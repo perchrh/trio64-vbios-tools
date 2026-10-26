@@ -16,7 +16,9 @@ Tests
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER and the checksums of both 32 KB halves in
                    the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
-                   across 4F02), and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
+                   across 4F02), the fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port
+                   accesses), the window function by far call, EAX/ECX kept across the 32-bit VGA
+                   clear and font load, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
@@ -46,7 +48,10 @@ import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
-from unicorn.x86_const import UC_X86_REG_EAX  # noqa: E402
+from unicorn import UC_HOOK_INSN  # noqa: E402
+from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX,  # noqa: E402
+                               UC_X86_REG_BX, UC_X86_REG_DX, UC_X86_REG_CS, UC_X86_REG_SS, UC_X86_REG_SP,
+                               UC_X86_INS_IN, UC_X86_INS_OUT)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.dirname(HERE)
@@ -250,6 +255,36 @@ def t_rom_patches(c):
     chk(eaxh == 0x1234, 'mode set: EAX bits 31-16 = %04X after 4F02 101h, the caller had 1234' % eaxh)
     chk(m.mem(0xA0000, 0x10000).count(0) == 0x10000, 'mode set clear: bank 0 at A0000 not zeroed by 4F02 101h')
     chk(cr.get(0x6A, 0) == 0, 'mode set clear: CR6A = %02X afterwards, expected bank 0' % cr.get(0x6A, 0))
+    # p12: the fast 4F05 path from the INT 10h entry runs without the dispatcher, which saves the 32-bit
+    # registers; it must keep them itself and use few port accesses
+    io = [0]
+    h1 = m.mu.hook_add(UC_HOOK_INSN, lambda uc, p, s, v, u: io.__setitem__(0, io[0] + 1), None, 1, 0, UC_X86_INS_OUT)
+    h2 = m.mu.hook_add(UC_HOOK_INSN, lambda uc, p, s, u: io.__setitem__(0, io[0] + 1), None, 1, 0, UC_X86_INS_IN)
+    for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_EDX):
+        m.mu.reg_write(reg, 0x56780000)
+    res = m.int10(0x4F05, bx=0, dx=3)
+    high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EBX, UC_X86_REG_EDX)]
+    m.mu.hook_del(h1)
+    m.mu.hook_del(h2)
+    chk(res['ax'] == 0x004F and cr.get(0x6A) == 3, '4F05 in 101h: AX=%04X CR6A=%02X' % (res['ax'], cr.get(0x6A, 0)))
+    chk(high == [0x5678, 0x5678], '4F05: EBX/EDX bits 31-16 changed: %s' % ['%04X' % h for h in high])
+    chk(io[0] <= 10, '4F05 set window: %d port accesses, the fast path needs at most 10' % io[0])
+    m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)        # the window function (far call) is unchanged
+    off, seg = struct.unpack('<HH', m.mem(0x3000C, 4))
+    m.mu.mem_write(0x7D10, b'\x9A' + struct.pack('<HH', off, seg) + b'\xF4')
+    m.mu.reg_write(UC_X86_REG_BX, 0)
+    m.mu.reg_write(UC_X86_REG_DX, 6)
+    m.mu.reg_write(UC_X86_REG_CS, 0)
+    m.mu.reg_write(UC_X86_REG_SS, 0)
+    m.mu.reg_write(UC_X86_REG_SP, 0x7000)
+    m.mu.emu_start(0x7D10, 0x7D15, count=100000)
+    chk(cr.get(0x6A) == 6, 'window function (far call) BX=0 DX=6: CR6A = %02X' % cr.get(0x6A, 0))
+    for ax, bx in ((0x0003, 0), (0x0013, 0), (0x1114, 0)):  # p12: 32-bit clear and font load, EAX kept
+        m.mu.reg_write(UC_X86_REG_EAX, 0x9ABC0000 | ax)
+        m.mu.reg_write(UC_X86_REG_ECX, 0x9ABC0000)
+        m.int10(ax, bx=bx)
+        high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX)]
+        chk(high == [0x9ABC, 0x9ABC], 'AX=%04X: EAX/ECX bits 31-16 changed: %s' % (ax, ['%04X' % h for h in high]))
     m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80        # as a VESA mode leaves it on the card
     m.int10(0x0003)
     chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 03 (CR90 = %02X)' % cr.get(0x90, 0))
