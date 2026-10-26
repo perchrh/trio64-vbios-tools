@@ -11,7 +11,8 @@ ifdef ROMVER
 DEFS += -DROMVER="'$(ROMVER)'"
 endif
 
-all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM
+all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
+     build/S3REGS.COM build/S3REGS32.EXE
 
 build:
 	mkdir -p build
@@ -33,6 +34,13 @@ build/S3ALIAS.COM: s3alias/s3alias.asm common/version.inc | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
 
 build/VGALOG.COM: vgalog/vgalog.asm common/version.inc | build
+	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+
+build/S3REGS.COM: s3regs/s3regs.asm common/version.inc | build
+	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+
+# Win32 console program for Windows 9x; the PE header is written in the source (no linker)
+build/S3REGS32.EXE: s3regs/s3regs32.asm common/version.inc | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
 
 # Emulator tests (python3 with the unicorn package, see pyproject.toml):

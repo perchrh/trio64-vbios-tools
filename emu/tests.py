@@ -32,7 +32,13 @@ Tests
                    is well formed
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
                    caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
+  vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
+                   registers in and out, SR10/SR11 and CR58-5A/6D after), /D writes them in call order,
+                   the S3 locks are put back, /U unhooks, /D afterwards is refused
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
+  s3regs           S3REGS.COM and S3REGS32.EXE (the Win32 one on a 32-bit CPU with the same register
+                   model, vgaemu.run_pe32) write the same snapshot, keep indexes and locks, and
+                   S3REGS32 /W logs register changes with their time (cursor registers ignored)
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
 """
@@ -481,10 +487,89 @@ def t_dos_exe(c):
     return 'MZ program ran, hooked INT 21h, stayed resident'
 
 
+def t_vgalog_mem(c):
+    """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped, nested BIOS calls with their
+    depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order."""
+    com = c.tool('VGALOG.COM')
+    m = c.machine()
+    r = m.run_com(com, '/M', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /M did not stay resident: %s' % (r.exit,))
+    calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=2)),
+             (0x1130, dict(bx=0x0200)), (0x0003, {})]
+    ret = {}
+    for ax, kw in calls:
+        res = m.int10(ax, **kw)
+        ret[ax] = res
+        check(res['flags'] & 0x200, 'AX=%04X returned with interrupts disabled' % ax)
+    check(ret[0x1130]['es'] == 0xC000 and ret[0x1130]['cx'] == 16, 'AX=1130h result changed by VGALOG: %s' % ret[0x1130])
+    rd = m.run_com(com, '/D', seg=0x4000)
+    check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
+    b = rd.files.get('VGALOG.BIN')
+    check(b is not None and b[:8] == b'VGALOGM1', 'VGALOG.BIN has no memory-mode header')
+    total, n = struct.unpack_from('<IH', b, 8)
+    recs = [b[16 + 32 * i:48 + 32 * i] for i in range(n)]
+    check(len(b) == 16 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    top = [struct.unpack_from('<H', x, 2)[0] for x in recs if x[23] == 0]
+    check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
+          % ['%04X' % a for a in top])
+    nested = [x for x in recs if x[23] > 0]
+    check(nested and all(struct.unpack_from('<H', x, 2)[0] == 0x1130 for x in nested),
+          'no nested AX=1130h from the BIOS during the mode set')
+    r101 = [x for x in recs if struct.unpack_from('<HH', x, 2) == (0x4F02, 0x0101)][0]
+    check(struct.unpack_from('<H', r101, 14)[0] == 0x004F and r101[26:28] == b'\x42\x41' and r101[28] == 0x90
+          and r101[29:31] == b'\x00\x0A', '4F02 101h record: AX out, SR10/11 or CR58/59/5A wrong: %s' % r101.hex())
+    check(m.r['crtc'].get(0x38) != 0x48 or m.r['seq'].get(8) != 0x06, 'S3 registers left unlocked')
+    ru = m.run_com(com, '/U', seg=0x4000)
+    check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
+    rd2 = m.run_com(com, '/D', seg=0x4000)
+    check(rd2.exit == ('exit', 1), '/D after /U not refused')
+    c.save('VGALOGM', rd)
+    return '%d calls, %d of them nested' % (n, len(nested))
+
+
+def t_s3regs(c):
+    """S3REGS (DOS) and S3REGS32 (Win32, run on the same register model) write the same snapshot of SR, CR,
+    GR and PCI, leave indexes and locks as found, and S3REGS32 /W logs register changes."""
+    com, exe = c.tool('S3REGS.COM'), c.tool('S3REGS32.EXE')
+    m = c.machine()
+    m.int10(0x4F02, bx=0x0101)
+    before = (m.r['si'], m.r['gi'], m.r['ci'], m.r['crtc'].get(0x38), m.r['crtc'].get(0x39), m.r['seq'].get(8))
+    r = m.run_com(com, 'test label')
+    check(r.exit == ('exit', 0), 'S3REGS ended with %s' % (r.exit,))
+    dos = r.files['S3REGS.TXT'].decode('latin1').split('\r\n')
+    r32 = m.run_pe32(exe, 'S3REGS32.EXE test label')
+    check(r32.exit == ('exit', 0), 'S3REGS32 ended with %s' % (r32.exit,))
+    win = r32.files['S3REGS.TXT'].decode('latin1').split('\r\n')
+    after = (m.r['si'], m.r['gi'], m.r['ci'], m.r['crtc'].get(0x38), m.r['crtc'].get(0x39), m.r['seq'].get(8))
+    check(before == after, 'indexes or locks changed: %s -> %s' % (before, after))
+    check(dos[0].startswith('S3REGS ') and dos[0].endswith('[test label] DOS') and win[0].endswith('[test label] Win32'),
+          'header lines: %r %r' % (dos[0], win[0]))
+    rows = lambda ls: [l for l in ls if l[:2] in ('SR', 'CR', 'GR') or l.startswith('PCI00:')]
+    check(rows(dos) == rows(win) and len(rows(dos)) == 2 + 16 + 1 + 1, 'DOS and Win32 snapshots differ:\n%s\n%s'
+          % ('\n'.join(rows(dos)), '\n'.join(rows(win))))
+    check('SR10: 42 41' in '\n'.join(dos) and 'CR50: 40 00 81 00 F8 00 00 00 90 00 0A' in '\n'.join(dos),
+          'snapshot values (SR10/11, CR58-5A in 101h) not as the BIOS set them')
+
+    def hook(ms):
+        if ms == 300:
+            m.r['seq'][0x10], m.r['seq'][0x11] = 0x41, 0x28
+        if ms == 500:
+            m.r['crtc'][0x54], m.r['crtc'][0x47] = 0x10, 0x05
+    rw = m.run_pe32(exe, '"C:\\TOOLS\\S3REGS32.EXE" /W 1 watch', sleep_hook=hook)
+    text = rw.files['S3REGS.TXT'].decode('latin1')
+    ch = text[text.index('WATCH'):text.index('END OF WATCH')].split('\r\n')[1:-1]
+    check(ch == ['+300 SR10 42->41', '+300 SR11 41->28', '+500 CR54 F8->10'], 'watch lines: %s' % ch)
+    rh = m.run_pe32(exe, 'S3REGS32 /?')
+    check(b'/W n' in rh.stdout, 'S3REGS32 /? shows no parameter list')
+    open(os.path.join(c.logs, 'S3REGS.TXT'), 'wb').write(r.files['S3REGS.TXT'] + r32.files['S3REGS.TXT'] + rw.files['S3REGS.TXT'])
+    return 'DOS and Win32 snapshots equal, watch logs 3 changes'
+
+
 TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga),
-         ('vgalog', t_vgalog), ('s3alias', t_s3alias), ('dos_exe', t_dos_exe)]
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe)]
 
 
 def main():
