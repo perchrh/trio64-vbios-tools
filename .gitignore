@@ -1,0 +1,4 @@
+build/
+*.COM
+*.LOG
+*.lst
