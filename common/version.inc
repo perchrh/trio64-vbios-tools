@@ -9,5 +9,5 @@
 %define VERSION '0.8'
 %endif
 %ifndef ROMVER
-%define ROMVER '2.04.11-p10'
+%define ROMVER '2.04.11-p11'
 %endif

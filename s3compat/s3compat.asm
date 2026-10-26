@@ -26,6 +26,7 @@
 ; Run order and expected outcome on the p9 ROM (219 pass, 0 fail, 4 warn on p8 before the 350-line
 ; and palette additions; the four warnings are known stock items)
 ;   1. ROM version string                      INFO
+;      Chip ID (CR2D-CR30, PCI revision)        INFO (89 01 06 E1, PCI 06 on the test card)
 ;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-340 MHz, 1-cycle EDO)
 ;   3. Initial state, setup                     INFO, PASS (mode 03, baseline, VRAM zeroed)
 ;   4. VGA modes 00h-13h and the 350-line text modes against the IBM reference
@@ -163,6 +164,7 @@ start:  cld
         PS 'VESA warn bits: 1 refresh math factor 2  2 DCLK above datasheet max',13,10
         PS '  4 CR50 GE pixel length/width  10 interlace on  20 LFB on planar',13,10
         call bios_id
+        call chip_id
         call setup
         call post_tests
         mov byte [pass],1
@@ -244,6 +246,47 @@ bios_id:
         loop .p
 .e:     pop es
         PS 13,10
+        ret
+
+; INFO: chip identification, so a log shows which stepping produced it. CR2D/CR2E = device ID (89h 01h
+; on the 86C775/785), CR2F = revision ID ("varies with stepping", Trio64V2 datasheet section 4.1),
+; CR30 = chip ID (E1h), then the PCI revision ID (configuration byte 08h) of device 5333:8901, which
+; should equal CR2F. The test card reads 89 01 06 E1 and PCI 06. No pass or fail.
+chip_id:
+        TB 'Chip ID CR2D 2E 2F 30, PCI rev ...... '
+        call unlock
+        RC 0x2D
+        call phex2
+        call sp1
+        RC 0x2E
+        call phex2
+        call sp1
+        RC 0x2F
+        call phex2
+        call sp1
+        RC 0x30
+        call phex2
+        PS ', PCI '
+        mov ax,0xB102                   ; find 5333:8901, index 0
+        mov cx,0x8901
+        mov dx,0x5333
+        xor si,si
+        int 0x1A
+        jc .np
+        or ah,ah
+        jnz .np
+        mov ax,0xB108                   ; read configuration byte 08h (revision ID) -> CL
+        mov di,8
+        int 0x1A
+        jc .np
+        or ah,ah
+        jnz .np
+        mov al,cl
+        call phex2
+        jmp .e
+.np:    PS 'n/a'
+.e:     mov byte [infoflag],1
+        call tend
         ret
 
 ; POST state checked against the datasheet

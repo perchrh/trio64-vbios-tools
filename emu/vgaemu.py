@@ -178,7 +178,7 @@ class Machine:
             return 0xFF
         if port in (0x3D5, 0x3B5):
             i = r['ci']
-            fixed = {0x30: 0xE1, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x92}   # chip id Trio64V2, EDO 2 MB
+            fixed = {0x30: 0xE1, 0x2D: 0x89, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x92}  # Trio64V2 rev 06, EDO 2 MB
             return fixed.get(i, r['crtc'].get(i, 0))
         if port == 0x3CF: return r['gc'].get(r['gi'], 0)
         if port == 0x3C1: return r['atc'].get(r['ai'] & 0x1F, 0)

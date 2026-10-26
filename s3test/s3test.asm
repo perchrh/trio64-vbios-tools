@@ -15,8 +15,10 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.11-p10"); the version found is printed, also for other BIOS versions
+;                    "2.04.11-p11"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
+;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30 and the PCI revision ID, so the log shows
+;                    the stepping (89 01 06 E1, PCI 06 on the test card)
 ;   MCLK             SR10 = 42h, SR11 = 41h after POST: 59.96 MHz memory clock
 ;   Memory type      CR36 bits 3-2 = 00: the RAM is still run as 1-cycle EDO
 ;   Pedestal         SR1A bit 5 = 0 (no blank pedestal, deepest black) and bit 4 = 1
@@ -85,6 +87,7 @@ start:  cld
         mov ax,[bp_]
         mov [vls],ax
         call t_rom
+        call t_chip
         call t_post
         mov si,modelist
 .ml:    lodsw
@@ -132,7 +135,7 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: 'Version ' and ROMVER (now "2.04.11-p10") within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; Expect: 'Version ' and ROMVER (now "2.04.11-p11") within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  mov dx,s_sig
         call puts
@@ -198,6 +201,49 @@ t_rom:  mov dx,s_sig
         cmp bl,0
         sete al
         call result
+        ret
+
+; ---------------- chip identification (INFO) ----------------
+; CR2D/CR2E = device ID (89h 01h), CR2F = revision ID (varies with stepping, datasheet section 4.1),
+; CR30 = chip ID (E1h), then the PCI revision ID (configuration byte 08h) of device 5333:8901, which
+; should equal CR2F. Prints one line ending in INFO; it is not a test and not counted.
+t_chip: call unlock
+        mov dx,s_chip
+        call puts
+        mov al,0x2D
+.c:     push ax
+        call rdcr
+        mov al,ah
+        call phex2
+        pop ax
+        cmp al,0x30
+        je .p
+        call sp1
+        inc al
+        jmp .c
+.p:     mov dx,s_pci
+        call puts
+        mov ax,0xB102                   ; find 5333:8901, index 0
+        mov cx,0x8901
+        mov dx,0x5333
+        xor si,si
+        int 0x1A
+        jc .np
+        or ah,ah
+        jnz .np
+        mov ax,0xB108                   ; configuration byte 08h (revision ID) -> CL
+        mov di,8
+        int 0x1A
+        jc .np
+        or ah,ah
+        jnz .np
+        mov al,cl
+        call phex2
+        jmp .e
+.np:    mov dx,s_na
+        call puts
+.e:     mov dx,s_info
+        call puts
         ret
 
 ; ---------------- POST state ----------------
@@ -1022,6 +1068,10 @@ ROMVLEN equ $-s_romver
 s_sig   db 'ROM signature ',ROMVER,' ............ $'
 s_nover db '(no version string)$'
 s_cks   db 'ROM checksum (C000:0000-7FFF) = $'
+s_chip  db 'Chip ID CR2D 2E 2F 30, PCI rev ...... $'
+s_pci   db ', PCI $'
+s_na    db 'n/a$'
+s_info  db '  INFO',13,10,'$'
 s_mclk  db 'MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'
 s_edo   db 'CR36 memory type (bits 3-2 = 00 EDO)  $'
 s_ped   db 'SR1A pedestal off, bit 4 set ........ $'

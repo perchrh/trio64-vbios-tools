@@ -15,8 +15,9 @@ video memory and no real bus speed, so those results stay with the hardware runs
 Tests
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER and the checksums of both 32 KB halves in
-                   the file, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it after
-                   a VESA mode; all failures listed. The other patches are S3TEST's checks
+                   the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
+                   across 4F02), and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
+                   after a VESA mode; all failures listed. The other patches are S3TEST's checks
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
@@ -44,6 +45,7 @@ import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
+from unicorn.x86_const import UC_X86_REG_EAX  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.dirname(HERE)
@@ -240,7 +242,13 @@ def t_rom_patches(c):
         chk(rom[0x8000:0x8002] == b'\x55\xAA', 'upper 32 KB has no 55AAh ROM header')
         chk(sum(rom[0x8000:0x10000]) & 0xFF == 0, 'checksum of the upper 32 KB is not 00')
     cr = m.r['crtc']
+    m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
+    m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # p11 clears with 32-bit stores: EAX bits 31-16 kept
     m.int10(0x4F02, bx=0x0101)
+    eaxh = m.mu.reg_read(UC_X86_REG_EAX) >> 16
+    chk(eaxh == 0x1234, 'mode set: EAX bits 31-16 = %04X after 4F02 101h, the caller had 1234' % eaxh)
+    chk(m.mem(0xA0000, 0x10000).count(0) == 0x10000, 'mode set clear: bank 0 at A0000 not zeroed by 4F02 101h')
+    chk(cr.get(0x6A, 0) == 0, 'mode set clear: CR6A = %02X afterwards, expected bank 0' % cr.get(0x6A, 0))
     m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80        # as a VESA mode leaves it on the card
     m.int10(0x0003)
     chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 03 (CR90 = %02X)' % cr.get(0x90, 0))
