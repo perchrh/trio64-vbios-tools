@@ -32,6 +32,8 @@ Tests
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
                    caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
+  dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
+                   (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
 """
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
@@ -401,10 +403,80 @@ def t_s3alias(c):
     check(mode(0x49) == 0x49, '49h still mapped after /U')
 
 
+EXE_SRC = r"""
+bits 16
+org 0
+        mov ax,0                        ; relocated: the load segment
+        mov ds,ax
+        mov dx,msg
+        mov ah,9
+        int 21h
+        mov ah,62h                      ; shrink the program block, then allocate one above it
+        int 21h
+        mov es,bx
+        mov bx,40h
+        mov ah,4Ah
+        int 21h
+        jc fail
+        mov bx,10h
+        mov ah,48h
+        int 21h
+        jc fail
+        mov ax,3521h                    ; hook INT 21h: our own AH=4Ch becomes AH=31h
+        int 21h
+        mov [old],bx
+        mov [old+2],es
+        mov dx,hook
+        mov ax,2521h
+        int 21h
+        mov ax,4C00h
+        int 21h
+fail:   mov ax,4C02h
+        int 21h
+hook:   cmp ah,4Ch
+        jne .c
+        mov ah,31h
+        mov dx,60h
+.c:     jmp far [cs:old]
+old     dd 0
+msg     db 'MZ OK',13,10,'$'
+"""
+
+
+def build_exe(tmp):
+    """A small MZ program (one relocation, stack after the image) built from EXE_SRC with nasm."""
+    nasm = shutil.which('nasm')
+    if not nasm:
+        raise Skip('nasm not found')
+    src = os.path.join(tmp, 'mz.asm')
+    open(src, 'w').write(EXE_SRC)
+    subprocess.run([nasm, '-f', 'bin', '-o', os.path.join(tmp, 'mz.bin'), src], check=True)
+    img = open(os.path.join(tmp, 'mz.bin'), 'rb').read()
+    total = 32 + len(img)
+    hdr = struct.pack('<2s13H', b'MZ', total % 512, (total + 511) // 512, 1, 2, 0x10, 0xFFFF,
+                      (len(img) + 15) // 16, 0x100, 0, 0, 0, 0x1C, 0) + struct.pack('<HH', 1, 0)
+    return hdr.ljust(32, b'\0') + img
+
+
+def t_dos_exe(c):
+    """The emulated DOS runs an MZ program: relocation, 62h/4Ah/48h with MCBs, and an INT 21h hook that
+    sees the program's own AH=4Ch (how S3VBE20 and other TSR kits stay resident)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        exe = build_exe(tmp)
+    m = c.machine()
+    r = m.run_exe(exe, '', seg=0x1000)
+    check(bytes(r.stdout) == b'MZ OK\r\n', 'output %r (relocation or AH=09h)' % bytes(r.stdout))
+    check(r.exit == ('tsr', 0, 0x60), 'ended with %s, expected the hook to turn AH=4Ch into AH=31h' % (r.exit,))
+    check(m.mem(0x1000 * 16 - 16, 1) == b'Z', 'no MCB in front of the PSP')
+    seg = struct.unpack('<H', m.mem(0x86, 2))[0]
+    check(seg == 0x1010, 'INT 21h vector %04X, expected the hook in the program (1010)' % seg)
+    return 'MZ program ran, hooked INT 21h, stayed resident'
+
+
 TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga),
-         ('vgalog', t_vgalog), ('s3alias', t_s3alias)]
+         ('vgalog', t_vgalog), ('s3alias', t_s3alias), ('dos_exe', t_dos_exe)]
 
 
 def main():
