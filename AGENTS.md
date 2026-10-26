@@ -6,7 +6,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 ## Project context
 
 - Hardware: Gainward S3 Trio64V2/DX (86C775), 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901.
-- The ROM is a 64 KB image. The lower 32 KB is BIOS 2.04.11 with our patches (currently -p9); the
+- The ROM is a 64 KB image. The lower 32 KB is BIOS 2.04.11 with our patches (currently -p10); the
   upper 32 KB is the Trio64V+ BIOS 1.03-08 and must stay byte-identical to the stock dump.
 - The patched ROM and its build scripts are kept outside this repository. This repository holds the
   DOS test tools (VSHOW, S3TEST, S3COMPAT) and their documentation.

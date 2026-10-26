@@ -15,7 +15,7 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.11-p9"); the version found is printed, also for other BIOS versions
+;                    "2.04.11-p10"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   MCLK             SR10 = 42h, SR11 = 41h after POST: 59.96 MHz memory clock
 ;   Memory type      CR36 bits 3-2 = 00: the RAM is still run as 1-cycle EDO
@@ -132,7 +132,7 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: 'Version ' and ROMVER (now "2.04.11-p9") within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; Expect: 'Version ' and ROMVER (now "2.04.11-p10") within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  mov dx,s_sig
         call puts
@@ -988,7 +988,7 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
 
 ; Modes tested by t_mode: mode, expected refresh in tenths of Hz, check flags, horizontal
 ; resolution, expected total line length in pixels (0 = not checked).
-; The expected refresh values are the rates set by the p4b-p9 timing changes and the unchanged
+; The expected refresh values are the rates set by the p4b-p9 timing changes, 70 Hz for 320x400x8 (p10) and the unchanged
 ; stock rates (70 Hz text/320x200, 72 Hz 400x300). The line lengths are the VGA totals and the
 ; VESA DMT totals (see the file header); stock has 792/796 pixels in 640x480, 416 in 320x240 and
 ; 1696/2112 in the interlaced 1280x1024 and the 97.9 Hz 1600x1200.
@@ -997,6 +997,7 @@ modelist:
         dw 0x0013,700,F_VGA,320,400
         dw 0x0012,597,F_VGA,640,800
         dw 0x012E,700,F_BOOST,320,400     ; 320x200x8
+        dw 0x0182,700,F_BOOST,320,400     ; 320x400x8  (p10: 12Eh without double scan)
         dw 0x0131,597,F_BOOST,320,400     ; 320x240x8  (p4b)
         dw 0x0133,597,F_BOOST,320,400     ; 320x240x16 (p5/p6)
         dw 0x0101,597,F_BOOST,640,800     ; 640x480x8  (p6 800-px line)
