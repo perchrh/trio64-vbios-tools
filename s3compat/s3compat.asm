@@ -216,7 +216,8 @@ start:  cld
 
 ; ======================================================================
 
-; INFO: print the version string (searched for '2.04' in the first 512 bytes of C000).
+; INFO: print the version string: what follows 'Version ' in the first 512 bytes of C000 (S3 BIOSes
+; 1.x and 2.x both sign on with 'Video BIOS. Version x.yy.zz').
 bios_id:
         PS 'ROM: '
         push es
@@ -224,14 +225,17 @@ bios_id:
         mov es,ax
         xor si,si
         mov cx,0x200
-.f:     cmp dword [es:si],'2.04'
+.f:     cmp dword [es:si],'Vers'
+        jne .n
+        cmp dword [es:si+4],'ion '
         je .g
-        inc si
+.n:     inc si
         loop .f
         pop es
         PS '(version string not found)',13,10
         ret
-.g:     mov cx,24
+.g:     add si,8
+        mov cx,24
 .p:     mov al,[es:si]
         cmp al,32
         jb .e

@@ -10,7 +10,7 @@ All tools need a 386 or later and run in plain DOS (no EMM386 needed).
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
-| S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh, booster, LFB, 4F05/4F06, CR50, flip-flop) | `S3TEST > S3TEST.LOG` |
+| S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop) | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze | `VGALOG`, then start the program; `VGALOG /U` to unload, `/H` for help; record format in `vgalog/vgalog.asm` |
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
@@ -45,10 +45,12 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
 the working copy without being committed.
 
-They take about three minutes. `rom_patches` checks every change on top of the stock ROM on its own and
-lists all that are missing (run against the stock image it lists 19): sign-on, checksum, MCLK, pedestal,
-60 Hz defaults, flip-flop reset, FIFO fix, booster and LFB base, 4F01/4F03/4F06, CR50 and the refresh
-and line length of the patched timings. The other tests check the BIOS registers, state blocks and
+They take about three minutes. The patches are checked by S3TEST, which the `s3test` emulator test runs
+and which also runs on the card: run against the stock image it fails 25 lines (signature, MCLK,
+pedestal, 60 Hz defaults, refresh and line length of the patched timings, booster and LFB base,
+4F01/4F03/4F06, CR50, flip-flop). `rom_patches` adds only what S3TEST cannot check: the sign-on and
+the checksums of both 32 KB halves in the file, and the FIFO fix with CR90 bit 7 set the way the card
+leaves it after a VESA mode (the model does not set it). The other tests check the BIOS registers, state blocks and
 default palettes of every VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of
 S3COMPAT run and give the same output with and without /V, the /V debug file format, and VGALOG and
 S3ALIAS install and unload. The tools run with /V; their output and debug files are kept in

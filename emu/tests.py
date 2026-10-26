@@ -6,7 +6,7 @@
 
 The ROM image is not in the repository; pass the 64 KB image of the card. The tools run with /V;
 their output (NAME.LOG) and debug files (NAME.DBG, VGALOG.BIN) are kept in emu/logs (--logs).
-Run against the stock ROM, rom_patches and s3test list everything the patches add. The tools are taken from
+Run against the stock ROM, s3test (and the FIFO line of rom_patches) list everything the patches add. The tools are taken from
 --build (run make first). Each test prints PASS, FAIL (with the reason) or SKIP; the exit code is 1
 when a test failed. The emulator models the VGA/S3 registers, one 64 KB planar window and a virtual clock
 that drives the PIT, the BIOS tick and the retrace bit (see vgaemu.py). It has no banked or linear
@@ -14,11 +14,9 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   post             the ROM initialises and hooks INT 10h into C000
-  rom_patches      every change on top of the stock 2.04.11 ROM on its own, all failures listed: sign-on
-                   ROMVER, checksum, MCLK 59.96 MHz, pedestal off, 60 Hz defaults for 1280/1600, ATC
-                   flip-flop reset, FIFO fix (CR90), booster and LFB base restore, 4F01/4F03 with the
-                   booster, 4F06 BL=3, CR50 in 151h, and the refresh and line length of the patched
-                   timings (computed from the programmed registers)
+  rom_patches      what S3TEST cannot check: sign-on ROMVER and the checksums of both 32 KB halves in
+                   the file, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it after
+                   a VESA mode; all failures listed. The other patches are S3TEST's checks
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
@@ -217,28 +215,10 @@ def romver():
     return re.search(r"%define ROMVER '([^']*)'", t).group(1)
 
 
-def refresh(m, xres):
-    """Refresh in Hz and total pixels per line that the programmed registers define (vgaemu.frame)."""
-    hz, pix, period, vtot = m.frame(xres)
-    return hz, pix
-
-
-# VESA mode, expected refresh in Hz, expected total pixels per line (0 = not checked), patch
-TIMINGS = [(0x012E, 70.0, 0, 'stock 70 Hz'),
-           (0x0131, 59.7, 400, 'p4b: 320x240x8 at 60 Hz (640x480 halved)'),
-           (0x0133, 59.7, 400, 'p5/p6: 320x240x16 at 60 Hz'),
-           (0x0101, 59.7, 800, 'p6: 640x480x8 with an 800-pixel line'),
-           (0x0111, 59.7, 800, 'p6: 640x480x16 with an 800-pixel line'),
-           (0x0141, 72.2, 0, 'stock 72 Hz'),
-           (0x0103, 60.3, 0, '800x600 at 60 Hz'),
-           (0x0105, 60.1, 0, '1024x768 at 60 Hz'),
-           (0x0106, 60.2, 0, 'p9: 1280x1024x4 VESA DMT 60 Hz'),
-           (0x0107, 60.2, 0, 'p6: 1280x1024 default 60 Hz'),
-           (0x0120, 60.0, 0, 'p6: 1600x1200 default 60 Hz')]
-
-
 def t_rom_patches(c):
-    """Every change on top of the stock 2.04.11 ROM, checked on its own; all failures are reported."""
+    """What S3TEST cannot check on the card or in the model: the ROM file itself and the FIFO fix with
+    CR90 bit 7 set the way the chip leaves it after a VESA mode (the model does not set it). Every other
+    patch is checked by S3TEST, which t_s3test runs here and which also runs on the hardware."""
     m = c.machine()
     fails = []
 
@@ -247,66 +227,18 @@ def t_rom_patches(c):
             fails.append(what)
 
     rom = c.rom
-    ver = romver().encode()
-    chk(ver in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
+    chk(romver().encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
-    seq, cr = m.r['seq'], m.r['crtc']
-    base = cr.get(0x59, 0)                    # the real LFB base (bits 31-24), set before the BIOS ran
-    # POST
-    chk((seq.get(0x10), seq.get(0x11)) == (0x42, 0x41),
-        'MCLK: SR10/SR11 = %02X/%02X, expected 42/41 (59.96 MHz)' % (seq.get(0x10, 0), seq.get(0x11, 0)))
-    chk(seq.get(0x1A, 0) & 0x30 == 0x10, 'pedestal: SR1A = %02X after POST, expected bit 5 = 0, bit 4 = 1'
-        % seq.get(0x1A, 0))
-    chk(cr.get(0x41, 0) & 0xE0 == 0x80, 'refresh default 1280x1024: CR41 = %02X, expected bits 7-5 = 100b (60 Hz)'
-        % cr.get(0x41, 0))
-    chk(cr.get(0x52, 0) & 0x07 == 0x01, 'refresh default 1600x1200: CR52 = %02X, expected bits 2-0 = 001b (60 Hz)'
-        % cr.get(0x52, 0))
-    # attribute controller flip-flop
-    m.int10(0x0003)
-    m.r['aff'] = 1
-    m.int10(0x0003)
-    chk(m.r['aff'] == 0, 'flip-flop: the ATC flip-flop is still in the data state after a mode set')
-    chk(seq.get(0x1A, 0) & 0x20 == 0, 'pedestal: SR1A bit 5 set after mode 03')
-    # booster and LFB base
+    if len(rom) >= 0x10000:
+        chk(rom[0x8000:0x8002] == b'\x55\xAA', 'upper 32 KB has no 55AAh ROM header')
+        chk(sum(rom[0x8000:0x10000]) & 0xFF == 0, 'checksum of the upper 32 KB is not 00')
+    cr = m.r['crtc']
     m.int10(0x4F02, bx=0x0101)
-    c58, c59, c5a, c6d = cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0)
-    chk(c58 & 0x13 == 0x10 and (c59, c5a) == (0, 0x0A) and c6d != 0,
-        'booster: 101h has CR58/59/5A/6D = %02X/%02X/%02X/%02X, expected LA on with a 64 KB window, '
-        '000Ah and the real base %02X in CR6D' % (c58, c59, c5a, c6d, base))
-    chk(c6d in (0, base), 'booster: CR6D = %02X, expected the real base %02X' % (c6d, base))
-    chk(m.int10(0x4F03)['bx'] == 0x0101, 'booster: 4F03 in 101h does not return 0101h')
-    m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
-    phys = struct.unpack('<I', m.mem(0x30028, 4))[0]
-    chk(phys == base << 24, 'booster: 4F01 PhysBasePtr %08X, expected the real base %08X' % (phys, base << 24))
-    r6 = m.int10(0x4F06, bx=3)
-    chk((r6['bx'], r6['cx']) == (4368, 4368), '4F06 BL=3 in 101h: %d/%d, expected 4368/4368' % (r6['bx'], r6['cx']))
-    chk(seq.get(0x1A, 0) & 0x20 == 0, 'pedestal: SR1A bit 5 set in 101h')
-    m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80        # as a VESA mode leaves it
+    m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80        # as a VESA mode leaves it on the card
     m.int10(0x0003)
-    chk(cr.get(0x59, 0) == base and cr.get(0x5A, 0) == 0,
-        'base restore: mode 03 after 101h has CR59/5A = %02X/%02X, expected %02X/00'
-        % (cr.get(0x59, 0), cr.get(0x5A, 0), base))
     chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 03 (CR90 = %02X)' % cr.get(0x90, 0))
-    chk(cr.get(0x58, 0) & 0x10 == 0, 'base restore: linear addressing still on in mode 03')
-    m.int10(0x4F02, bx=0x4101)
-    chk(m.int10(0x4F03)['bx'] == 0x4101, 'LFB: 4F03 in 4101h does not return 4101h')
-    chk(cr.get(0x59, 0) == base, 'LFB: CR59 in 4101h = %02X, expected the real base %02X' % (cr.get(0x59, 0), base))
-    m.int10(0x4F02, bx=0x0151)
-    chk(cr.get(0x50, 0) == 0x40, 'CR50: 151h (512x384x8) has CR50 = %02X, expected 40h' % cr.get(0x50, 0))
-    # timings
-    for mode, want, hpix, what in TIMINGS:
-        m.int10(0x4F01, cx=mode, es=0x3000, di=0)
-        xres = struct.unpack('<H', m.mem(0x30012, 2))[0]
-        m.int10(0x4F02, bx=mode)
-        hz, h = refresh(m, xres)
-        if hz is None or abs(hz - want) > 0.5:
-            fails.append('timing %03Xh (%s): %s Hz, expected %.1f' % (mode, what, 'unknown' if hz is None
-                                                                       else '%.1f' % hz, want))
-        elif hpix and h != hpix:
-            fails.append('timing %03Xh (%s): %d pixels per line, expected %d' % (mode, what, h, hpix))
-    m.int10(0x0003)
-    check(not fails, '%d of the patches missing or wrong:\n    ' % len(fails) + '\n    '.join(fails))
-    return 'all patches present'
+    check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
+    return 'ROM file and FIFO fix as expected'
 
 
 # S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)

@@ -14,7 +14,8 @@
 ;   Exit code 0 = every test passed, 1 = at least one failed.
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
-;   ROM signature    the first 256 bytes of C000 contain ROMVER (now "2.04.11-p9")
+;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
+;                    "2.04.11-p9"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   MCLK             SR10 = 42h, SR11 = 41h after POST: 59.96 MHz memory clock
 ;   Memory type      CR36 bits 3-2 = 00: the RAM is still run as 1-cycle EDO
@@ -22,13 +23,22 @@
 ;   Refresh defaults CR41 bits 7-5 = 100b and CR52 bits 2-0 = 001b: 1280x1024 and 1600x1200
 ;                    default to 60 Hz
 ;   Each mode in modelist: the mode set returns 004Fh, the measured refresh is within 1.5 Hz of
-;                    the expected value, the pedestal is still off, and depending on the mode type:
-;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and the
-;                                      real frame buffer base back in CR59 after the booster
+;                    the expected value, the total line length is the expected one, the pedestal is
+;                    still off, and depending on the mode type:
+;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and
+;                                      CR59/CR5A back to the real base (CR59 at POST) and 00 after
+;                                      the booster
 ;                    banked (F_BOOST)  booster active: CR58 linear addressing on with a 64 KB
 ;                                      window, CR59/CR5A = 000Ah, real base saved in CR6D
-;                    linear (F_LFB)    linear addressing on, window 1 MB or larger, CR59 = CR6D
-;                    no flag           only status, refresh and pedestal (106h, planar)
+;                    linear (F_LFB)    linear addressing on, window 1 MB or larger, CR59 = the real
+;                                      base
+;                    no flag           only status, refresh, line length and pedestal (106h,
+;                                      planar)
+;                    The line length is the total in pixels of the mode's resolution,
+;                    xres * (CR00 + 5) / (CR01 + 1) with CR5D bits 0 and 1 as bit 8. Expected: the VGA
+;                    totals (900 for 720-pixel text, 400 for 320, 800 for 640) and the VESA DMT totals
+;                    for 60 Hz (1056, 1344, 1688, 2160); 320x240 is 640x480 halved (400). It is not
+;                    checked for 400x300 (stock 72 Hz, no DMT timing).
 ;   4F03 in boosted 101h reports 0101h (no linear bit although CR58 has LA on)
 ;   4F01 PhysBasePtr equals the real base (CR59 at POST, the PCI BAR), not the booster's 000A0000h
 ;   4F05 set bank 3, then get bank: 004Fh and 3
@@ -85,6 +95,10 @@ start:  cld
         mov [m_hz],ax
         lodsw
         mov [m_flags],ax
+        lodsw
+        mov [m_xres],ax
+        lodsw
+        mov [m_line],ax
         push si
         call t_mode
         pop si
@@ -118,7 +132,7 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: signature ROMVER (now "2.04.11-p9") within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; Expect: 'Version ' and ROMVER (now "2.04.11-p9") within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  mov dx,s_sig
         call puts
@@ -127,9 +141,11 @@ t_rom:  mov dx,s_sig
         mov ds,ax
         xor si,si
         mov cx,0x100
-.f:     cmp dword [si],'2.04'
-        je .fv
-        inc si
+.f:     cmp dword [si],'Vers'
+        jne .fn
+        cmp dword [si+4],'ion '
+        je .fs
+.fn:    inc si
         loop .f
         pop ds
         mov dx,s_nover
@@ -137,7 +153,8 @@ t_rom:  mov dx,s_sig
         xor al,al
         call result
         jmp .ck
-.fv:    mov bx,si                       ; print the version found, up to the line end
+.fs:    add si,8
+        mov bx,si                       ; print the version found, up to the line end
         mov cx,12
 .pv:    mov al,[si]
         cmp al,' '
@@ -256,8 +273,9 @@ t_post: call unlock
 
 ; ---------------- one mode ----------------
 ; Set [m_mode] (AH=00 for VGA modes, 4F02 for VESA), measure the refresh rate and read
-; CR58, CR59, CR5A, CR6D, CR90 and SR1A. Expect status 004Fh, refresh within 15 (1.5 Hz) of
-; [m_hz], SR1A bit 5 clear, plus the checks selected by [m_flags] (see the file header).
+; the line length from CR00, CR01 and CR5D, and CR58, CR59, CR5A, CR6D, CR90 and SR1A. Expect status
+; 004Fh, refresh within 15 (1.5 Hz) of [m_hz], a line of exactly [m_line] pixels at [m_xres] (when
+; [m_line] is not 0), SR1A bit 5 clear, plus the checks selected by [m_flags] (see the file header).
 t_mode: VS 'D:TEST mode '
         push ax
         mov ax,[m_mode]
@@ -279,6 +297,7 @@ t_mode: VS 'D:TEST mode '
 .set:   call unlock
         call measure            ; -> AX = Hz*10
         mov [m_meas],ax
+        call linelen
         mov dx,s_mode
         call puts
         mov ax,[m_mode]
@@ -295,7 +314,17 @@ t_mode: VS 'D:TEST mode '
         call puts
         movzx eax,word [m_hz]
         call pdec10
-        mov dx,s_regs
+        cmp word [m_line],0
+        je .nl
+        mov dx,s_line
+        call puts
+        movzx eax,word [m_lmeas]
+        call pdec
+        mov dx,s_exp
+        call puts
+        movzx eax,word [m_line]
+        call pdec
+.nl:    mov dx,s_regs
         call puts
         mov al,0x58
         call rdcr
@@ -343,6 +372,14 @@ t_mode: VS 'D:TEST mode '
         ja .fail
         test byte [r1a],0x20    ; pedestal off
         jnz .fail
+        mov ax,[m_line]         ; line length, exact
+        or ax,ax
+        jz .lk
+        cmp word [m_lrem],0
+        jne .fail
+        cmp ax,[m_lmeas]
+        jne .fail
+.lk:
         mov ax,[m_flags]
         test al,F_VGA
         jz .nv
@@ -350,12 +387,12 @@ t_mode: VS 'D:TEST mode '
         jnz .fail
         test byte [r90],0x80    ; FIFO fix
         jnz .fail
-        mov al,[r59]
+        mov al,[r59]            ; real base restored, CR5A cleared
         cmp al,0
         je .fail
-        cmp al,[r6d]            ; real base restored (if booster ran before)
-        je .ok
-        cmp byte [r6d],0
+        cmp al,[base]
+        jne .fail
+        cmp byte [r5a],0
         jne .fail
         jmp .ok
 .nv:    test al,F_BOOST
@@ -378,12 +415,46 @@ t_mode: VS 'D:TEST mode '
         test byte [r58],0x03
         jz .fail
         mov al,[r59]
-        cmp al,[r6d]
+        cmp al,[base]
         jne .fail
 .ok:    mov al,1
         jmp .res
 .fail:  xor al,al
 .res:   call result
+        ret
+
+; Line length of the current mode: [m_lmeas] = [m_xres] * htotal / hdisplay, [m_lrem] = remainder,
+; with htotal = CR00 + 5 and hdisplay = CR01 + 1 in character clocks (CR5D bits 0 and 1 are bit 8 of
+; each). The ratio makes it independent of the pixel clock mode and the character width. Needs the
+; S3 registers unlocked. Keeps all registers.
+linelen:
+        pushad
+        mov al,0x5D
+        call rdcr
+        mov bl,ah
+        mov al,0x00
+        call rdcr
+        movzx eax,ah
+        test bl,1
+        jz .h
+        add eax,256
+.h:     add eax,5
+        movzx ecx,word [m_xres]
+        mul ecx
+        push eax
+        mov al,0x01
+        call rdcr
+        movzx ecx,ah
+        test bl,2
+        jz .d
+        add ecx,256
+.d:     inc ecx
+        pop eax
+        xor edx,edx
+        div ecx
+        mov [m_lmeas],ax
+        mov [m_lrem],dx
+        popad
         ret
 
 ; ---------------- VBE function tests ----------------
@@ -511,7 +582,13 @@ t_func: mov ax,0x4F02
         movzx eax,word [m_meas]
         call pdec
         cmp word [tmp],0x004F
-        jne .f6
+        je .s6
+        mov dx,s_st             ; the function failed: show its status (VBE 1.2 has no BL=3)
+        call puts
+        mov ax,[tmp]
+        call phex4
+        jmp .f6
+.s6:
         cmp word [tmp2],4368
         jne .f6
         cmp word [m_meas],4368
@@ -909,30 +986,31 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
 ; /V debug log (shared with VSHOW and S3COMPAT)
 %include "vdebug.inc"
 
-; mode, expected Hz*10, flags
-
-; Modes tested by t_mode: mode, expected refresh in tenths of Hz, check flags.
-; The expected values are the rates set by the p4b-p9 timing changes and the unchanged stock
-; rates (70 Hz text/320x200, 72 Hz 400x300).
+; Modes tested by t_mode: mode, expected refresh in tenths of Hz, check flags, horizontal
+; resolution, expected total line length in pixels (0 = not checked).
+; The expected refresh values are the rates set by the p4b-p9 timing changes and the unchanged
+; stock rates (70 Hz text/320x200, 72 Hz 400x300). The line lengths are the VGA totals and the
+; VESA DMT totals (see the file header); stock has 792/796 pixels in 640x480, 416 in 320x240 and
+; 1696/2112 in the interlaced 1280x1024 and the 97.9 Hz 1600x1200.
 modelist:
-        dw 0x0003,700,F_VGA
-        dw 0x0013,700,F_VGA
-        dw 0x0012,597,F_VGA
-        dw 0x012E,700,F_BOOST     ; 320x200x8
-        dw 0x0131,597,F_BOOST     ; 320x240x8  (p4b)
-        dw 0x0133,597,F_BOOST     ; 320x240x16 (p5/p6)
-        dw 0x0101,597,F_BOOST     ; 640x480x8  (p6 800-px line)
-        dw 0x4101,597,F_LFB
-        dw 0x0111,597,F_BOOST     ; 640x480x16 (p6)
-        dw 0x0141,722,F_BOOST     ; 400x300x8  (unchanged 72 Hz)
-        dw 0x0103,603,F_BOOST     ; 800x600x8
-        dw 0x4103,603,F_LFB
-        dw 0x0105,601,F_BOOST     ; 1024x768x8
-        dw 0x0106,602,0           ; 1280x1024x4 (p9: DMT 60 Hz, 108.4 MHz)
-        dw 0x0107,602,F_BOOST     ; 1280x1024x8 (p6 60 Hz, DMT)
-        dw 0x0120,600,F_BOOST     ; 1600x1200x8 (p6 60 Hz)
-        dw 0x0003,700,F_VGA       ; back to text: FIFO fix, base restore
-        dw 0x0013,700,F_VGA
+        dw 0x0003,700,F_VGA,720,900
+        dw 0x0013,700,F_VGA,320,400
+        dw 0x0012,597,F_VGA,640,800
+        dw 0x012E,700,F_BOOST,320,400     ; 320x200x8
+        dw 0x0131,597,F_BOOST,320,400     ; 320x240x8  (p4b)
+        dw 0x0133,597,F_BOOST,320,400     ; 320x240x16 (p5/p6)
+        dw 0x0101,597,F_BOOST,640,800     ; 640x480x8  (p6 800-px line)
+        dw 0x4101,597,F_LFB,640,800
+        dw 0x0111,597,F_BOOST,640,800     ; 640x480x16 (p6)
+        dw 0x0141,722,F_BOOST,400,0       ; 400x300x8  (unchanged 72 Hz)
+        dw 0x0103,603,F_BOOST,800,1056    ; 800x600x8
+        dw 0x4103,603,F_LFB,800,1056
+        dw 0x0105,601,F_BOOST,1024,1344   ; 1024x768x8
+        dw 0x0106,602,0,1280,1688         ; 1280x1024x4 (p9: DMT 60 Hz, 108.4 MHz)
+        dw 0x0107,602,F_BOOST,1280,1688   ; 1280x1024x8 (p6 60 Hz, DMT)
+        dw 0x0120,600,F_BOOST,1600,2160   ; 1600x1200x8 (p6 60 Hz)
+        dw 0x0003,700,F_VGA,720,900       ; back to text: FIFO fix, base restore
+        dw 0x0013,700,F_VGA,320,400
         dw 0xFFFF
 
 s_vname db 'S3TEST.DBG',0
@@ -951,6 +1029,7 @@ s_mode  db 'Mode $'
 s_st    db ' st $'
 s_hz    db ' Hz $'
 s_exp   db ' (exp $'
+s_line  db ') line $'
 s_regs  db ') CR58 59 5A 6D 90 SR1A: $'
 s_f03   db '4F03 in boosted 101h (0101) ......... $'
 s_f03l  db '4F03 in linear 4101h (4101) ......... $'
@@ -976,6 +1055,10 @@ bp_     dw 0
 m_mode  dw 0
 m_hz    dw 0
 m_flags dw 0
+m_xres  dw 0
+m_line  dw 0
+m_lmeas dw 0
+m_lrem  dw 0
 m_st    dw 0
 m_meas  dw 0
 tmp     dw 0
