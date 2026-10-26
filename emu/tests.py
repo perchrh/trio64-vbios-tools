@@ -32,6 +32,11 @@ Tests
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
                    caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
+  s3f8x14          S3F8X14 installs; plane 2 holds its 8x14 font in 350-line text (with the 9x14
+                   alternates in mode 07h) and after 1101h/1111h, modes 0Fh/10h get 25 rows of 14
+                   with INT 43h on the font, 1122h too, 1130h BH=2/5 return it with the BIOS's CX
+                   and DL; S3COMPAT's VGA part has no warning with it resident (mode 10h passes);
+                   refused second install, /H, /U. Passes on any of the ROMs
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
 """
@@ -403,6 +408,87 @@ def t_s3alias(c):
     check(mode(0x49) == 0x49, '49h still mapped after /U')
 
 
+def t_s3f8x14(c):
+    """S3F8X14 puts its 8x14 font and 9x14 alternates everywhere the IBM BIOS uses the 8x14 font, on any of
+    the BIOSes (with or without a font of their own, asking for it through AX=1130h or not); /H, /U."""
+    if not os.path.exists(os.path.join(SRC, 's3f8x14', 's3f8x14.asm')):
+        raise Skip('no s3f8x14/ in this tree')
+    com = c.tool('S3F8X14.COM')
+    m = c.machine()
+    runs = []
+    r = m.run_com(com, '', seg=0x2000)
+    runs.append(b'S3F8X14 -> ' + repr(r.exit).encode() + b'\r\n' + bytes(r.stdout))
+    check(r.exit and r.exit[0] == 'tsr', 'S3F8X14 did not stay resident: %s' % (r.exit,))
+    r2 = m.int10(0x1130, bx=0x0200)
+    f14 = m.mem(r2['es'] * 16 + r2['bp'], 256 * 14)
+    check(r2['es'] == 0x2000 and f14 in com, 'AX=1130h BH=2 returns %04X:%04X, not the resident font' % (r2['es'], r2['bp']))
+    check(r2['cx'] == 16 and r2['dx'] & 0xFF == 24, 'AX=1130h BH=2 in mode 03: CX=%d DL=%d, expected the BIOS values 16/24'
+          % (r2['cx'], r2['dx'] & 0xFF))
+    r5 = m.int10(0x1130, bx=0x0500)
+    a9 = r5['es'] * 16 + r5['bp']
+    check(r5['es'] == 0x2000 and m.mem(a9, 1) != b'\0', 'AX=1130h BH=5 does not return the 9x14 table')
+
+    def glyphs(n=256):
+        return [m.planes[2][ch * 32:ch * 32 + 14] for ch in range(n)]
+    want = [f14[ch * 14:ch * 14 + 14] for ch in range(256)]
+
+    def chk_text(label):
+        bad = sum(1 for a, b in zip(glyphs(), want) if a != b)
+        check(bad == 0, '%s: %d characters in plane 2 are not the 8x14 font' % (label, bad))
+
+    m.int10(0x1201, bx=0x30)
+    m.int10(0x0003)
+    check(m.mem(0x485, 1)[0] == 14 and m.r['crtc'][9] & 0x1F == 13, 'mode 03 at 350 lines: not 14 lines per row')
+    chk_text('mode 03 at 350 lines')
+    m.int10(0x1201, bx=0x30)                     # 720x350 mode 07h: 9-dot, the 9x14 alternates on top
+    m.int10(0x0007)
+    alts, i = [], 0
+    while m.mem(a9 + i, 1) != b'\0':
+        alts.append((m.mem(a9 + i, 1)[0], m.mem(a9 + i + 1, 14)))
+        i += 15
+    g = glyphs()
+    bad = [ch for ch, rows in alts if g[ch] != rows] + [ch for ch in range(256) if ch not in dict(alts) and g[ch] != want[ch]]
+    check(alts and not bad, 'mode 07 at 350 lines: %d characters are neither 8x14 nor the 9x14 alternates' % len(bad))
+    m.int10(0x1201, bx=0x30)                     # 720x350 mode 07h: 9-dot, the 9x14 alternates on top
+    m.int10(0x0007)
+    alts, i = [], 0
+    while m.mem(a9 + i, 1) != b'\0':
+        alts.append((m.mem(a9 + i, 1)[0], m.mem(a9 + i + 1, 14)))
+        i += 15
+    g, ad = glyphs(), dict(alts)
+    bad = [ch for ch in range(256) if g[ch] != ad.get(ch, want[ch])]
+    check(alts and not bad, 'mode 07 at 350 lines: %d characters are neither 8x14 nor the 9x14 alternates' % len(bad))
+    m.int10(0x1202, bx=0x30)
+    for ax in (0x1101, 0x1111):
+        m.int10(0x0003)
+        m.int10(ax, bx=0)
+        chk_text('mode 03 + AX=%04X' % ax)
+    for mode in (0x0F, 0x10):
+        m.int10(mode)
+        seg = struct.unpack('<H', m.mem(0x43 * 4 + 2, 2))[0]
+        check((m.mem(0x484, 1)[0], m.mem(0x485, 1)[0], seg) == (24, 14, 0x2000),
+              'mode %02Xh: rows %d, height %d, INT 43h segment %04X; expected 25 rows of 14 and the resident font'
+              % (mode, m.mem(0x484, 1)[0] + 1, m.mem(0x485, 1)[0], seg))
+    m.int10(0x0012)
+    m.int10(0x1122, bx=2)
+    check(m.mem(0x485, 1)[0] == 14 and struct.unpack('<H', m.mem(0x43 * 4 + 2, 2))[0] == 0x2000,
+          'AX=1122h: not the resident 8x14 font')
+    m.int10(0x0003)
+    with tempfile.TemporaryDirectory() as tmp:     # S3COMPAT's VGA part with the font resident: no warning
+        out = m.run_com(build_s3compat_vga(tmp), '', seg=0x5000).stdout.decode('latin1').split('\r\n')
+    warn = [l.strip() for l in out if l.rstrip().endswith(('WARN 01', 'FAIL'))]
+    check(not warn and any(l.startswith('Passed:') for l in out), 'S3COMPAT VGA part with S3F8X14: %s' % warn)
+    m.int10(0x0003)
+    for tail, want_exit in (('', ('exit', 1)), ('/H', ('exit', 0)), ('/U', ('exit', 0)), ('/U', ('exit', 1))):
+        r = m.run_com(com, tail, seg=0x4000)
+        runs.append(('S3F8X14 %s' % tail).encode() + b' -> ' + repr(r.exit).encode() + b'\r\n' + bytes(r.stdout))
+        check(r.exit == want_exit, 'S3F8X14 %s ended with %s, expected %s' % (tail, r.exit, want_exit))
+    seg = struct.unpack('<H', m.mem(0x42, 2))[0]
+    check(seg == 0xC000, 'INT 10h vector not restored by /U: %04X' % seg)
+    open(os.path.join(c.logs, 'S3F8X14.LOG'), 'wb').write(b'\r\n'.join(runs))
+    return 'font used for 350-line text (9x14 in mode 07h), 1101h/1111h, modes 0Fh/10h, 1122h'
+
+
 EXE_SRC = r"""
 bits 16
 org 0
@@ -476,7 +562,7 @@ def t_dos_exe(c):
 TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga),
-         ('vgalog', t_vgalog), ('s3alias', t_s3alias), ('dos_exe', t_dos_exe)]
+         ('vgalog', t_vgalog), ('s3alias', t_s3alias), ('s3f8x14', t_s3f8x14), ('dos_exe', t_dos_exe)]
 
 
 def main():

@@ -19,7 +19,7 @@ What is emulated
     passes come to an end.
   - A small DOS (INT 21h) for .COM and .EXE programs (MZ header with relocations, run_exe): console and
     file output, create/close, IOCTL, InDOS, get/set vector, version, PSP (51h/62h), memory blocks
-    (48h-4Ah, with MCBs in front of the environment and the program), list of lists (52h, first MCB),
+    (48h-4Ah, with MCBs in front of the environment and the program), list of lists (52h: first MCB, NUL device header as the only driver),
     allocation strategy and UMB link (58h, no UMBs), country (38h), date/time (zero), Ctrl-Break,
     default drive, commit, terminate and stay resident. INT 21h goes through the vector table to a stub
     at 0050:0020, so a program that hooks INT 21h (for example a TSR that stays resident when its own
@@ -507,6 +507,7 @@ class Machine:
             uc.reg_write(UC_X86_REG_ES, 0x0070)
             uc.reg_write(UC_X86_REG_BX, 0x0010)
             uc.mem_write(0x0700 + 0x10 - 2, struct.pack('<H', self.psp - 0x11))
+            uc.mem_write(0x0700 + 0x10 + 0x22, b'\xFF\xFF\xFF\xFF\x04\x80\0\0\0\0NUL     ')  # NUL device, last
         elif ah == 0x58:                                # strategy / UMB link: first fit, no UMBs
             if ax & 0xFF in (0, 2):
                 uc.reg_write(UC_X86_REG_AX, 0)
