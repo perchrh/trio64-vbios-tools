@@ -967,7 +967,10 @@ scrtab: ;   AX      BX      CX      DX      x0  x1   y0  y1   shift  -   bit
 ; ---------------- VBE 4F05 (p12: fast path from the INT 10h entry) ----------------
 ; In 101h: 4F05 BH=0 DX=5 returns 004Fh with BX, CX, DX, SI, DI unchanged (fail 1), keeps the 3C4h index
 ; and SR08 (fail 2) and sets CR6A = 05h (fail 4). In planar 102h DX=2 gives CR6A = 08h and 0040:00FE =
-; 0008h (fail 8). In linear 4101h it is refused with 034Fh and CR6A stays (fail 10h).
+; 0008h (fail 8). In linear 4101h it is refused with 034Fh and CR6A stays (fail 10h). CR6A is compared
+; in its bank field, bits 4-0 (Trio64V2 datasheet: bit 5 reserved with 2 MB); the reserved bits 7-6 read
+; back as 1 on the card (p12 hardware log: C3h after bank 3), which the first version of this test
+; counted as fail 4 and 8.
 t_bank: VS 'D:TEST 4F05'
         call vnl
         call vflush
@@ -1013,6 +1016,7 @@ t_bank: VS 'D:TEST 4F05'
 .f2:    or byte [tmp],2
 .r2:    mov al,0x6A
         call rdcr
+        and ah,0x1F                     ; bank field CR6A bits 4-0 (2 MB); bits 7-6 read 1 on the card
         cmp ah,0x05
         je .pl
         or byte [tmp],4
@@ -1026,6 +1030,7 @@ t_bank: VS 'D:TEST 4F05'
         call unlock
         mov al,0x6A
         call rdcr
+        and ah,0x1F
         cmp ah,0x08
         jne .f8
         push es
