@@ -4,20 +4,29 @@ What is emulated
   - 1 MB of RAM with the 64 KB ROM image at C0000; the ROM is started like a system BIOS does it
     (far call to C000:0003) and then serves INT 10h.
   - A register-level model of the VGA and S3 ports: sequencer, CRTC (3D4/3B4), graphics controller,
-    attribute controller with its flip-flop, misc output, DAC with read/write indexes, input status
-    (3DAh toggles retrace on every read), PCI configuration mechanism 1,
-    PIT channels 0 and 2 (a counter that runs down a fixed amount per read), port 61h,
-    the card's PCI configuration header (BAR0 = E0000000, as on the real card).
-  - The BIOS timer tick at 0040:006C advances every 20 reads.
+    attribute controller with its flip-flop, misc output (its I/O select bit decides whether the
+    colour or the mono CRTC ports answer), CR11 write protection of CR00-07, SR04 bit 0 reading 0 as
+    on the chip, DAC with read/write indexes, input status
+    (3DAh), PIT channels 0 and 2, port 61h, PCI configuration mechanism 1 and the PCI BIOS
+    (INT 1Ah B101h-B10Dh) with the card's configuration header (BAR0 = E0000000 as on the real card;
+    the Trio64 keeps BAR0 in CR59/CR5A).
+  - One virtual clock in PIT counts (1.193182 MHz) for everything that measures time: it advances
+    with every port access and every read of the BIOS tick. The PIT channels count from it, the tick
+    at 0040:006C counts channel 0 periods, and the vertical retrace bit of 3DAh follows the frame period that
+    the programmed CRTC and clock registers give. So refresh rates the tools measure here equal the
+    rate the registers define, and call durations are plausible, but not real.
+    Every write to A0000-BFFFF also takes one count, so loops that write video memory until a tick
+    passes come to an end.
   - A small DOS (INT 21h) for .COM programs: console and file output, create/close, IOCTL, InDOS,
     get/set vector, version, PSP, free memory, commit, terminate and stay resident. INT 16h returns
-    keys from a queue (Enter when empty), INT 15h AH=87h and the PCI BIOS (INT 1Ah) report "not
-    supported".
+    keys from a queue (Enter when empty); INT 15h AH=87h reports "not supported".
 
 What is not emulated (results that depend on it are meaningless here)
-  - Video memory: A0000-BFFFF is plain RAM, so memory tests through banks, planes or the LFB fail.
-  - Real timing: refresh rates, line frequencies and call durations are artefacts of the model.
-  - The reserved bit 0 of SR04 reads back as written (the real chip returns 0).
+  - Video memory beyond one 64 KB window: A0000-BFFFF is plain RAM, plus a model of the four planes
+    (map mask, read map, bit mask, set/reset, latches, write modes 0-2, read mode 0) for the 16-colour
+    and unchained modes. There is no banking or LFB memory, so memory tests through banks or the LFB
+    fail.
+  - Real timing: CPU speed, bus waits and monitor behaviour. Durations come from the virtual clock.
   - Equipment-dependent BIOS state (AH=1Bh +26h alternate display, +2Dh flags).
 
 Usage (see tests.py for complete examples)
@@ -35,7 +44,7 @@ except ImportError:
     sys.exit('The emulator needs the unicorn package. Install it with: python3 -m venv .venv && '
              '.venv/bin/pip install .   (or: pip install unicorn), see pyproject.toml')
 from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_16, UC_HOOK_INTR, UC_HOOK_INSN, UC_HOOK_MEM_READ, \
-    UC_HOOK_BLOCK, UC_HOOK_CODE
+    UC_HOOK_MEM_WRITE, UC_HOOK_BLOCK, UC_HOOK_CODE
 from unicorn.x86_const import *
 
 REGNAMES = ['MISC', 'FEAT', 'SR0', 'SR1', 'SR2', 'SR3', 'SR4'] + ['CR%02X' % i for i in range(25)] + \
@@ -74,13 +83,17 @@ class Machine:
         mu.mem_write(0x413, struct.pack('<H', 640))
         self.r = {'seq': {}, 'crtc': {}, 'gc': {}, 'atc': {}, 'misc': 0x67, 'feat': 0, 'si': 0, 'ci': 0,
                   'gi': 0, 'ai': 0, 'aff': 0, 'dac_w': 0, 'dac_c': 0, 'dac_r': 0, 'dac_rc': 0, 'pci': 0,
-                  'st': 0, 'pit': {0x40: [0xFFFF, 0], 0x42: [0xFFFF, 0]}, 'p61': 0}
+                  'st': 0, 'p61': 0}
+        # PIT channels: reload value, mode, time it was loaded, latched value, byte flip-flop
+        self.pit = {0x40: {'reload': 0, 'mode': 3, 't0': 0, 'latch': None, 'ff': 0, 'wff': 0},
+                    0x42: {'reload': 0, 'mode': 3, 't0': 0, 'latch': None, 'ff': 0, 'wff': 0}}
+        self.t = 0                                      # virtual clock in PIT counts
+        self.tick_base = 0                              # BIOS ticks counted before channel 0 was reloaded
         # the system BIOS has assigned BAR0 = E0000000 before the video ROM starts; on the Trio64 the
         # BAR is CR59/CR5A (the linear frame buffer base)
         self.r['crtc'][0x59] = 0xE0
         self.r['crtc'][0x5A] = 0x00
         self.dac = [[0, 0, 0] for _ in range(256)]
-        self.tick = 0
         self.keys = list(keys or [])
         self.com = None                                 # ComResult while a .COM runs
         self.handles = {}
@@ -88,11 +101,72 @@ class Machine:
         mu.hook_add(UC_HOOK_INSN, self._in, None, 1, 0, UC_X86_INS_IN)
         mu.hook_add(UC_HOOK_INSN, self._out, None, 1, 0, UC_X86_INS_OUT)
         mu.hook_add(UC_HOOK_MEM_READ, self._tread, None, 0x46C, 0x46D)
+        mu.hook_add(UC_HOOK_MEM_WRITE, self._vwrite, None, 0xA0000, 0xBFFFF)
+        mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
+        self.planes = [bytearray(0x10000) for _ in range(4)]
+        self.latch = [0, 0, 0, 0]
 
     # ------------------------------------------------------------------ ports
+    # ------------------------------------------------------------------ virtual clock
+    def frame(self, xres=None):
+        """Timing the programmed registers define: (Hz, pixels per line, frame period in PIT counts,
+        total lines). Hz is None when the clock source is unknown. Same rules as S3COMPAT's predict."""
+        r = self.r
+        seq, cr = r['seq'], r['crtc']
+        csel = (r['misc'] >> 2) & 3
+        if csel == 0:
+            clk = 25175e3
+        elif csel == 1:
+            clk = 28322e3
+        elif csel == 3:
+            n, m = seq.get(0x12, 0), seq.get(0x13, 0)
+            rr = ((n >> 5) & 3) | (4 if n & 0x80 else 0)
+            clk = 14318180.0 * ((m & 0x7F) + 2) / (((n & 0x1F) + 2) * (1 << rr))
+        else:
+            return None, None, 19886, 525
+        if seq.get(1, 0) & 8:
+            clk /= 2
+        if csel == 3 and seq.get(0x15, 0) & 0x10:
+            clk /= 2
+        cw = 8 if seq.get(1, 0) & 1 else 9
+        htot = cr.get(0, 0) + (256 if cr.get(0x5D, 0) & 1 else 0) + 5
+        hdisp = cr.get(1, 0) + (256 if cr.get(0x5D, 0) & 2 else 0) + 1
+        c7 = cr.get(7, 0)
+        vtot = cr.get(6, 0) + (256 if c7 & 1 else 0) + (512 if c7 & 0x20 else 0) + \
+            (1024 if cr.get(0x5E, 0) & 1 else 0) + 2
+        hz = clk / (htot * cw * vtot)
+        cmode = cr.get(0x67, 0) >> 4
+        if csel == 3:
+            if cmode in (1, 3, 5):
+                hz *= 2
+            elif cmode == 0 and (seq.get(0x0B, 0) & 0xF0) == 0x70:
+                hz /= 2
+        pix = round(xres * htot / hdisp) if xres else htot * cw
+        return hz, pix, max(1000, round(1193182 / hz)), vtot
+
+    def _retrace(self):
+        """Vertical retrace bit from the virtual clock: on for about 3 lines at the start of each frame."""
+        hz, pix, period, vtot = self.frame()
+        return (self.t % period) < max(60, period * 3 // max(vtot, 1))
+
+    def _pit_count(self, ch):
+        p = self.pit[ch]
+        reload = p['reload'] or 0x10000
+        el = self.t - p['t0']
+        if p['mode'] == 3:                              # square wave counts down by 2
+            return (reload - (2 * el) % reload) & 0xFFFF
+        return (reload - el % reload) & 0xFFFF
+
     def _in(self, uc, port, size, ud):
         r = self.r
-        if port == 0x3C5: return r['seq'].get(r['si'], 0)
+        self.t += 3                                     # about one ISA I/O cycle
+        if port == 0x3C5:
+            v = r['seq'].get(r['si'], 0)
+            return v & 0xFE if r['si'] == 4 else v      # SR04 bit 0 is reserved and reads 0
+        if port in (0x3B4, 0x3B5, 0x3BA) and r['misc'] & 1:
+            return 0xFF                                 # colour I/O: the mono ports are not decoded
+        if port in (0x3D4, 0x3D5, 0x3DA) and not r['misc'] & 1:
+            return 0xFF
         if port in (0x3D5, 0x3B5):
             i = r['ci']
             fixed = {0x30: 0xE1, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x92}   # chip id Trio64V2, EDO 2 MB
@@ -104,9 +178,10 @@ class Machine:
         if port == 0x3CA: return r['feat']
         if port == 0x3C2: return 0x10
         if port in (0x3DA, 0x3BA):
+            self.t += 22                                # polling loops: keep the run time short
             r['aff'] = 0
-            r['st'] ^= 0x09
-            return r['st']
+            r['st'] ^= 0x01                             # display enable toggles
+            return (r['st'] & 0x01) | (0x08 if self._retrace() else 0)
         if port == 0x3C9:
             v = self.dac[r['dac_r']][r['dac_rc']]
             r['dac_rc'] += 1
@@ -120,11 +195,13 @@ class Machine:
         if port in (0x3D4, 0x3B4): return r['ci']
         if port == 0x3CE: return r['gi']
         if port in (0x40, 0x42):
-            p = r['pit'][port]
-            if p[1] == 0:
-                p[0] = (p[0] - 60) & 0xFFFF
-            v = (p[0] >> (8 * p[1])) & 0xFF
-            p[1] ^= 1
+            p = self.pit[port]
+            if p['latch'] is None:
+                p['latch'] = self._pit_count(port)
+            v = (p['latch'] >> (8 * p['ff'])) & 0xFF
+            p['ff'] ^= 1
+            if p['ff'] == 0:
+                p['latch'] = None
             return v
         if port == 0x61:
             r['p61'] ^= 0x30
@@ -143,6 +220,14 @@ class Machine:
         r = self.r
 
         def w8(p, v):
+            if p in (0x3B4, 0x3B5, 0x3BA) and r['misc'] & 1:
+                return                                  # colour I/O: the mono ports are not decoded
+            if p in (0x3D4, 0x3D5, 0x3DA) and not r['misc'] & 1:
+                return
+            if p in (0x3D5, 0x3B5) and r['ci'] <= 7 and r['crtc'].get(0x11, 0) & 0x80:
+                if r['ci'] == 7:                        # CR11 bit 7 protects CR00-07 except CR07 bit 4
+                    r['crtc'][7] = (r['crtc'].get(7, 0) & ~0x10) | (v & 0x10)
+                return
             if p == 0x3C4: r['si'] = v
             elif p == 0x3C5: r['seq'][r['si']] = v
             elif p in (0x3D4, 0x3B4): r['ci'] = v
@@ -167,8 +252,34 @@ class Machine:
                 if r['dac_c'] == 3:
                     r['dac_c'] = 0
                     r['dac_w'] = (r['dac_w'] + 1) & 255
+        self.t += 2
         if port == 0xCF8:
             r['pci'] = val
+            return
+        if port == 0x43:                                # PIT control word
+            ch = {0x00: 0x40, 0x80: 0x42}.get(val & 0xC0)
+            if ch is None:
+                return
+            p = self.pit[ch]
+            if val & 0x30 == 0:                         # counter latch
+                p['latch'] = self._pit_count(ch)
+                p['ff'] = 0
+            else:
+                p['mode'] = (val >> 1) & 7
+                p['wff'] = 0
+                p['latch'] = None
+                p['ff'] = 0
+            return
+        if port in (0x40, 0x42):
+            p = self.pit[port]
+            if p['wff'] == 0:
+                p['reload'] = (p['reload'] & 0xFF00) | (val & 0xFF)
+            else:
+                if port == 0x40:                        # the tick keeps counting across a reload
+                    self.tick_base = self._ticks()
+                p['reload'] = (p['reload'] & 0x00FF) | ((val & 0xFF) << 8)
+                p['t0'] = self.t
+            p['wff'] ^= 1
             return
         if size == 1:
             w8(port, val & 0xFF)
@@ -176,9 +287,58 @@ class Machine:
             w8(port, val & 0xFF)
             w8(port + 1, (val >> 8) & 0xFF)
 
+    def _planar(self):
+        """16-colour and unchained 256-colour modes: chain-4 off, odd/even off, A0000 64 KB window."""
+        sr4 = self.r['seq'].get(4, 0)
+        return not sr4 & 0x08 and sr4 & 0x04 and (self.r['gc'].get(6, 0) >> 2) & 3 == 1
+
+    def _vwrite(self, uc, acc, addr, size, val, ud):
+        self.t += 1                                     # video memory writes take time too
+        if addr >= 0xB0000 or not self._planar():
+            return
+        gc, sr = self.r['gc'], self.r['seq']
+        mode = gc.get(5, 0) & 3
+        mask, sr_en, sr_val = gc.get(8, 0xFF), gc.get(1, 0), gc.get(0, 0)
+        mapmask = sr.get(2, 0x0F)
+        for k in range(size):
+            off = (addr + k) & 0xFFFF
+            cpu = (val >> (8 * k)) & 0xFF
+            for p in range(4):
+                if not mapmask & (1 << p):
+                    continue
+                if mode == 1:
+                    d = self.latch[p]
+                else:
+                    if mode == 2:
+                        d = 0xFF if cpu & (1 << p) else 0
+                    elif sr_en & (1 << p):
+                        d = 0xFF if sr_val & (1 << p) else 0
+                    else:
+                        d = cpu
+                    d = (d & mask) | (self.latch[p] & ~mask & 0xFF)
+                self.planes[p][off] = d
+
+    def _vread(self, uc, acc, addr, size, val, ud):
+        """Before the CPU reads a planar address: load the latches and put the selected plane's bytes
+        into RAM, so the read returns them (read mode 0)."""
+        if not self._planar():
+            return
+        plane = self.r['gc'].get(4, 0) & 3
+        data = bytearray()
+        for k in range(size):
+            off = (addr + k) & 0xFFFF
+            self.latch = [self.planes[p][off] for p in range(4)]
+            data.append(self.planes[plane][off])
+        uc.mem_write(addr, bytes(data))
+
+    def _ticks(self):
+        """BIOS ticks: one per channel 0 period (IRQ 0), in step with the channel 0 counter."""
+        p = self.pit[0x40]
+        return self.tick_base + (self.t - p['t0']) // (p['reload'] or 0x10000)
+
     def _tread(self, uc, acc, addr, size, val, ud):
-        self.tick += 1
-        uc.mem_write(0x46C, struct.pack('<H', (self.tick // 20) & 0xFFFF))
+        self.t += 40                                    # loops that wait for the tick move time on
+        uc.mem_write(0x46C, struct.pack('<H', self._ticks() & 0xFFFF))
 
     # ------------------------------------------------------------------ interrupts
     def _reg(self, n):
@@ -200,9 +360,9 @@ class Machine:
             if n == 0x15 and ah == 0x87:
                 self._ret_cf(uc, 1, ax=0x8600)
                 return
-            if n == 0x1A and ah == 0xB1:
-                self._ret_cf(uc, 1, ax=0x8100)
-                return
+        if n == 0x1A and ah == 0xB1:
+            self._pcibios(uc)
+            return
         # real-mode INT through the IVT: push FLAGS, CS, IP (IP already points past the INT)
         ss = self._reg(UC_X86_REG_SS)
         sp = self._reg(UC_X86_REG_SP)
@@ -216,6 +376,47 @@ class Machine:
         uc.reg_write(UC_X86_REG_EFLAGS, self._reg(UC_X86_REG_EFLAGS) & ~0x300)
         uc.reg_write(UC_X86_REG_CS, seg)
         uc.reg_write(UC_X86_REG_IP, off)
+
+    def _pci_read(self, reg):
+        reg &= 0xFC
+        if reg == 0x10:
+            return (self.r['crtc'].get(0x59, 0) << 24) | (self.r['crtc'].get(0x5A, 0) << 16)
+        return PCI_CONFIG.get(reg, 0)
+
+    def _pcibios(self, uc):
+        """PCI BIOS 2.1: the card is bus 0, device 9 (BX = 0048h), the only device."""
+        al = self._reg(UC_X86_REG_AX) & 0xFF
+        di = self._reg(UC_X86_REG_DI)
+        ok = True
+        if al == 0x01:
+            uc.reg_write(UC_X86_REG_EDX, 0x20494350)    # 'PCI '
+            uc.reg_write(UC_X86_REG_AX, 0x0001)          # mechanism 1
+            uc.reg_write(UC_X86_REG_BX, 0x0210)
+            uc.reg_write(UC_X86_REG_CX, 0)
+            self._ret_cf(uc, 0)
+            return
+        if al == 0x02:                                  # find device CX, vendor DX, index SI
+            ok = (self._reg(UC_X86_REG_DX), self._reg(UC_X86_REG_CX), self._reg(UC_X86_REG_SI)) == \
+                (0x5333, 0x8901, 0)
+        elif al == 0x03:                                # find class ECX, index SI
+            ok = (self._reg(UC_X86_REG_ECX) & 0xFFFFFF) == 0x030000 and self._reg(UC_X86_REG_SI) == 0
+        elif al in (0x08, 0x09, 0x0A):                  # read config byte/word/dword
+            v = self._pci_read(di) >> (8 * (di & 3))
+            v &= {0x08: 0xFF, 0x09: 0xFFFF, 0x0A: 0xFFFFFFFF}[al]
+            mask = {0x08: 0xFF, 0x09: 0xFFFF, 0x0A: 0xFFFFFFFF}[al]
+            uc.reg_write(UC_X86_REG_ECX, (self._reg(UC_X86_REG_ECX) & ~mask & 0xFFFFFFFF) | v)
+        elif al in (0x0B, 0x0C, 0x0D):                  # writes: only BAR0 matters (CR59/CR5A)
+            if di & 0xFC == 0x10 and al == 0x0D:
+                v = self._reg(UC_X86_REG_ECX)
+                self.r['crtc'][0x59] = (v >> 24) & 0xFF
+                self.r['crtc'][0x5A] = (v >> 16) & 0xFF
+        else:
+            ok = False
+        if ok and al in (0x02, 0x03):
+            uc.reg_write(UC_X86_REG_BX, 0x0048)
+        ax = self._reg(UC_X86_REG_AX)
+        uc.reg_write(UC_X86_REG_AX, (ax & 0x00FF) | (0 if ok else 0x8600))
+        self._ret_cf(uc, 0 if ok else 1)
 
     def _ret_cf(self, uc, cf, ax=None):
         fl = self._reg(UC_X86_REG_EFLAGS)

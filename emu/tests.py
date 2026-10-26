@@ -8,9 +8,9 @@ The ROM image is not in the repository; pass the 64 KB image of the card. The to
 their output (NAME.LOG) and debug files (NAME.DBG, VGALOG.BIN) are kept in emu/logs (--logs).
 Run against the stock ROM, rom_patches and s3test list everything the patches add. The tools are taken from
 --build (run make first). Each test prints PASS, FAIL (with the reason) or SKIP; the exit code is 1
-when a test failed. The emulator has no video memory model and no real timing (see vgaemu.py), so the
-tests only check what the model can judge: BIOS register values, BIOS data, palettes, VBE results,
-and that the tools behave the same with and without /V.
+when a test failed. The emulator models the VGA/S3 registers, one 64 KB planar window and a virtual clock
+that drives the PIT, the BIOS tick and the retrace bit (see vgaemu.py). It has no banked or linear
+video memory and no real bus speed, so those results stay with the hardware runs.
 
 Tests
   post             the ROM initialises and hooks INT 10h into C000
@@ -23,12 +23,14 @@ Tests
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
                    EGA (all others)
-  s3test           S3TEST runs to the end; the checks the model can judge pass; with /V the output is the
-                   same and S3TEST.DBG is well formed
+  s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
+                   (banked memory, throughput); with /V the output is the same and S3TEST.DBG is well
+                   formed
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed
   s3compat_vga     S3COMPAT's VGA and Mode X part (built with nasm from the source with the rest cut
-                   out): no default-DAC failures and no register differences except the known model
-                   artefacts; with /V the output is the same and S3COMPAT.DBG is well formed
+                   out): every test passes (registers, BIOS data, refresh, planar memory, palettes),
+                   only the known mode 10h warning; with /V the output is the same and S3COMPAT.DBG
+                   is well formed
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
                    caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
@@ -216,39 +218,9 @@ def romver():
 
 
 def refresh(m, xres):
-    """Refresh in Hz predicted from the registers the BIOS programmed (as S3COMPAT's predict does),
-    and the total pixels per line (XRes * horizontal total / displayed, as S3COMPAT's line info)."""
-    r = m.r
-    seq, cr = r['seq'], r['crtc']
-    csel = (r['misc'] >> 2) & 3
-    if csel == 0:
-        clk = 25175e3
-    elif csel == 1:
-        clk = 28322e3
-    elif csel == 3:
-        n, mm = seq.get(0x12, 0), seq.get(0x13, 0)
-        rr = ((n >> 5) & 3) | (4 if n & 0x80 else 0)
-        clk = 14318180.0 * ((mm & 0x7F) + 2) / (((n & 0x1F) + 2) * (1 << rr))
-    else:
-        return None, None
-    if seq.get(1, 0) & 8:
-        clk /= 2
-    if csel == 3 and seq.get(0x15, 0) & 0x10:
-        clk /= 2
-    cw = 8 if seq.get(1, 0) & 1 else 9
-    htot = cr.get(0, 0) + (256 if cr.get(0x5D, 0) & 1 else 0) + 5
-    hdisp = cr.get(1, 0) + (256 if cr.get(0x5D, 0) & 2 else 0) + 1
-    c7 = cr.get(7, 0)
-    vtot = cr.get(6, 0) + (256 if c7 & 1 else 0) + (512 if c7 & 0x20 else 0) + \
-        (1024 if cr.get(0x5E, 0) & 1 else 0) + 2
-    hz = clk / (htot * cw * vtot)
-    cmode = cr.get(0x67, 0) >> 4
-    if csel == 3:
-        if cmode in (1, 3, 5):
-            hz *= 2
-        elif cmode == 0 and (seq.get(0x0B, 0) & 0xF0) == 0x70:
-            hz /= 2
-    return hz, round(xres * htot / hdisp)
+    """Refresh in Hz and total pixels per line that the programmed registers define (vgaemu.frame)."""
+    hz, pix, period, vtot = m.frame(xres)
+    return hz, pix
 
 
 # VESA mode, expected refresh in Hz, expected total pixels per line (0 = not checked), patch
@@ -337,9 +309,8 @@ def t_rom_patches(c):
     return 'all patches present'
 
 
-S3TEST_MUST_PASS = ['ROM checksum', 'MCLK SR10 SR11', 'CR36 memory type', 'SR1A pedestal off',
-                    'Refresh defaults', '4F03 in boosted 101h', '4F05 set bank 3', '4F03 in linear 4101h',
-                    '4F06 BL=3', 'CR50 in 512x384x8']
+# S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)
+S3TEST_MODEL_LIMITS = ('Banked data check', 'Banked write throughput')
 
 
 def t_s3test(c):
@@ -350,11 +321,9 @@ def t_s3test(c):
     check(r1.exit and r1.exit[0] == 'exit', 'S3TEST did not end: %s' % (r1.exit,))
     out = r1.stdout.decode('latin1')
     check('Passed:' in out, 'no summary line')
-    bad = []
-    for name in S3TEST_MUST_PASS:
-        line = [l for l in out.split('\r\n') if l.startswith(name)]
-        if not (line and line[0].rstrip().endswith('PASS')):
-            bad.append(line[0].strip() if line else name + ' (missing)')
+    results = [l for l in out.split('\r\n') if l.rstrip().endswith(('PASS', 'FAIL'))]
+    check(len(results) >= 30, 'only %d result lines' % len(results))
+    bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
@@ -378,9 +347,6 @@ def t_vshow(c):
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
         check(any(l.startswith('D:FRM n=31') for l in lines), 'no frame timing')
-
-
-ALLOWED_DETAIL = re.compile(r'^(SR04=03\(02\)|DS\+26=..\(..\)|DS\+2D=..\(..\))$')
 
 
 def build_s3compat_vga(tmp):
@@ -416,15 +382,10 @@ def t_s3compat_vga(c):
     tests = [l for l in lines if l.startswith(('VGA ', 'Mode ', 'Text 80x50')) and
              re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
     check(len(tests) >= 17 + 6, 'only %d VGA/Mode X lines' % len(tests))
-    dac = [l for l in lines if 'DAC#' in l]
-    check(not dac, 'default DAC wrong: %s' % dac[:2])
-    bad = []
-    for l in lines:
-        if l.startswith('      '):
-            for tok in l.split():
-                if not ALLOWED_DETAIL.match(tok):
-                    bad.append(tok)
-    check(not bad, 'unexpected differences: %s' % ' '.join(bad[:10]))
+    bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
+           not (l.startswith('VGA 10h') and l.rstrip().endswith('WARN 01'))]     # known: no 8x14 font
+    details = [l.strip() for l in lines if l.startswith('      ')]
+    check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad + details[:6]))
     if v:
         r1 = c.machine().run_com(com, '')
         check(r1.stdout == r0.stdout, 'output differs without /V')

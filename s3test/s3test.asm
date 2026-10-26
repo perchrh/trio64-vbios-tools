@@ -30,7 +30,7 @@
 ;                    linear (F_LFB)    linear addressing on, window 1 MB or larger, CR59 = CR6D
 ;                    no flag           only status, refresh and pedestal (106h, planar)
 ;   4F03 in boosted 101h reports 0101h (no linear bit although CR58 has LA on)
-;   4F01 PhysBasePtr equals CR6D << 24 (the real base, not the booster's 000A0000h)
+;   4F01 PhysBasePtr equals the real base (CR59 at POST, the PCI BAR), not the booster's 000A0000h
 ;   4F05 set bank 3, then get bank: 004Fh and 3
 ;   320 KB written through banks 0-4 and read back: 0 errors
 ;   Banked write throughput at least 60000 KB/s (the booster; 83700 KB/s measured on p7)
@@ -188,6 +188,9 @@ t_rom:  mov dx,s_sig
 ; Expect: SR10/SR11 = 42h/41h (59.96 MHz MCLK), CR36 bits 3-2 = 00 (1-cycle EDO),
 ; SR1A & 30h = 10h (pedestal off), CR41 bits 7-5 = 100b and CR52 bits 2-0 = 001b (60 Hz defaults).
 t_post: call unlock
+        mov al,0x59                     ; the real LFB base, as the system BIOS assigned it (PCI BAR0)
+        call rdcr
+        mov [base],ah
         mov dx,s_mclk
         call puts
         mov al,0x10
@@ -401,7 +404,7 @@ t_func: mov ax,0x4F02
         cmp word [tmp],0x0101
         sete al
         call result
-        ; 4F01 PhysBasePtr == CR6D<<24
+        ; 4F01 PhysBasePtr == the real base from POST (with the booster on, CR59/5A hold 000Ah)
         mov ax,0x4F01
         mov cx,0x0101
         mov di,mibuf
@@ -418,7 +421,7 @@ t_func: mov ax,0x4F02
         mov dx,s_0000
         call puts
         pop eax
-        movzx ebx,byte [r6d]
+        movzx ebx,byte [base]
         shl ebx,24
         cmp eax,ebx
         jne .f1
@@ -951,7 +954,7 @@ s_exp   db ' (exp $'
 s_regs  db ') CR58 59 5A 6D 90 SR1A: $'
 s_f03   db '4F03 in boosted 101h (0101) ......... $'
 s_f03l  db '4F03 in linear 4101h (4101) ......... $'
-s_f01   db '4F01 PhysBasePtr = CR6D<<24 ......... $'
+s_f01   db '4F01 PhysBasePtr = real base ........ $'
 s_0000  db '0000$'
 s_f05   db '4F05 set bank 3 / get (004F 0003) ... $'
 s_dat   db 'Banked data check 320 KB, errors .... $'
@@ -986,6 +989,7 @@ r58     db 0
 r59     db 0
 r5a     db 0
 r6d     db 0
+base    db 0                    ; CR59 at POST: the real LFB base (bits 31-24)
 r90     db 0
 r1a     db 0
 mibuf   times 256 db 0
