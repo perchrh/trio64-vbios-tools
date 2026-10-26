@@ -118,29 +118,42 @@ start:  cld
 ; ---------------- ROM identity ----------------
 ; Expect: signature "2.04.11-p9" within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
-t_rom:  push ds
+t_rom:  mov dx,s_sig
+        call puts
+        push ds
         mov ax,0xC000
         mov ds,ax
         xor si,si
         mov cx,0x100
 .f:     cmp dword [si],'2.04'
-        jne .n
-        cmp dword [si+4],'.11-'
-        jne .n
-        cmp word [si+8],'p9'
-        je .fo
-.n:     inc si
+        je .fv
+        inc si
         loop .f
         pop ds
-        mov dx,s_sig
+        mov dx,s_nover
         call puts
         xor al,al
         call result
         jmp .ck
-.fo:    pop ds
-        mov dx,s_sig
-        call puts
+.fv:    mov bx,si                       ; print the version found, up to the line end
+        mov cx,12
+.pv:    mov al,[si]
+        cmp al,' '
+        jb .pe
+        push ds                         ; putc works on our segment
+        push cs
+        pop ds
+        call putc
+        pop ds
+        inc si
+        loop .pv
+.pe:    xor al,al
+        cmp dword [bx+4],'.11-'
+        jne .pr
+        cmp word [bx+8],'p9'
+        jne .pr
         mov al,1
+.pr:    pop ds
         call result
 .ck:    push ds
         mov ax,0xC000
@@ -581,43 +594,110 @@ rdsr:   push dx
         pop dx
         ret
 
-; Refresh rate: count rising edges of the vertical retrace bit (3DAh bit 3) during 9 BIOS
-; timer ticks (0.4945 s). One edge is worth 2.02 Hz, so readings come in steps of about 2 Hz
-; (70 Hz modes read 68.7 or 70.8); the 1.5 Hz tolerance in t_mode accepts the step on either side.
-measure:                        ; count vertical retrace starts over 9 BIOS ticks -> AX = Hz*10
-        push es
-        xor ax,ax
-        mov es,ax
-        mov bx,[es:0x46C]
-.w0:    cmp bx,[es:0x46C]
-        je .w0
-        mov bx,[es:0x46C]
-        add bx,9
-        xor ecx,ecx
+; Refresh rate: PIT channel 0 in mode 2 (same 18.2 Hz tick, counter readable), the counts between
+; rising edges of the vertical retrace bit (3DAh bit 3) for 30 frames; Hz x 10 = 11931820 / median
+; counts per frame. The median ignores a frame stretched by a long interrupt (for example a disk
+; cache writing), which the old edge count over 9 ticks could not. 0 when no retrace is seen.
+measure:                        ; -> AX = Hz*10
+        push ebx
+        push ecx
+        push edx
+        push di
+        pushf
+        cli
+        mov al,0x34
+        out 0x43,al
+        xor al,al
+        out 0x40,al
+        out 0x40,al
+        popf
+        call rdcnt
+        mov [pprev],ax
+        mov dword [pel],0
+        mov word [vfrn],0
+        call waitvr
+        jc .z
+        mov di,vfr
+        mov eax,[pel]
+        mov [di],eax
+        mov cx,30
+.l:     call waitvr
+        jc .z
+        add di,4
+        mov eax,[pel]
+        mov [di],eax
+        loop .l
+        mov word [vfrn],31
+        call vframes
+        call vmedian
+        or eax,eax
+        jz .z
+        mov ecx,eax
+        mov eax,11931820
+        xor edx,edx
+        div ecx
+        jmp .x
+.z:     VS 'D:FRM timeout',13,10
+        xor eax,eax
+.x:     cmp byte [vflag],1              ; /V keeps mode 2 for its call timing (vdone restores)
+        je .r
+        pushf
+        cli
+        push ax
+        mov al,0x36                     ; ch0 back to mode 3
+        out 0x43,al
+        xor al,al
+        out 0x40,al
+        out 0x40,al
+        pop ax
+        popf
+.r:     pop di
+        pop edx
+        pop ecx
+        pop ebx
+        ret
+rdcnt:  xor al,al               ; latch channel 0 -> AX
+        out 0x43,al
+        in al,0x40
+        mov ah,al
+        in al,0x40
+        xchg al,ah
+        ret
+pupd:   push ax                 ; add the PIT counts since the last call to [pel] and [pwt]
+        push bx
+        call rdcnt
+        mov bx,[pprev]
+        mov [pprev],ax
+        sub bx,ax
+        movzx ebx,bx
+        add [pel],ebx
+        add [pwt],ebx
+        pop bx
+        pop ax
+        ret
+waitvr: push dx                 ; wait for the start of vertical retrace, CF on timeout (~0.25 s)
+        push ax
+        mov dword [pwt],0
         mov dx,0x3DA
+.a:     call pupd
+        cmp dword [pwt],300000
+        ja .t
         in al,dx
-        and al,8
-        mov ah,al
-.l:     in al,dx
-        and al,8
-        cmp al,ah
-        je .same
-        mov ah,al
-        or al,al
-        jz .same
-        inc ecx
-.same:  cmp bx,[es:0x46C]
-        jne .l
-        pop es
-        VS 'D:FRM edges='               ; /V: raw count
-        mov eax,ecx
-        call vdec
-        VS ' ticks=9',13,10
-        mov eax,ecx             ; Hz*10 = count*182065/(9*1000)
-        mov ebx,182065
-        mul ebx
-        mov ebx,9000
-        div ebx
+        test al,8
+        jnz .a
+.b:     call pupd
+        cmp dword [pwt],300000
+        ja .t
+        in al,dx
+        test al,8
+        jz .b
+        pop ax
+        pop dx
+        clc
+        ret
+.t:     pop ax
+        pop dx
+        stc
         ret
 
 ; Select 64 KB bank SI in window A through VBE 4F05.
@@ -847,6 +927,7 @@ s_vname db 'S3TEST.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
 s_title db 'S3TEST 0.8 - Trio64V2/DX VBIOS 2.04.11-p9 test suite',13,10,13,10,'$'
 s_sig   db 'ROM signature 2.04.11-p9 ............ $'
+s_nover db '(no version string)$'
 s_cks   db 'ROM checksum (C000:0000-7FFF) = $'
 s_mclk  db 'MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'
 s_edo   db 'CR36 memory type (bits 3-2 = 00 EDO)  $'
@@ -886,6 +967,9 @@ m_meas  dw 0
 tmp     dw 0
 tmp2    dw 0
 errs    dd 0
+pel     dd 0
+pwt     dd 0
+pprev   dw 0
 kbs     dd 0
 r58     db 0
 r59     db 0

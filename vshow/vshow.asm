@@ -1394,7 +1394,7 @@ waitvr: mov dword [pwt],0
         ret
 
 ; Refresh: PIT channel 0 in mode 2, 30 frames between rising edges of 3DAh bit 3, Hz x 10 =
-; 30 * 1193182 * 10 / counts. Line frequency: Hz times the CRTC vertical total (CR06, CR07 bits 0/5,
+; 1193182 * 10 / median counts per frame. Line frequency: Hz times the CRTC vertical total (CR06, CR07 bits 0/5,
 ; CR5E bit 0, plus 2). Expect both to match the monitor OSD within about 0.1 Hz and 0.1 kHz.
 measure:
         mov word [vfrn],0
@@ -1428,10 +1428,11 @@ measure:
         inc word [vfrn]
         loop .l
         pop di
-        mov ecx,[pel]
-        sub ecx,[t0]
+        call vmedian                    ; median frame period: robust against one long interrupt
+        or eax,eax
         jz .z
-        mov eax,357954600               ; 30 frames * 1193182 Hz * 10
+        mov ecx,eax
+        mov eax,11931820                ; Hz*10 = 1193182 * 10 / counts per frame
         xor edx,edx
         div ecx
         mov [hz],ax
