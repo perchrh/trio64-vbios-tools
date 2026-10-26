@@ -1,21 +1,40 @@
-; VSHOW.COM 0.8 - VESA mode viewer for LCD/monitor checks (386+)
-;   VSHOW            list all VESA modes the BIOS reports
-;   VSHOW mode [/L]  set the mode (hex, e.g. 106, 0x106 or 106h) and draw a test picture:
-;                    16 colour bars, single-pixel checkerboard in the bottom half, 1-pixel white frame,
-;                    mode and measured refresh / line frequency in the middle.
-;                    /L = alternating 1-pixel vertical lines over the whole screen (LCD clock/phase pattern)
-;   VSHOW /I [/L]    interactive: list of supported modes, arrows select, Enter shows, any key returns,
-;                    L toggles the line pattern, Esc quits
+; VSHOW.COM 0.8 - VESA mode viewer for LCD and monitor checks of the Trio64V2/DX VBIOS (386+)
+;
+; Purpose
+;   A visual test: it shows what a VESA mode set by the BIOS looks like on a real monitor, and measures
+;   the timing the monitor receives. S3TEST and S3COMPAT check registers; VSHOW checks the picture.
+;
+; Usage
+;   VSHOW                list all VESA modes the BIOS reports (4F00 mode list, 4F01 per mode)
+;   VSHOW mode [/L]      set one mode (hex: 106, 0x106 or 106h) and draw the test picture
+;   VSHOW /I [/L]        interactive: list of the modes VSHOW can show, arrows select, Enter shows,
+;                        any key returns to the list, L toggles the line pattern, Esc quits
+;   VSHOW /A [/L]        every graphics mode in turn: picture and info per mode, a beep when the mode
+;                        is up, any key for the next mode, Esc stops; a summary is printed at the end
 ;   VSHOW /H, /?, /HELP  parameter list
-;   VSHOW /A [/L]    run through every graphics mode the BIOS reports: test picture and info per mode,
-;                    a beep when the mode is up, any key for the next mode, Esc stops; summary at the end
-;   Any key returns to text mode and prints the measured values.
-; Works with 4 bpp planar, 8 bpp packed and 15/16/24/32 bpp direct colour modes, banked access
-; through window A or B with the BIOS window granularity.
+;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
+;
+; The test picture and what to expect
+;   16 colour bars           every bar a solid, distinct colour (direct colour modes use the 4F01 masks)
+;   single-pixel checkers    bottom half: a sharp, even grey texture; smearing or moire = wrong LCD
+;                            clock/phase or a monitor scaler
+;   1-pixel white frame      all four edges visible and straight: the visible area is exactly XRes x YRes
+;   /L line pattern          sharp vertical lines everywhere when the LCD clock (total pixels per line)
+;                            and phase are right; beats or vertical bands when the clock is wrong
+;   info box                 mode number and size, measured refresh in Hz, line frequency in kHz and the
+;                            total lines from the CRTC; compare with the monitor's OSD and with the
+;                            intended timing (for example 1280x1024 DMT: 60.0 Hz, 64.0 kHz, 1066 lines)
+;   Errors are printed as "VSHOW 0.8: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
+;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw.
+;
+; Supported: 4 bpp planar, 8 bpp packed and 15/16/24/32 bpp direct colour modes, banked access through
+; window A or B with the BIOS window granularity (no LFB use, so it also works without one).
 bits 16
 cpu 386
 org 0x100
 
+; Command line parser: a hex mode number and the switches /L, /A, /I, /H, /?, /HELP.
+; Anything else prints "bad argument" and the usage text.
 start:  cld
         mov si,0x81
         xor bx,bx
@@ -109,7 +128,9 @@ start:  cld
         mov [mode],bx
         jmp show
 
-; ---------------------------------------------------------------- mode list
+; No mode given: print every mode from the 4F00 list with its 4F01 size and colour depth.
+; Expect the standard VESA modes and the S3 extra modes; '(n/a)' marks modes the BIOS lists but cannot
+; set with this memory or monitor, 'text' marks text modes.
 list:   mov dx,s_use
         call dputs
         mov dword [vib],'VBE2'
@@ -190,7 +211,7 @@ list:   mov dx,s_use
         mov ax,0x4C00
         int 0x21
 
-; ---------------------------------------------------------------- show a mode
+; One mode: picture until a key is pressed, then text mode and one line with the measured values.
 show:   call showone
         jnc .ok
         mov dx,[emsg]
@@ -221,6 +242,9 @@ sfail:  mov [emsg],dx
 
 ; set [mode], draw the test picture and the info box; CF + [emsg] on error (no mode change done then,
 ; except when the mode set itself failed)
+
+; Checks the 4F01 data (supported, graphics, memory model, a readable+writable window), sets the mode,
+; draws the picture and measures the timing. Expect the mode set to return 004Fh.
 showone:
         mov word [st],0
         mov ax,0x4F01
@@ -354,7 +378,8 @@ fmt3:   mov di,tbuf
         stosb
         ret
 
-; ---------------------------------------------------------------- all modes
+; /A: every mode VSHOW can show, in list order. Expect a beep for each mode once its picture is up;
+; the summary lists each mode with its measured Hz/kHz, or the reason it was skipped.
 runall: mov dword [vib],'VBE2'
         mov ax,0x4F00
         mov di,vib
@@ -448,6 +473,8 @@ runall: mov dword [vib],'VBE2'
 ; ---------------------------------------------------------------- interactive menu (/I)
 LROWS   equ 19                          ; list rows on screen
 LTOP    equ 3
+
+; /I: interactive menu over the modes modeok accepts.
 menu:   mov dword [vib],'VBE2'
         mov ax,0x4F00
         mov di,vib
@@ -608,6 +635,7 @@ menu:   mov dword [vib],'VBE2'
         mov ax,0x4C00
         int 0x21
 
+; Same acceptance rules as showone, without setting the mode: used to build the menu.
 modeok: ; mode info in mi: CF if VSHOW cannot show it (same rules as showone); keeps BX
         push bx
         call .chk
@@ -783,6 +811,7 @@ rcpyd:  lodsb                           ; copy '$'-terminated SI to DI
         jmp rcpyd
 .r:     ret
 
+; Audible confirmation that a mode is up (useful when the monitor shows nothing or 'out of range').
 beep:   ; 1 kHz on the PC speaker for about 0.15 s (PIT channel 2)
         push es
         mov al,0xB6
@@ -830,6 +859,9 @@ efail:  push dx
 ; EGA 16 colours as 8-bit RGB; for direct colour modes packed with the 4F01 masks
 egargb  db 0,0,0, 0,0,0xAA, 0,0xAA,0, 0,0xAA,0xAA, 0xAA,0,0, 0xAA,0,0xAA, 0xAA,0x55,0, 0xAA,0xAA,0xAA
         db 0x55,0x55,0x55, 0x55,0x55,0xFF, 0x55,0xFF,0x55, 0x55,0xFF,0xFF, 0xFF,0x55,0x55, 0xFF,0x55,0xFF, 0xFF,0xFF,0x55, 0xFF,0xFF,0xFF
+
+; Build the 16 bar colours for the current mode from the 4F01 field sizes and positions, so a wrong
+; mask in 4F01 shows up as wrong bar colours.
 mkcol:  xor bx,bx
 .l:     cmp byte [mi+0x1B],6
         je .d
@@ -913,7 +945,7 @@ patcol: mov ax,cx
 .w:     mov al,15
         ret
 
-; ---------------------------------------------------------------- packed / direct
+; Packed and direct colour modes: write every pixel through the bank window.
 packed: xor bp,bp
 .y:     xor cx,cx
 .x:     call patcol
@@ -953,6 +985,7 @@ putpix: ; AL colour index at CX,BP (packed/direct, or planar when model 3)
         pop cx
         ret
 
+; Pixel address to bank + offset using the BIOS window granularity, as a VESA 1.2 program does.
 addr:   ; EAX linear offset -> ES:DI in the window, switching banks as needed (keeps EAX)
         push eax
         push edx
@@ -975,7 +1008,7 @@ addr:   ; EAX linear offset -> ES:DI in the window, switching banks as needed (k
         pop eax
         ret
 
-; ---------------------------------------------------------------- planar 4 bpp (fast, byte at a time)
+; 16-colour planar modes: write mode 2 through the graphics controller, so the same picture appears.
 planar: mov dx,0x3CE
         mov ax,0x0005
         out dx,ax
@@ -1105,7 +1138,7 @@ putpl:  ; one planar pixel: colour AL at CX,BP (write mode 2 with bit mask)
         pop cx
         ret
 
-; ---------------------------------------------------------------- text (ROM 8x16 font)
+; Info text drawn with the ROM 8x16 font (AX=1130h BH=6) inside a black box.
 drawline:                               ; tbuf centred at row [ty], black box behind it
         push es
         push bp
@@ -1214,7 +1247,7 @@ fmt1:   ; "Mode 0106  1280x1024x4"
         xor al,al
         stosb
         ret
-fmt2:   ; "60.2 Hz  64.2 kHz  (CRTC 1688x1066)"
+fmt2:   ; "60.2 Hz  64.0 kHz  1066 lines total"
         mov di,tbuf
         movzx eax,word [hz]
         call bdec10
@@ -1321,6 +1354,10 @@ waitvr: mov dword [pwt],0
         ret
 .t:     stc
         ret
+
+; Refresh: PIT channel 0 in mode 2, 30 frames between rising edges of 3DAh bit 3, Hz x 10 =
+; 30 * 1193182 * 10 / counts. Line frequency: Hz times the CRTC vertical total (CR06, CR07 bits 0/5,
+; CR5E bit 0, plus 2). Expect both to match the monitor OSD within about 0.1 Hz and 0.1 kHz.
 measure:
         mov word [hz],0
         mov word [khz],0

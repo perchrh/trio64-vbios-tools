@@ -1,5 +1,40 @@
-; S3TEST.COM 0.8 - automatic test suite for the patched Trio64V2/DX VBIOS (2.04.11-p9). 386+.
-; Output is buffered while modes switch and written to stdout at the end: S3TEST > S3TEST.LOG
+; S3TEST.COM 0.8 - regression test for the patched Trio64V2/DX VBIOS 2.04.11-p9 (386+)
+;
+; Purpose
+;   Confirms that every change made to the stock 2.04.11 ROM is present and working. It is the
+;   quick check to run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
+;
+; Usage
+;   S3TEST > S3TEST.LOG
+;   Output is buffered while the video modes switch and written to stdout at the end.
+;   Exit code 0 = every test passed, 1 = at least one failed.
+;
+; Tests and expected outcomes (each line ends in PASS or FAIL)
+;   ROM signature    the first 256 bytes of C000 contain "2.04.11-p9"
+;   ROM checksum     bytes C000:0000-7FFF add up to 00
+;   MCLK             SR10 = 42h, SR11 = 41h after POST: 59.96 MHz memory clock
+;   Memory type      CR36 bits 3-2 = 00: the RAM is still run as 1-cycle EDO
+;   Pedestal         SR1A bit 5 = 0 (no blank pedestal, deepest black) and bit 4 = 1
+;   Refresh defaults CR41 bits 7-5 = 100b and CR52 bits 2-0 = 001b: 1280x1024 and 1600x1200
+;                    default to 60 Hz
+;   Each mode in modelist: the mode set returns 004Fh, the measured refresh is within 1.5 Hz of
+;                    the expected value, the pedestal is still off, and depending on the mode type:
+;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and the
+;                                      real frame buffer base back in CR59 after the booster
+;                    banked (F_BOOST)  booster active: CR58 linear addressing on with a 64 KB
+;                                      window, CR59/CR5A = 000Ah, real base saved in CR6D
+;                    linear (F_LFB)    linear addressing on, window 1 MB or larger, CR59 = CR6D
+;                    no flag           only status, refresh and pedestal (106h, planar)
+;   4F03 in boosted 101h reports 0101h (no linear bit although CR58 has LA on)
+;   4F01 PhysBasePtr equals CR6D << 24 (the real base, not the booster's 000A0000h)
+;   4F05 set bank 3, then get bank: 004Fh and 3
+;   320 KB written through banks 0-4 and read back: 0 errors
+;   Banked write throughput at least 60000 KB/s (the booster; 83700 KB/s measured on p7)
+;   4F03 in 4101h reports 4101h
+;   4F06 BL=3 in 101h: 4368 bytes and 4368 pixels (2 MB / 480 lines, rounded down to 8)
+;   CR50 in 151h (512x384x8) = 40h (pixel length 00, was the reserved 10b in stock)
+;   ATC flip-flop: left in the data state before a mode set, it is back in the index state after
+;
 bits 16
 org 0x100
 F_VGA   equ 1
@@ -53,6 +88,8 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
+; Expect: signature "2.04.11-p9" within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  push ds
         mov ax,0xC000
         mov ds,ax
@@ -97,6 +134,9 @@ t_rom:  push ds
         ret
 
 ; ---------------- POST state ----------------
+; Read the registers the BIOS set at boot, before any mode set by this program.
+; Expect: SR10/SR11 = 42h/41h (59.96 MHz MCLK), CR36 bits 3-2 = 00 (1-cycle EDO),
+; SR1A & 30h = 10h (pedestal off), CR41 bits 7-5 = 100b and CR52 bits 2-0 = 001b (60 Hz defaults).
 t_post: call unlock
         mov dx,s_mclk
         call puts
@@ -162,6 +202,9 @@ t_post: call unlock
         ret
 
 ; ---------------- one mode ----------------
+; Set [m_mode] (AH=00 for VGA modes, 4F02 for VESA), measure the refresh rate and read
+; CR58, CR59, CR5A, CR6D, CR90 and SR1A. Expect status 004Fh, refresh within 15 (1.5 Hz) of
+; [m_hz], SR1A bit 5 clear, plus the checks selected by [m_flags] (see the file header).
 t_mode: mov ax,[m_mode]
         cmp ax,0x100
         jb .vga
@@ -283,7 +326,9 @@ t_mode: mov ax,[m_mode]
 .res:   call result
         ret
 
-; ---------------- VBE function tests in 101h (booster) ----------------
+; ---------------- VBE function tests ----------------
+; In 101h with the booster active: 4F03, 4F01 PhysBasePtr, 4F05 set/get, banked data check,
+; banked throughput. Then 4F03 in 4101h, 4F06 BL=3 in 101h and CR50 in 151h (p8 changes).
 t_func: mov ax,0x4F02
         mov bx,0x0101
         int 0x10
@@ -431,6 +476,9 @@ t_func: mov ax,0x4F02
         ret
 
 ; ---------------- ATC flip-flop reset after mode set ----------------
+; Put the attribute controller flip-flop in the data state (one write to 3C0h), set mode 03,
+; then write 31h to 3C0h. If the BIOS reset the flip-flop, 31h lands in the index register and
+; reads back from 3C0h. Expect 31h (index 11h with palette address source set).
 t_ff:   mov ax,0x0003
         int 0x10
         mov dx,0x3DA
@@ -461,7 +509,7 @@ t_ff:   mov ax,0x0003
         call result
         ret
 
-; ---------------- helpers ----------------
+; Unlock the S3 extended registers: SR08 = 06h, CR38 = 48h, CR39 = A5h.
 unlock: push ax
         push dx
         mov dx,0x3C4
@@ -475,6 +523,8 @@ unlock: push ax
         pop dx
         pop ax
         ret
+
+; Read CRTC register AL into AH (port 3D4h/3D5h).
 rdcr:   push dx
         mov dx,0x3D4
         out dx,al
@@ -483,6 +533,8 @@ rdcr:   push dx
         mov ah,al
         pop dx
         ret
+
+; Read sequencer register AL into AH (port 3C4h/3C5h).
 rdsr:   push dx
         mov dx,0x3C4
         out dx,al
@@ -492,6 +544,9 @@ rdsr:   push dx
         pop dx
         ret
 
+; Refresh rate: count rising edges of the vertical retrace bit (3DAh bit 3) during 9 BIOS
+; timer ticks (0.4945 s). One edge is worth 2.02 Hz, so readings come in steps of about 2 Hz
+; (70 Hz modes read 68.7 or 70.8); the 1.5 Hz tolerance in t_mode accepts the step on either side.
 measure:                        ; count vertical retrace starts over 9 BIOS ticks -> AX = Hz*10
         push es
         xor ax,ax
@@ -524,6 +579,7 @@ measure:                        ; count vertical retrace starts over 9 BIOS tick
         div ebx
         ret
 
+; Select 64 KB bank SI in window A through VBE 4F05.
 setbank:                        ; SI = bank
         push ax
         push bx
@@ -537,6 +593,8 @@ setbank:                        ; SI = bank
         pop ax
         ret
 
+; Write a hashed pattern (address * 9E3779B1h) to banks 0-4 through A000 and read it back.
+; [errs] counts the mismatching dwords; expect 0.
 verify: mov dword [errs],0
         push es
         mov ax,0xA000
@@ -575,6 +633,8 @@ verify: mov dword [errs],0
         pop es
         ret
 
+; Banked write speed: fill banks 0-4 with rep stosd repeatedly for about 2 s (36 ticks).
+; [kbs] = KB written per second.
 bench:  push es
         xor ax,ax
         mov es,ax
@@ -609,6 +669,7 @@ bench:  push es
         mov [kbs],eax
         ret
 
+; Print PASS (AL=1) or FAIL (AL=0) and count it.
 result: push ax                 ; AL=1 pass
         or al,al
         jz .f
@@ -621,6 +682,7 @@ result: push ax                 ; AL=1 pass
         pop ax
         ret
 
+; Output helpers: everything goes to the buffer obuf, written to stdout at the end.
 putc:   push di                 ; AL -> buffer
         mov di,[bp_]
         mov [di],al
@@ -700,6 +762,10 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
         ret
 
 ; mode, expected Hz*10, flags
+
+; Modes tested by t_mode: mode, expected refresh in tenths of Hz, check flags.
+; The expected values are the rates set by the p4b-p9 timing changes and the unchanged stock
+; rates (70 Hz text/320x200, 72 Hz 400x300).
 modelist:
         dw 0x0003,700,F_VGA
         dw 0x0013,700,F_VGA

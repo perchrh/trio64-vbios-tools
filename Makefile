@@ -12,8 +12,8 @@ build/VSHOW.COM: vshow/vshow.asm | build
 build/S3TEST.COM: s3test/s3test.asm | build
 	$(NASM) -f bin -o $@ $<
 
-# s3compat.asm includes vgaref.inc and dac_col.bin from its own folder
-build/S3COMPAT.COM: s3compat/s3compat.asm s3compat/vgaref.inc s3compat/dac_col.bin | build
+# s3compat.asm includes vgaref.inc (reference tables) from its own folder
+build/S3COMPAT.COM: s3compat/s3compat.asm s3compat/vgaref.inc | build
 	cd s3compat && $(NASM) -f bin -o ../$@ s3compat.asm
 
 clean:

@@ -1,5 +1,44 @@
 ; S3COMPAT.COM 0.8 - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS (386+)
-; usage: S3COMPAT [/I] [/Q] > S3COMPAT.LOG  /I pause after each mode, /Q skip 2 MB VRAM test
+;
+; Purpose
+;   Tests the video BIOS, not the chip: does every standard VGA mode and BIOS function behave like the
+;   IBM VGA BIOS, does every VESA mode the BIOS lists work banked and linear, and are the registers the
+;   BIOS programs inside the limits of the Trio64V2 datasheet. Test ideas follow VGATEST (PC Tech
+;   Journal 1988), SVGATEST, VBETest and X-VESA.
+;
+; Usage
+;   S3COMPAT [/I] [/Q] > S3COMPAT.LOG
+;   /I  wait for a key after each mode (look at the screen)      /Q  skip the 2 MB VRAM test
+;   A notice on stderr says the run takes about 3 minutes; a key starts it, Esc cancels.
+;   When stdout is a file, every test line is written and committed (INT 21h AH=68h) before the next
+;   test starts, so after a freeze the last line in the log is the test that hung.
+;   Exit code 0 = no FAIL, 1 = at least one FAIL.
+;
+; Result lines
+;   <test name> ... <details>  PASS | FAIL xxxx | WARN xx | INFO
+;   FAIL/WARN carry a bit mask per test, explained at the routine and in the log header. Detail lines
+;   show REG=actual(expected), masked to the bits under test. INFO lines report without judging.
+;
+; Run order and expected outcome on the p9 ROM (219 pass, 0 fail, 4 warn on p8 before the 350-line
+; and palette additions; the four warnings are known stock items)
+;   1. ROM version string                      INFO
+;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-340 MHz, 1-cycle EDO)
+;   3. Initial state, setup                     INFO, PASS (mode 03, baseline, VRAM zeroed)
+;   4. VGA modes 00h-13h and the 350-line text modes against the IBM reference
+;                                               PASS; mode 10h WARN 01 (8x16 font used, 8x14 missing)
+;   5. Mode X family and 80x50 text             PASS
+;   6. VGA BIOS functions (cursor .. AH=1B)     PASS; AX=1130 BH=2 WARN 01 (8x14 font missing)
+;   7. VESA global (4F00, 4F08, 4F04, 4F0A)     PASS
+;   8. Every VESA mode, banked and linear       PASS; 106h WARN 02 (108 MHz above the 95 MHz
+;                                               datasheet single-clock limit, works on the card);
+;                                               4104 WARN 20 (LFB offered on a planar mode, stock)
+;   9. S3 modes via AH=00 vs the same via 4F02   PASS
+;  10. VESA functions (4F01-4F09, VRAM, LFB)     PASS
+;  11. Pass 2: VGA modes right after VESA modes  as step 4 (leftover state must not matter)
+;  12. Cleanup: mode 03 vs the baseline          PASS, VRAM zeroed, the DOS screen restored
+;
+; Reference data (vgaref.inc): IBM register values and AH=1Bh state blocks per VGA mode, and IBM's
+; default 256-colour DAC, from the VGATEST tables; the 350-line entries from the IBM parameter table.
 bits 16
 cpu 386
 org 0x100
@@ -27,6 +66,9 @@ org 0x100
         call readreg
 %endmacro
 
+; Program start: memory check (log buffer, screen save), options, stdout-is-file test, PIT channel 0
+; to mode 2 (same 18.2 Hz tick, but a counter that can be read precisely), startup notice, then the
+; test sequence listed in the file header.
 start:  cld
         mov ax,cs
         add ax,0x1000
@@ -92,7 +134,8 @@ start:  cld
         PS 'S3COMPAT 0.8 - VGA/SVGA/VESA compatibility test for the Trio64V2 VBIOS',13,10
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
-        PS '  8 refresh  10 memory  20 default DAC  40 refresh vs CRTC/PLL math',13,10
+        PS '  8 refresh  10 memory  20 default DAC (256/EGA/CGA)  40 refresh vs CRTC/PLL math',13,10
+        PS 'VGA xxh 350 = the mode at 350 scan lines (AH=12 BL=30 first).',13,10
         PS 'VESA fail bits: 1 4F01  2 window  4 layout  8 set/4F03  10 refresh  20 memory',13,10
         PS '  40 4F06  80 4F07/4F09  100 CRTC geometry vs 4F01  200 datasheet clock/colour',13,10
         PS '  400 refresh vs CRTC/PLL math  800 datasheet memory mapping (CR31/CR58-5A)',13,10
@@ -104,7 +147,7 @@ start:  cld
         call setup
         call post_tests
         mov byte [pass],1
-        PS 13,10,'--- VGA BIOS modes vs IBM reference tables (VGATEST) ---',13,10
+        PS 13,10,'--- VGA BIOS modes vs IBM reference tables (VGATEST, IBM parameter table) ---',13,10
         call vga_pass
         call modex_all
         PS 13,10,'--- VGA BIOS functions ---',13,10
@@ -152,6 +195,8 @@ start:  cld
 .x:     int 0x21
 
 ; ======================================================================
+
+; INFO: print the version string (searched for '2.04' in the first 512 bytes of C000).
 bios_id:
         PS 'ROM: '
         push es
@@ -178,6 +223,10 @@ bios_id:
         ret
 
 ; POST state checked against the datasheet
+
+; POST state against the datasheet. Fail bits:
+;   1 MCLK PLL VCO outside 135-340 MHz or N = 0
+;   2 CR36 bits 3-2 not 00 (not 1-cycle EDO) or MCLK above 60 MHz (1-cycle EDO needs >= 16.67 ns)
 post_tests:
         call unlock
         TB 'MCLK PLL (SR10/SR11) vs datasheet'
@@ -217,6 +266,8 @@ post_tests:
         ret
 
 ; AL = N byte (SR10/SR12 style), AH = M byte -> [vco], [fout] in kHz
+
+; PLL: f = 14.31818 MHz * (M+2) / ((N+2) * 2^R); R is 2 bits plus bit 7 of the N byte (Trio64V2).
 pllcalc:
         push ebx
         push ecx
@@ -279,6 +330,7 @@ pkhz:   push eax                        ; print EAX kHz as MHz with 2 decimals
 ; known starting point and clean exit
 SCRSAVE equ 0x8000                      ; DOS screen copy at scrseg:8000 (state buffers use 0-7FFF)
 
+; Remember the DOS screen (mode, cursor, font height, text pages) so it can be put back at the end.
 save_screen:
         mov ah,0x0F
         int 0x10
@@ -358,6 +410,8 @@ restore_screen:
         int 0x10
         ret
 
+; Known starting point. INFO: the registers as found. Then mode 03, a baseline snapshot of the
+; registers in statelist, and all of VRAM zeroed through the 64 KB window (fail bit 1: 4F02 101h failed).
 setup:  ; log what the card looked like, then put it into a known state
         call unlock
         TB 'Initial state: mode '
@@ -441,6 +495,9 @@ zero_vram:                              ; all banks to 0 through the 64K window,
 .f:     stc
         ret
 
+; Leave the card in a known state. Mode 03 must give the same registers as the baseline from setup
+; (WARN 01 if not, the differences are printed), the S3 extensions must be off (fail 4), then VRAM is
+; zeroed again (fail 1) and mode 03 set.
 cleanup:
         PS 13,10,'--- Final state ---',13,10
         TB 'Mode 03 after all tests vs baseline'
@@ -501,6 +558,9 @@ STATEN  equ ($-statelist)/2
 ; ======================================================================
 ; VGA pass
 VENT    equ 114
+
+; All entries of vgaref: modes 00h-06h, 0Dh, 0Eh, 10h-13h at 400/480 lines and modes 00h-03h at
+; 350 lines. Run twice: pass 1 from a clean state, pass 2 right after a VESA mode (prevesa).
 vga_pass:
         mov word [vi],0
 .l:     mov ax,[vi]
@@ -515,14 +575,31 @@ vga_pass:
 .d:     ret
 
 prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131,0x0133,0x0102,0x0120
+        dw 0x0101,0x0105,0x4101,0x0111     ; for the four 350-line entries
 
+; One VGA mode against the IBM reference. Fail bits:
+;   1  MISC, FEAT, SR, CRTC, ATC or GR register differs from IBM (all 62, detail lines show which)
+;   2  AH=1Bh state block differs from IBM (bit 4 of +2Dh ignored), or AH=0Fh mode/columns/page wrong
+;   4  an S3 extension is still on (vgaext: clock select, CR31, CR58, CR67, CR51, CR43, CR5D, CR5E,
+;      CR69, CR90 bit 7, SR15, SR18)
+;   8  measured refresh more than 1.5 Hz from the reference (70 Hz, 60 Hz for 11h/12h)
+;   10 memory test of the mode's video memory failed
+;   20 default DAC not loaded as IBM does: 256-colour table (13h), CGA palette (04h-06h, 0Dh, 0Eh),
+;      EGA palette (all others, also in 350-line text)
+;   40 measured refresh does not match the rate predicted from the CRTC and clock registers
+; Warn bit 1: mode 10h reports 21 rows / 16 lines in AH=1Bh because the 8x14 font is missing (known).
+; The 350-line entries select 350 scan lines with AH=12h BL=30h AL=01h first and go back to 400 after.
+; Expect PASS for every entry (WARN 01 for mode 10h).
 vga_one:
         TB 'VGA '
         mov si,[ent]
         mov al,[si]
         call phex2
         PS 'h'
-        cmp byte [pass],2
+        test byte [si+1],0x80
+        jz .s1
+        PS ' 350'
+.s1:    cmp byte [pass],2
         jne .s2
         PS ' after '
         mov si,[vi]
@@ -538,7 +615,13 @@ vga_one:
         mov ax,0x4F02
         int 0x10
 .s:     mov si,[ent]
-        movzx ax,byte [si]
+        test byte [si+1],0x80
+        jz .s400
+        mov ax,0x1201                   ; 350-line variant: alternate select 350 scan lines
+        mov bl,0x30
+        int 0x10
+        mov si,[ent]
+.s400:  movzx ax,byte [si]
         int 0x10
         call unlock
         call tdots
@@ -644,26 +727,47 @@ vga_one:
         call pdec10
         xor ax,ax
         call lineinfo
-        ; default DAC
+        ; default DAC loaded by the mode set, as the IBM VGA BIOS does it:
+        ; 13h the 256-colour table, 04h-06h/0Dh/0Eh (200 lines) the CGA palette, all others the EGA palette
         mov si,[ent]
-        cmp byte [si],3
-        jne .d13
-        call dac_ega
-        jmp .mem
-.d13:   cmp byte [si],0x13
-        jne .mem
+        mov al,[si]
+        cmp al,0x13
+        jne .dg
         call dac_256
+        jmp .mem
+.dg:    mov byte [cgapal],0
+        cmp al,4
+        jb .de
+        cmp al,6
+        jbe .dcg
+        cmp al,0x0D
+        jb .de
+        cmp al,0x0E
+        ja .de
+.dcg:   mov byte [cgapal],1
+.de:    call dac_ega
 .mem:   mov si,[ent]
         mov al,[si+1]
+        and al,0x7F
         mov cx,[si+3]
         call memtest
         jnc .e
         FAILB 0x10
-.e:     call pause
+.e:     mov si,[ent]
+        test byte [si+1],0x80
+        jz .e4
+        mov ax,0x1202                   ; back to 400 scan lines for the following modes
+        mov bl,0x30
+        int 0x10
+.e4:    call pause
         call tend
         ret
 
-; mode 3: DAC 0-63 must hold the EGA 64-colour palette
+; DAC 0-63 after the mode set. [cgapal]=0: EGA 64-colour palette, colour bits 5-0 = r g b R G B,
+; component = 2Ah * (R, G or B bit 2-0) + 15h * (r, g or b bit 5-3).
+; [cgapal]=1: CGA palette of the 200-line modes, bits 2-0 = R G B, bit 4 = intensity (+15h on all
+; three), bits 3 and 5 ignored, and colour 6 is brown (green 15h instead of 2Ah).
+; Expect every entry to match; the first mismatch fails bit 20 and is printed.
 dac_ega:
         mov di,dacbuf
         xor al,al
@@ -671,33 +775,24 @@ dac_ega:
         call dacread
         xor bx,bx
         mov si,dacbuf
-.l:     mov ax,bx                       ; r
-        mov dl,0
-        test al,4
-        jz .r1
-        add dl,0x2A
-.r1:    test al,0x20
-        jz .r2
-        add dl,0x15
-.r2:    cmp dl,[si]
+.l:     mov ax,0x2004                   ; red: 2Ah if bit 2, 15h if bit 5
+        call dexp
+        cmp dl,[si]
         jne .bad
-        mov dl,0
-        test al,2
-        jz .g1
-        add dl,0x2A
-.g1:    test al,0x10
-        jz .g2
-        add dl,0x15
-.g2:    cmp dl,[si+1]
+        mov ax,0x1002                   ; green: bits 1 and 4
+        call dexp
+        cmp byte [cgapal],1
+        jne .g
+        mov cl,bl
+        and cl,0x17
+        cmp cl,6
+        jne .g
+        mov dl,0x15                     ; CGA brown
+.g:     cmp dl,[si+1]
         jne .bad
-        mov dl,0
-        test al,1
-        jz .b1
-        add dl,0x2A
-.b1:    test al,8
-        jz .b2
-        add dl,0x15
-.b2:    cmp dl,[si+2]
+        mov ax,0x0801                   ; blue: bits 0 and 3
+        call dexp
+        cmp dl,[si+2]
         jne .bad
         add si,3
         inc bx
@@ -708,9 +803,27 @@ dac_ega:
         PS ' DAC#'
         mov al,bl
         call phex2
-        PS ' wrong'
+        cmp byte [cgapal],1
+        je .bc
+        PS ' not EGA'
+        ret
+.bc:    PS ' not CGA'
         ret
 
+; expected component for DAC entry BL: AL = bit worth 2Ah, AH = bit worth 15h (EGA); CGA uses bit 4 for 15h
+dexp:   mov dl,0
+        test bl,al
+        jz .1
+        add dl,0x2A
+.1:     cmp byte [cgapal],1
+        jne .2
+        mov ah,0x10
+.2:     test bl,ah
+        jz .3
+        add dl,0x15
+.3:     ret
+
+; Mode 13h: DAC 0-247 must equal IBM's default table (248-255 are 0 in IBM and not compared).
 dac_256:
         mov di,dacbuf
         xor al,al
@@ -735,6 +848,7 @@ dac_256:
         PS ' wrong'
         ret
 
+; Read CX DAC entries from index AL into DI (R, G, B, 6 bit each).
 dacread:                                ; AL = first, CX = count, DI = dest
         push dx
         mov dx,0x3C7
@@ -747,7 +861,8 @@ dacread:                                ; AL = first, CX = count, DI = dest
         pop dx
         ret
 
-; ---------------- memory tests ----------------
+; Video memory test of a VGA mode: write an address-derived pattern and read it back.
+; Text and CGA modes at B800 (the mode's page size), planar modes plane by plane at A000, chain-4 64 KB.
 memtest:                                ; AL type, CX bytes -> CF on error
         cmp al,1
         je .lin8
@@ -883,6 +998,10 @@ mxtab:  db 0x63
         db 0
 mxtext: db 'Text 80x50 (AX=1112)$'
 
+; Mode X family (unchained 256-colour modes made from 13h by register writes, as games do) and
+; 80x50 text (AX=1112h). Fail bits: 1 font height (CR09) wrong in 80x50, 2 BIOS data rows/height
+; wrong, 4 S3 extension left on, 8 refresh off by more than 1.5 Hz, 10 planar memory test,
+; 40 refresh vs register prediction. Expect PASS: tests the FIFO fix (CR90) after VESA modes in pass 2.
 modex_all:
         mov si,mxtab
 .l:     cmp byte [si],0
@@ -944,6 +1063,7 @@ modex_all:
         int 0x10
         ret
 
+; One Mode X variant: mode 13h, then sequencer/misc/CRTC writes from mxtab, measure, memory test.
 modex_one:
         call tbeginx
         mov si,[ent]
@@ -1029,6 +1149,12 @@ modex_one:
 
 ; ======================================================================
 ; VGA BIOS function tests (after VGATEST)
+
+; VGA BIOS functions, after VGATEST tests 2-12. Each test is one result line; fail bits per test:
+;   AH=01/02/03 cursor   1 CR0A/CR0B not 0D/0E for shape 0607h (emulation), 2 AH=03 shape,
+;                        4 CR0E/CR0F or AH=03 position, 8 emulation off (AH=12 BL=34) not honoured
+;   AH=04 light pen      1 a light pen reported (the VGA has none)
+;   AH=05 pages          1 CR0C/CR0D start address not page * page size (mode 03 page 3, 0Dh page 7)
 bios_tests:
         ; ---- cursor
         mov ax,3
@@ -1146,6 +1272,7 @@ bios_tests:
         call misc_bios
         ret
 
+; Active page start in CR0C/CR0D must equal 40:4E (halved in word mode).
 pgchk:  push es
         xor ax,ax
         mov es,ax
@@ -1216,6 +1343,8 @@ texp:   ; DX pos, BX expected
         call phex4
 .ok:    ret
 
+; AH=06/07 scroll up/down, whole screen and a window. Fail bit 1: a character/attribute at a checked
+; position differs (blank lines must carry the fill attribute).
 scroll_test:
         mov ax,3
         int 0x10
@@ -1268,6 +1397,9 @@ scroll_test:
         call tend
         ret
 
+; AH=08/09/0A/0E in text modes 01h and 03h. Fail bits: 1 AH=09 char+attribute or count,
+; 2 AH=0A keeps the attribute, 4 AH=0Eh teletype position. Graphics modes 04h, 0Dh, 12h, 13h:
+; AH=09 then AH=08 must read the same character back (fail 1).
 textio: mov byte [tmpb],1
 .m:     TB 'AH=08/09/0A/0E text I/O mode '
         mov al,[tmpb]
@@ -1388,6 +1520,10 @@ pxtab:  db 4,4
         db 0x13,0
         dw 319,199
         db 0xFF
+
+; AH=0C/0D in modes 04h, 06h, 0Dh, 0Eh, 10h, 11h, 12h, 13h at corners and inner points.
+; Fail bits: 1 read back differs, 2 XOR write (colour bit 7) did not clear the pixel,
+; 4 mode 13h pixel not at A000:y*320+x.
 pixels: mov si,pxtab
 .m:     cmp byte [si],0xFF
         je .d
@@ -1490,7 +1626,15 @@ pxy:    mov si,[ent]                    ; -> CX,DX for point [vi]
         mov dx,50
 .r:     ret
 
-; ---- palette
+; Palette and DAC functions. Fail bits per test:
+;   1000/1007   1 AR register not written, 2 read back wrong
+;   1001/1008   1 overscan AR11 not written, 2 read back wrong
+;   1002/1009   1 the 17 registers read back differ
+;   1003        1 blink off not in AR10 bit 3, 2 blink on not set
+;   1010/1015, 1012/1017   1 single DAC entry, 2 block read back, 4 hardware readback via 3C7/3C9
+;   3C6/3C7     1 pixel mask not FFh, 2 status not 3 after a read index, 4 status not 0 after write index
+;   1013/101A   1 colour page select not read back
+;   101B        1 grey value of an entry more than 1 off (30R+59G+11B)/100 of IBM's default
 palette_tests:
         mov ax,0x12
         int 0x10
@@ -1707,6 +1851,7 @@ palette_tests:
         call tend
         ret
 
+; IBM grey summing formula for one DAC entry of dac_col.
 greyof: ; DI -> component inside dac_col: AL = (30R+59G+11B+50)/100 of that entry
         push bx
         push dx
@@ -1737,7 +1882,9 @@ greyof: ; DI -> component inside dac_col: AL = (30R+59G+11B+50)/100 of that entr
         ret
 paltab  db 0,1,2,3,4,5,0x14,7,0x38,0x39,0x3A,0x3B,0x3C,0x3D,0x3E,0x3D,0
 
-; ---- save / restore state AH=1C
+; AH=1Ch save state in mode 03 (cursor 5,5, DAC entry 1 changed), mode 13h, restore. Fail bits:
+; 1 AH=1Ch not supported, 2 registers after restore differ from mode 03 with the cursor at 5,5,
+; 4 BIOS mode byte not 03, 8 DAC entry 1 not restored.
 saverest:
         mov ax,3
         int 0x10
@@ -1815,7 +1962,13 @@ saverest:
 .x:     call tend
         ret
 
-; ---- fonts
+; Font information and loading. Fail bits per test:
+;   1130 BH=3   1 CX/DL wrong (16 / 24 rows), 2 glyph 1 not the IBM 8x8 smiley
+;   1130 BH=4   1 upper-half 8x8 glyph wrong
+;   1130 BH=6   2 glyph 1 not the IBM 8x16 smiley
+;   1130 BH=2   WARN 01 when the 8x14 pointer equals the 8x16 one (known: no 8x14 font in this ROM)
+;   1130 BH=1   1 INT 43h in mode 13h not the 8x8 font
+;   1111/1112/1114 load   1 BIOS rows/height wrong, 2 CR09 character height wrong
 fonts:  mov ax,3
         int 0x10
         TB 'AX=1130 BH=3 8x8 font'
@@ -1932,6 +2085,8 @@ fldtab  dw 0x1111
 g8      db 0x7E,0x81,0xA5,0x81,0xBD,0x99,0x81,0x7E
 g8u     db 0x78,0xCC,0xC0,0xCC,0x78,0x18,0x0C,0x78
 g16     db 0x00,0x00,0x7E,0x81,0xA5,0x81,0x81,0xBD,0x99,0x81,0x81,0x7E,0x00,0x00,0x00,0x00
+
+; AX=1130h: BH = font -> DX:AX pointer, CX bytes per character, BL = rows - 1.
 fptr:   push es                         ; BH -> DX:AX font ptr, CX, BL=DL
         push bp
         mov ax,0x1130
@@ -1956,7 +2111,12 @@ fcmp:   ; DX:AX font, BX = bytes/char, SI = expected glyph 1, CX = len -> ZF
         pop es
         ret
 
-; ---- alternate select
+; AH=12h alternate select. Fail bits per test:
+;   BL=30 scan lines  1 not supported, 2 350 lines not set (CR12) or 40:85 not 14, 4 400 not restored
+;   BL=31 palette     1 not supported, 2 palette reloaded although disabled, 4 not reloaded when enabled
+;   BL=32 video       1 not supported or CR01 changed
+;   BL=33 grey        1 not supported, 2 grey summing not applied in 13h, 4 still applied after off
+;   BL=36 screen      1 SR01 bit 5 not set/cleared
 altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
         call tdots
         mov ax,0x1201
@@ -2110,6 +2270,9 @@ altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
 .p:     call tend
         ret
 
+; Fail bit 1 per test: AH=1Ah display combination not 08h (VGA colour) or set not accepted;
+; AH=12h BL=10h not 'colour, 256 KB' (BX=0003h); AH=1Bh static table not the IBM modes mask
+; (FFh E0h 0Fh) and 7 scan line flags.
 misc_bios:
         mov ax,3
         int 0x10
@@ -2166,6 +2329,7 @@ misc_bios:
 .e:     call tend
         ret
 
+; Vertical display end from CR12, CR07 bits 1/6 and CR5E bit 1, plus 1.
 getvde: RC 0x12                         ; -> AX = vertical display end + 1 (incl. CR5E)
         movzx bx,al
         RC 7
@@ -2185,6 +2349,17 @@ getvde: RC 0x12                         ; -> AX = vertical display end + 1 (incl
 
 ; ======================================================================
 ; VESA global
+
+; VBE functions that do not depend on a mode. Fail/warn bits per test:
+;   4F00 VESA   fail 1 status, signature or version < 1.2; warn 1 wrote past 256 bytes, warn 2 mode
+;               list inside the caller's buffer
+;   OEM string  INFO
+;   4F00 VBE2   fail 1 status/signature or wrote past 512 bytes; vendor/product/revision printed
+;   modes       fail 1 a standard mode 100h-107h or 110h-11Ah missing from the list
+;   4F08        fail 1 claims an 8-bit DAC or reports other than 6 bits (the DAC is 6 bit)
+;   4F04        fail 1 state buffer size call failed
+;   4F0A        fail 1 no protected mode interface
+;   4F01 guard  fail 1 4F01 writes past 256 bytes
 vesa_global:
         ; 4F00 with VESA signature: must not write past 256 bytes
         mov di,vbeinfo
@@ -2427,6 +2602,8 @@ reqmodes dw 0x100,0x101,0x102,0x103,0x104,0x105,0x106,0x107
 ; known refresh rates (Hz*10) from the p7 tables
 knownhz dw 0x12E,700,0x131,597,0x133,597,0x101,597,0x111,597,0x141,722
         dw 0x103,603,0x105,601,0x107,600,0x120,600,0
+
+; Every mode in the 4F00 list: vesa_one (banked), then vesa_lfb when 4F01 offers a linear buffer.
 vesa_modes:
         mov word [mi],0
 .l:     mov si,[mi]
@@ -2476,6 +2653,17 @@ presmode:                               ; print WxHxBPP
         call pdec
         ret
 
+; One VESA mode, banked. Fail bits:
+;   1  4F01 failed            2  window A not 64 KB granularity/size at A000h, readable+writable
+;   4  4F01 layout implausible (pitch < width, size > memory, colour masks not 5:5:5, 5:6:5 or 8:8:8)
+;   8  4F02 failed or 4F03 reports another mode     10 refresh outside 56-90 Hz or off the known rate
+;   20 first/last byte through the window wrong (planar: per plane at every bank, see planchk)
+;   40 4F06 BL=1 pitch differs from 4F01            80 4F07 start get/set or 4F09 8-bit palette wrong
+;   100 CRTC geometry (pitch, YRes, XRes) vs 4F01   200 datasheet colour mode / clock rules (dschk)
+;   400 refresh vs CRTC/PLL prediction              800 memory mapping rules (mapchk)
+; Warn bits: 1 refresh prediction off by a factor 2, 2 DCLK above datasheet maximum, 4 CR50 pixel
+; length, 10 interlace on, 20 LFB on a planar mode. INFO for modes the BIOS marks unsupported.
+; Expect PASS (106h WARN 02).
 vesa_one:
         mov byte [lfbav],0
         TB 'VESA '
@@ -2647,7 +2835,8 @@ vesa_one:
 .end:   call tend
         ret
 
-; ---------------- planar SVGA modes: separate pattern per plane at every bank start/end ----------------
+; 16-colour modes: a different byte per plane at the start and end of every 64 KB bank, read back
+; with read map select. Catches bank or plane mixups. Fail bit 20 of vesa_one.
 planchk:                                ; CF on error
         movzx eax,word [mibuf+0x10]
         movzx edx,word [mibuf+0x14]
@@ -2773,7 +2962,8 @@ pbank:  ; SI -> offset entry: set bank, DI = offset in window, BL = pattern base
         mov bl,al
         ret
 
-; ---------------- line frequency and horizontal total (the 'clock' value an LCD wants) ----------------
+; Printed after the refresh: line frequency in kHz, H = total pixels per line (the 'clock' value an
+; LCD's manual adjustment wants) and V = total lines, from CR00/CR01/CR06/CR07/CR5D/CR5E.
 lineinfo:                               ; AX = XRes for VESA graphics modes, 0 = VGA dot method
         mov [li_x],ax
         RC 0x5D
@@ -2848,6 +3038,9 @@ lastoff:                                ; EBX = offset of last dword of visible 
         mov ebx,eax
         ret
 
+; One VESA mode with the linear frame buffer (mode | 4000h). Fail bits: 8 set failed or 4F03 has no
+; linear bit, 20 first/last dword through the LFB (INT 15h AH=87h copies) wrong, 800 mapping rules.
+; Warn 20: INT 15h AH=87h not available (LFB not testable).
 vesa_lfb:
         TB 'VESA '
         mov ax,[vm]
@@ -2890,6 +3083,8 @@ vesa_lfb:
         ret
 
 ; 4F01 layout plausibility
+
+; 4F01 plausibility: bytes per line >= XRes * bpp, the page fits in memory, direct colour masks.
 layout: movzx eax,word [mibuf+0x12]
         movzx ebx,byte [mibuf+0x19]
         imul eax,ebx
@@ -2947,7 +3142,13 @@ pos15   db 5,10,5,5,5,0
 pos16   db 5,11,6,5,5,0
 pos24   db 8,16,8,8,8,0
 
-; ---------------- datasheet checks of what the BIOS programmed ----------------
+; Datasheet checks of the registers the BIOS programmed for the current VESA mode:
+; pitch (CR13 + CR51 bits 5-4 / CR43 bit 2, unit from CR31/CR14/CR17) = 4F01 BytesPerScanLine,
+; vertical display end = YRes * character height, horizontal display end a multiple of XRes (fail 100);
+; CR67 colour mode fits the bpp, packed 24 bpp needs SR0B 7xh, clock doubling (CR67 mode 1) needs
+; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO 135-340 MHz (fail 200);
+; DCLK above 95 MHz (170 doubled, 75 packed 24, 50 at 32 bpp) is WARN 02; CR50 pixel length
+; WARN 04; interlace WARN 10.
 dschk:  call rdall
         ; CRTC pitch (CR13 + CR51 5-4, or CR43 bit 2) in the addressing unit (CR31.3 -> dwords)
         movzx ax,byte [q_r13]
@@ -3135,6 +3336,11 @@ cm_16   db 5,0xFF
 cm_24   db 13,7,0,0xFF
 
 ; CR31 / CR58 / CR59-5A against the datasheet rules for the mode in use
+
+; Memory mapping rules: linear addressing (CR58 bit 4) needs enhanced mapping (CR31 bit 3); in a
+; banked mode LA on is only allowed as the booster's 64 KB window at A0000h (CR59/5A = 000Ah) with
+; CR31 bit 0; in an LFB mode the window is 2 MB or more and CR59/5A equals PhysBasePtr; plain banking
+; above 64 KB needs CR31 bit 0. Fail bit 800; LFB offered on a planar mode is WARN 20.
 mapchk: call rdall
         test byte [q_r58],0x10          ; linear addressing needs enhanced mapping first
         jz .a
@@ -3255,7 +3461,9 @@ rdlist: db 3,0x00
         dw q_rs18
         db 0xFF
 
-; ---------------- refresh predicted from CRTC and clock registers ----------------
+; Refresh predicted from the registers: clock (25.175 / 28.322 MHz or the DCLK PLL), SR01 dot clock
+; divide and 8/9 dots, SR15 bit 4, horizontal and vertical totals incl. the S3 overflow bits, and the
+; clocks per pixel of the colour mode (CR67, SR0B).
 predict:                                ; -> AX = Hz*10 (0 = unknown), [csel], [dclk]
         mov ax,0x0000
         call readreg
@@ -3350,6 +3558,7 @@ predict:                                ; -> AX = Hz*10 (0 = unknown), [csel], [
 .x2:    shl ax,1
 .r:     ret
 
+; Measured vs predicted refresh within 2 % (at least 1 Hz). A factor 2 either way is WARN 01.
 cmphz:  ; [hz] measured vs [phz] predicted: CF=1 fail, factor 2 -> warn
         movzx eax,word [phz]
         or eax,eax
@@ -3394,6 +3603,9 @@ near_:  ; |ebx-eax| <= max(eax/50,10) -> CF=0
 
 ; ======================================================================
 ; S3 internal modes via AH=00 compared with the same mode set via 4F02
+
+; S3 internal modes via INT 10h AH=00 (the BIOS's own numbers, used by S3 drivers in games) against
+; the same mode set through 4F02. First the VESA list must match the ROM's VESA->S3 table (WARN 01).
 svga_modes:
         mov si,mlist                    ; ROM table must match the BIOS mode list
         mov di,s3map
@@ -3422,6 +3634,8 @@ svga_modes:
         call tend
         ret
 
+; Fail bits: 1 AH=0Fh or 40:49 mode number wrong, 2 registers (extlist) differ from the 4F02 set,
+; 4 first/last byte through the window wrong. INFO when 4F01 marks the mode unsupported.
 svga_one:
         TB 'AH=00 '
         mov al,[im]
@@ -3502,6 +3716,16 @@ setm:   mov ax,0x4F02
         pop ax
         ret
 
+; VBE functions in 640x480x8 (101h). Fail bits per test:
+;   invalid mode 17Fh   1 4F01 accepted, 2 4F02 accepted, 4 current mode changed
+;   clear / D15         1 memory cleared despite D15, 2 not cleared without it
+;   4F05 + WinFuncPtr   1 get bank, 2 no WinFuncPtr, 4 far call does not switch, 8 get after far call
+;   4F06                1 set 1024 pixels (or CR13/CR51 pitch), 2 set 2048 bytes,
+;                       4 BL=3 maximum not min(8184, memory / 480) rounded down to 8 (p8 fix)
+;   4F07                1 start address (CR0C/CR0D/CR69 bits 3-0) or read back, 4 wait-for-retrace set
+;   4F09                1 set, 2 get differs, 4 DAC hardware differs, 8 set during retrace
+;   4F04 round trip     1 save/restore failed, 2 registers differ, 4 DAC entry, 8 mode not 101h
+; Then the 2 MB VRAM test (unless /Q) and the banked/LFB cross check.
 vesa_func:
         mov word [vm],0x101
         call getinfo
@@ -3887,6 +4111,7 @@ pitchreg:                               ; from rdall values -> AX bytes per line
 .3:     mul cx
         ret
 
+; 4F07 to (x, y): CR0C/CR0D/CR69 must hold (y*640+x)/4 and 4F07 BL=1 must return x and y.
 startchk:                               ; CX=x DX=y in 101h, pitch 640
         mov [tmpw],cx
         mov [tmpw2],dx
@@ -3962,6 +4187,9 @@ markchk:                                ; -> EAX, EDX
         pop eax
         ret
 
+; All VRAM through the banks with two patterns (address XOR 5AA5C33Ch, then inverted), written fully
+; before reading: catches MCLK too fast for the RAM and bank aliasing. Fail bit 1, the error count and
+; the first bad address are printed. Expect 0 errors at 59.96 MHz.
 vram_test:
         TB 'VRAM all banks, 2 patterns (MCLK)'
         call tdots
@@ -4037,6 +4265,10 @@ vram_test:
         ret
 
 ; banked write at bank 5 visible through the LFB, LFB write at the end visible through banks
+
+; The banked window and the LFB must be the same memory: write at bank 5 and read through the LFB,
+; write the last 256 bytes through the LFB and read through the last bank. Fail bits 1 and 2;
+; WARN 01 when INT 15h AH=87h is not available.
 lfb_cross:
         TB 'Banked window and LFB same memory'
         call tdots
@@ -4122,6 +4354,7 @@ bufphys:                                ; EAX = physical address of cmpbuf
         add eax,cmpbuf
         ret
 
+; INT 15h AH=87h block move (the only way to reach the LFB from real mode without a DOS extender).
 xfer:   ; EAX src phys, EDX dst phys, CX words -> CF
         push si
         push es
@@ -4205,6 +4438,10 @@ bankrw: ; EBX = linear offset: write/read 4 bytes through window A -> CF on erro
 
 ; ======================================================================
 ; register access
+
+; Read a register: AL type (0 MISC, 1 FEAT, 2 SR, 3 CR, 4 AR, 5 GR), AH index -> AL.
+; AR00-0F are read with the palette address source bit clear (the screen blanks for a moment),
+; otherwise the ATC returns the index.
 readreg:                                ; AL type AH index -> AL
         push dx
         push bx
@@ -4256,6 +4493,7 @@ readreg:                                ; AL type AH index -> AL
         pop dx
         ret
 
+; Register snapshot and comparison helpers (lists of type, index pairs).
 snap:   ; SI list (type,idx), CX n, DI dest
 .l:     mov ax,[si]
         call readreg
@@ -4349,6 +4587,9 @@ pupd:   ; add elapsed PIT counts since last call to [pel] and [pwt]
         pop bx
         pop ax
         ret
+
+; Refresh in Hz x 10: PIT channel 0 counts summed over 30 frames between rising edges of 3DAh
+; bit 3. 0 when no retrace is seen within about 0.25 s.
 measure:
         push bx
         push cx
@@ -4415,6 +4656,9 @@ pause:  cmp byte [interact],1
 
 ; ======================================================================
 ; test line framework
+
+; Test line framework: tbegin prints the name and flushes the log, so a freeze leaves the name of
+; the test that hung as the last line; tend prints PASS/FAIL/WARN/INFO with the bit mask and details.
 tbegin: mov word [fails],0
         mov word [warns],0
         mov byte [mm_n],0
@@ -4443,6 +4687,8 @@ tbeginx:
         ret
 
 ; write the buffered text to stdout and commit it, so a freeze loses nothing
+
+; Write the log buffer to stdout and commit it (INT 21h AH=68h) when stdout is a file.
 flush:  cmp byte [tofile],1
         jne .r
         pusha
@@ -4694,9 +4940,10 @@ pdec10: push eax
 ; ======================================================================
 ; data
 %include "vgaref.inc"
-dac_col: incbin "dac_col.bin"
 
 ; VGA snapshot list: MISC FEAT SR0-4 CR0-18 AR0-14 GR0-8 (62)
+
+; The 62 registers compared with the IBM reference, in the order of the vgaref snapshots.
 vgalist: db 0,0, 1,0
 %assign i 0
 %rep 5
@@ -4789,6 +5036,7 @@ hz      dw 0
 phz     dw 0
 mlen    dw 0
 tmpb    db 0
+cgapal  db 0                            ; 1 = expect the CGA palette in dac_ega
 tmpb2   db 0
 tmpw    dw 0
 tmpw2   dw 0
