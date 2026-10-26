@@ -45,12 +45,17 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
 the working copy without being committed.
 
-They take about two minutes and check the BIOS registers, state blocks and default palettes of every
-VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of S3COMPAT run and give the
-same output with and without /V, the /V debug file format, and VGALOG and S3ALIAS install and unload.
-The emulator has no video memory and no real timing (see `emu/vgaemu.py`), so refresh rates, memory
-tests and LFB results there mean nothing; the hardware logs decide. `emu/cover.py` lists the ROM bytes
-that a broad INT 10h workload never touches.
+They take about two minutes. `rom_patches` checks every change on top of the stock ROM on its own and
+lists all that are missing (run against the stock image it lists 19): sign-on, checksum, MCLK, pedestal,
+60 Hz defaults, flip-flop reset, FIFO fix, booster and LFB base, 4F01/4F03/4F06, CR50 and the refresh
+and line length of the patched timings. The other tests check the BIOS registers, state blocks and
+default palettes of every VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of
+S3COMPAT run and give the same output with and without /V, the /V debug file format, and VGALOG and
+S3ALIAS install and unload. The tools run with /V; their output and debug files are kept in
+`emu/logs/` (S3TEST.LOG, S3TEST.DBG, ...). The emulator has no video memory and no real timing (see
+`emu/vgaemu.py`), so refresh rates measured by the tools, memory tests and LFB results there mean
+nothing; the hardware logs decide. `emu/cover.py` lists the ROM bytes that a broad INT 10h workload
+never touches.
 
 ## Debug log (/V)
 
