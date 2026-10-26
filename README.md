@@ -1,7 +1,7 @@
 # Trio64V2/DX VBIOS test tools
 
 DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX card
-(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.11-p10.
+(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.11-p11.
 The ROM image itself is not in this repository; the changes it carries are described below.
 
 All tools share one version number, currently 0.8 (set in `common/version.inc`), and print it on their first line of output.
@@ -97,12 +97,12 @@ The line format is described at the top of `common/vdebug.inc`.
 The EGA and CGA default palettes are not tables: S3COMPAT computes them from the IBM rules
 (EGA: 2Ah per primary bit, 15h per secondary bit; CGA: bit 4 adds 15h to all three, colour 6 is brown).
 
-## VBIOS changes in 2.04.11-p10
+## VBIOS changes in 2.04.11-p11
 
-p10 differs from the stock 2.04.11 dump in the lower 32 KB only. The upper 32 KB (Trio64V+ BIOS
+p11 differs from the stock 2.04.11 dump in the lower 32 KB only. The upper 32 KB (Trio64V+ BIOS
 1.03-08, for an older card) is byte-identical to stock, both halves checksum to 0, and every change
-keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO mode. About 60 bytes of the
-lower 32 KB are still free (0x7FC0-7FEF and a few small gaps).
+keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO mode. About 25 bytes of the
+lower 32 KB are still free (0x7FE3-7FEF, 0x7F66-7F70 and a few small gaps).
 
 | Area | Change | Effect |
 | --- | --- | --- |
@@ -117,6 +117,7 @@ lower 32 KB are still free (0x7FC0-7FEF and a few small gaps).
 | 1280x1024x16 colours (106h) | Stock VESA DMT timing kept (108 MHz, 64 kHz, 60 Hz) | 14% above the 95 MHz single-clock datasheet limit but clean on this card; the CVT reduced-blanking timing tried in p8 made a 1280x1024-incapable LCD report out of range |
 | Banked VESA speed | Booster: banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB window at A0000h; real LFB base kept in CR6D and restored on the next mode set; 4F01 and 4F05/4F03 read it correctly | Banked writes at 83.7 MB/s, as fast as the LFB; VESA 1.2 games much faster |
 | 320x400x8 (182h) | New VESA mode (p10): S3 mode 53h, the 640x400 @ 70 Hz timing of 320x200x8 (12Eh) without double scanning; same number as S3VBE20 uses | 320x400 with 256 colours through VBE, banked (booster) or linear; 4F00 lists 47 modes |
+| Mode set clear | The 2 MB video memory clear of every S3/VESA mode set (p11) writes 32-bit words (rep stosd) instead of 16-bit ones, through the same 64 KB banks | Half the bus transactions; the clear is most of the 81 ms a mode set took on p10 (no change with the no-clear bit) |
 | 512x384x8 (151h) | CR50 table byte 60h to 40h | Correct graphics engine pixel length (was the reserved 10b) |
 | VBE 4F06 BL=3 | Rewritten: BX = min(8184, memory / lines) rounded down to 8, CX = BX in pixels | Real maximum line length (4368 for 101h instead of 546) |
 
@@ -124,9 +125,9 @@ lower 32 KB are still free (0x7FC0-7FEF and a few small gaps).
 
 Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x8000 up is untouched.
 
-| Offset | Stock | p10 | Purpose |
+| Offset | Stock | p11 | Purpose |
 | --- | --- | --- | --- |
-| 0x0079 | 2.04.11 | 2.04.11-p10 | Sign-on string (copyright line moved into the padding before 0x00AB) |
+| 0x0079 | 2.04.11 | 2.04.11-p11 | Sign-on string (copyright line moved into the padding before 0x00AB) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 (M) = 41h, SR10 (N/R) = 42h |
 | 0x00D1 | 07 | 05 | POST flags: bit 1 (blank pedestal) cleared |
 | 0x00DE | 08 | 88 | CR41 refresh fields: 1280 field = 4 (60 Hz) |
@@ -136,6 +137,7 @@ Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x80
 | 0x08AD-08B1 | F5 0C 82 48 33 | 60 7E 82 3C 28 | 320x240x15/16 refresh entry: CRTC table 0x7E60, 60 Hz |
 | 0x095C | 60 | 40 | CR50 for 512x384x8 / x32 |
 | 0x0B1A-0B1D | C2 9F A0 85 | C3 9F A0 86 | 640x480x15/16 @ 60 Hz: line total 800 |
+| 0x143D-1441 | mov es,[cs:1D53] | jmp 7FC0, nop x2 | Mode set clear: bank loop with rep stosd at 0x7FC0 |
 | 0x12FD-12FF | mov di,158 | jmp 7FAF | S3 mode table lookup: mode 53h (320x400x8) from the entry at 0x7E36 |
 | 0x17EB, 0x1B56, 0x56CC, 0x57F1, 0x58D7, 0x6274, 0x630D | A5 0E | 6B 7D | Pointer to the VESA-to-S3 mode table, moved from 0x0EA5 to 0x7D6B |
 | 0x553F, 0x56B9, 0x57F9, 0x6277, 0x6310 | 37 0E | FB 7C | Pointer to the VESA mode list (4F00), moved from 0x0E37 to 0x7CFB |
@@ -156,7 +158,8 @@ Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x80
 | 0x7F58-7F65 | 00 | refresh entry | 320x400x8: 12Eh's 70 Hz entry with the new CRTC table |
 | 0x7F71-7FAE | 00 | code | 4F06 BL=3 routine |
 | 0x7FAF-7FBF | 00 | code | S3 mode table lookup hook (mode 53h) |
-| 0x7FFF | 77 | C8 | Checksum of the lower 32 KB |
+| 0x7FC0-7FE2 | 00 | code | Mode set clear: 16384 x rep stosd per 64 KB bank (CR6A), EAX kept for the caller |
+| 0x7FFF | 77 | 77 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
