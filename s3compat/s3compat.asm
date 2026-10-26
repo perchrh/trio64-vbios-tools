@@ -562,9 +562,10 @@ showlist: db 0,0, 2,0x10, 2,0x11, 2,0x12, 2,0x13, 2,0x15, 2,0x18, 2,0x1A
         db 3,0x31, 3,0x36, 3,0x3A, 3,0x42, 3,0x50, 3,0x51, 3,0x58, 3,0x59, 3,0x5A
         db 3,0x5D, 3,0x5E, 3,0x67, 3,0x69, 3,0x6A, 3,0x6D, 3,0x90, 3,0x91
         dw 0xFFFF
-; registers compared between the start and the end (mode 03 both times)
+; registers compared between the start and the end (mode 03 both times). SR12/SR13 (DCLK PLL) are
+; left out: mode 03 uses clock select 1 (28 MHz), so they only hold whatever the last VESA mode set
 statelist: db 0,0, 2,1, 2,2, 2,3, 2,4, 2,0x0A, 2,0x0B, 2,0x0D, 2,0x10, 2,0x11
-        db 2,0x12, 2,0x13, 2,0x15, 2,0x18, 2,0x1A
+        db 2,0x15, 2,0x18, 2,0x1A
 %assign i 0
 %rep 25
         db 3,i
@@ -4660,8 +4661,9 @@ pupd:   ; add elapsed PIT counts since last call to [pel] and [pwt]
         pop ax
         ret
 
-; Refresh in Hz x 10: PIT channel 0 counts summed over 30 frames between rising edges of 3DAh
-; bit 3. 0 when no retrace is seen within about 0.25 s.
+; Refresh in Hz x 10: PIT channel 0 counts between rising edges of 3DAh bit 3 for 30 frames,
+; Hz x 10 = 11931820 / median counts per frame (the median ignores a frame stretched by a long
+; interrupt, for example a disk cache writing the /V log). 0 when no retrace is seen within ~0.25 s.
 measure:
         push bx
         push cx
@@ -4694,11 +4696,11 @@ measure:
         pop di
         mov word [vfrn],31
         call vframes
-        mov eax,[pel]
-        sub eax,[t0]
+        call vmedian                    ; median frame period: robust against one long interrupt
+        or eax,eax
         jz .z
         mov ecx,eax
-        mov eax,357954600               ; 30 * 11931820
+        mov eax,11931820                ; Hz*10 = 1193182 * 10 / counts per frame
         xor edx,edx
         div ecx
         jmp .x

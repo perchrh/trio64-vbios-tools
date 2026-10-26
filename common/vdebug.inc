@@ -257,6 +257,54 @@ vframes:; [vfr] = [vfrn] cumulative PIT counts at successive retrace starts -> p
         popad
 .r:     ret
 
+vmedian:; EAX = median of the per-frame PIT counts in [vfr]/[vfrn] (0 if fewer than 2 entries).
+        ; Used for the refresh result too: one long interrupt (a disk cache writing) only stretches
+        ; one frame, which moves the mean but not the median.
+        push ebx
+        push ecx
+        push esi
+        push edi
+        xor eax,eax
+        movzx ecx,word [cs:vfrn]
+        cmp cx,2
+        jb .x
+        dec cx                          ; CX = number of periods
+        xor si,si
+.d:     mov eax,[cs:vfr+si+4]           ; periods into vsrt
+        sub eax,[cs:vfr+si]
+        mov [cs:vsrt+si],eax
+        add si,4
+        loop .d
+        movzx ecx,word [cs:vfrn]
+        dec cx
+        mov si,4                        ; insertion sort
+.o:     movzx ebx,cx
+        shl bx,2
+        cmp si,bx
+        jae .s
+        mov eax,[cs:vsrt+si]
+        mov di,si
+.i:     or di,di
+        jz .p
+        cmp [cs:vsrt+di-4],eax
+        jbe .p
+        mov ebx,[cs:vsrt+di-4]
+        mov [cs:vsrt+di],ebx
+        sub di,4
+        jmp .i
+.p:     mov [cs:vsrt+di],eax
+        add si,4
+        jmp .o
+.s:     shr cx,1                        ; middle element
+        shl cx,2
+        mov si,cx
+        mov eax,[cs:vsrt+si]
+.x:     pop edi
+        pop esi
+        pop ecx
+        pop ebx
+        ret
+
 vflush: ; write the buffer to the file and commit it (call only when DOS may be used)
         cmp byte [cs:vflag],1
         jne .r
@@ -821,6 +869,8 @@ vi10:   cmp byte [cs:vquiet],0
         cli
 .nf:    call vtnow
         mov [cs:vt0],eax
+        push dword [cs:vt0]             ; nested INT 10h calls (the BIOS calls itself) overwrite
+        push word [cs:vi_f]             ; the globals: keep start time and caller flags on the stack
         mov ax,[cs:vi_f]
         and ax,0xFDFF                   ; enter the BIOS with IF=0, like a real INT
         push ax
@@ -847,6 +897,8 @@ vi10:   cmp byte [cs:vquiet],0
         mov [cs:vo_bp],bp
         mov [cs:vo_ds],ds
         mov [cs:vo_es],es
+        pop word [cs:vi_f]
+        pop dword [cs:vt0]
         call vtnow
         sub eax,[cs:vt0]
         mov [cs:vt0],eax
@@ -895,6 +947,7 @@ vtag    dd 0
 vtag2   dd 0
 vtag3   dd 0
 vfr     times 33 dd 0
+vsrt    times 33 dd 0
 vfrn    dw 0
 vseg    dw 0
 vptr    dw 0
