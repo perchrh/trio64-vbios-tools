@@ -20,7 +20,7 @@ each test routine has a comment block with its fail and warn bits.
 
 All tools share one version number and S3TEST checks for one ROM version; both are set in
 `common/version.inc` (`VERSION`, `ROMVER`) and can be overridden for a build, for example
-`make clean && make VERSION=0.9 ROMVER=2.04.11-p10`.
+`make clean && make VERSION=0.9 ROMVER=2.04.11-p12`.
 
 ## Building
 
@@ -100,8 +100,9 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
 
 p11 differs from the stock 2.04.11 dump in the lower 32 KB only. The upper 32 KB (Trio64V+ BIOS
 1.03-08, for an older card) is byte-identical to stock, both halves checksum to 0, and every change
-keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO mode. About 25 bytes of the
-lower 32 KB are still free (0x7FE3-7FEF, 0x7F66-7F70 and a few small gaps).
+keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO mode. About 380 bytes of the
+lower 32 KB are still free (0x7CFB-7E3F, 0x7F58-7F70, 0x7FAF-7FBF, 0x7FE3-7FEF). p11 is p9 plus
+the 32-bit mode set clear; p10 (an extra VESA mode 182h, 320x400x8) was withdrawn and is not in p11.
 
 | Area | Change | Effect |
 | --- | --- | --- |
@@ -115,8 +116,7 @@ lower 32 KB are still free (0x7FE3-7FEF, 0x7F66-7F70 and a few small gaps).
 | 1280x1024, 1600x1200 | Default refresh 60 Hz (CR41 and CR52 refresh fields) | Works on 60 Hz LCDs; stock defaulted to rates LCDs reject |
 | 1280x1024x16 colours (106h) | Stock VESA DMT timing kept (108 MHz, 64 kHz, 60 Hz) | 14% above the 95 MHz single-clock datasheet limit but clean on this card; the CVT reduced-blanking timing tried in p8 made a 1280x1024-incapable LCD report out of range |
 | Banked VESA speed | Booster: banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB window at A0000h; real LFB base kept in CR6D and restored on the next mode set; 4F01 and 4F05/4F03 read it correctly | Banked writes at 83.7 MB/s, as fast as the LFB; VESA 1.2 games much faster |
-| 320x400x8 (182h) | New VESA mode (p10): S3 mode 53h, the 640x400 @ 70 Hz timing of 320x200x8 (12Eh) without double scanning; same number as S3VBE20 uses | 320x400 with 256 colours through VBE, banked (booster) or linear; 4F00 lists 47 modes |
-| Mode set clear | The 2 MB video memory clear of every S3/VESA mode set (p11) writes 32-bit words (rep stosd) instead of 16-bit ones, through the same 64 KB banks | Half the bus transactions; the clear is most of the 81 ms a mode set took on p10 (no change with the no-clear bit) |
+| Mode set clear | The 2 MB video memory clear of every S3/VESA mode set (p11) writes 32-bit words (rep stosd) instead of 16-bit ones, through the same 64 KB banks | Half the bus transactions; the clear is most of the 81 ms a mode set took on p9 (no change with the no-clear bit) |
 | 512x384x8 (151h) | CR50 table byte 60h to 40h | Correct graphics engine pixel length (was the reserved 10b) |
 | VBE 4F06 BL=3 | Rewritten: BX = min(8184, memory / lines) rounded down to 8, CX = BX in pixels | Real maximum line length (4368 for 101h instead of 546) |
 
@@ -137,9 +137,6 @@ Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x80
 | 0x095C | 60 | 40 | CR50 for 512x384x8 / x32 |
 | 0x0B1A-0B1D | C2 9F A0 85 | C3 9F A0 86 | 640x480x15/16 @ 60 Hz: line total 800 |
 | 0x143D-1441 | mov es,[cs:1D53] | jmp 7FC0, nop x2 | Mode set clear: bank loop with rep stosd at 0x7FC0 |
-| 0x12FD-12FF | mov di,158 | jmp 7FAF | S3 mode table lookup: mode 53h (320x400x8) from the entry at 0x7E36 |
-| 0x17EB, 0x1B56, 0x56CC, 0x57F1, 0x58D7, 0x6274, 0x630D | A5 0E | 6B 7D | Pointer to the VESA-to-S3 mode table, moved from 0x0EA5 to 0x7D6B |
-| 0x553F, 0x56B9, 0x57F9, 0x6277, 0x6310 | 37 0E | FB 7C | Pointer to the VESA mode list (4F00), moved from 0x0E37 to 0x7CFB |
 | 0x20DE-20DF | 86 26 | 80 7E | INT 10h AH=00 jump table entry: mode set via the hook at 0x7E80 |
 | 0x56FE-5700 | call 2686 | call 7E80 | VBE 4F02: mode set via the hook |
 | 0x5718-571D | mov word [4FE],0 | call 7EF0, nop x3 | VBE 4F02 end: booster |
@@ -149,16 +146,9 @@ Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x80
 | 0x7E40-7E58 | 00 | CRTC table | 320x240x8 @ 60 Hz |
 | 0x7E60-7E78 | 00 | CRTC table | 320x240x15/16 @ 60 Hz |
 | 0x7E80-7F57 | 00 | code | Mode set hook, LFB base restore, booster, base fix, linear test |
-| 0x7CFB-7D6A | 00 | table | VESA mode list with 182h after 120h (the old one at 0x0E37 is no longer used) |
-| 0x7D6B-7E10 | 00 | table | VESA-to-S3 mode table with 53h (the old one at 0x0EA5 is no longer used) |
-| 0x7E11-7E1C | 00 | record | 4F01 data of 182h: 320x400, 320 bytes per line, 8 bpp, character height 16 |
-| 0x7E1D-7E35 | 00 | CRTC table | 320x400x8: 12Eh's CRTC table with CR09 = 40h |
-| 0x7E36-7E3E | 00 | mode entry | S3 mode 53h: VGA parameter record 0x0377 (as 54h), refresh list 0x7F58 |
-| 0x7F58-7F65 | 00 | refresh entry | 320x400x8: 12Eh's 70 Hz entry with the new CRTC table |
 | 0x7F71-7FAE | 00 | code | 4F06 BL=3 routine |
-| 0x7FAF-7FBF | 00 | code | S3 mode table lookup hook (mode 53h) |
 | 0x7FC0-7FE2 | 00 | code | Mode set clear: 16384 x rep stosd per 64 KB bank (CR6A), EAX kept for the caller |
-| 0x7FFF | 77 | 77 | Checksum of the lower 32 KB |
+| 0x7FFF | 77 | 83 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
@@ -177,10 +167,7 @@ No code was copied from another project; all ROM code was written for this BIOS.
 
 | TSR | Fixes | Why not in the ROM |
 | --- | --- | --- |
-| 8x14 font TSR | AX=1130h BH=2 returns the 8x16 font; mode 10h uses 21 rows of 16 lines | A 3.5 KB font does not fit in the free ROM space (accepted for now) |
 | S3ALIAS.COM (`s3alias/`) | Pinball Illusions' S3 driver: AH=00 mode 49h becomes 59h, 4Bh becomes 5Ah | Remapping S3 mode numbers in the ROM would break programs that use this BIOS's own numbering |
-
-[8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/)
 
 ### Omitted: 1-cycle linear addressing (CR87 bit 1, SR15 bit 7)
 

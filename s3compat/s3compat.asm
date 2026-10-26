@@ -2110,7 +2110,7 @@ fonts:  mov ax,3
         call fptr
         cmp ax,[f16]
         jne .f4
-        PS 'same as 8x16 (known, 8x14 TSR)'
+        PS 'same as 8x16 (known, no 8x14 font)'
         WARNB 1
 .f4:    call tend
         mov ax,0x13

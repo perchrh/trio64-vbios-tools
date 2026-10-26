@@ -28,7 +28,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Rejected on this card, do not retry without new evidence: SR15 bit 7 (data errors) and CR87 bit 1
   (hang), see README "Omitted".
 - Fixes that change what a standard function returns, or need more ROM space than is free, stay as
-  TSRs (8x14 font, S3ALIAS).
+  TSRs (S3ALIAS).
 - The 8x14 font is missing in the BIOS and that is accepted for now.
 
 ## Test tools
