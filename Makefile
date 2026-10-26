@@ -35,10 +35,13 @@ build/S3ALIAS.COM: s3alias/s3alias.asm common/version.inc | build
 build/VGALOG.COM: vgalog/vgalog.asm common/version.inc | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
 
-# Emulator tests (python3 with the unicorn package): make emu-test ROM=path/to/S3V2P9.BIN
+# Emulator tests (python3 with the unicorn package, see pyproject.toml):
+#   make emu-test ROM=path/to/S3V2P9.BIN
+# Uses the virtual environment .venv when there is one, otherwise python3 (override with PYTHON=...).
+PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
 emu-test: all
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P9.BIN"; exit 2; }
-	python3 emu/tests.py --rom "$(ROM)" --build build
+	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build
 
 clean:
 	rm -rf build

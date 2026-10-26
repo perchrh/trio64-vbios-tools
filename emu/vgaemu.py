@@ -27,6 +27,12 @@ Usage (see tests.py for complete examples)
   print(r.stdout.decode('latin1'), r.files.get('S3TEST.DBG'))
 """
 import struct
+import sys
+try:
+    import unicorn  # noqa: F401
+except ImportError:
+    sys.exit('The emulator needs the unicorn package. Install it with: python3 -m venv .venv && '
+             '.venv/bin/pip install .   (or: pip install unicorn), see pyproject.toml')
 from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_16, UC_HOOK_INTR, UC_HOOK_INSN, UC_HOOK_MEM_READ, \
     UC_HOOK_BLOCK, UC_HOOK_CODE
 from unicorn.x86_const import *

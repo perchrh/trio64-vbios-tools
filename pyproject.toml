@@ -1,0 +1,24 @@
+# Python dependencies of the emulator tests in emu/ (the DOS tools themselves only need NASM).
+#
+#   python3 -m venv .venv
+#   .venv/bin/pip install .
+#   make emu-test ROM=path/to/S3V2P9.BIN      (uses .venv/bin/python3 when it exists)
+#
+# This only installs the dependencies; emu/tests.py and emu/cover.py run from the source tree.
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trio64-vbios-tools-emu"
+version = "0.8"
+description = "Emulator tests for the Trio64V2/DX VBIOS DOS tools"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "unicorn>=2.0",    # x86 CPU emulator (tested with 2.1.4)
+]
+
+[tool.setuptools]
+py-modules = []
+packages = []

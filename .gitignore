@@ -3,3 +3,7 @@ build/
 *.LOG
 *.lst
 __pycache__/
+*.bin
+*.BIN
+.venv/
+*.egg-info/
