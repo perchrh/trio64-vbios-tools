@@ -15,7 +15,7 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.11-p11"); the version found is printed, also for other BIOS versions
+;                    "2.04.11-p12"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30 and the PCI revision ID, so the log shows
 ;                    the stepping (89 01 06 E1, PCI 06 on the test card)
@@ -50,6 +50,16 @@
 ;   4F06 BL=3 in 101h: 4368 bytes and 4368 pixels (2 MB / 480 lines, rounded down to 8)
 ;   CR50 in 151h (512x384x8) = 40h (pixel length 00, was the reserved 10b in stock)
 ;   ATC flip-flop: left in the data state before a mode set, it is back in the index state after
+;   VGA mode set clear (p12): after filling video memory, mode 13h leaves A000 all 00, mode 12h all four
+;                    planes 00, mode 03h B800:0000-7FFF 0720h (fail bits 1 13h, 2 12h, 4 03h)
+;   Font load (p12): plane 2 holds the 8x16 font after AX=1114h and the 8x8 font after AX=1112h, as the
+;                    tables of AX=1130h BH=06h/03h (fail bits 1 8x16, 2 8x8)
+;   Mode 13h scroll (p12): AH=06h full screen and a window, AH=07h a window, AH=06h AL=0, each checked
+;                    pixel by pixel (fail bits 1, 2, 4, 8)
+;   4F05 (p12 fast path): registers and the 3C4h index kept, CR6A set, planar 102h bank x 4 in CR6A and
+;                    0040:00FE, refused in linear 4101h (fail bits 1, 2, 4, 8, 10h)
+;   Timings, INFO lines not counted: mode set 03h, 4F02 101h with the clear, one 4F05, one mode 13h
+;                    scroll (shortest of 3 runs)
 ;
 bits 16
 org 0x100
@@ -108,6 +118,11 @@ start:  cld
         jmp .ml
 .mld:   call t_func
         call t_ff
+        call t_vclr
+        call t_font
+        call t_scr13
+        call t_bank
+        call t_time
         ; final: text mode, write report
         mov ax,0x0003
         int 0x10
@@ -135,7 +150,7 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: 'Version ' and ROMVER (now "2.04.11-p11") within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; Expect: 'Version ' and ROMVER (now "2.04.11-p12") within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  mov dx,s_sig
         call puts
@@ -694,6 +709,483 @@ t_ff:   mov ax,0x0003
         call result
         ret
 
+
+; ---------------- VGA mode set clear (p12: 32-bit) ----------------
+; Video memory filled with a pattern, then the mode set again: mode 13h leaves A000:0000-FFFF 00, mode 12h
+; all four planes 00 (64 KB each, read map 0-3), mode 03h B800:0000-7FFF 0720h words. Fail bits:
+; 1 mode 13h, 2 mode 12h, 4 mode 03h.
+t_vclr: VS 'D:TEST vga clear'
+        call vnl
+        call vflush
+        push es
+        mov byte [tmp],0
+        mov ax,0x0013
+        int 0x10
+        mov ax,0xA000
+        mov es,ax
+        xor di,di
+        mov cx,0x8000
+        mov ax,0x5555
+        rep stosw
+        mov ax,0x0013
+        int 0x10
+        xor di,di
+        mov cx,0x8000
+        xor ax,ax
+        repe scasw
+        je .m12
+        or byte [tmp],1
+.m12:   mov ax,0x0012
+        int 0x10
+        xor di,di                       ; write mode 0, map mask 0Fh: all planes
+        mov cx,0x8000
+        mov ax,0xAAAA
+        rep stosw
+        mov ax,0x0012
+        int 0x10
+        mov bl,0
+.pl:    mov dx,0x3CE
+        mov al,0x04
+        mov ah,bl
+        out dx,ax                       ; read map = plane BL
+        xor di,di
+        mov cx,0x8000
+        xor ax,ax
+        repe scasw
+        je .pn
+        or byte [tmp],2
+.pn:    inc bl
+        cmp bl,4
+        jb .pl
+        mov ax,0x0003
+        int 0x10
+        mov ax,0xB800
+        mov es,ax
+        xor di,di
+        mov cx,0x4000
+        mov ax,0x55AA
+        rep stosw
+        mov ax,0x0003
+        int 0x10
+        xor di,di
+        mov cx,0x4000
+        mov ax,0x0720
+        repe scasw
+        je .e
+        or byte [tmp],4
+.e:     pop es
+        mov dx,s_vclr
+        jmp bits_result
+
+; ---------------- font load (p12: 32-bit) ----------------
+; Mode 03h with AX=1114h: plane 2 holds the 8x16 font of AX=1130h BH=06h at 32 bytes per character;
+; after AX=1112h the 8x8 font of BH=03h (8 bytes per character). The mode set loads the font with the
+; same routine, plus the 9x16 alternates in 9-dot modes, which is why 1114h is used for the check. Plane 2 is read with SR04 = 06h, GR04 = 02h,
+; GR05 = 00h, GR06 = 04h; the next mode set puts them back. Fail bits: 1 8x16, 2 8x8.
+t_font: VS 'D:TEST font load'
+        call vnl
+        call vflush
+        mov byte [tmp],0
+        mov ax,0x0003
+        int 0x10
+        mov ax,0x1114                   ; 8x16 (the mode set adds the 9x16 alternates in 9-dot modes)
+        xor bl,bl
+        int 0x10
+        mov bh,6
+        mov cx,16
+        call fchk
+        jz .f8
+        or byte [tmp],1
+.f8:    mov ax,0x1112
+        xor bl,bl
+        int 0x10
+        mov bh,3
+        mov cx,8
+        call fchk
+        jz .e
+        or byte [tmp],2
+.e:     mov ax,0x0003
+        int 0x10
+        mov dx,s_font
+        jmp bits_result
+
+; Plane 2 against the BIOS font table BH (AX=1130h), CX bytes per character -> ZF=1 when equal.
+fchk:   push ds
+        push es
+        push cx
+        mov ax,0x1130
+        int 0x10                        ; ES:BP = table
+        pop cx
+        push es
+        pop ds
+        mov si,bp
+        push cx
+        mov dx,0x3C4
+        mov ax,0x0604
+        out dx,ax
+        mov dx,0x3CE
+        mov ax,0x0204
+        out dx,ax
+        mov ax,0x0005
+        out dx,ax
+        mov ax,0x0406
+        out dx,ax
+        pop cx
+        mov ax,0xA000
+        mov es,ax
+        xor di,di
+        mov bx,256
+.c:     push cx
+        push di
+        repe cmpsb
+        pop di
+        pop cx
+        jne .r
+        add di,32
+        dec bx
+        jnz .c
+.r:     pop es
+        pop ds
+        ret
+
+; ---------------- mode 13h scroll (p12: 32-bit for AH=06h) ----------------
+; A000 is filled with (7x + 13y) mod 256, then each case is checked pixel by pixel against the same
+; formula: A AH=06h AL=1 full screen, fill 1Fh; B AH=06h AL=2 rows 3-10, columns 5-20, fill 05h;
+; C AH=07h AL=1 the same window, fill 44h; D AH=06h AL=0 rows 1-3, columns 2-4, fill 33h.
+; Fail bits 1 A, 2 B, 4 C, 8 D.
+t_scr13:
+        VS 'D:TEST mode 13h scroll'
+        call vnl
+        call vflush
+        mov byte [tmp],0
+        mov si,scrtab
+.n:     cmp word [si],0
+        je .e
+        push si
+        mov ax,0x0013
+        int 0x10
+        call fill13
+        mov ax,[si]
+        mov bx,[si+2]
+        mov cx,[si+4]
+        mov dx,[si+6]
+        int 0x10
+        pop si
+        push si
+        call chk13
+        pop si
+        jz .ok
+        mov al,[si+18]
+        or [tmp],al
+.ok:    add si,20
+        jmp .n
+.e:     mov dx,s_scr
+        jmp bits_result
+
+fill13: push es
+        mov ax,0xA000
+        mov es,ax
+        xor di,di
+        xor dx,dx                       ; y
+.y:     mov ax,dx
+        imul ax,ax,13
+        mov cx,320
+.x:     stosb
+        add al,7
+        loop .x
+        inc dx
+        cmp dx,200
+        jb .y
+        pop es
+        ret
+
+; SI = case: +8 x0, +10 x1, +12 y0, +14 y1, +16 shift (lines, + = up, - = down), +3 fill (BH). ZF=1 when
+; every pixel is as expected.
+chk13:  push es
+        mov ax,0xA000
+        mov es,ax
+        xor di,di
+        xor bp,bp                       ; y
+.y:     xor cx,cx                       ; x
+.x:     mov bx,bp                       ; BX = source line for an unchanged pixel
+        cmp cx,[si+8]
+        jb .p
+        cmp cx,[si+10]
+        ja .p
+        cmp bp,[si+12]
+        jb .p
+        cmp bp,[si+14]
+        ja .p
+        mov ax,[si+16]
+        or ax,ax
+        js .dn
+        mov bx,[si+14]                  ; up: lines y0..y1-shift come from y+shift, the rest is fill
+        sub bx,ax
+        cmp bp,bx
+        jg .fl
+        mov bx,bp
+        add bx,ax
+        jmp .p
+.dn:    neg ax                          ; down: lines y0+shift..y1 come from y-shift
+        mov bx,[si+12]
+        add bx,ax
+        cmp bp,bx
+        jl .fl
+        mov bx,bp
+        sub bx,ax
+.p:     mov ax,bx                       ; expected (7x + 13 * source line) mod 256
+        imul ax,ax,13
+        mov dx,cx
+        imul dx,dx,7
+        add ax,dx
+        jmp .c
+.fl:    mov al,[si+3]
+.c:     cmp al,[es:di]
+        jne .r
+        inc di
+        inc cx
+        cmp cx,320
+        jb .x
+        inc bp
+        cmp bp,200
+        jb .y
+        xor ax,ax                       ; ZF=1
+.r:     pop es
+        ret
+
+scrtab: ;   AX      BX      CX      DX      x0  x1   y0  y1   shift  -   bit
+        dw 0x0601, 0x1F00, 0x0000, 0x1827, 0,  319, 0,  199,  8
+        db 0, 1
+        dw 0x0602, 0x0500, 0x0305, 0x0A14, 40, 167, 24, 87,   16
+        db 0, 2
+        dw 0x0701, 0x4400, 0x0305, 0x0A14, 40, 167, 24, 87,   -8
+        db 0, 4
+        dw 0x0600, 0x3300, 0x0102, 0x0304, 16, 39,  8,  31,   24
+        db 0, 8
+        dw 0
+
+; ---------------- VBE 4F05 (p12: fast path from the INT 10h entry) ----------------
+; In 101h: 4F05 BH=0 DX=5 returns 004Fh with BX, CX, DX, SI, DI unchanged (fail 1), keeps the 3C4h index
+; and SR08 (fail 2) and sets CR6A = 05h (fail 4). In planar 102h DX=2 gives CR6A = 08h and 0040:00FE =
+; 0008h (fail 8). In linear 4101h it is refused with 034Fh and CR6A stays (fail 10h).
+t_bank: VS 'D:TEST 4F05'
+        call vnl
+        call vflush
+        mov byte [tmp],0
+        mov ax,0x4F02
+        mov bx,0x0101
+        int 0x10
+        call unlock
+        mov al,0x08
+        call rdsr
+        mov [tmp2],ah                   ; SR08 before
+        mov dx,0x3C4
+        mov al,0x02
+        out dx,al                       ; SR index 02h
+        mov ax,0x4F05
+        xor bx,bx
+        mov cx,0x1234
+        mov dx,5
+        mov si,0x5678
+        mov di,0x9ABC
+        int 0x10
+        cmp ax,0x004F
+        jne .f1
+        or bx,bx
+        jne .f1
+        cmp cx,0x1234
+        jne .f1
+        cmp dx,5
+        jne .f1
+        cmp si,0x5678
+        jne .f1
+        cmp di,0x9ABC
+        je .r1
+.f1:    or byte [tmp],1
+.r1:    mov dx,0x3C4
+        in al,dx
+        cmp al,0x02
+        jne .f2
+        mov al,0x08
+        call rdsr
+        cmp ah,[tmp2]
+        je .r2
+.f2:    or byte [tmp],2
+.r2:    mov al,0x6A
+        call rdcr
+        cmp ah,0x05
+        je .pl
+        or byte [tmp],4
+.pl:    mov ax,0x4F02
+        mov bx,0x0102
+        int 0x10
+        mov ax,0x4F05
+        xor bx,bx
+        mov dx,2
+        int 0x10
+        call unlock
+        mov al,0x6A
+        call rdcr
+        cmp ah,0x08
+        jne .f8
+        push es
+        xor ax,ax
+        mov es,ax
+        cmp word [es:0x4FE],0x0008
+        pop es
+        je .lf
+.f8:    or byte [tmp],8
+.lf:    mov ax,0x4F02
+        mov bx,0x4101
+        int 0x10
+        call unlock
+        mov al,0x6A
+        call rdcr
+        mov [tmp2],ah
+        mov ax,0x4F05
+        xor bx,bx
+        mov dx,7
+        int 0x10
+        cmp ax,0x034F
+        jne .f10
+        call unlock
+        mov al,0x6A
+        call rdcr
+        cmp ah,[tmp2]
+        je .e
+.f10:   or byte [tmp],0x10
+.e:     mov dx,s_bank
+        jmp bits_result
+
+; Print the test name at DX, the fail bits in [tmp] and PASS (bits 0) or FAIL.
+bits_result:
+        call puts
+        mov al,[tmp]
+        call phex2
+        cmp byte [tmp],0
+        sete al
+        call result
+        ret
+
+; ---------------- timings (INFO, not counted) ----------------
+; PIT channel 0 in mode 2 and the BIOS tick give a 32-bit time in 1/1193182 s; each value is the
+; shortest of 3 runs: mode set 03h, 4F02 101h (with the 2 MB clear), one 4F05 (1000 calls, per call),
+; one AH=06h full-screen scroll in mode 13h. INT 10h logging (/V) is off while timing.
+t_time: VS 'D:TEST timings'
+        call vnl
+        call vflush
+        mov byte [vquiet],1
+        pushf
+        cli
+        mov al,0x34
+        out 0x43,al
+        xor al,al
+        out 0x40,al
+        out 0x40,al
+        popf
+        mov dx,s_t03
+        mov bx,tm_03
+        call time3
+        mov dx,s_t101
+        mov bx,tm_101
+        call time3
+        mov ax,0x4F02
+        mov bx,0x0101
+        int 0x10
+        mov dx,s_t05
+        mov bx,tm_05
+        call time3
+        mov ax,0x0013
+        int 0x10
+        mov dx,s_tscr
+        mov bx,tm_scr
+        call time3
+        mov byte [vquiet],0
+        cmp byte [vflag],1              ; /V keeps mode 2 for its call timing (vdone restores)
+        je .r
+        pushf
+        cli
+        mov al,0x36
+        out 0x43,al
+        xor al,al
+        out 0x40,al
+        out 0x40,al
+        popf
+.r:     ret
+
+; DX = line text, BX = routine to time. Prints "text <ms or us with one decimal>  INFO".
+time3:  push dx
+        mov dword [tmin],0xFFFFFFFF
+        mov cx,3
+.l:     push cx
+        push bx
+        call tstamp
+        mov [tst],eax
+        call bx
+        call tstamp
+        sub eax,[tst]
+        cmp eax,[tmin]
+        jae .n
+        mov [tmin],eax
+.n:     pop bx
+        pop cx
+        loop .l
+        pop dx
+        call puts
+        mov eax,[tmin]                  ; tenths: counts * 10000 / 1193182
+        mov ecx,10000
+        mul ecx
+        mov ecx,1193182
+        div ecx
+        call pdec10
+        mov dx,s_tinfo
+        call puts
+        ret
+
+; EAX = BIOS tick * 65536 + PIT channel 0 counts elapsed in this tick (mode 2: counts down by 1).
+tstamp: push es
+        push bx
+        push dx
+        xor ax,ax
+        mov es,ax
+.r:     mov bx,[es:0x46C]
+        call rdcnt
+        mov dx,ax
+        cmp bx,[es:0x46C]
+        jne .r
+        mov ax,bx
+        shl eax,16
+        mov ax,0xFFFF
+        sub ax,dx
+        pop dx
+        pop bx
+        pop es
+        ret
+
+tm_03:  mov ax,0x0003
+        int 0x10
+        ret
+tm_101: mov ax,0x4F02
+        mov bx,0x0101
+        int 0x10
+        ret
+tm_05:  mov cx,1000
+.l:     push cx
+        mov ax,0x4F05
+        xor bx,bx
+        mov dx,cx
+        and dx,7
+        int 0x10
+        pop cx
+        loop .l
+        ret
+tm_scr: mov ax,0x0601
+        mov bx,0x0700
+        xor cx,cx
+        mov dx,0x1827
+        int 0x10
+        ret
+
 ; Unlock the S3 extended registers: SR08 = 06h, CR38 = 48h, CR39 = A5h.
 unlock: push ax
         push dx
@@ -1092,6 +1584,15 @@ s_kbs   db ' KB/s$'
 s_f06   db '4F06 BL=3 max line 101h (4368/4368) $'
 s_c50   db 'CR50 in 512x384x8 151h (40) ........ $'
 s_ff    db 'ATC flip-flop reset by mode set ..... $'
+s_vclr  db 'VGA mode set clear 13h 12h 03h ..... $'
+s_font  db 'Font load 8x16 and 8x8 in plane 2 .. $'
+s_scr   db 'Mode 13h scroll AH=06h/07h data .... $'
+s_bank  db '4F05 regs, SR index, CR6A, planar, LFB $'
+s_t03   db 'Time: mode set 03h (ms) ............ $'
+s_t101  db 'Time: 4F02 101h with clear (ms) .... $'
+s_t05   db 'Time: 4F05 set window (us) ......... $'
+s_tscr  db 'Time: mode 13h scroll AH=06h (ms) .. $'
+s_tinfo db '  INFO',13,10,'$'
 s_pass  db '  PASS',13,10,'$'
 s_fail  db '  FAIL',13,10,'$'
 s_sum1  db 13,10,'Passed: $'
@@ -1113,6 +1614,8 @@ m_st    dw 0
 m_meas  dw 0
 tmp     dw 0
 tmp2    dw 0
+tmin    dd 0
+tst     dd 0
 errs    dd 0
 pel     dd 0
 pwt     dd 0
