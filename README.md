@@ -31,6 +31,21 @@ NASM 2.x (tested with 2.16.01):
 
 The .COM files land in `build/`. `common/` holds the /V debug log code the test tools share.
 
+## Emulator tests
+
+`emu/` runs the video BIOS and the DOS tools in an emulated PC, so changes can be checked before a
+hardware run. The tests need python3 and the unicorn package (`pip install unicorn`), NASM, and the
+64 KB ROM image of the card, which is not in this repository:
+
+    make emu-test ROM=path/to/S3V2P9.BIN
+
+They take about two minutes and check the BIOS registers, state blocks and default palettes of every
+VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of S3COMPAT run and give the
+same output with and without /V, the /V debug file format, and VGALOG and S3ALIAS install and unload.
+The emulator has no video memory and no real timing (see `emu/vgaemu.py`), so refresh rates, memory
+tests and LFB results there mean nothing; the hardware logs decide. `emu/cover.py` lists the ROM bytes
+that a broad INT 10h workload never touches.
+
 ## Debug log (/V)
 
 VSHOW, S3TEST and S3COMPAT take `/V`. It writes a second file, `VSHOW.DBG`, `S3TEST.DBG` or
