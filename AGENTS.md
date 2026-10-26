@@ -42,7 +42,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   maximum). Do not take expected values from the ROM under test unless the source is cross-checked,
   as the VGA parameter table is against VGATEST.
 - The S3 2.04.07 reference BIOS has been examined, but its data is not used in the tests yet.
-- Runs must be non-interactive by default (S3COMPAT /I adds pauses). Output must be redirectable to a
+- Runs are non-interactive (to look at a mode, use VSHOW). Output must be redirectable to a
   file; anything meant for the person at the screen goes to stderr.
 - Write and commit the log (INT 21h AH=40h, then AH=68h) before each test starts, so that after a
   freeze the last line in the log names the test that hung.
@@ -92,7 +92,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   should be explained.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and
   the DOS tools on top of it, under Unicorn with a VGA register model (`make emu-test ROM=...`). It
-  has no video memory and no real timing, so keep its artefacts (refresh, VRAM, equipment flags, the
-  reserved SR04 bit) apart from real findings; the hardware logs decide. Add a test to
+  models registers, a planar window and a virtual clock (refresh rates there follow the programmed
+  timing), but has no banked or linear video memory and no real bus speed, so keep those results
+  apart from real findings; the hardware logs decide. Add a test to
   `emu/tests.py` for new behaviour the model can judge.
 - Deliver changes as a pull request against main.

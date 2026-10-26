@@ -13,7 +13,7 @@ All tools need a 386 or later and run in plain DOS (no EMM386 needed).
 | S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh, booster, LFB, 4F05/4F06, CR50, flip-flop) | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze | `VGALOG`, then start the program; `VGALOG /U` to unload, `/H` for help; record format in `vgalog/vgalog.asm` |
-| S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test, `/I` pauses per mode) |
+| S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
 each test routine has a comment block with its fail and warn bits.
@@ -45,16 +45,18 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
 the working copy without being committed.
 
-They take about two minutes. `rom_patches` checks every change on top of the stock ROM on its own and
+They take about three minutes. `rom_patches` checks every change on top of the stock ROM on its own and
 lists all that are missing (run against the stock image it lists 19): sign-on, checksum, MCLK, pedestal,
 60 Hz defaults, flip-flop reset, FIFO fix, booster and LFB base, 4F01/4F03/4F06, CR50 and the refresh
 and line length of the patched timings. The other tests check the BIOS registers, state blocks and
 default palettes of every VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of
 S3COMPAT run and give the same output with and without /V, the /V debug file format, and VGALOG and
 S3ALIAS install and unload. The tools run with /V; their output and debug files are kept in
-`emu/logs/` (S3TEST.LOG, S3TEST.DBG, ...). The emulator has no video memory and no real timing (see
-`emu/vgaemu.py`), so refresh rates measured by the tools, memory tests and LFB results there mean
-nothing; the hardware logs decide. `emu/cover.py` lists the ROM bytes that a broad INT 10h workload
+`emu/logs/` (S3TEST.LOG, S3TEST.DBG, ...). The emulator models the VGA and S3 registers, one 64 KB planar window
+and a virtual clock that drives the timer, the BIOS tick and the retrace bit from the programmed
+timing (see `emu/vgaemu.py`), so refresh rates and planar memory tests mean something there. It has
+no banked or linear video memory and no real bus speed: those results, and the monitor, stay with
+the hardware logs, which decide. `emu/cover.py` lists the ROM bytes that a broad INT 10h workload
 never touches.
 
 ## Debug log (/V)

@@ -7,8 +7,8 @@
 ;   Journal 1988), SVGATEST, VBETest and X-VESA.
 ;
 ; Usage
-;   S3COMPAT [/I] [/Q] [/V] > S3COMPAT.LOG
-;   /I  wait for a key after each mode (look at the screen)      /Q  skip the 2 MB VRAM test
+;   S3COMPAT [/Q] [/V] > S3COMPAT.LOG
+;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VSHOW)
 ;   /V  debug log in S3COMPAT.DBG (common/vdebug.inc): every INT 10h call with registers and duration,
 ;       a register dump and the result line after every test, 4F00/4F01/AH=1Bh blocks, per-frame
 ;       timer counts, memory mismatches. The normal log is the same with or without /V. Needs 64 KB
@@ -97,10 +97,7 @@ start:  cld
         jne .op
         lodsb
         and al,0xDF
-        cmp al,'I'
-        jne .o2
-        mov byte [interact],1
-.o2:    cmp al,'Q'
+        cmp al,'Q'
         jne .o3
         mov byte [quick],1
 .o3:    cmp al,'V'
@@ -787,7 +784,7 @@ vga_one:
         mov ax,0x1202                   ; back to 400 scan lines for the following modes
         mov bl,0x30
         int 0x10
-.e4:    call pause
+.e4:
         call tend
         ret
 
@@ -1032,13 +1029,13 @@ mxtab:  db 0x63
         db 'Mode X 320x400$'
         db 0xE7
         dw 602
-        db 18
+        db 17                           ; 17 register writes (the 0 word after them is padding)
         dw 0x6B00,0x5901,0x5A02,0x8E03,0x5E04,0x8A05,0x0D06,0x3E07,0x4109,0xEA10,0xAC11,0xDF12,0x2D13,0x0014,0xE715,0x0616,0xE317
         dw 0x0000
         db 'Mode X 360x240$'
         db 0xE7
         dw 602
-        db 18
+        db 17
         dw 0x6B00,0x5901,0x5A02,0x8E03,0x5E04,0x8A05,0x0D06,0x3E07,0x4009,0xEA10,0xAC11,0xDF12,0x2D13,0x0014,0xE715,0x0616,0xE317
         dw 0x0000
         db 'Mode X 360x480$'
@@ -1190,7 +1187,7 @@ modex_one:
         call mplan
         jnc .m
         FAILB 0x10
-.m:     call pause
+.m:
         call tend
         ret
 
@@ -2890,7 +2887,6 @@ vesa_one:
         jne .rq
         xor ax,ax
 .rq:    call lineinfo
-        call pause
 .end:   call tend
         ret
 
@@ -4732,14 +4728,6 @@ waitvr: ; wait for the start of vertical retrace, CF on timeout (~0.25 s)
 .t:     stc
         ret
 
-pause:  cmp byte [interact],1
-        jne .r
-        push ax
-        xor ah,ah
-        int 0x16
-        pop ax
-.r:     ret
-
 ; ======================================================================
 ; test line framework
 
@@ -5130,11 +5118,6 @@ scrseg  dw 0
 segds   dw 0
 optr    dw 0
 col     db 0
-interact db 0
-silent  db 0
-lastbeep dw 0
-ledhb   db 0
-ledsec  db 2
 omode   db 0
 opage   db 0
 ocur    dw 0
