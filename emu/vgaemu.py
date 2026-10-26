@@ -17,9 +17,14 @@ What is emulated
     rate the registers define, and call durations are plausible, but not real.
     Every write to A0000-BFFFF also takes one count, so loops that write video memory until a tick
     passes come to an end.
-  - A small DOS (INT 21h) for .COM programs: console and file output, create/close, IOCTL, InDOS,
-    get/set vector, version, PSP, free memory, commit, terminate and stay resident. INT 16h returns
-    keys from a queue (Enter when empty); INT 15h AH=87h reports "not supported".
+  - A small DOS (INT 21h) for .COM and .EXE programs (MZ header with relocations, run_exe): console and
+    file output, create/close, IOCTL, InDOS, get/set vector, version, PSP (51h/62h), memory blocks
+    (48h-4Ah, with MCBs in front of the environment and the program), list of lists (52h, first MCB),
+    allocation strategy and UMB link (58h, no UMBs), country (38h), date/time (zero), Ctrl-Break,
+    default drive, commit, terminate and stay resident. INT 21h goes through the vector table to a stub
+    at 0050:0020, so a program that hooks INT 21h (for example a TSR that stays resident when its own
+    AH=4Ch passes its hook) sees its own calls. INT 16h returns keys from a queue (Enter when empty);
+    INT 15h AH=87h reports "not supported".
 
 What is not emulated (results that depend on it are meaningless here)
   - Video memory beyond one 64 KB window: A0000-BFFFF is plain RAM, plus a model of the four planes
@@ -57,6 +62,8 @@ PCI_CONFIG = {0x00: 0x89015333, 0x04: 0x02000003, 0x08: 0x03000006,
               0x2C: 0x89015333, 0x3C: 0x0000010A}
 
 IRET_SEG = 0x0060          # every unused vector points to 0060:0000 = IRET
+DOS_STUB = 0x0520          # INT 21h vector 0050:0020: INT F1h (the emulated DOS), RETF 2 (keeps its flags)
+MEM_TOP = 0x9000           # first segment after conventional memory available to programs
 STUB = 0x7C00              # small code stubs (POST far call, INT 10h call) live here
 
 
@@ -79,6 +86,8 @@ class Machine:
         mu.mem_write(0xFF065, b'\xCF')                 # system BIOS video entry F000:F065 (INT 42h)
         for v in range(256):
             mu.mem_write(v * 4, struct.pack('<HH', 0, IRET_SEG))
+        mu.mem_write(DOS_STUB, b'\xCD\xF1\xCA\x02\x00')
+        mu.mem_write(0x21 * 4, struct.pack('<HH', DOS_STUB - 0x500, 0x0050))
         mu.mem_write(0x410, struct.pack('<H', 0x0020))  # equipment: 80x25 colour
         mu.mem_write(0x413, struct.pack('<H', 640))
         self.r = {'seq': {}, 'crtc': {}, 'gc': {}, 'atc': {}, 'misc': 0x67, 'feat': 0, 'si': 0, 'ci': 0,
@@ -346,10 +355,11 @@ class Machine:
 
     def _intr(self, uc, n, ud):
         ah = (self._reg(UC_X86_REG_AX) >> 8) & 0xFF
-        if self.com is not None:
-            if n == 0x21:
+        if n == 0xF1:                                   # the DOS stub behind the INT 21h vector
+            if self.com is not None:
                 self._dos(uc, ah)
-                return
+            return
+        if self.com is not None:
             if n == 0x20:
                 self.com.exit = ('exit', 0)
                 uc.emu_stop()
@@ -433,6 +443,7 @@ class Machine:
         dx = self._reg(UC_X86_REG_DX)
         ds = self._reg(UC_X86_REG_DS)
         cf = 0
+        es = self._reg(UC_X86_REG_ES)
         if ah == 0x02:
             c.stdout.append(dx & 0xFF)
         elif ah == 0x09:
@@ -469,10 +480,48 @@ class Machine:
             uc.reg_write(UC_X86_REG_AX, cx)
         elif ah == 0x44:
             uc.reg_write(UC_X86_REG_DX, 0x0000 if self.stdout_is_file else 0x0080)
-        elif ah in (0x49, 0x4A, 0x68, 0x50):
+        elif ah == 0x4A:                                # resize: only the program's own block matters
+            if es == self.psp:
+                if es + bx > MEM_TOP:
+                    cf = 1
+                    uc.reg_write(UC_X86_REG_AX, 8)
+                    uc.reg_write(UC_X86_REG_BX, MEM_TOP - es)
+                else:
+                    self.prog_end = es + bx
+                    self._mcb(es - 1, b'Z', self.psp, bx)
+        elif ah == 0x48:                                # allocate above the program and earlier blocks
+            seg = max(self.prog_end, self.heap) + 1
+            if seg + bx > MEM_TOP:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 8)
+                uc.reg_write(UC_X86_REG_BX, max(0, MEM_TOP - seg))
+            else:
+                self._mcb(seg - 1, b'M', self.psp, bx)
+                self.heap = seg + bx
+                uc.reg_write(UC_X86_REG_AX, seg)
+        elif ah in (0x49, 0x68, 0x50):
             pass
-        elif ah == 0x51:
+        elif ah in (0x51, 0x62):
             uc.reg_write(UC_X86_REG_BX, self.psp)
+        elif ah == 0x52:                                # list of lists at 0070:0010, first MCB before it
+            uc.reg_write(UC_X86_REG_ES, 0x0070)
+            uc.reg_write(UC_X86_REG_BX, 0x0010)
+            uc.mem_write(0x0700 + 0x10 - 2, struct.pack('<H', self.psp - 0x11))
+        elif ah == 0x58:                                # strategy / UMB link: first fit, no UMBs
+            if ax & 0xFF in (0, 2):
+                uc.reg_write(UC_X86_REG_AX, 0)
+        elif ah == 0x38 and ax & 0xFF == 0:             # country info: all zero (USA date order)
+            uc.mem_write(ds * 16 + dx, bytes(34))
+            uc.reg_write(UC_X86_REG_BX, 1)
+        elif ah == 0x19:
+            uc.reg_write(UC_X86_REG_AX, (ax & 0xFF00) | 2)  # drive C:
+        elif ah == 0x0B:
+            uc.reg_write(UC_X86_REG_AX, ax & 0xFF00)       # no key waiting
+        elif ah == 0x33:
+            uc.reg_write(UC_X86_REG_DX, dx & 0xFF00)       # Ctrl-Break checking off
+        elif ah in (0x2A, 0x2C):
+            uc.reg_write(UC_X86_REG_CX, 0)
+            uc.reg_write(UC_X86_REG_DX, 0)
         elif ah == 0x4C:
             c.exit = ('exit', ax & 0xFF)
             uc.emu_stop()
@@ -546,34 +595,80 @@ class Machine:
         return bytes(self.mu.mem_read(addr, n))
 
     # ------------------------------------------------------------------ DOS programs
-    def run_com(self, com, tail='', seg=0x2000, stdout_is_file=True, max_insn=600_000_000):
-        """Run a .COM program at seg:0100 with the command tail; returns a ComResult. The program's
-        resident part stays in memory when it ends with INT 21h AH=31h."""
+    def _mcb(self, seg, kind, owner, paras, name=b''):
+        self.mu.mem_write(seg * 16, kind + struct.pack('<HH', owner, paras) + bytes(3) + name[:8].ljust(8, b'\0'))
+
+    def _psp(self, seg, tail, name):
+        """PSP at seg:0000, environment (empty, then the program name) in the 15 paragraphs before it,
+        MCBs in front of both."""
         mu = self.mu
-        self.com = c = ComResult()
-        self.stdout_is_file = stdout_is_file
         self.psp = seg
-        base = seg * 16
+        self.prog_end = MEM_TOP
+        self.heap = 0
         psp = bytearray(256)
         psp[0:2] = b'\xCD\x20'
-        psp[2:4] = struct.pack('<H', 0x9000)                 # top of memory
+        psp[2:4] = struct.pack('<H', MEM_TOP)              # top of memory
         psp[0x2C:0x2E] = struct.pack('<H', seg - 0x10)      # environment segment
         t = (' ' + tail.strip()).encode() if tail.strip() else b''
         psp[0x80] = len(t)
         psp[0x81:0x81 + len(t) + 1] = t + b'\r'
-        mu.mem_write(base, bytes(psp))
+        mu.mem_write(seg * 16, bytes(psp))
+        mu.mem_write((seg - 0x10) * 16, b'\0\0\x01\0C:\\' + name.encode() + b'\0')
+        self._mcb(seg - 0x11, b'M', seg, 0x0F)
+        self._mcb(seg - 1, b'Z', seg, MEM_TOP - seg, name.split('.')[0].encode())
+
+    def _go(self, start, max_insn):
+        c = self.com
+        try:
+            self.mu.emu_start(start, 0, count=max_insn)
+        except UcError as e:
+            c.exit = ('error', '%s at %04x:%04x' % (e, self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP)))
+        self.com = None
+        return c
+
+    def run_com(self, com, tail='', seg=0x2000, stdout_is_file=True, max_insn=600_000_000, name='PROG.COM'):
+        """Run a .COM program at seg:0100 with the command tail; returns a ComResult. The program's
+        resident part stays in memory when it ends with INT 21h AH=31h."""
+        mu = self.mu
+        self.com = ComResult()
+        self.stdout_is_file = stdout_is_file
+        self._psp(seg, tail, name)
+        base = seg * 16
         mu.mem_write(base + 0x100, com)
         mu.mem_write(base + 0xFFFE, b'\0\0')
         for reg in (UC_X86_REG_CS, UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_SS):
             mu.reg_write(reg, seg)
         mu.reg_write(UC_X86_REG_SP, 0xFFFE)
         mu.reg_write(UC_X86_REG_EFLAGS, 0x202)
-        try:
-            mu.emu_start(base + 0x100, 0, count=max_insn)
-        except UcError as e:
-            c.exit = ('error', '%s at %04x:%04x' % (e, self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP)))
-        self.com = None
-        return c
+        return self._go(base + 0x100, max_insn)
+
+    def run_exe(self, exe, tail='', seg=0x2000, stdout_is_file=True, max_insn=600_000_000, name='PROG.EXE'):
+        """Run an MZ .EXE with its PSP at seg:0000 and the load image at seg+10h (relocations applied);
+        returns a ComResult like run_com."""
+        mu = self.mu
+        sig, cblp, cp, nrel, hdr, minalloc, maxalloc, ss, sp, ck, ip, cs, relo = struct.unpack('<2s12H', exe[:26])
+        if sig not in (b'MZ', b'ZM'):
+            raise ValueError('not an MZ executable')
+        size = (cp - 1) * 512 + (cblp or 512) - hdr * 16
+        img = bytearray(exe[hdr * 16: hdr * 16 + size])
+        load = seg + 0x10
+        for i in range(nrel):
+            o, s = struct.unpack('<HH', exe[relo + 4 * i: relo + 4 * i + 4])
+            a = s * 16 + o
+            img[a:a + 2] = struct.pack('<H', (struct.unpack('<H', img[a:a + 2])[0] + load) & 0xFFFF)
+        self.com = ComResult()
+        self.stdout_is_file = stdout_is_file
+        self._psp(seg, tail, name)
+        if load + (size + 15) // 16 + minalloc > MEM_TOP:
+            raise ValueError('program does not fit below %04X' % MEM_TOP)
+        mu.mem_write(load * 16, bytes(img))
+        mu.reg_write(UC_X86_REG_DS, seg)
+        mu.reg_write(UC_X86_REG_ES, seg)
+        mu.reg_write(UC_X86_REG_SS, load + ss)
+        mu.reg_write(UC_X86_REG_SP, sp)
+        mu.reg_write(UC_X86_REG_CS, load + cs)
+        mu.reg_write(UC_X86_REG_EFLAGS, 0x202)
+        return self._go((load + cs) * 16 + ip, max_insn)
 
     # ------------------------------------------------------------------ coverage
     def track_coverage(self):
