@@ -2,7 +2,9 @@
 
 DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX card
 (86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.11-p12.
-The ROM image itself is not in this repository; the changes it carries are described below.
+The ROM image itself is not in this repository; the changes it carries are described below, and
+`rompatch/` holds their source and a patcher that builds the image from the stock or the S3 reference
+BIOS.
 
 All tools share one version number, currently 0.8 (set in `common/version.inc`), and print it on their first line of output.
 All tools need a 386 or later and run in plain DOS (no EMM386 needed), except S3REGS32.EXE, which
@@ -63,6 +65,35 @@ timing (see `emu/vgaemu.py`), so refresh rates and planar memory tests mean some
 no banked or linear video memory and no real bus speed: those results, and the monitor, stay with
 the hardware logs, which decide. `emu/cover.py` lists the ROM bytes that a broad INT 10h workload
 never touches.
+
+## ROM patcher
+
+`rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets) and
+`s3p12.py`, which applies the whole p12 change set to a clean BIOS. It needs python3 (no packages) and
+NASM:
+
+    python3 rompatch/s3p12.py STOCK.BIN -o S3V2P12.BIN
+    python3 rompatch/s3p12.py REF2047.BIN --upper STOCK.BIN -o S3V2P12R.BIN
+    make rom IN=STOCK.BIN OUT=S3V2P12.BIN [UPPER=STOCK.BIN]
+
+| Base | Result |
+| --- | --- |
+| 2.04.11, the stock dump of the card (64 KB) | Byte for byte the p12 build: the tool checks the SHA-256 (165c2185...) and stops if it differs |
+| 2.04.07, the S3 reference BIOS (32 KB, with `--upper` for the Trio64V+ half) | 2.04.07-p12: the same patches at that version's addresses, the stock board flags (0xD1 = 05h, CR80 = 00h), and 16 refresh entries whose DCLK VCO ran at 145-162 MHz moved into 170-340 MHz at the same pixel clock (`--no-vco-fix` leaves them). Checked against the SHA-256 of the build that passed every emulator test |
+
+The addresses the new code uses are in `rompatch/bios.inc` (2.04.11 defaults); for 2.04.07 the tool
+passes that version's addresses with -D. Every patch site is compared with the original code first
+(the replaced routines in full), and the result is checked before it is written: both halves sum to
+00, the upper half is unchanged, every DCLK VCO is in range. The CR88 bit 1 tweak of both versions
+keeps comparing SR10/SR11 with the old MCLK values, as in 2.04.11-p12, so it stays off at 59.96 MHz.
+
+    python3 rompatch/test_s3p12.py --stock STOCK.BIN --ref REF2047.BIN --p12 S3V2P12.BIN
+    make rom-test STOCK=STOCK.BIN REF=REF2047.BIN P12=S3V2P12.BIN
+
+runs the checksum tests: the stock image gives the p12 SHA-256 (and the same bytes as `--p12`), the
+reference gives its pinned SHA-256, both halves of every result sum to 00 with the right byte at
+7FFFh, the VCO check, and five inputs that must be refused (already patched, a patch site changed, a
+wrong checksum, an unknown version, a 32 KB image without `--upper`).
 
 ## Debug log (/V)
 
@@ -165,9 +196,9 @@ VESA mode 182h, 320x400x8) was withdrawn and is in neither p11 nor p12.
 | 1280x1024, 1600x1200 | Default refresh 60 Hz (CR41 and CR52 refresh fields) | Works on 60 Hz LCDs; stock defaulted to rates LCDs reject |
 | 1280x1024x16 colours (106h) | Stock VESA DMT timing kept (108 MHz, 64 kHz, 60 Hz) | 14% above the 95 MHz single-clock datasheet limit but clean on this card; the CVT reduced-blanking timing tried in p8 made a 1280x1024-incapable LCD report out of range |
 | Banked VESA speed | Booster: banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB window at A0000h; real LFB base kept in CR6D and restored on the next mode set; 4F01 and 4F05/4F03 read it correctly | Banked writes at 83.7 MB/s, as fast as the LFB; VESA 1.2 games much faster |
-| Mode set clear | The 2 MB video memory clear of every S3/VESA mode set (p11) writes 32-bit words (rep stosd) instead of 16-bit ones, through the same 64 KB banks | Half the bus transactions; the clear is most of the 81 ms a mode set took on p9 (no change with the no-clear bit) |
-| VGA mode set (p12) | The clear of video memory in modes 00h-13h (2C38h) and the font load into plane 2 (1224h, every text mode set and AX=11xxh) write 32-bit words | Mode set 03h about half the video memory writes (9368 instead of 20632), modes 12h/13h 16384 instead of 32768 |
-| VBE 4F05 (p12) | AX=4F05h BH=0 (set window) is handled at the INT 10h entry: unlock, CR58 test (refused in linear modes as before), SR04 for planar banks, CR6A; the 3C4h index is kept | 6 port writes and 3 reads instead of 13 writes and about 6 reads (15 us per call on the card with p9); get, errors and the window function (far call) are unchanged |
+| Mode set clear | The 2 MB video memory clear of every S3/VESA mode set (p11) writes 32-bit words (rep stosd) instead of 16-bit ones, through the same 64 KB banks | Half the bus transactions; the clear is most of the 81 ms a mode set took on p9 (no change with the no-clear bit); 38.3 ms on the card with p12 |
+| VGA mode set (p12) | The clear of video memory in modes 00h-13h (2C38h) and the font load into plane 2 (1224h, every text mode set and AX=11xxh) write 32-bit words | Mode set 03h about half the video memory writes (9368 instead of 20632), modes 12h/13h 16384 instead of 32768; mode set 03h 3.0 ms on the card (4.4 ms with p9) |
+| VBE 4F05 (p12) | AX=4F05h BH=0 (set window) is handled at the INT 10h entry: unlock, CR58 test (refused in linear modes as before), SR04 for planar banks, CR6A; the 3C4h index is kept | 6 port writes and 3 reads instead of 13 writes and about 6 reads (15 us per call on the card with p9, 4.3 us with p12); get, errors and the window function (far call) are unchanged |
 | Mode 13h scroll (p12) | AH=06h moves and fills with 32-bit words, full screen and windows; AH=07h keeps the original code | Half the video memory reads and writes |
 | 512x384x8 (151h) | CR50 table byte 60h to 40h | Correct graphics engine pixel length (was the reserved 10b) |
 | VBE 4F06 BL=3 | Rewritten: BX = min(8184, memory / lines) rounded down to 8, CX = BX in pixels | Real maximum line length (4368 for 101h instead of 546) |
