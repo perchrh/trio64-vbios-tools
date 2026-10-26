@@ -34,10 +34,16 @@ The .COM files land in `build/`. `common/` holds the /V debug log code the test 
 ## Emulator tests
 
 `emu/` runs the video BIOS and the DOS tools in an emulated PC, so changes can be checked before a
-hardware run. The tests need python3 and the unicorn package (`pip install unicorn`), NASM, and the
-64 KB ROM image of the card, which is not in this repository:
+hardware run. The tests need python3 and the unicorn package from PyPI (listed in `pyproject.toml`),
+NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
+    python3 -m venv .venv
+    .venv/bin/pip install .
     make emu-test ROM=path/to/S3V2P9.BIN
+
+`make emu-test` uses `.venv` when it exists, otherwise `python3`; `pip install unicorn` into any
+environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
+the working copy without being committed.
 
 They take about two minutes and check the BIOS registers, state blocks and default palettes of every
 VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of S3COMPAT run and give the
