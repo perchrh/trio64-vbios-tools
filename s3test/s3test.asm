@@ -2,7 +2,7 @@
 ; The tool version (VERSION) and the ROM version it expects (ROMVER) come from common/version.inc.
 ;
 ; Purpose
-;   Confirms that every change made to the stock 2.04.11 ROM is present and working. It is the
+;   Confirms that every change made to the BIOS (2.04.07, the S3 reference BIOS) is present and working. It is the
 ;   quick check to run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
 ;
 ; Usage
@@ -15,7 +15,7 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.11-p12"); the version found is printed, also for other BIOS versions
+;                    "2.04.07-p14"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30 and the PCI revision ID, so the log shows
 ;                    the stepping (89 01 06 E1, PCI 06 on the test card)
@@ -159,7 +159,7 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: 'Version ' and ROMVER (now "2.04.11-p12") within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; Expect: 'Version ' and ROMVER (now "2.04.07-p14") within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  mov dx,s_sig
         call puts

@@ -54,15 +54,15 @@ emu-test: all
 clean:
 	rm -rf build
 
-# ROM patcher (python3 and nasm): p13 (or TARGET=p12) from the stock 2.04.11 dump or the S3 reference 2.04.07
-#   make rom IN=STOCK.BIN OUT=S3V2P13.BIN [TARGET=p12] [UPPER=STOCK.BIN]
-#   make rom-test STOCK=STOCK.BIN [REF=REF2047.BIN] [P12=S3V2P12.BIN] [P13=S3V2P13.BIN]
+# ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
+#   make rom IN=REF2047.BIN UPPER=STOCK.BIN OUT=S3V2P14.BIN
+#   make rom-test REF=REF2047.BIN UPPER=STOCK.BIN [ROM=S3V2P14.BIN]
 rom:
-	@test -n "$(IN)" -a -n "$(OUT)" || { echo "rom: set IN and OUT, e.g. make rom IN=STOCK.BIN OUT=S3V2P13.BIN"; exit 2; }
-	python3 rompatch/s3patch.py --nasm $(NASM) "$(IN)" -o "$(OUT)" $(if $(TARGET),--target $(TARGET)) $(if $(UPPER),--upper "$(UPPER)")
+	@test -n "$(IN)" -a -n "$(OUT)" -a -n "$(UPPER)" || { echo "rom: set IN, UPPER and OUT, e.g. make rom IN=REF2047.BIN UPPER=STOCK.BIN OUT=S3V2P14.BIN"; exit 2; }
+	python3 rompatch/s3patch.py --nasm $(NASM) "$(IN)" --upper "$(UPPER)" -o "$(OUT)"
 
 rom-test:
-	@test -n "$(STOCK)" || { echo "rom-test: set STOCK to the 64 KB stock image"; exit 2; }
-	python3 rompatch/test_s3patch.py --nasm $(NASM) --stock "$(STOCK)" $(if $(REF),--ref "$(REF)") $(if $(P12),--p12 "$(P12)") $(if $(P13),--p13 "$(P13)")
+	@test -n "$(REF)" -a -n "$(UPPER)" || { echo "rom-test: set REF (2.04.07, 32 KB) and UPPER (the stock 64 KB image)"; exit 2; }
+	python3 rompatch/test_s3patch.py --nasm $(NASM) --ref "$(REF)" --upper "$(UPPER)" $(if $(ROM),--rom "$(ROM)")
 
 .PHONY: all clean emu-test rom rom-test

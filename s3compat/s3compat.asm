@@ -39,6 +39,11 @@
 ;                                               4104 WARN 20 (LFB offered on a planar mode, stock)
 ;   9. S3 modes via AH=00 vs the same via 4F02   PASS
 ;  10. VESA functions (4F01-4F09, VRAM, LFB)     PASS
+;      More VBE: 4F00 capabilities vs 4F08, 4F04 per state mask, invalid subfunctions refused,
+;      undefined functions 4F0B-4F1F refused, 4F0A table layout, 4F10 DPMS states (the monitor
+;      sees the syncs stop for a moment), 4F15 DDC EDID
+;                                               PASS; 4F15 INFO without DDC2, WARN 01 when the
+;                                               monitor gives no EDID
 ;  11. Pass 2: VGA modes right after VESA modes  as step 4 (leftover state must not matter)
 ;  12. Cleanup: mode 03 vs the baseline          PASS, VRAM zeroed, the DOS screen restored
 ;
@@ -181,6 +186,7 @@ start:  cld
         call svga_modes
         PS 13,10,'--- VESA functions ---',13,10
         call vesa_func
+        call vesa_more
         mov byte [pass],2
         PS 13,10,'--- Pass 2: VGA modes set right after a VESA mode (leftover state) ---',13,10
         call vga_pass
@@ -3821,6 +3827,529 @@ setm:   mov ax,0x4F02
         call unlock
         pop ax
         ret
+
+; More VBE functions, after vesa_func (expected values from the VBE 2.0, VBE/PM 1.0 and VBE/DDC 1.0
+; specifications and the Trio64V+ datasheet section 12.2 for the DPMS sync control). Fail and warn bits:
+;   4F00 capabilities vs 4F08   1 capability bit 0 (DAC switchable to 8 bits) disagrees with what 4F08
+;                               BH=8 does, 2 bit 1 set (controller not VGA compatible)
+;   4F04 state masks            1 a size query (CX = 1, 2, 4, 8) failed, gave 0 or more than CX = 0Fh,
+;                               2 mask 4 (DAC) restore did not bring DAC entry 7 back, 4 mask 2 (BIOS
+;                               data) did not bring the cursor position back, 8 mask 1 (hardware) did
+;                               not bring the display start (CR0C/CR0D) back, 10h the DAC-only restore
+;                               changed the display start, 20h mask 8 (SVGA) save/restore failed,
+;                               40h DL = 3 accepted
+;   VBE invalid subfunctions    each must not return 004Fh: 1 4F05 BH=2, 2 4F09 BL=2 and 4 BL=3
+;                               (secondary palette, not offered), 8 4F0A BL=1, 10h 4F06 BL=4,
+;                               20h 4F07 BL=2, 40h 4F08 BL=2, 80h 4F10 BL=3
+;   VBE undefined functions     4F0Bh-4F13h and 4F16h-4F1Fh (not 4F14h, the OEM function): 1 one
+;                               returned 004Fh, 2 the mode (4F03) changed
+;   4F0A table layout           1 the three code offsets not inside the table (8 up to CX), 2 the port
+;                               list or the memory list after it not ended by FFFFh inside the table
+;   4F10 power management       INFO when not offered. 1 a state the capabilities offer is refused or
+;                               4F10 BL=2 reads back another state, 2 the sync control in SR0D does not
+;                               match (standby: HSYNC off, suspend: VSYNC off, off: both, datasheet bits
+;                               5-4 and 7-6), 4 back on: SR0D sync bits not 00 or state not 0. The
+;                               monitor sees the syncs stop for a moment
+;   4F15 DDC EDID               INFO when DDC2 is not offered. WARN 1 the EDID read failed (can be the
+;                               monitor or cable), FAIL 2 the 128 bytes read have no EDID header or a
+;                               wrong checksum
+vesa_more:
+        mov bx,0x101
+        call setm
+        ; ---- capabilities vs 4F08
+        TB '4F00 capabilities vs 4F08'
+        call tdots
+        mov di,palbuf2
+        mov dword [di],'VBE2'
+        mov ax,0x4F00
+        int 0x10
+        mov eax,[palbuf2+0x0A]
+        mov [tmpw],ax
+        PS 'caps '
+        mov ax,[tmpw]
+        call phex4
+        mov ax,0x4F08
+        mov bx,0x0800
+        int 0x10
+        mov [tmpw2],bx
+        mov [tmpw3],ax
+        mov ax,0x4F08                   ; back to 6 bits
+        mov bx,0x0600
+        int 0x10
+        mov al,[tmpw]
+        and al,1                        ; 1: switchable
+        xor ah,ah                       ; AH = 1 when 4F08 really set 8 bits
+        cmp word [tmpw3],0x004F
+        jne .c0
+        cmp byte [tmpw2+1],8
+        sete ah
+.c0:    cmp al,ah
+        je .c1
+        FAILB 1
+.c1:    test byte [tmpw],2
+        jz .c2
+        FAILB 2
+.c2:    call tend
+        ; ---- 4F04 state masks
+        TB '4F04 state masks'
+        call tdots
+        mov bx,0x101
+        call setm
+        mov ax,0x4F04
+        xor dl,dl
+        mov cx,0x0F
+        int 0x10
+        mov [tmpw3],bx                  ; size of everything
+        mov cx,1
+.sz:    push cx
+        mov ax,0x4F04
+        xor dl,dl
+        int 0x10
+        pop cx
+        cmp ax,0x004F
+        jne .szf
+        or bx,bx
+        jz .szf
+        cmp bx,[tmpw3]
+        jbe .szn
+.szf:   FAILB 1
+.szn:   shl cx,1
+        cmp cx,0x10
+        jb .sz
+        ; mask 4: DAC entry 7 = 01 02 03, save, change to 1E 1F 20 and the display start, restore
+        mov ax,0x1010
+        mov bx,7
+        mov dh,1
+        mov cx,0x0203
+        int 0x10
+        mov dl,1
+        mov cx,4
+        call st4f04
+        mov ax,0x1010
+        mov bx,7
+        mov dh,0x1E
+        mov cx,0x1F20
+        int 0x10
+        mov ax,0x4F07
+        xor bx,bx
+        xor cx,cx
+        mov dx,40
+        int 0x10
+        call rdstart
+        mov [tmpw],ax                   ; start after the change
+        mov dl,2
+        mov cx,4
+        call st4f04
+        mov ax,0x1015
+        mov bx,7
+        int 0x10
+        cmp dh,1
+        jne .m4f
+        cmp cx,0x0203
+        je .m4
+.m4f:   FAILB 2
+.m4:    call rdstart
+        cmp ax,[tmpw]
+        je .m2
+        FAILB 0x10
+.m2:    ; mask 2: cursor at row 3, column 5, save, move it, restore
+        mov ah,2
+        xor bh,bh
+        mov dx,0x0305
+        int 0x10
+        mov dl,1
+        mov cx,2
+        call st4f04
+        mov ah,2
+        xor bh,bh
+        mov dx,0x0A14
+        int 0x10
+        mov dl,2
+        mov cx,2
+        call st4f04
+        push es
+        xor ax,ax
+        mov es,ax
+        mov ax,[es:0x450]
+        pop es
+        cmp ax,0x0305
+        je .m1
+        FAILB 4
+.m1:    ; mask 1: display start 0, save, start at line 40, restore
+        mov ax,0x4F07
+        xor bx,bx
+        xor cx,cx
+        xor dx,dx
+        int 0x10
+        call rdstart
+        mov [tmpw],ax
+        mov dl,1
+        mov cx,1
+        call st4f04
+        mov ax,0x4F07
+        xor bx,bx
+        xor cx,cx
+        mov dx,40
+        int 0x10
+        mov dl,2
+        mov cx,1
+        call st4f04
+        call rdstart
+        cmp ax,[tmpw]
+        je .m8
+        FAILB 8
+.m8:    mov dl,1                        ; mask 8: save and restore must work
+        mov cx,8
+        call st4f04
+        jne .m8f
+        mov ax,0x4F05
+        xor bx,bx
+        mov dx,5
+        int 0x10
+        mov dl,2
+        mov cx,8
+        call st4f04
+        je .md
+.m8f:   FAILB 0x20
+.md:    mov ax,0x4F04
+        mov dl,3
+        mov cx,0x0F
+        int 0x10
+        cmp ax,0x004F
+        jne .m9
+        FAILB 0x40
+.m9:    mov bx,0x101
+        call setm
+        call tend
+        ; ---- invalid subfunctions
+        TB 'VBE invalid subfunctions refused'
+        call tdots
+        mov bx,0x101
+        call setm
+        mov si,badsub
+.bs:    lodsw
+        or ax,ax
+        jz .bse
+        mov bx,[si]
+        mov dl,[si+2]
+        add si,3
+        push si
+        push dx
+        xor cx,cx
+        xor dx,dx
+        mov di,palbuf2
+        int 0x10
+        pop dx
+        pop si
+        cmp ax,0x004F
+        jne .bs
+        mov al,dl
+        xor ah,ah
+        or [fails],ax
+        jmp .bs
+.bse:   mov ax,0x4F10                   ; 4F10 BL=3 may have changed nothing, but make sure: on
+        mov bx,0x0001
+        int 0x10
+        call tend
+        ; ---- undefined functions
+        TB 'VBE undefined functions 4F0B-4F1F'
+        call tdots
+        mov bx,0x101
+        call setm
+        mov cx,0x0B
+.uf:    cmp cx,0x10
+        je .un
+        cmp cx,0x14
+        je .un
+        cmp cx,0x15
+        je .un
+        push cx
+        mov ax,0x4F00
+        or al,cl
+        xor bx,bx
+        xor dx,dx
+        mov di,palbuf2
+        push cx
+        xor cx,cx
+        int 0x10
+        pop cx
+        cmp ax,0x004F
+        jne .uo
+        FAILB 1
+        mov ax,cx
+        call phex2
+        call sp1
+.uo:    pop cx
+.un:    inc cx
+        cmp cx,0x20
+        jb .uf
+        mov ax,0x4F03
+        int 0x10
+        and bx,0x3FFF
+        cmp bx,0x101
+        je .ud
+        FAILB 2
+.ud:    call tend
+        ; ---- 4F0A table
+        TB '4F0A table layout'
+        call tdots
+        push es
+        mov ax,0x4F0A
+        xor bl,bl
+        int 0x10
+        cmp ax,0x004F
+        jne .tf
+        mov bx,cx                       ; BX = table length
+        PS 'size '
+        mov ax,bx
+        call phex4
+        call sp1
+        mov si,di                       ; ES:SI = table
+        mov cx,3
+.to:    mov ax,[es:si]
+        cmp ax,8
+        jb .tfo
+        cmp ax,bx
+        jb .tok
+.tfo:   FAILB 1
+.tok:   add si,2
+        loop .to
+        mov ax,[es:si]                  ; port and memory list
+        or ax,ax
+        jz .tx
+        mov si,di
+        add si,ax
+        mov dx,di
+        add dx,bx                       ; DX = end of the table
+.pl:    cmp si,dx
+        jae .tf2
+        lodsw
+        cmp ax,0xFFFF
+        jne .pl
+.ml:    cmp si,dx
+        jae .tf2
+        mov ax,[es:si]
+        cmp ax,0xFFFF
+        je .tx
+        add si,6                        ; 4-byte address, 2-byte length
+        jmp .ml
+.tf:    FAILB 1
+        jmp .tx
+.tf2:   FAILB 2
+.tx:    pop es
+        call tend
+        ; ---- 4F10
+        TB '4F10 power management (DPMS)'
+        call tdots
+        mov ax,0x4F10
+        xor bl,bl
+        xor di,di
+        push es
+        int 0x10
+        pop es
+        cmp ax,0x004F
+        je .pm
+        PS 'not offered'
+        mov byte [infoflag],1
+        jmp .pe
+.pm:    mov [tmpw],bx
+        PS 'version '
+        mov al,[tmpw]
+        call phex2
+        PS ' states '
+        mov al,[tmpw+1]
+        call phex2
+        call sp1
+        mov cl,1                        ; states 1 standby, 2 suspend, 4 off
+.ps:    test [tmpw+1],cl
+        jz .pn
+        push cx
+        mov ax,0x4F10
+        mov bh,cl
+        mov bl,1
+        int 0x10
+        pop cx
+        cmp ax,0x004F
+        jne .pf1
+        push cx
+        mov ax,0x4F10
+        mov bl,2
+        int 0x10
+        pop cx
+        cmp bh,cl
+        je .pr
+.pf1:   FAILB 1
+.pr:    mov al,0x0D                     ; SR0D sync control, expected from the state
+        call rdsrx
+        mov al,ah
+        and al,0x30
+        setnz bl                        ; HSYNC forced
+        mov al,ah
+        and al,0xC0
+        setnz bh                        ; VSYNC forced
+        test cl,5
+        setnz al
+        cmp al,bl
+        jne .pf2
+        test cl,6
+        setnz al
+        cmp al,bh
+        je .pn
+.pf2:   FAILB 2
+.pn:    shl cl,1
+        cmp cl,8
+        jb .ps
+        mov ax,0x4F10                   ; on
+        mov bx,0x0001
+        int 0x10
+        mov ax,0x4F10
+        mov bl,2
+        int 0x10
+        or bh,bh
+        jnz .pf4
+        mov al,0x0D
+        call rdsrx
+        test ah,0xF0
+        jz .pe
+.pf4:   FAILB 4
+.pe:    mov bx,0x101
+        call setm
+        call tend
+        ; ---- 4F15
+        TB '4F15 DDC EDID'
+        call tdots
+        mov ax,0x4F15
+        xor bl,bl
+        xor cx,cx
+        xor di,di
+        push es
+        int 0x10
+        pop es
+        cmp ax,0x004F
+        jne .dn
+        mov [tmpw],bx
+        PS 'caps '
+        mov ax,[tmpw]
+        call phex4
+        call sp1
+        test byte [tmpw],2
+        jnz .dr
+.dn:    PS 'DDC2 not offered'
+        mov byte [infoflag],1
+        jmp .de
+.dr:    mov di,palbuf2
+        mov cx,128
+        xor al,al
+        rep stosb
+        mov ax,0x4F15
+        mov bl,1
+        xor cx,cx
+        xor dx,dx
+        mov di,palbuf2
+        int 0x10
+        cmp ax,0x004F
+        je .dh
+        PS 'read '
+        call phex4
+        WARNB 1
+        jmp .de
+.dh:    mov si,palbuf2
+        cmp dword [si],0xFFFFFF00
+        jne .df
+        cmp dword [si+4],0x00FFFFFF
+        jne .df
+        mov cx,128
+        xor ah,ah
+.ds:    lodsb
+        add ah,al
+        loop .ds
+        or ah,ah
+        jnz .df
+        PS 'EDID ok, ID '
+        mov ax,[palbuf2+8]
+        xchg al,ah
+        call phex4
+        jmp .de
+.df:    FAILB 2
+.de:    call tend
+        ret
+
+; 4F04 DL (1 save, 2 restore) with mask CX into [scrseg]:0. ZF=1 when it returned 004Fh.
+st4f04: push es
+        mov es,[scrseg]
+        xor bx,bx
+        mov ax,0x4F04
+        int 0x10
+        pop es
+        cmp ax,0x004F
+        ret
+
+; AX = display start address CR0C:CR0D (CRTC at 3D4h)
+rdstart:
+        push dx
+        mov dx,0x3D4
+        mov al,0x0C
+        out dx,al
+        inc dx
+        in al,dx
+        mov ah,al
+        dec dx
+        mov al,0x0D
+        out dx,al
+        inc dx
+        in al,dx
+        pop dx
+        ret
+
+; Sequencer register AL -> AH with SR08 = 06h (unlocks SR09-SR18), SR08 and the index put back
+rdsrx:  push dx
+        push bx
+        mov bl,al
+        mov dx,0x3C4
+        in al,dx
+        push ax
+        mov al,0x08
+        out dx,al
+        inc dx
+        in al,dx
+        mov bh,al                       ; SR08 as found
+        mov al,0x06
+        out dx,al
+        dec dx
+        mov al,bl
+        out dx,al
+        inc dx
+        in al,dx
+        mov bl,al
+        dec dx
+        mov al,0x08
+        mov ah,bh
+        out dx,ax
+        pop ax
+        out dx,al
+        mov ah,bl
+        pop bx
+        pop dx
+        ret
+
+badsub: ;   AX      BX      fail bit
+        dw 0x4F05, 0x0200
+        db 1
+        dw 0x4F09, 0x0002
+        db 2
+        dw 0x4F09, 0x0003
+        db 4
+        dw 0x4F0A, 0x0001
+        db 8
+        dw 0x4F06, 0x0004
+        db 0x10
+        dw 0x4F07, 0x0002
+        db 0x20
+        dw 0x4F08, 0x0002
+        db 0x40
+        dw 0x4F10, 0x0003
+        db 0x80
+        dw 0
 
 ; VBE functions in 640x480x8 (101h). Fail bits per test:
 ;   invalid mode 17Fh   1 4F01 accepted, 2 4F02 accepted, 4 current mode changed

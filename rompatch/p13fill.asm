@@ -1,5 +1,5 @@
 ; p13: word fill for the text scroll (AH=06h/07h) and AH=09h in text modes. Assembled at P13A, the dead
-; bytes of the old 4F06 BL=3 routine (59E1h in 2.04.11, 41 bytes).
+; bytes of the old 4F06 BL=3 routine (59C0h, 41 bytes).
 bits 16
 cpu 386
 %include "bios.inc"

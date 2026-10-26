@@ -4,10 +4,10 @@
 ;          All tools share it. Change it here, or override it for one build:
 ;              make VERSION=0.9          (or: nasm -DVERSION="'0.9'" ...)
 ; ROMVER   the ROM sign-on version S3TEST expects (its signature test and title line). Override:
-;              make ROMVER=2.04.11-p10   (or: nasm -DROMVER="'2.04.11-p10'" ...)
+;              make ROMVER=2.04.07-p13   (or: nasm -DROMVER="'2.04.07-p13'" ...)
 %ifndef VERSION
 %define VERSION '0.8'
 %endif
 %ifndef ROMVER
-%define ROMVER '2.04.11-p13'
+%define ROMVER '2.04.07-p14'
 %endif
