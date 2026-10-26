@@ -134,6 +134,8 @@ No code was copied from another project; all ROM code was written for this BIOS.
 | 8x14 font TSR | AX=1130h BH=2 returns the 8x16 font; mode 10h uses 21 rows of 16 lines | A 3.5 KB font does not fit in the free ROM space (accepted for now) |
 | S3ALIAS.COM (`s3alias/`) | Pinball Illusions' S3 driver: AH=00 mode 49h becomes 59h, 4Bh becomes 5Ah | Remapping S3 mode numbers in the ROM would break programs that use this BIOS's own numbering |
 
+[8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/)
+
 ### Omitted: 1-cycle linear addressing (CR87 bit 1, SR15 bit 7)
 
 The Trio64V2 datasheet (section 3.5) describes a faster linear addressing path: CR87 bit 1 = 1
