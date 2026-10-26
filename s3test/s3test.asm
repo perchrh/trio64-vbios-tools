@@ -1,4 +1,5 @@
-; S3TEST.COM 0.8 - regression test for the patched Trio64V2/DX VBIOS 2.04.11-p9 (386+)
+; S3TEST.COM - regression test for the patched Trio64V2/DX VBIOS (386+)
+; The tool version (VERSION) and the ROM version it expects (ROMVER) come from common/version.inc.
 ;
 ; Purpose
 ;   Confirms that every change made to the stock 2.04.11 ROM is present and working. It is the
@@ -13,7 +14,7 @@
 ;   Exit code 0 = every test passed, 1 = at least one failed.
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
-;   ROM signature    the first 256 bytes of C000 contain "2.04.11-p9"
+;   ROM signature    the first 256 bytes of C000 contain ROMVER (now "2.04.11-p9")
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   MCLK             SR10 = 42h, SR11 = 41h after POST: 59.96 MHz memory clock
 ;   Memory type      CR36 bits 3-2 = 00: the RAM is still run as 1-cycle EDO
@@ -40,6 +41,7 @@
 ;
 bits 16
 org 0x100
+%include "version.inc"
 %include "vdebug.mac"
 F_VGA   equ 1
 F_BOOST equ 2
@@ -116,7 +118,7 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: signature "2.04.11-p9" within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; Expect: signature ROMVER (now "2.04.11-p9") within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  mov dx,s_sig
         call puts
@@ -147,11 +149,18 @@ t_rom:  mov dx,s_sig
         pop ds
         inc si
         loop .pv
-.pe:    xor al,al
-        cmp dword [bx+4],'.11-'
+.pe:    push es                         ; compare with ROMVER, which must end there
+        push cs
+        pop es
+        mov si,bx
+        mov di,s_romver
+        mov cx,ROMVLEN
+        repe cmpsb
+        pop es
+        mov al,0
         jne .pr
-        cmp word [bx+8],'p9'
-        jne .pr
+        cmp byte [si],'!'               ; next character: end of the version (space, CR, 0)
+        jae .pr
         mov al,1
 .pr:    pop ds
         call result
@@ -925,8 +934,10 @@ modelist:
 
 s_vname db 'S3TEST.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
-s_title db 'S3TEST 0.8 - Trio64V2/DX VBIOS 2.04.11-p9 test suite',13,10,13,10,'$'
-s_sig   db 'ROM signature 2.04.11-p9 ............ $'
+s_title db 'S3TEST ',VERSION,' - Trio64V2/DX VBIOS ',ROMVER,' test suite',13,10,13,10,'$'
+s_romver db ROMVER
+ROMVLEN equ $-s_romver
+s_sig   db 'ROM signature ',ROMVER,' ............ $'
 s_nover db '(no version string)$'
 s_cks   db 'ROM checksum (C000:0000-7FFF) = $'
 s_mclk  db 'MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'

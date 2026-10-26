@@ -1,4 +1,4 @@
-; S3ALIAS.COM 0.8 - mode number alias TSR for Pinball Illusions' S3 driver on the Trio64V2/DX VBIOS 2.x
+; S3ALIAS.COM - mode number alias TSR for Pinball Illusions' S3 driver on the Trio64V2/DX VBIOS 2.x
 ;
 ; Purpose
 ;   Pinball Illusions has its own S3 driver that sets 640x480x256 with INT 10h AH=00 mode 49h and
@@ -18,7 +18,7 @@
 ; What it does and the expected outcome
 ;   INT 10h AH=00 with AL = 49h becomes AL = 59h, AL = 4Bh becomes AL = 5Ah. Bit 7 of AL (do not
 ;   clear video memory) is kept. Every other call goes to the BIOS unchanged.
-;   Expect: "S3ALIAS 0.8: installed ..." at install and "S3ALIAS 0.8: unloaded" with /U; Pinball
+;   Expect: "S3ALIAS <version>: installed ..." at install and "S3ALIAS <version>: unloaded" with /U; Pinball
 ;   Illusions shows its tables in 640x480 and 800x600 with correct colours. Run S3TEST and S3COMPAT
 ;   without S3ALIAS: S3COMPAT sets every S3 mode through AH=00, and its lines for 49h (VESA 110h) and
 ;   4Bh (VESA 116h) would fail.
@@ -28,6 +28,7 @@
 ;   That segment is the resident copy's PSP; /U puts its saved INT 10h vector back and frees it.
 bits 16
 org 0x100
+%include "version.inc"
 start:  jmp init
 old10   dd 0
 sig     db 'S3ALIAS1'           ; identifies a resident copy (see the header)
@@ -171,14 +172,14 @@ unload: call findres
         mov ax,0x4C01
         int 0x21
 
-s_use   db 'S3ALIAS 0.8 - INT 10h AH=00 mode alias for Pinball Illusions on the Trio64V2 BIOS 2.x',13,10
+s_use   db 'S3ALIAS ',VERSION,' - INT 10h AH=00 mode alias for Pinball Illusions on the Trio64V2 BIOS 2.x',13,10
         db '  S3ALIAS             install: mode 49h -> 59h (640x480x8), 4Bh -> 5Ah (800x600x8)',13,10
         db '  S3ALIAS /U          unload',13,10
         db '  S3ALIAS /H, /?, /HELP  this help',13,10,'$'
-s_bad   db 'S3ALIAS 0.8: bad argument.',13,10,13,10,'$'
-s_inst  db 'S3ALIAS 0.8: installed, mode 49h->59h (640x480x8), 4Bh->5Ah (800x600x8)',13,10,'$'
-s_twice db 'S3ALIAS 0.8: already installed.',13,10,'$'
-s_unl   db 'S3ALIAS 0.8: unloaded.',13,10,'$'
-s_notres db 'S3ALIAS 0.8: not unloaded: S3ALIAS is not installed, or another program hooked INT 10h',13,10
+s_bad   db 'S3ALIAS ',VERSION,': bad argument.',13,10,13,10,'$'
+s_inst  db 'S3ALIAS ',VERSION,': installed, mode 49h->59h (640x480x8), 4Bh->5Ah (800x600x8)',13,10,'$'
+s_twice db 'S3ALIAS ',VERSION,': already installed.',13,10,'$'
+s_unl   db 'S3ALIAS ',VERSION,': unloaded.',13,10,'$'
+s_notres db 'S3ALIAS ',VERSION,': not unloaded: S3ALIAS is not installed, or another program hooked INT 10h',13,10
         db 'after it (unload that one first).',13,10,'$'
-s_free  db 'S3ALIAS 0.8: INT 10h restored, but its memory could not be freed.',13,10,'$'
+s_free  db 'S3ALIAS ',VERSION,': INT 10h restored, but its memory could not be freed.',13,10,'$'

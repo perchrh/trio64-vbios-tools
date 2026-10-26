@@ -4,7 +4,7 @@ DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX ca
 (86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.11-p9.
 The ROM image itself is not in this repository; the changes it carries are described below.
 
-All tools share one version number, currently 0.8, and print it on their first line of output.
+All tools share one version number, currently 0.8 (set in `common/version.inc`), and print it on their first line of output.
 All tools need a 386 or later and run in plain DOS (no EMM386 needed).
 
 | Tool | Purpose | Run |
@@ -18,8 +18,9 @@ All tools need a 386 or later and run in plain DOS (no EMM386 needed).
 Each source file starts with a header that says what is tested and which outcome is expected, and
 each test routine has a comment block with its fail and warn bits.
 
-S3TEST checks for the ROM signature `2.04.11-p9`; change the two strings and the
-`cmp word [si+8],'p9'` line in `s3test/s3test.asm` for another version.
+All tools share one version number and S3TEST checks for one ROM version; both are set in
+`common/version.inc` (`VERSION`, `ROMVER`) and can be overridden for a build, for example
+`make clean && make VERSION=0.9 ROMVER=2.04.11-p10`.
 
 ## Building
 

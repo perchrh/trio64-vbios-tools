@@ -1,4 +1,4 @@
-; VSHOW.COM 0.8 - VESA mode viewer for LCD and monitor checks of the Trio64V2/DX VBIOS (386+)
+; VSHOW.COM - VESA mode viewer for LCD and monitor checks of the Trio64V2/DX VBIOS (386+)
 ;
 ; Purpose
 ;   A visual test: it shows what a VESA mode set by the BIOS looks like on a real monitor, and measures
@@ -26,7 +26,7 @@
 ;   info box                 mode number and size, measured refresh in Hz, line frequency in kHz and the
 ;                            total lines from the CRTC; compare with the monitor's OSD and with the
 ;                            intended timing (for example 1280x1024 DMT: 60.0 Hz, 64.0 kHz, 1066 lines)
-;   Errors are printed as "VSHOW 0.8: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
+;   Errors are printed as "VSHOW <version>: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
 ;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw.
 ;
 ; Supported: 4 bpp planar, 8 bpp packed and 15/16/24/32 bpp direct colour modes, banked access through
@@ -34,6 +34,7 @@
 bits 16
 cpu 386
 org 0x100
+%include "version.inc"
 %include "vdebug.mac"
 
 ; Command line parser: a hex mode number and the switches /L, /A, /I, /H, /?, /HELP.
@@ -1564,7 +1565,7 @@ ddec:   push di
         pop di
         ret
 
-s_use   db 'VSHOW 0.8 - VESA mode viewer for monitor and LCD checks',13,10
+s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,10
         db '  VSHOW               list the VESA modes the BIOS reports',13,10
         db '  VSHOW mode [/L]     show one mode; mode in hex: 106, 0x106 or 106h',13,10
         db '  VSHOW /I [/L]       interactive: arrows select a mode, Enter shows it,',13,10
@@ -1578,14 +1579,14 @@ s_use   db 'VSHOW 0.8 - VESA mode viewer for monitor and LCD checks',13,10
         db 'Each mode shows a white frame, the pattern, the mode, measured refresh,',13,10
         db 'line frequency and total lines; any key returns.',13,10,'$'
 s_vname db 'VSHOW.DBG',0
-s_vnomem db 'VSHOW 0.8: not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
-s_bad   db 'VSHOW 0.8: bad argument.',13,10,13,10,'$'
-s_novbe db 'VSHOW 0.8: no VESA BIOS (4F00 failed).',13,10,'$'
+s_vnomem db 'VSHOW ',VERSION,': not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
+s_bad   db 'VSHOW ',VERSION,': bad argument.',13,10,13,10,'$'
+s_novbe db 'VSHOW ',VERSION,': no VESA BIOS (4F00 failed).',13,10,'$'
 s_list  db 13,10,'Mode  Resolution',13,10,'$'
 s_text  db ' text$'
 s_na    db ' (n/a)$'
 s_crlf  db 13,10,'$'
-s_mode  db 'VSHOW 0.8: mode $'
+s_mode  db 'VSHOW ',VERSION,': mode $'
 s_colon db ': $'
 s_status db ', BIOS status $'
 s_e4f01 db 'mode info (4F01) failed$'
@@ -1595,7 +1596,7 @@ s_emodel db 'memory model / colour depth not supported by VSHOW$'
 s_ewin  db 'no readable+writable window$'
 s_e4f02 db 'mode set (4F02) failed$'
 s_sep   db ', $'
-s_ver   db 'VSHOW 0.8: $'
+s_ver   db 'VSHOW ',VERSION,': $'
 s_m     db 'Mode ',0
 s_hz    db ' Hz  ',0
 s_khz   db ' kHz  ',0
@@ -1605,11 +1606,11 @@ s_info2 db 0
 s_info3 db 'Press any key',0
 s_back  db 'Any key: back to the list',0
 s_last  db 'Last: ',0
-s_mt1   db 'VSHOW 0.8 - supported graphics modes',0
+s_mt1   db 'VSHOW ',VERSION,' - supported graphics modes',0
 s_mt2   db 'Up/Down/PgUp/PgDn select, Enter show, L line pattern, Esc quit',0
 s_pon   db '  [pattern: lines] ',0
 s_poff  db '  [pattern: bars]  ',0
-s_none  db 'VSHOW 0.8: no graphics mode VSHOW can show.',13,10,'$'
+s_none  db 'VSHOW ',VERSION,': no graphics mode VSHOW can show.',13,10,'$'
 s_of    db ' of ',0
 s_next  db ': any key = next mode, Esc = stop',0
 s_sep2  db ', ',0
@@ -1617,7 +1618,7 @@ s_crlf0 db 13,10,0
 s_colon0 db ': ',0
 s_skip  db ', skipped',13,10,0
 s_stopped db 'Stopped with Esc.',13,10,0
-s_res   db 'VSHOW 0.8 /A results:',13,10,'$'
+s_res   db 'VSHOW ',VERSION,' /A results:',13,10,'$'
 
 lines   db 0
 vreq    db 0                            ; /V given
