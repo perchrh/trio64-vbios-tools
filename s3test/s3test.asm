@@ -56,10 +56,16 @@
 ;                    tables of AX=1130h BH=06h/03h (fail bits 1 8x16, 2 8x8)
 ;   Mode 13h scroll (p12): AH=06h full screen and a window, AH=07h a window, AH=06h AL=0, each checked
 ;                    pixel by pixel (fail bits 1, 2, 4, 8)
+;   Text scroll (p13): mode 03h, AH=06h/07h full screen, even, odd and one-cell-wide windows, AL=0
+;                    window and full screen, every cell checked (fail bits 1-40h, one per case)
+;   AH=09h text (p13): counts 1, 2, 3, 5, 80 on page 0 and 3 on page 1, every cell of page 0 checked
+;                    (fail bits 1-20h)
+;   Planar scroll (p13): modes 12h and 0Dh, AH=06h/07h full screen and windows (widths 16, 18, 3),
+;                    AL=0, every byte of the four planes checked (fail bits 1-80h)
 ;   4F05 (p12 fast path): registers and the 3C4h index kept, CR6A set, planar 102h bank x 4 in CR6A and
 ;                    0040:00FE, refused in linear 4101h (fail bits 1, 2, 4, 8, 10h)
 ;   Timings, INFO lines not counted: mode set 03h, 4F02 101h with the clear, one 4F05, one mode 13h
-;                    scroll (shortest of 3 runs)
+;                    scroll, a text clear and a mode 12h clear with AH=06h AL=0 (shortest of 3 runs)
 ;
 bits 16
 org 0x100
@@ -121,6 +127,9 @@ start:  cld
         call t_vclr
         call t_font
         call t_scr13
+        call t_txscr
+        call t_ah09
+        call t_plscr
         call t_bank
         call t_time
         ; final: text mode, write report
@@ -875,7 +884,7 @@ t_scr13:
         call chk13
         pop si
         jz .ok
-        mov al,[si+18]
+        mov al,[si+19]                  ; fail bit (the byte after the 0 at +18)
         or [tmp],al
 .ok:    add si,20
         jmp .n
@@ -962,6 +971,467 @@ scrtab: ;   AX      BX      CX      DX      x0  x1   y0  y1   shift  -   bit
         db 0, 4
         dw 0x0600, 0x3300, 0x0102, 0x0304, 16, 39,  8,  31,   24
         db 0, 8
+        dw 0
+
+; ---------------- text scroll (p13: 32-bit fills and window moves) ----------------
+; Mode 03h. B800 is filled with the cell word P(c, r) = (7c + 13r) mod 256 | ((5c + 11r) mod 128) << 8,
+; then each case is checked cell by cell against the same formula (fill: 20h with attribute BH):
+; A AH=06h AL=1 full screen, fill 1Fh; B AH=07h AL=2 full screen, fill 07h; C AH=06h AL=2 rows 3-10,
+; columns 5-20 (even width), fill 70h; D AH=07h AL=1 rows 3-10, columns 5-21 (odd width), fill 4Eh;
+; E AH=06h AL=0 rows 1-3, columns 2-4, fill 33h; F AH=06h AL=0 full screen, fill 07h; G AH=07h AL=3
+; rows 2-9, column 1 (one cell wide), fill 2Ah. Fail bits 1 A, 2 B, 4 C, 8 D, 10h E, 20h F, 40h G.
+t_txscr:
+        VS 'D:TEST text scroll'
+        call vnl
+        call vflush
+        mov byte [tmp],0
+        mov si,txstab
+.n:     cmp word [si],0
+        je .e
+        push si
+        mov ax,0x0003
+        int 0x10
+        call filltx
+        mov ax,[si]
+        mov bx,[si+2]
+        mov cx,[si+4]
+        mov dx,[si+6]
+        int 0x10
+        pop si
+        push si
+        call chktx
+        pop si
+        jz .ok
+        mov al,[si+19]                  ; fail bit (the byte after the 0 at +18)
+        or [tmp],al
+.ok:    add si,20
+        jmp .n
+.e:     mov ax,0x0003
+        int 0x10
+        mov dx,s_txs
+        jmp bits_result
+
+; B800:0000 = P(c, r) for 80 x 25 cells.
+filltx: push es
+        mov ax,0xB800
+        mov es,ax
+        xor di,di
+        xor dx,dx                       ; r
+.r:     xor cx,cx                       ; c
+.c:     call ptx
+        stosw
+        inc cx
+        cmp cx,80
+        jb .c
+        inc dx
+        cmp dx,25
+        jb .r
+        pop es
+        ret
+
+; AX = P(CX, DX) (column CX, row DX)
+ptx:    push bx
+        mov ax,cx
+        imul ax,ax,7
+        mov bx,dx
+        imul bx,bx,13
+        add al,bl                       ; character
+        mov bx,cx
+        imul bx,bx,5
+        push dx
+        imul dx,dx,11
+        add bl,dl
+        pop dx
+        and bl,0x7F
+        mov ah,bl                       ; attribute
+        pop bx
+        ret
+
+; SI = case: +8 c0, +10 c1, +12 r0, +14 r1, +16 shift (rows, + = up, - = down, 99 = clear), +3 fill
+; attribute (BH). ZF=1 when every cell is as expected.
+chktx:  push es
+        mov ax,0xB800
+        mov es,ax
+        xor di,di
+        xor dx,dx                       ; r
+.r:     xor cx,cx                       ; c
+.c:     push dx                         ; DX = source row for an unchanged cell
+        cmp cx,[si+8]
+        jb .p
+        cmp cx,[si+10]
+        ja .p
+        cmp dx,[si+12]
+        jb .p
+        cmp dx,[si+14]
+        ja .p
+        mov ax,[si+16]
+        or ax,ax
+        js .dn
+        mov bx,[si+14]                  ; up: rows r0..r1-shift come from r+shift, the rest is fill
+        sub bx,ax
+        cmp dx,bx
+        jg .fl
+        add dx,ax
+        jmp .p
+.dn:    neg ax                          ; down: rows r0+shift..r1 come from r-shift
+        mov bx,[si+12]
+        add bx,ax
+        cmp dx,bx
+        jl .fl
+        sub dx,ax
+.p:     call ptx
+        jmp .k
+.fl:    mov al,0x20
+        mov ah,[si+3]
+.k:     pop dx
+        cmp ax,[es:di]
+        jne .x
+        add di,2
+        inc cx
+        cmp cx,80
+        jb .c
+        inc dx
+        cmp dx,25
+        jb .r
+        xor ax,ax                       ; ZF=1
+.x:     pop es
+        ret
+
+txstab: ;   AX      BX      CX      DX      c0  c1  r0  r1  shift  -   bit
+        dw 0x0601, 0x1F00, 0x0000, 0x184F, 0,  79, 0,  24, 1
+        db 0, 1
+        dw 0x0702, 0x0700, 0x0000, 0x184F, 0,  79, 0,  24, -2
+        db 0, 2
+        dw 0x0602, 0x7000, 0x0305, 0x0A14, 5,  20, 3,  10, 2
+        db 0, 4
+        dw 0x0701, 0x4E00, 0x0305, 0x0A15, 5,  21, 3,  10, -1
+        db 0, 8
+        dw 0x0600, 0x3300, 0x0102, 0x0304, 2,  4,  1,  3,  99
+        db 0, 0x10
+        dw 0x0600, 0x0700, 0x0000, 0x184F, 0,  79, 0,  24, 99
+        db 0, 0x20
+        dw 0x0703, 0x2A00, 0x0201, 0x0901, 1,  1,  2,  9,  -3
+        db 0, 0x40
+        dw 0
+
+; ---------------- AH=09h in text modes (p13: 32-bit stores) ----------------
+; Mode 03h, B800 filled with P(c, r) as in the text scroll test. AH=09h 'Q' attribute 1Eh at row 5,
+; column 10 with CX = 1, 2, 3, 5 and 80 (fail bits 1, 2, 4, 8, 10h), and on page 1 (B800:1000) with
+; CX = 3 (fail bit 20h, the BIOS's code path for pages above 0): CX cells become 1E51h, every other
+; cell keeps P(c, r) (the cells of a count running past the row continue on the next rows, as on
+; the IBM BIOS).
+t_ah09: VS 'D:TEST AH=09h text'
+        call vnl
+        call vflush
+        mov byte [tmp],0
+        mov si,ah09tab
+.n:     cmp word [si],0
+        je .e
+        push si
+        mov ax,0x0003
+        int 0x10
+        call filltx
+        mov ax,[si+4]                   ; page
+        mov ah,0x05
+        int 0x10
+        mov ah,0x02
+        mov bh,[si+4]
+        mov dx,0x050A
+        int 0x10
+        mov ax,0x0951
+        mov bl,0x1E
+        mov bh,[si+4]
+        mov cx,[si]
+        int 0x10
+        mov ax,0x0500
+        int 0x10
+        pop si
+        push si
+        call chk09
+        pop si
+        jz .ok
+        mov al,[si+2]
+        or [tmp],al
+.ok:    add si,6
+        jmp .n
+.e:     mov ax,0x0003
+        int 0x10
+        mov dx,s_ah09
+        jmp bits_result
+
+; SI = case: +0 count, +4 page. Page 0 cells are P(c, r) except the CX cells from (10, 5); page 1
+; (filltx only filled B800:0000-0F9F, page 1 starts at 1000h): its CX cells from (10, 5) are 1E51h.
+chk09:  push es
+        mov ax,0xB800
+        mov es,ax
+        cmp byte [si+4],0
+        jne .pg1
+        xor di,di
+        xor dx,dx
+.r:     xor cx,cx
+.c:     mov ax,dx                       ; cell index r * 80 + c
+        imul ax,ax,80
+        add ax,cx
+        sub ax,5 * 80 + 10
+        jb .p
+        cmp ax,[si]
+        jae .p
+        mov ax,0x1E51
+        jmp .k
+.p:     call ptx
+.k:     cmp ax,[es:di]
+        jne .x
+        add di,2
+        inc cx
+        cmp cx,80
+        jb .c
+        inc dx
+        cmp dx,25
+        jb .r
+        xor ax,ax
+        jmp .x
+.pg1:   mov di,0x1000 + (5 * 80 + 10) * 2
+        mov cx,[si]
+.q:     cmp word [es:di],0x1E51
+        jne .x
+        add di,2
+        loop .q
+        xor ax,ax
+.x:     pop es
+        ret
+
+ah09tab: ;  count, fail bit, 0, page
+        dw 1
+        db 1, 0
+        dw 0
+        dw 2
+        db 2, 0
+        dw 0
+        dw 3
+        db 4, 0
+        dw 0
+        dw 5
+        db 8, 0
+        dw 0
+        dw 80
+        db 0x10, 0
+        dw 0
+        dw 3
+        db 0x20, 0
+        dw 1
+        dw 0
+
+; ---------------- planar scroll (p13: 32-bit set/reset fills) ----------------
+; Modes 12h (80 bytes x 480 lines, 16-line characters) and 0Dh (40 x 200, 8-line characters), with
+; the geometry taken from the BIOS data area (44Ah columns, 485h character height, 484h rows - 1).
+; Every plane p is filled with Q(p, x, y) = (7x + 13y + 85p) mod 256 (x byte column, y scan line), then
+; each case is checked byte by byte in all four planes (fill: FFh in the planes of the colour BH, else
+; 00h). Mode 12h: A AH=06h AL=1 full screen, colour 0Eh; B AH=07h AL=2 full screen, 05h; C AH=06h
+; AL=3 rows 3-10, columns 5-20, 0Ah; D AH=07h AL=1 rows 3-10, columns 5-22 (18 bytes, not a multiple of
+; 4), 03h; E AH=06h AL=0 rows 1-3, columns 2-4, 0Fh; F AH=06h AL=0 full screen, 09h. Mode 0Dh: G AH=06h
+; AL=1 full screen, 0Ch; H AH=07h AL=1 rows 3-10, columns 5-22, 06h. Fail bits 1 A, 2 B, 4 C, 8 D,
+; 10h E, 20h F, 40h G, 80h H.
+t_plscr:
+        VS 'D:TEST planar scroll'
+        call vnl
+        call vflush
+        mov byte [tmp],0
+        mov si,plstab
+.n:     cmp word [si],0
+        je .e
+        push si
+        mov ax,[si+20]                  ; mode
+        int 0x10
+        push es
+        xor ax,ax
+        mov es,ax
+        mov ax,[es:0x44A]
+        mov [plbpl],ax
+        movzx ax,byte [es:0x485]
+        mov [plchh],ax
+        movzx bx,byte [es:0x484]
+        inc bx
+        mul bx
+        mov [pllines],ax
+        pop es
+        call fillpl
+        mov ax,[si]
+        mov bx,[si+2]
+        mov cx,[si+4]
+        mov dx,[si+6]
+        int 0x10
+        pop si
+        push si
+        call chkpl
+        pop si
+        jz .ok
+        mov al,[si+19]                  ; fail bit (the byte after the 0 at +18)
+        or [tmp],al
+.ok:    add si,22
+        jmp .n
+.e:     mov ax,0x0003
+        int 0x10
+        mov dx,s_pls
+        jmp bits_result
+
+; Q(p, x, y) into AL: plane [plp], CX = x, DX = y
+qpl:    push bx
+        mov ax,cx
+        imul ax,ax,7
+        mov bx,dx
+        imul bx,bx,13
+        add al,bl
+        mov bl,[plp]
+        imul bx,bx,85
+        add al,bl
+        pop bx
+        ret
+
+; Fill the four planes with Q: write mode 0, no set/reset, bit mask FFh, one plane at a time.
+fillpl: push es
+        mov ax,0xA000
+        mov es,ax
+        mov dx,0x3CE
+        mov ax,0x0005
+        out dx,ax
+        mov ax,0x0001
+        out dx,ax
+        mov ax,0x0003
+        out dx,ax
+        mov ax,0xFF08
+        out dx,ax
+        mov byte [plp],0
+.p:     mov dx,0x3C4
+        mov ah,1
+        mov cl,[plp]
+        shl ah,cl
+        mov al,0x02
+        out dx,ax
+        xor di,di
+        xor dx,dx                       ; y
+.y:     xor cx,cx                       ; x
+.x:     call qpl
+        stosb
+        inc cx
+        cmp cx,[plbpl]
+        jb .x
+        inc dx
+        cmp dx,[pllines]
+        jb .y
+        inc byte [plp]
+        cmp byte [plp],4
+        jb .p
+        mov dx,0x3C4
+        mov ax,0x0F02
+        out dx,ax
+        pop es
+        ret
+
+; SI = case (as txstab, in character cells; +3 colour). ZF=1 when every byte of every plane is as
+; expected. Uses read map select (GR04) per plane and puts it back to 0.
+chkpl:  push es
+        push bp
+        mov ax,0xA000
+        mov es,ax
+        mov byte [plp],0
+.p:     mov dx,0x3CE
+        mov ah,[plp]
+        mov al,0x04
+        out dx,ax
+        xor di,di
+        xor dx,dx                       ; y
+.y:     mov ax,dx                       ; BP = character row of y
+        push dx
+        xor dx,dx
+        div word [plchh]
+        mov bp,ax
+        pop dx
+        xor cx,cx                       ; x
+.x:     push dx                         ; DX = source line for an unchanged byte
+        cmp cx,[si+8]
+        jb .q
+        cmp cx,[si+10]
+        ja .q
+        cmp bp,[si+12]
+        jb .q
+        cmp bp,[si+14]
+        ja .q
+        mov ax,[si+16]
+        or ax,ax
+        js .dn
+        mov bx,[si+14]                  ; up: rows r0..r1-shift come from r+shift, the rest is fill
+        sub bx,ax
+        cmp bp,bx
+        jg .fl
+        imul ax,[plchh]
+        add dx,ax
+        jmp .q
+.dn:    neg ax                          ; down: rows r0+shift..r1 come from r-shift
+        mov bx,[si+12]
+        add bx,ax
+        cmp bp,bx
+        jl .fl
+        imul ax,[plchh]
+        sub dx,ax
+.q:     call qpl
+        jmp .k
+.fl:    mov bl,[si+3]
+        mov al,0
+        push cx
+        mov cl,[plp]
+        shr bl,cl
+        pop cx
+        test bl,1
+        jz .k
+        mov al,0xFF
+.k:     pop dx
+        cmp al,[es:di]
+        jne .x0
+        inc di
+        inc cx
+        cmp cx,[plbpl]
+        jb .x
+        inc dx
+        cmp dx,[pllines]
+        jb .y
+        inc byte [plp]
+        cmp byte [plp],4
+        jb .p
+        xor ax,ax                       ; ZF=1
+.x0:    pushf
+        mov dx,0x3CE
+        mov ax,0x0004
+        out dx,ax
+        popf
+        pop bp
+        pop es
+        ret
+
+plstab: ;   AX      BX      CX      DX      c0  c1  r0  r1  shift  -   bit  mode
+        dw 0x0601, 0x0E00, 0x0000, 0x1D4F, 0,  79, 0,  29, 1
+        db 0, 1
+        dw 0x12
+        dw 0x0702, 0x0500, 0x0000, 0x1D4F, 0,  79, 0,  29, -2
+        db 0, 2
+        dw 0x12
+        dw 0x0603, 0x0A00, 0x0305, 0x0A14, 5,  20, 3,  10, 3
+        db 0, 4
+        dw 0x12
+        dw 0x0701, 0x0300, 0x0305, 0x0A16, 5,  22, 3,  10, -1
+        db 0, 8
+        dw 0x12
+        dw 0x0600, 0x0F00, 0x0102, 0x0304, 2,  4,  1,  3,  99
+        db 0, 0x10
+        dw 0x12
+        dw 0x0600, 0x0900, 0x0000, 0x1D4F, 0,  79, 0,  29, 99
+        db 0, 0x20
+        dw 0x12
+        dw 0x0601, 0x0C00, 0x0000, 0x1827, 0,  39, 0,  24, 1
+        db 0, 0x40
+        dw 0x0D
+        dw 0x0701, 0x0600, 0x0305, 0x0A16, 5,  22, 3,  10, -1
+        db 0, 0x80
+        dw 0x0D
         dw 0
 
 ; ---------------- VBE 4F05 (p12: fast path from the INT 10h entry) ----------------
@@ -1075,7 +1545,8 @@ bits_result:
 ; ---------------- timings (INFO, not counted) ----------------
 ; PIT channel 0 in mode 2 and the BIOS tick give a 32-bit time in 1/1193182 s; each value is the
 ; shortest of 3 runs: mode set 03h, 4F02 101h (with the 2 MB clear), one 4F05 (1000 calls, per call),
-; one AH=06h full-screen scroll in mode 13h. INT 10h logging (/V) is off while timing.
+; one AH=06h full-screen scroll in mode 13h, AH=06h AL=0 full screen in mode 03h and in mode 12h.
+; INT 10h logging (/V) is off while timing.
 t_time: VS 'D:TEST timings'
         call vnl
         call vflush
@@ -1105,6 +1576,18 @@ t_time: VS 'D:TEST timings'
         mov dx,s_tscr
         mov bx,tm_scr
         call time3
+        mov ax,0x0003
+        int 0x10
+        mov dx,s_ttcl
+        mov bx,tm_tcl
+        call time3
+        mov ax,0x0012
+        int 0x10
+        mov dx,s_tpcl
+        mov bx,tm_pcl
+        call time3
+        mov ax,0x0003
+        int 0x10
         mov byte [vquiet],0
         cmp byte [vflag],1              ; /V keeps mode 2 for its call timing (vdone restores)
         je .r
@@ -1188,6 +1671,18 @@ tm_scr: mov ax,0x0601
         mov bx,0x0700
         xor cx,cx
         mov dx,0x1827
+        int 0x10
+        ret
+tm_tcl: mov ax,0x0600
+        mov bx,0x0700
+        xor cx,cx
+        mov dx,0x184F
+        int 0x10
+        ret
+tm_pcl: mov ax,0x0600
+        mov bx,0x0100
+        xor cx,cx
+        mov dx,0x1D4F
         int 0x10
         ret
 
@@ -1592,11 +2087,16 @@ s_ff    db 'ATC flip-flop reset by mode set ..... $'
 s_vclr  db 'VGA mode set clear 13h 12h 03h ..... $'
 s_font  db 'Font load 8x16 and 8x8 in plane 2 .. $'
 s_scr   db 'Mode 13h scroll AH=06h/07h data .... $'
+s_txs   db 'Text scroll AH=06h/07h cells ....... $'
+s_ah09  db 'AH=09h text char/attribute count ... $'
+s_pls   db 'Planar scroll 12h/0Dh AH=06h/07h ... $'
 s_bank  db '4F05 regs, SR index, CR6A, planar, LFB $'
 s_t03   db 'Time: mode set 03h (ms) ............ $'
 s_t101  db 'Time: 4F02 101h with clear (ms) .... $'
 s_t05   db 'Time: 4F05 set window (us) ......... $'
 s_tscr  db 'Time: mode 13h scroll AH=06h (ms) .. $'
+s_ttcl  db 'Time: text clear AH=06h AL=0 (ms) .. $'
+s_tpcl  db 'Time: mode 12h clear AH=06h AL=0 (ms) $'
 s_tinfo db '  INFO',13,10,'$'
 s_pass  db '  PASS',13,10,'$'
 s_fail  db '  FAIL',13,10,'$'
@@ -1620,6 +2120,10 @@ m_meas  dw 0
 tmp     dw 0
 tmp2    dw 0
 tmin    dd 0
+plbpl   dw 0                            ; planar scroll test: bytes per line, character height, lines
+plchh   dw 0
+pllines dw 0
+plp     db 0                            ; plane
 tst     dd 0
 errs    dd 0
 pel     dd 0

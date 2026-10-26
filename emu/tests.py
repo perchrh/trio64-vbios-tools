@@ -18,7 +18,8 @@ Tests
                    the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port
                    accesses), the window function by far call, EAX/ECX kept across the 32-bit VGA
-                   clear and font load, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
+                   clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
+                   AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
@@ -49,7 +50,7 @@ import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
 from unicorn import UC_HOOK_INSN  # noqa: E402
-from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX,  # noqa: E402
+from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_BX, UC_X86_REG_DX, UC_X86_REG_CS, UC_X86_REG_SS, UC_X86_REG_SP,
                                UC_X86_INS_IN, UC_X86_INS_OUT)
 
@@ -285,6 +286,20 @@ def t_rom_patches(c):
         m.int10(ax, bx=bx)
         high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX)]
         chk(high == [0x9ABC, 0x9ABC], 'AX=%04X: EAX/ECX bits 31-16 changed: %s' % (ax, ['%04X' % h for h in high]))
+    # p13: the text and planar scroll fills, the window moves and AH=09h use EAX for 32-bit stores; AH=0Eh
+    # reaches the scroll from its fast path without the dispatcher, so the helpers must keep EAX
+    for mode, calls in ((0x03, ((0x0601, 0x1F00, 0, 0x184F), (0x0702, 0x0700, 0x0305, 0x0A15),
+                                (0x0941, 0x001E, 5, 0))),
+                        (0x12, ((0x0601, 0x0E00, 0, 0x1D4F), (0x0701, 0x0300, 0x0305, 0x0A16))),
+                        (0x0D, ((0x0703, 0x0600, 0x0102, 0x0A10),))):
+        m.int10(mode)
+        for ax, bx, cx, dx in calls + ((0x0200, 0, 0, 0x184F if mode != 0x12 else 0x1D4F), (0x0E0A, 7, 0, 0)):
+            for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
+                m.mu.reg_write(reg, 0x9ABC0000)
+            m.int10(ax, bx=bx, cx=cx, dx=dx)
+            high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
+            chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
+                % (mode, ax, ['%04X' % h for h in high]))
     m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80        # as a VESA mode leaves it on the card
     m.int10(0x0003)
     chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 03 (CR90 = %02X)' % cr.get(0x90, 0))

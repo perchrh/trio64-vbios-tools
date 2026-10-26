@@ -1,7 +1,7 @@
 ; bios.inc - addresses in the lower 32 KB that the patch code uses (C000:offset)
 ;
-; The defaults are those of BIOS 2.04.11 (the stock Gainward/Cardex image). s3p12.py assembles every
-; file with -D for the BIOS it patches (2.04.07: see PROFILES in s3p12.py), so the same source serves
+; The defaults are those of BIOS 2.04.11 (the stock Gainward/Cardex image). s3patch.py assembles every
+; file with -D for the BIOS it patches (2.04.07: see PROFILES in s3patch.py), so the same source serves
 ; both versions.
 %ifndef MODESET
 %define MODESET  0x2686     ; mode set (AL = mode), the INT 10h AH=00 handler
@@ -41,4 +41,16 @@
 %endif
 %ifndef CLR_RET
 %define CLR_RET  0x1457     ; end of the S3/VESA mode set clear: pop ds / pop es / popa / ret
+%endif
+%ifndef P13A
+%define P13A     0x59E1     ; p13 code: the old 4F06 BL=3 routine after the p8 call (dead, 41 bytes)
+%endif
+%ifndef P13B
+%define P13B     0x1442     ; p13 code: the old 16-bit clear loop after the p11 jump (dead, 21 bytes)
+%endif
+%ifndef DFDN
+%define DFDN     0x7FAF     ; p13: dfdn (p13df.asm), in free space
+%endif
+%ifndef P13C
+%define P13C     0x1227     ; p13 code: the old 8-bit font load loop after the p12 jump (dead, 14 bytes)
 %endif
