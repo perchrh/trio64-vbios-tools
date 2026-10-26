@@ -9,8 +9,12 @@
 ;
 ; Usage
 ;   VGALOG           install, then start the program to watch; VGALOG.BIN grows in the current directory
-;   It cannot be removed again; reboot to get rid of it. Remove VGALOG.BIN between runs or it is
-;   overwritten at the next install. Calls made while DOS is busy are passed on but not logged.
+;   VGALOG /U        unload: puts INT 10h back, closes VGALOG.BIN and frees the memory
+;   VGALOG /H, /?, /HELP  parameter list
+;   A second install is refused while VGALOG is resident. Unloading only works while VGALOG is the last
+;   program that hooked INT 10h; otherwise it says so and stays resident. A new install overwrites
+;   VGALOG.BIN, so copy it away between runs. Calls made while DOS is busy are passed on but not logged.
+;   Exit code 0 = done, 1 = refused, bad argument or the file could not be created.
 ;
 ; Record format, 16 bytes per record, two records per call
 ;   +0  'B' before the call, 'A' after it        +1  0
@@ -21,13 +25,20 @@
 ;   A 'B' record without its 'A' record is the call that hung.
 ;
 ; Expected outcome
-;   The message "VGALOG <version> installed ..." at install; the watched program runs as without VGALOG.
+;   The message "VGALOG <version> installed ..." at install and "VGALOG <version>: unloaded" with /U;
+;   the watched program runs as without VGALOG.
+;
+; How a resident copy is found
+;   The INT 10h vector must point to offset isr in a segment that holds the signature at offset sig.
+;   That segment is the resident copy's PSP; /U uses its saved vector and file handle.
 ;   VGALOG.BIN size = 32 bytes per logged call.
 bits 16
 org 0x100
 %include "version.inc"
 start:  jmp init
 old10   dd 0
+sig     db 'VGALOG01'           ; identifies a resident copy (see the header)
+SIGLEN  equ 8
 indos   dd 0
 mypsp   dw 0
 handle  dw 0
@@ -147,7 +158,75 @@ flush:  ; write rec (16 bytes) and commit, only if DOS is not busy. DS=CS
 .skip:  ret
 resend:                                 ; everything from here is freed after installation
 
-init:   mov [mypsp],cs
+; ---------------- command line ----------------
+init:   mov si,0x81
+.p:     lodsb
+        cmp al,13
+        je install
+        cmp al,' '
+        je .p
+        cmp al,9
+        je .p
+        cmp al,'/'
+        je .sw
+        cmp al,'-'
+        jne bad
+.sw:    lodsb
+        or al,0x20
+        mov ah,al
+.sk:    mov al,[si]             ; skip the rest of the switch word (/help)
+        cmp al,' '
+        je .sd
+        cmp al,13
+        je .sd
+        cmp al,'/'
+        je .sd
+        inc si
+        jmp .sk
+.sd:    cmp ah,'u'
+        je unload
+        cmp ah,'h'
+        je help
+        cmp ah,'?'
+        je help
+bad:    mov dx,s_bad
+        mov ah,9
+        int 0x21
+        mov dx,s_use
+        mov ah,9
+        int 0x21
+        mov ax,0x4C01
+        int 0x21
+help:   mov dx,s_use
+        mov ah,9
+        int 0x21
+        mov ax,0x4C00
+        int 0x21
+
+; ---------------- resident copy? -> ZF=1 and ES = its segment ----------------
+findres:
+        mov ax,0x3510
+        int 0x21
+        cmp bx,isr
+        jne .r
+        mov si,sig
+        mov di,sig
+        mov cx,SIGLEN
+        repe cmpsb              ; DS:SI = our signature, ES:DI = the same offset in the hook's segment
+.r:     ret
+
+; ---------------- install ----------------
+install:
+        call findres
+        jne .go
+        mov dx,s_twice
+        mov ah,9
+        int 0x21
+        mov ax,0x4C01
+        int 0x21
+.go:    push cs
+        pop es
+        mov [mypsp],cs
         mov ah,0x3C
         xor cx,cx
         mov dx,fname
@@ -165,10 +244,14 @@ init:   mov [mypsp],cs
         mov dx,isr
         mov ax,0x2510
         int 0x21
+        mov es,[0x2C]                   ; free the environment copy, the resident part does not need it
+        mov ah,0x49
+        int 0x21
+        mov word [0x2C],0
         mov dx,msg
         mov ah,9
         int 0x21
-        mov dx,resend+15
+        mov dx,resend+15                ; keep PSP + handler, in paragraphs
         shr dx,4
         mov ax,0x3100
         int 0x21
@@ -177,6 +260,64 @@ init:   mov [mypsp],cs
         int 0x21
         mov ax,0x4C01
         int 0x21
+
+; ---------------- unload ----------------
+unload: call findres
+        je .go
+        mov dx,s_notres                 ; not installed, or not the last INT 10h hook
+        mov ah,9
+        int 0x21
+        mov ax,0x4C01
+        int 0x21
+.go:    push ds                         ; ES = resident copy: put its saved vector back
+        lds dx,[es:old10]
+        mov ax,0x2510
+        int 0x21
+        pop ds
+        mov ah,0x51                     ; close its file as the resident program (the handle is its own)
+        int 0x21
+        push bx
+        mov bx,es
+        mov ah,0x50
+        int 0x21
+        mov bx,[es:handle]
+        mov ah,0x3E
+        int 0x21
+        pop bx
+        mov ah,0x50
+        int 0x21
+        mov bx,[es:0x2C]                ; environment (0 when freed at install)
+        or bx,bx
+        jz .fp
+        push es
+        mov es,bx
+        mov ah,0x49
+        int 0x21
+        pop es
+.fp:    mov ah,0x49                     ; the resident PSP and handler
+        int 0x21
+        jc .fe
+        mov dx,s_unl
+        mov ah,9
+        int 0x21
+        mov ax,0x4C00
+        int 0x21
+.fe:    mov dx,s_free
+        mov ah,9
+        int 0x21
+        mov ax,0x4C01
+        int 0x21
+
 fname   db 'VGALOG.BIN',0
 msg     db 'VGALOG ',VERSION,' installed, logging INT 10h AH=00 and 4F01/4F02/4F06 to VGALOG.BIN',13,10,'$'
 msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
+s_use   db 'VGALOG ',VERSION,' - logs INT 10h AH=00 and VBE 4F01/4F02/4F06 calls to VGALOG.BIN',13,10
+        db '  VGALOG              install (VGALOG.BIN is created new in the current directory)',13,10
+        db '  VGALOG /U           unload (INT 10h restored, VGALOG.BIN closed)',13,10
+        db '  VGALOG /H, /?, /HELP  this help',13,10,'$'
+s_bad   db 'VGALOG ',VERSION,': bad argument.',13,10,13,10,'$'
+s_twice db 'VGALOG ',VERSION,': already installed.',13,10,'$'
+s_unl   db 'VGALOG ',VERSION,': unloaded, VGALOG.BIN closed.',13,10,'$'
+s_notres db 'VGALOG ',VERSION,': not unloaded: VGALOG is not installed, or another program hooked INT 10h',13,10
+        db 'after it (unload that one first).',13,10,'$'
+s_free  db 'VGALOG ',VERSION,': INT 10h restored, but its memory could not be freed.',13,10,'$'

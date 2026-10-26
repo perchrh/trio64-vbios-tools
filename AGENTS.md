@@ -90,8 +90,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - A functional change is verified on the real card: S3TEST and S3COMPAT logs from the test machine are
   the final word. Compare with the previous log: the pass, fail and warn counts and every changed line
   should be explained.
-- Emulation is a useful extra check before hardware runs: for example running the ROM's POST and
-  INT 10h under an x86 emulator (Unicorn) with a small VGA register model, or running parts of a tool
-  on top of it. That tooling is not part of this repository; when used, say so and keep its artefacts
-  (refresh, VRAM, equipment flags) apart from real findings.
-- Deliver changes as a patch or a branch against main; do not push without being asked.
+- Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and
+  the DOS tools on top of it, under Unicorn with a VGA register model (`make emu-test ROM=...`). It
+  has no video memory and no real timing, so keep its artefacts (refresh, VRAM, equipment flags, the
+  reserved SR04 bit) apart from real findings; the hardware logs decide. Add a test to
+  `emu/tests.py` for new behaviour the model can judge.
+- Deliver changes as a pull request against main.

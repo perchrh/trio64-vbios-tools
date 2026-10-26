@@ -2,3 +2,4 @@ build/
 *.COM
 *.LOG
 *.lst
+__pycache__/
