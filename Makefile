@@ -1,7 +1,7 @@
-# Builds the DOS test tools for the Trio64V2/DX VBIOS project. Needs NASM 2.x.
+# Builds the DOS tools for the Trio64V2/DX VBIOS project. Needs NASM 2.x.
 NASM ?= nasm
 
-all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM
+all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM
 
 build:
 	mkdir -p build
@@ -15,6 +15,9 @@ build/S3TEST.COM: s3test/s3test.asm | build
 # s3compat.asm includes vgaref.inc (reference tables) from its own folder
 build/S3COMPAT.COM: s3compat/s3compat.asm s3compat/vgaref.inc | build
 	cd s3compat && $(NASM) -f bin -o ../$@ s3compat.asm
+
+build/S3ALIAS.COM: s3alias/s3alias.asm | build
+	$(NASM) -f bin -o $@ $<
 
 clean:
 	rm -rf build

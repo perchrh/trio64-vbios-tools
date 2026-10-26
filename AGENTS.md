@@ -49,8 +49,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Start from a known state and leave one: set mode 03, take a baseline, zero VRAM without destroying
   the DOS screen, and restore the screen and the PIT at the end.
 - Exit code 0 when nothing failed, 1 otherwise.
-- All three tools share one version number (0.8 now). Each tool prints its version on its first line
-  of output and in its error messages. Bump all three together, and only when asked.
+- All tools share one version number (0.8 now). Each tool prints its version on its first line of
+  output and in its error messages. Bump them all together, and only when asked.
 
 ## Assembly conventions
 

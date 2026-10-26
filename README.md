@@ -4,13 +4,14 @@ DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX ca
 (86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.11-p9.
 The ROM image itself is not in this repository; the changes it carries are described below.
 
-All three tools share one version number, currently 0.8, and print it on their first line of output.
+All tools share one version number, currently 0.8, and print it on their first line of output.
 All tools need a 386 or later and run in plain DOS (no EMM386 needed).
 
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
 | S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh, booster, LFB, 4F05/4F06, CR50, flip-flop) | `S3TEST > S3TEST.LOG` |
+| S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game; not with S3TEST or S3COMPAT |
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test, `/I` pauses per mode) |
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
@@ -110,7 +111,7 @@ No code was copied from another project; all ROM code was written for this BIOS.
 | TSR | Fixes | Why not in the ROM |
 | --- | --- | --- |
 | 8x14 font TSR | AX=1130h BH=2 returns the 8x16 font; mode 10h uses 21 rows of 16 lines | A 3.5 KB font does not fit in the free ROM space (accepted for now) |
-| S3ALIAS.COM | Pinball Illusions' S3 driver: AH=00 mode 49h becomes 59h, 4Bh becomes 5Ah | Remapping S3 mode numbers in the ROM would break programs that use this BIOS's own numbering |
+| S3ALIAS.COM (`s3alias/`) | Pinball Illusions' S3 driver: AH=00 mode 49h becomes 59h, 4Bh becomes 5Ah | Remapping S3 mode numbers in the ROM would break programs that use this BIOS's own numbering |
 
 ### Omitted: 1-cycle linear addressing (CR87 bit 1, SR15 bit 7)
 
