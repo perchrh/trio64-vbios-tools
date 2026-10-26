@@ -1,0 +1,6 @@
+; vdebug.mac - macro for the /V debug log (see vdebug.inc); include near the top of the tool
+; VS 'text'  appends text to the debug log when /V is on (nothing otherwise)
+%macro VS 1+
+        call vstr
+        db %1,0
+%endmacro

@@ -5,7 +5,10 @@
 ;   quick check to run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
 ;
 ; Usage
-;   S3TEST > S3TEST.LOG
+;   S3TEST [/V] > S3TEST.LOG
+;   /V  debug log in S3TEST.DBG (common/vdebug.inc): every INT 10h call (except during the throughput
+;       benchmark), the result line, a register dump after every test and the raw retrace counts.
+;       The normal output is the same with or without /V.
 ;   Output is buffered while the video modes switch and written to stdout at the end.
 ;   Exit code 0 = every test passed, 1 = at least one failed.
 ;
@@ -37,14 +40,38 @@
 ;
 bits 16
 org 0x100
+%include "vdebug.mac"
 F_VGA   equ 1
 F_BOOST equ 2
 F_LFB   equ 4
 
 start:  cld
         mov word [bp_],obuf
-        mov dx,s_title
+        mov si,0x81                     ; /V: debug log in S3TEST.DBG
+.op:    lodsb
+        cmp al,13
+        je .opd
+        cmp al,'/'
+        jne .op
+        lodsb
+        and al,0xDF
+        cmp al,'V'
+        jne .op
+        mov ax,cs
+        add ax,0x2000
+        cmp ax,[2]
+        ja .vm
+        sub ax,0x1000
+        mov dx,s_vname
+        call vinit
+        jmp .opd
+.vm:    mov dx,s_vnomem
+        mov ah,9
+        int 0x21
+.opd:   mov dx,s_title
         call puts
+        mov ax,[bp_]
+        mov [vls],ax
         call t_rom
         call t_post
         mov si,modelist
@@ -81,6 +108,7 @@ start:  cld
         mov bx,1
         mov ah,0x40
         int 0x21
+        call vdone
         mov ax,0x4C00
         cmp word [nfail],0
         je .ex
@@ -205,7 +233,14 @@ t_post: call unlock
 ; Set [m_mode] (AH=00 for VGA modes, 4F02 for VESA), measure the refresh rate and read
 ; CR58, CR59, CR5A, CR6D, CR90 and SR1A. Expect status 004Fh, refresh within 15 (1.5 Hz) of
 ; [m_hz], SR1A bit 5 clear, plus the checks selected by [m_flags] (see the file header).
-t_mode: mov ax,[m_mode]
+t_mode: VS 'D:TEST mode '
+        push ax
+        mov ax,[m_mode]
+        call vhex4
+        pop ax
+        call vnl
+        call vflush
+        mov ax,[m_mode]
         cmp ax,0x100
         jb .vga
         mov bx,ax
@@ -406,7 +441,9 @@ t_func: mov ax,0x4F02
         sete al
         call result
         ; throughput
+        mov byte [vquiet],1             ; no INT 10h logging while timing
         call bench
+        mov byte [vquiet],0
         mov dx,s_thr
         call puts
         mov eax,[kbs]
@@ -572,6 +609,10 @@ measure:                        ; count vertical retrace starts over 9 BIOS tick
 .same:  cmp bx,[es:0x46C]
         jne .l
         pop es
+        VS 'D:FRM edges='               ; /V: raw count
+        mov eax,ecx
+        call vdec
+        VS ' ticks=9',13,10
         mov eax,ecx             ; Hz*10 = count*182065/(9*1000)
         mov ebx,182065
         mul ebx
@@ -679,7 +720,19 @@ result: push ax                 ; AL=1 pass
 .f:     inc word [nfail]
         mov dx,s_fail
 .p:     call puts
-        pop ax
+        cmp byte [vflag],1              ; /V: copy the result line, register dump, flush
+        jne .nv
+        pusha
+        mov si,[vls]
+        mov cx,[bp_]
+        sub cx,si
+        call vcopy
+        mov ax,[bp_]
+        mov [vls],ax
+        popa
+        call vregs
+        call vflush
+.nv:    pop ax
         ret
 
 ; Output helpers: everything goes to the buffer obuf, written to stdout at the end.
@@ -761,6 +814,9 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
         pop edx
         ret
 
+; /V debug log (shared with VSHOW and S3COMPAT)
+%include "vdebug.inc"
+
 ; mode, expected Hz*10, flags
 
 ; Modes tested by t_mode: mode, expected refresh in tenths of Hz, check flags.
@@ -787,6 +843,8 @@ modelist:
         dw 0x0013,700,F_VGA
         dw 0xFFFF
 
+s_vname db 'S3TEST.DBG',0
+s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
 s_title db 'S3TEST 0.8 - Trio64V2/DX VBIOS 2.04.11-p9 test suite',13,10,13,10,'$'
 s_sig   db 'ROM signature 2.04.11-p9 ............ $'
 s_cks   db 'ROM checksum (C000:0000-7FFF) = $'
@@ -817,6 +875,7 @@ s_sum2  db '  Failed: $'
 s_sum3  db 13,10,'$'
 
 npass   dw 0
+vls     dw 0                    ; /V: start of the current line in obuf
 nfail   dw 0
 bp_     dw 0
 m_mode  dw 0

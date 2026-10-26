@@ -13,6 +13,8 @@
 ;                        is up, any key for the next mode, Esc stops; a summary is printed at the end
 ;   VSHOW /H, /?, /HELP  parameter list
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
+;   /V                   debug log in VSHOW.DBG (see common/vdebug.inc): every INT 10h call, 4F00/4F01
+;                        blocks, registers and per-frame timer counts of each mode shown
 ;
 ; The test picture and what to expect
 ;   16 colour bars           every bar a solid, distinct colour (direct colour modes use the 4F01 masks)
@@ -32,6 +34,7 @@
 bits 16
 cpu 386
 org 0x100
+%include "vdebug.mac"
 
 ; Command line parser: a hex mode number and the switches /L, /A, /I, /H, /?, /HELP.
 ; Anything else prints "bad argument" and the usage text.
@@ -106,7 +109,11 @@ start:  cld
         jne .sw4
         mov byte [allm],2
         jmp .p
-.sw4:   cmp al,'?'
+.sw4:   cmp al,'v'
+        jne .sw5
+        mov byte [vreq],1
+        jmp .p
+.sw5:   cmp al,'?'
         je .help
         cmp al,'h'
         je .help
@@ -115,12 +122,28 @@ start:  cld
         mov dx,s_use
         call dputs
         mov ax,0x4C01
-        int 0x21
+        jmp vexit
 .help:  mov dx,s_use
         call dputs
         mov ax,0x4C00
-        int 0x21
-.d:     cmp byte [allm],1
+        jmp vexit
+.d:     cmp byte [vreq],1               ; /V: debug log in VSHOW.DBG
+        jne .d1
+        push bx
+        push cx
+        mov ax,cs
+        add ax,0x2000
+        cmp ax,[2]
+        ja .vm
+        sub ax,0x1000
+        mov dx,s_vname
+        call vinit
+        jmp .vd
+.vm:    mov dx,s_vnomem
+        call dputs
+.vd:    pop cx
+        pop bx
+.d1:    cmp byte [allm],1
         je runall
         cmp byte [allm],2
         je menu
@@ -137,12 +160,13 @@ list:   mov dx,s_use
         mov ax,0x4F00
         mov di,vib
         int 0x10
+        call v4f00
         cmp ax,0x004F
         je .ok
         mov dx,s_novbe
         call dputs
         mov ax,0x4C01
-        int 0x21
+        jmp vexit
 .ok:    mov dx,s_list
         call dputs
         push ds
@@ -168,6 +192,7 @@ list:   mov dx,s_use
         mov cx,[mode]
         mov di,mi
         int 0x10
+        call v4f01
         cmp ax,0x004F
         jne .n
         mov ax,[mode]
@@ -209,7 +234,7 @@ list:   mov dx,s_use
 .e:     mov dx,s_crlf
         call dputs
         mov ax,0x4C00
-        int 0x21
+        jmp vexit
 
 ; One mode: picture until a key is pressed, then text mode and one line with the measured values.
 show:   call showone
@@ -234,7 +259,7 @@ show:   call showone
         mov dx,s_crlf
         call dputs
         mov ax,0x4C00
-        int 0x21
+        jmp vexit
 
 sfail:  mov [emsg],dx
         stc
@@ -247,10 +272,18 @@ sfail:  mov [emsg],dx
 ; draws the picture and measures the timing. Expect the mode set to return 004Fh.
 showone:
         mov word [st],0
+        VS 'D:TEST mode '               ; /V: which mode, flushed before anything is set
+        push ax
+        mov ax,[mode]
+        call vhex4
+        pop ax
+        call vnl
+        call vflush
         mov ax,0x4F01
         mov cx,[mode]
         mov di,mi
         int 0x10
+        call v4f01
         cmp ax,0x004F
         je .i1
         mov [st],ax
@@ -350,6 +383,9 @@ showone:
         add word [ty],16
         call drawline
         call beep
+        call vframes                    ; /V: raw timing, registers of the mode as shown
+        call vregs
+        call vflush
         clc
         ret
 
@@ -384,12 +420,13 @@ runall: mov dword [vib],'VBE2'
         mov ax,0x4F00
         mov di,vib
         int 0x10
+        call v4f00
         cmp ax,0x004F
         je .ok
         mov dx,s_novbe
         call dputs
         mov ax,0x4C01
-        int 0x21
+        jmp vexit
 .ok:    push ds                         ; copy the mode list
         lds si,[vib+0x0E]
         mov di,mlist
@@ -468,7 +505,7 @@ runall: mov dword [vib],'VBE2'
         mov dx,rbuf
         call dputz
         mov ax,0x4C00
-        int 0x21
+        jmp vexit
 
 ; ---------------------------------------------------------------- interactive menu (/I)
 LROWS   equ 19                          ; list rows on screen
@@ -479,12 +516,13 @@ menu:   mov dword [vib],'VBE2'
         mov ax,0x4F00
         mov di,vib
         int 0x10
+        call v4f00
         cmp ax,0x004F
         je .ok
         mov dx,s_novbe
         call dputs
         mov ax,0x4C01
-        int 0x21
+        jmp vexit
 .ok:    push ds
         lds si,[vib+0x0E]
         mov di,mlist
@@ -538,7 +576,7 @@ menu:   mov dword [vib],'VBE2'
         mov dx,s_none
         call dputs
         mov ax,0x4C01
-        int 0x21
+        jmp vexit
 .draw:  mov ax,3
         int 0x10
         mov ah,1                        ; hide the cursor
@@ -633,7 +671,7 @@ menu:   mov dword [vib],'VBE2'
 .quit:  mov ax,3
         int 0x10
         mov ax,0x4C00
-        int 0x21
+        jmp vexit
 
 ; Same acceptance rules as showone, without setting the mode: used to build the menu.
 modeok: ; mode info in mi: CF if VSHOW cannot show it (same rules as showone); keeps BX
@@ -853,7 +891,7 @@ efail:  push dx
 .x:     mov dx,s_crlf
         call dputs
         mov ax,0x4C01
-        int 0x21
+        jmp vexit
 
 ; ---------------------------------------------------------------- colours
 ; EGA 16 colours as 8-bit RGB; for direct colour modes packed with the 4F01 masks
@@ -1359,6 +1397,7 @@ waitvr: mov dword [pwt],0
 ; 30 * 1193182 * 10 / counts. Line frequency: Hz times the CRTC vertical total (CR06, CR07 bits 0/5,
 ; CR5E bit 0, plus 2). Expect both to match the monitor OSD within about 0.1 Hz and 0.1 kHz.
 measure:
+        mov word [vfrn],0
         mov word [hz],0
         mov word [khz],0
         pushf
@@ -1376,10 +1415,19 @@ measure:
         jc .z
         mov eax,[pel]
         mov [t0],eax
+        push di
+        mov di,vfr                      ; PIT count at every retrace start, for /V
+        mov [di],eax
+        mov word [vfrn],1
         mov cx,30
 .l:     call waitvr
-        jc .z
+        jc .zd
+        add di,4
+        mov eax,[pel]
+        mov [di],eax
+        inc word [vfrn]
         loop .l
+        pop di
         mov ecx,[pel]
         sub ecx,[t0]
         jz .z
@@ -1387,7 +1435,9 @@ measure:
         xor edx,edx
         div ecx
         mov [hz],ax
-.z:     pushf
+.z:     cmp byte [vflag],1              ; /V keeps mode 2 for its call timing (vdone restores)
+        je .z3
+        pushf
         cli
         mov al,0x36                     ; ch0 back to mode 3
         out 0x43,al
@@ -1395,7 +1445,7 @@ measure:
         out 0x40,al
         out 0x40,al
         popf
-        ; vertical total from the CRTC (incl. S3 CR5E bit 0) -> line frequency
+.z3:    ; vertical total from the CRTC (incl. S3 CR5E bit 0) -> line frequency
         mov dx,0x3D4
         mov ax,0x4838
         out dx,ax
@@ -1435,6 +1485,37 @@ measure:
         div ebx
         mov [khz],ax
         ret
+.zd:    pop di                          ; timeout inside the frame loop
+        jmp .z
+
+; ---------------------------------------------------------------- /V helpers
+v4f00:  pushf                           ; dump the 4F00 block at vib (AX and flags kept)
+        push si
+        push cx
+        mov dword [vtag],'4F00'
+        mov si,vib
+        mov cx,512
+        call vblk
+        pop cx
+        pop si
+        popf
+        ret
+v4f01:  pushf                           ; dump the 4F01 block at mi
+        push si
+        push cx
+        mov dword [vtag],'4F01'
+        mov si,mi
+        mov cx,256
+        call vblk
+        pop cx
+        pop si
+        popf
+        ret
+vexit:  call vdone                      ; every exit: close the /V log (AX = exit code)
+        int 0x21
+
+; /V debug log (shared with S3TEST and S3COMPAT)
+%include "vdebug.inc"
 
 ; ---------------------------------------------------------------- DOS output
 dputs:  mov ah,9
@@ -1491,9 +1572,12 @@ s_use   db 'VSHOW 0.8 - VESA mode viewer for monitor and LCD checks',13,10
         db '                      any key = next mode, Esc = stop, summary at the end',13,10
         db '  /L                  1-pixel vertical line pattern (LCD clock/phase adjustment)',13,10
         db '                      instead of the colour bars',13,10
+        db '  /V                  debug log: raw BIOS calls, registers and timing in VSHOW.DBG',13,10
         db '  /H, /?, /HELP       this help',13,10
         db 'Each mode shows a white frame, the pattern, the mode, measured refresh,',13,10
         db 'line frequency and total lines; any key returns.',13,10,'$'
+s_vname db 'VSHOW.DBG',0
+s_vnomem db 'VSHOW 0.8: not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
 s_bad   db 'VSHOW 0.8: bad argument.',13,10,13,10,'$'
 s_novbe db 'VSHOW 0.8: no VESA BIOS (4F00 failed).',13,10,'$'
 s_list  db 13,10,'Mode  Resolution',13,10,'$'
@@ -1535,6 +1619,7 @@ s_stopped db 'Stopped with Esc.',13,10,0
 s_res   db 'VSHOW 0.8 /A results:',13,10,'$'
 
 lines   db 0
+vreq    db 0                            ; /V given
 allm    db 0
 lastkey db 0
 wnum    db 0

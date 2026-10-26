@@ -7,8 +7,12 @@
 ;   Journal 1988), SVGATEST, VBETest and X-VESA.
 ;
 ; Usage
-;   S3COMPAT [/I] [/Q] > S3COMPAT.LOG
+;   S3COMPAT [/I] [/Q] [/V] > S3COMPAT.LOG
 ;   /I  wait for a key after each mode (look at the screen)      /Q  skip the 2 MB VRAM test
+;   /V  debug log in S3COMPAT.DBG (common/vdebug.inc): every INT 10h call with registers and duration,
+;       a register dump and the result line after every test, 4F00/4F01/AH=1Bh blocks, per-frame
+;       timer counts, memory mismatches. The normal log is the same with or without /V. Needs 64 KB
+;       more memory and runs longer (the debug file is committed before every mode set).
 ;   A notice on stderr says the run takes about 3 minutes; a key starts it, Esc cancels.
 ;   When stdout is a file, every test line is written and committed (INT 21h AH=68h) before the next
 ;   test starts, so after a freeze the last line in the log is the test that hung.
@@ -43,6 +47,7 @@ bits 16
 cpu 386
 org 0x100
 
+%include "vdebug.mac"
 %macro PS 1+
         call ps
         db %1,0
@@ -95,8 +100,11 @@ start:  cld
         jne .o2
         mov byte [interact],1
 .o2:    cmp al,'Q'
-        jne .op
+        jne .o3
         mov byte [quick],1
+.o3:    cmp al,'V'
+        jne .op
+        mov byte [vreq],1
         jmp .op
 .opd:   mov ax,0x4400                   ; stdout a file? then write + commit after every test step
         mov bx,1
@@ -130,7 +138,20 @@ start:  cld
         sti
         mov ax,0x4C00
         int 0x21
-.go:    call save_screen
+.go:    cmp byte [vreq],1               ; /V: debug log in S3COMPAT.DBG (needs 64 KB more)
+        jne .gs
+        mov ax,cs
+        add ax,0x4000
+        cmp ax,[2]
+        ja .gm
+        sub ax,0x1000
+        mov dx,s_vname
+        call vinit
+        jmp .gs
+.gm:    mov dx,s_vnomem
+        mov ah,9
+        int 0x21
+.gs:    call save_screen
         PS 'S3COMPAT 0.8 - VGA/SVGA/VESA compatibility test for the Trio64V2 VBIOS',13,10
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
@@ -188,6 +209,7 @@ start:  cld
         mov byte [tofile],1             ; console: buffer is printed now, in text mode
         call restore_screen             ; before the console write, so the summary lands below the old screen
         call flush
+        call vdone
         mov ax,0x4C00
         cmp word [nfail],0
         je .x
@@ -646,6 +668,10 @@ vga_one:
         xor bx,bx
         mov ah,0x1B
         int 0x10
+        mov dword [vtag],'1B  '         ; /V: the state block
+        mov si,dsbuf
+        mov cx,64
+        call vblk
         mov si,dsbuf+4
         mov di,[ent]
         add di,67
@@ -899,7 +925,17 @@ mlin:   push es
         pop es
         clc
         ret
-.bad:   pop es
+.bad:   pushad                          ; /V: first mismatch
+        movzx ebx,al
+        movzx ecx,byte [es:di]
+        mov ax,es
+        movzx eax,ax
+        shl eax,4
+        movzx edx,di
+        add eax,edx
+        call vmem
+        popad
+        pop es
         stc
         ret
 
@@ -959,7 +995,16 @@ mplan:  push es
         pop es
         clc
         ret
-.bad:   mov dx,0x3CE
+.bad:   pushad                          ; /V: first mismatch, address = plane:offset
+        movzx ecx,byte [es:di]
+        movzx edx,bx                    ; plane
+        movzx ebx,al                    ; expected
+        mov eax,edx
+        shl eax,16
+        mov ax,di
+        call vmem
+        popad
+        mov dx,0x3CE
         mov ax,0x0004
         out dx,ax
         pop es
@@ -2371,6 +2416,10 @@ vesa_global:
         mov di,vbeinfo
         int 0x10
         mov [tmpw],ax
+        mov dword [vtag],'4F00'         ; /V: the info block
+        mov si,vbeinfo
+        mov cx,256
+        call vblk
         TB '4F00 VESA sig: '
         mov ax,[vbeinfo+4]
         mov al,ah
@@ -2447,6 +2496,10 @@ vesa_global:
         mov di,vbe2buf
         int 0x10
         mov [tmpw],ax
+        mov dword [vtag],'VBE2'         ; /V: the 512-byte info block
+        mov si,vbe2buf
+        mov cx,512
+        call vblk
         TB '4F00 VBE2 sig, 512 byte block'
         call tdots
         cmp word [tmpw],0x004F
@@ -2636,7 +2689,11 @@ getinfo:                                ; [vm] -> mibuf, CF on error
         je .o
         stc
         ret
-.o:     clc
+.o:     mov dword [vtag],'4F01'         ; /V: the mode info block
+        mov si,mibuf
+        mov cx,256
+        call vblk
+        clc
         ret
 
 presmode:                               ; print WxHxBPP
@@ -4230,7 +4287,17 @@ vram_test:
         xor eax,[vpat]
         cmp [es:di],eax
         je .n
-        cmp dword [vrerr],0
+        cmp dword [vrerr],16            ; /V: the first 16 mismatches
+        jae .v1
+        pushad
+        mov ebx,eax
+        mov ecx,[es:di]
+        movzx eax,si
+        shl eax,16
+        mov ax,di
+        call vmem
+        popad
+.v1:    cmp dword [vrerr],0
         jne .n2
         mov ecx,ebx
         or cx,di
@@ -4433,7 +4500,12 @@ bankrw: ; EBX = linear offset: write/read 4 bytes through window A -> CF on erro
         jne .b
         clc
         ret
-.b:     stc
+.b:     pushad                          ; /V: offset, written, read
+        mov ecx,edx
+        xchg eax,ebx
+        call vmem
+        popad
+        stc
         ret
 
 ; ======================================================================
@@ -4609,10 +4681,19 @@ measure:
         jc .z
         mov eax,[pel]
         mov [t0],eax
+        push di
+        mov di,vfr                      ; PIT count at every retrace start, for /V
+        mov [di],eax
         mov cx,30
 .l:     call waitvr
-        jc .z
+        jc .zd
+        add di,4
+        mov eax,[pel]
+        mov [di],eax
         loop .l
+        pop di
+        mov word [vfrn],31
+        call vframes
         mov eax,[pel]
         sub eax,[t0]
         jz .z
@@ -4621,7 +4702,9 @@ measure:
         xor edx,edx
         div ecx
         jmp .x
-.z:     xor ax,ax
+.zd:    pop di
+.z:     VS 'D:FRM timeout',13,10
+        xor ax,ax
 .x:     pop dx
         pop cx
         pop bx
@@ -4668,6 +4751,10 @@ tbegin: mov word [fails],0
         push si
         push ax
         mov si,[bp+2]
+        mov [vname],si
+        VS 'D:TEST '                    ; /V: test name and a flushed debug log
+        call vstrz
+        call vnl
 .l:     lodsb
         or al,al
         jz .e
@@ -4678,12 +4765,24 @@ tbegin: mov word [fails],0
         pop si
         pop bp
         call flush                      ; the test that started last is on disk
+        push ax
+        mov ax,[optr]                   ; start of this test's lines in the log buffer
+        mov [vline0],ax
+        pop ax
+        call vflush
         ret
 tbeginx:
         mov word [fails],0
         mov word [warns],0
         mov byte [mm_n],0
         mov byte [infoflag],0
+        VS 'D:TEST (mode X)',13,10
+        mov word [vname],0
+        push ax
+        mov ax,[optr]
+        mov [vline0],ax
+        pop ax
+        call vflush
         ret
 
 ; write the buffered text to stdout and commit it, so a freeze loses nothing
@@ -4744,7 +4843,24 @@ tend:   push ax
 .i:     inc word [ninfo]
         PS '  INFO',13,10
 .x:     call mm_flush
-        call flush
+        cmp byte [vflag],1              ; /V: copy the result line(s), then a register dump
+        jne .nv
+        pusha
+        push ds
+        VS 'D:RES '
+        mov si,[vname]
+        or si,si
+        jz .nn
+        call vstrz                      ; the test name went to the log before the test ran
+.nn:    mov si,[vline0]
+        mov cx,[optr]
+        sub cx,si
+        mov ds,[logseg]
+        call vcopyc
+        pop ds
+        popa
+        call vregs
+.nv:    call flush
         pop ax
         ret
 
@@ -4938,6 +5054,10 @@ pdec10: push eax
         ret
 
 ; ======================================================================
+; /V debug log (shared with VSHOW and S3TEST)
+%include "vdebug.inc"
+
+; ======================================================================
 ; data
 %include "vgaref.inc"
 
@@ -4997,6 +5117,8 @@ s_start db 'S3COMPAT 0.8: the test takes about 3 minutes. The screen will change
         db 'constantly. Wait for the DOS prompt to come back.',13,10
         db 'Press any key to start, Esc to cancel.',13,10
 s_start_len equ $-s_start
+s_vname db 'S3COMPAT.DBG',0
+s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
 s_nomem db 'Not enough memory (needs 256 KB free).',13,10,'$'
 
 align 4
@@ -5018,6 +5140,9 @@ orows   dw 0
 ostart  dw 0
 tofile  db 0
 quick   db 0
+vreq    db 0                            ; /V given
+vline0  dw 0                            ; log buffer offset where the current test started
+vname   dw 0                            ; its name (TB text), 0 = none
 pass    db 0
 npass   dw 0
 nfail   dw 0

@@ -28,7 +28,27 @@ NASM 2.x (tested with 2.16.01):
     make            # Linux, macOS, WSL
     build.bat       # DOS or Windows with nasm.exe on the PATH
 
-The .COM files land in `build/`.
+The .COM files land in `build/`. `common/` holds the /V debug log code the test tools share.
+
+## Debug log (/V)
+
+VSHOW, S3TEST and S3COMPAT take `/V`. It writes a second file, `VSHOW.DBG`, `S3TEST.DBG` or
+`S3COMPAT.DBG`, in the current directory. Its only purpose is to show how the code ran on the real
+card, so problems can be found and fixed from a log instead of guessed at. The normal output is the
+same with or without /V. The debug file contains:
+
+- the environment: CPU, DOS version, memory, interrupt vectors, system BIOS date, the video ROM header
+  and checksum, the BIOS data area and the PCI configuration of the display controller
+- every INT 10h call the tool makes (and nested calls the BIOS makes itself) with all registers in and
+  out and the duration in PIT counts
+- a register dump (SR, GR, CR00-18, CR30-6F, CR80-9F, AR, DAC 0-15, video BIOS data) after every test or
+  shown mode, with the normal result line copied next to it
+- the 4F00, 4F01 and AH=1Bh blocks as hex, per-frame timer counts of every refresh measurement and the
+  first memory mismatches with address, expected and read value
+
+The file is committed before every mode set and VBE call (except 4F05), so after a freeze its last
+lines show the call that hung. Expect a debug file of 1-2 MB for S3COMPAT and a longer run.
+The line format is described at the top of `common/vdebug.inc`.
 
 ## S3COMPAT reference data
 

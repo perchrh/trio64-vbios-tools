@@ -49,6 +49,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Start from a known state and leave one: set mode 03, take a baseline, zero VRAM without destroying
   the DOS screen, and restore the screen and the PIT at the end.
 - Exit code 0 when nothing failed, 1 otherwise.
+- VSHOW, S3TEST and S3COMPAT take /V: a debug log in <TOOL>.DBG (common/vdebug.inc). New code paths
+  should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
+  `D:` records in the documented format. /V must not change the normal output, and nothing may be
+  logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
 - All tools share one version number (0.8 now). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.
 
