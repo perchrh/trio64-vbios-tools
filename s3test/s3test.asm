@@ -1,4 +1,4 @@
-; S3TEST.COM - automatic test suite for the patched Trio64V2/DX VBIOS (2.04.11-p9). 386+.
+; S3TEST.COM 0.8 - automatic test suite for the patched Trio64V2/DX VBIOS (2.04.11-p9). 386+.
 ; Output is buffered while modes switch and written to stdout at the end: S3TEST > S3TEST.LOG
 bits 16
 org 0x100
@@ -721,7 +721,7 @@ modelist:
         dw 0x0013,700,F_VGA
         dw 0xFFFF
 
-s_title db 'S3TEST - Trio64V2/DX VBIOS 2.04.11-p9 test suite',13,10,13,10,'$'
+s_title db 'S3TEST 0.8 - Trio64V2/DX VBIOS 2.04.11-p9 test suite',13,10,13,10,'$'
 s_sig   db 'ROM signature 2.04.11-p9 ............ $'
 s_cks   db 'ROM checksum (C000:0000-7FFF) = $'
 s_mclk  db 'MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'

@@ -1,4 +1,4 @@
-; S3COMPAT.COM - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS (386+)
+; S3COMPAT.COM 0.8 - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS (386+)
 ; usage: S3COMPAT [/I] [/Q] > S3COMPAT.LOG  /I pause after each mode, /Q skip 2 MB VRAM test
 bits 16
 cpu 386
@@ -89,7 +89,7 @@ start:  cld
         mov ax,0x4C00
         int 0x21
 .go:    call save_screen
-        PS 'S3COMPAT 1.7 - VGA/SVGA/VESA compatibility test for the Trio64V2 VBIOS',13,10
+        PS 'S3COMPAT 0.8 - VGA/SVGA/VESA compatibility test for the Trio64V2 VBIOS',13,10
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
         PS '  8 refresh  10 memory  20 default DAC  40 refresh vs CRTC/PLL math',13,10
@@ -4746,7 +4746,7 @@ extlist: db 0,0, 2,1, 2,2, 2,3, 2,4
         db 2,0x12, 2,0x13, 2,0x15, 2,0x18, 5,5, 5,6, 4,0x10
 EXTN    equ ($-extlist)/2
 
-s_start db 'S3COMPAT: the test takes about 3 minutes. The screen will change modes',13,10
+s_start db 'S3COMPAT 0.8: the test takes about 3 minutes. The screen will change modes',13,10
         db 'constantly. Wait for the DOS prompt to come back.',13,10
         db 'Press any key to start, Esc to cancel.',13,10
 s_start_len equ $-s_start
