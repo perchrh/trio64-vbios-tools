@@ -12,6 +12,8 @@
 ;       The normal output is the same with or without /V.
 ;   Output is buffered while the video modes switch and written to stdout at the end.
 ;   Exit code 0 = every test passed, 1 = at least one failed.
+;   The report ends with "Time spent: x.y s", the run time from the BIOS tick (with /V it includes
+;   writing the debug log, so it is the one line that differs from a run without /V).
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
@@ -76,6 +78,8 @@ F_BOOST equ 2
 F_LFB   equ 4
 
 start:  cld
+        call tickrd
+        mov [runt0],eax
         mov word [bp_],obuf
         mov si,0x81                     ; /V: debug log in S3TEST.DBG
 .op:    lodsb
@@ -144,6 +148,11 @@ start:  cld
         movzx eax,word [nfail]
         call pdec
         mov dx,s_sum3
+        call puts
+        mov dx,s_sum4                   ; run time (own line, so logs compare without it)
+        call puts
+        call runtime
+        mov dx,s_sum5
         call puts
         mov cx,[bp_]
         sub cx,obuf
@@ -2005,6 +2014,33 @@ pdec:   push ebx                ; EAX unsigned
         pop ecx
         pop ebx
         ret
+; Run time from the BIOS tick (0040:006C, 18.2 per second; a tick that falls inside a long CLI is lost).
+; tickrd: EAX = the tick count. runtime: prints the time since [runt0] as "x.y s" (midnight handled).
+tickrd: push es
+        xor ax,ax
+        mov es,ax
+        pushf
+        cli
+        mov eax,[es:0x46C]
+        popf
+        pop es
+        ret
+runtime:
+        push edx
+        push ecx
+        call tickrd
+        sub eax,[runt0]
+        jae .p
+        add eax,0x1800B0                ; past midnight: ticks per day
+.p:     mov ecx,655360                  ; tenths of a second: ticks * 10 * 65536 / 1193182
+        mul ecx
+        mov ecx,1193182
+        div ecx
+        call pdec10
+        pop ecx
+        pop edx
+        ret
+
 pdec10: push edx                ; EAX = value*10 -> "x.y"
         push ebx
         xor edx,edx
@@ -2103,6 +2139,8 @@ s_fail  db '  FAIL',13,10,'$'
 s_sum1  db 13,10,'Passed: $'
 s_sum2  db '  Failed: $'
 s_sum3  db 13,10,'$'
+s_sum4  db 'Time spent: $'
+s_sum5  db ' s',13,10,'$'
 
 npass   dw 0
 vls     dw 0                    ; /V: start of the current line in obuf
@@ -2120,6 +2158,7 @@ m_meas  dw 0
 tmp     dw 0
 tmp2    dw 0
 tmin    dd 0
+runt0   dd 0                            ; BIOS tick at the start
 plbpl   dw 0                            ; planar scroll test: bytes per line, character height, lines
 plchh   dw 0
 pllines dw 0

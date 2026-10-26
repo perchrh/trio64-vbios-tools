@@ -21,7 +21,8 @@ is for the Windows 9x desktop.
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
-each test routine has a comment block with its fail and warn bits.
+each test routine has a comment block with its fail and warn bits. S3TEST and S3COMPAT end their log
+with `Time spent: x.y s`, the run time measured with the BIOS tick.
 
 All tools share one version number and S3TEST checks for one ROM version; both are set in
 `common/version.inc` (`VERSION`, `ROMVER`) and can be overridden for a build, for example

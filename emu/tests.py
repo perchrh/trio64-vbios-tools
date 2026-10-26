@@ -26,8 +26,8 @@ Tests
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
                    EGA (all others)
   s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
-                   (banked memory, throughput); with /V the output is the same and S3TEST.DBG is well
-                   formed
+                   (banked memory, throughput); with /V the output is the same (except the Time spent
+                   line) and S3TEST.DBG is well formed
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed
   s3compat_vga     S3COMPAT's VGA and Mode X part (built with nasm from the source with the rest cut
                    out): every test passes (registers, BIOS data, refresh, planar memory, palettes),
@@ -329,7 +329,7 @@ def t_s3test(c):
     if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
         r0 = c.machine().run_com(com, '')
-        check(r1.stdout == r0.stdout, 'output differs without /V')
+        check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
     return 'exit code %d' % r1.exit[1]
 
 
@@ -343,11 +343,16 @@ def t_vshow(c):
     check(b'VSHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
     if v:
         r0 = c.machine().run_com(com, '101')
-        check(r1.stdout == r0.stdout, 'output differs without /V')
+        check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
         lines = check_dbg(r1.files.get('VSHOW.DBG'), 'VSHOW.DBG')
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
         check(any(l.startswith('D:FRM n=31') for l in lines), 'no frame timing')
+
+
+def no_time(out):
+    """The output without the 'Time spent:' line of S3TEST and S3COMPAT (the run time differs with /V)."""
+    return re.sub(rb'Time spent: [0-9.]+ s\r\n', b'', bytes(out))
 
 
 def build_s3compat_vga(tmp):
@@ -429,7 +434,7 @@ def t_s3compat_vga(c):
     check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad + details[:6]))
     if v:
         r1 = c.machine().run_com(com, '')
-        check(r1.stdout == r0.stdout, 'output differs without /V')
+        check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
         dl = check_dbg(r0.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         check(sum(1 for l in dl if l.startswith('D:TEST')) >= len(tests), 'fewer D:TEST records than tests')
     return '%d tests' % len(tests)

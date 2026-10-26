@@ -22,6 +22,8 @@
 ;   <test name> ... <details>  PASS | FAIL xxxx | WARN xx | INFO
 ;   FAIL/WARN carry a bit mask per test, explained at the routine and in the log header. Detail lines
 ;   show REG=actual(expected), masked to the bits under test. INFO lines report without judging.
+;   The last line, "Time spent: x.y s", is the run time from the key press on, from the BIOS tick
+;   (with /V it includes writing the debug log, so it is the one line that differs without /V).
 ;
 ; Run order and expected outcome on the p9 ROM (219 pass, 0 fail, 4 warn on p8 before the 350-line
 ; and palette additions; the four warnings are known stock items)
@@ -142,7 +144,9 @@ start:  cld
         sti
         mov ax,0x4C00
         int 0x21
-.go:    cmp byte [vreq],1               ; /V: debug log in S3COMPAT.DBG (needs 64 KB more)
+.go:    call tickrd                     ; run time from here (after the key)
+        mov [runt0],eax
+        cmp byte [vreq],1               ; /V: debug log in S3COMPAT.DBG (needs 64 KB more)
         jne .gs
         mov ax,cs
         add ax,0x4000
@@ -211,7 +215,9 @@ start:  cld
         PS '  Info: '
         movzx eax,word [ninfo]
         call pdec
-        PS 13,10
+        PS 13,10,'Time spent: '         ; run time (own line, so logs compare without it)
+        call runtime
+        PS ' s',13,10
         mov byte [tofile],1             ; console: buffer is printed now, in text mode
         call restore_screen             ; before the console write, so the summary lands below the old screen
         call flush
@@ -5606,6 +5612,33 @@ pdec:   push eax
         pop ebx
         pop eax
         ret
+; Run time from the BIOS tick (0040:006C, 18.2 per second; a tick that falls inside a long CLI is lost).
+; tickrd: EAX = the tick count. runtime: prints the time since [runt0] as "x.y s" (midnight handled).
+tickrd: push es
+        xor ax,ax
+        mov es,ax
+        pushf
+        cli
+        mov eax,[es:0x46C]
+        popf
+        pop es
+        ret
+runtime:
+        push edx
+        push ecx
+        call tickrd
+        sub eax,[runt0]
+        jae .p
+        add eax,0x1800B0                ; past midnight: ticks per day
+.p:     mov ecx,655360                  ; tenths of a second: ticks * 10 * 65536 / 1193182
+        mul ecx
+        mov ecx,1193182
+        div ecx
+        call pdec10
+        pop ecx
+        pop edx
+        ret
+
 pdec10: push eax
         push edx
         push ebx
@@ -5746,6 +5779,7 @@ align 4
 tmpd    dd 0
 tmpd2   dd 0
 t0      dd 0
+runt0   dd 0                            ; BIOS tick when the test started (after the key)
 pel     dd 0
 psize   dd 0
 offl    times 40 dd 0
