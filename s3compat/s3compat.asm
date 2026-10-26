@@ -3205,7 +3205,11 @@ pos24   db 8,16,8,8,8,0
 ; pitch (CR13 + CR51 bits 5-4 / CR43 bit 2, unit from CR31/CR14/CR17) = 4F01 BytesPerScanLine,
 ; vertical display end = YRes * character height, horizontal display end a multiple of XRes (fail 100);
 ; CR67 colour mode fits the bpp, packed 24 bpp needs SR0B 7xh, clock doubling (CR67 mode 1) needs
-; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO 135-340 MHz (fail 200);
+; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO 170-340 MHz (fail 200);
+; the maximum is the Trio64V2 datasheet's (section 3.6), the minimum the range XFree86 uses for the
+; Trio64V2/DX/GX DCLK PLL (s3_Trio64DAC.c, 170000-340000 kHz); every mode of p9 is at 200-325 MHz.
+; The MCLK check in post_tests keeps the Trio64V+ datasheet minimum of 135 MHz.
+
 ; DCLK above 95 MHz (170 doubled, 75 packed 24, 50 at 32 bpp) is WARN 02; CR50 pixel length
 ; WARN 04; interlace WARN 10.
 dschk:  call rdall
@@ -3338,7 +3342,7 @@ dschk:  call rdall
 .d2:    ; PLL limits
         cmp byte [csel],3
         jne .mm
-        cmp dword [vco],135000
+        cmp dword [vco],170000
         jb .vb
         cmp dword [vco],340000
         ja .vb

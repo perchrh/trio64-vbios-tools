@@ -195,6 +195,7 @@ machine, so neither bit is set by the ROM.
 
 - S3 Trio64V2/DX and GX datasheet (preliminary): MCLK and DCLK limits, the 3-bit DCLK R divider
   (SR12 bit 7), CR36 EDO modes, CR87 1-cycle linear addressing, CR90/CR91 FIFO.
+- XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c`: the DCLK PLL range 170-340 MHz for the Trio64V2/DX/GX, which S3COMPAT uses for every VESA mode
 - S3 Trio64V+ (86C765) datasheet, from the S3VBEFIX repository: PLL formula and VCO range, CR67 colour
   modes, SR15/SR18 clock doubling, CR31/CR58/CR59-5A linear addressing, CR50, CR51, CR43, CR5D/CR5E.
 - [S3VBEFIX](https://github.com/wbcbz7/S3VBEFIX) source and README, plus SVGATRIX.TXT and vbe20.txt.
