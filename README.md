@@ -5,14 +5,17 @@ DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX ca
 The ROM image itself is not in this repository; the changes it carries are described below.
 
 All tools share one version number, currently 0.8 (set in `common/version.inc`), and print it on their first line of output.
-All tools need a 386 or later and run in plain DOS (no EMM386 needed).
+All tools need a 386 or later and run in plain DOS (no EMM386 needed), except S3REGS32.EXE, which
+is for the Windows 9x desktop.
 
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
 | S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop) | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
-| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze | `VGALOG`, then start the program; `VGALOG /U` to unload, `/H` for help; record format in `vgalog/vgalog.asm` |
+| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them | `VGALOG` (or `VGALOG /M`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
+| S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
+| S3REGS32.EXE | The same snapshot from the Windows 9x desktop (Win32 console program), and `/W n` logs every register change for n seconds | `S3REGS32 label`, `S3REGS32 /W 60 label` |
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
@@ -80,6 +83,52 @@ same with or without /V. The debug file contains:
 The file is committed before every mode set and VBE call (except 4F05), so after a freeze its last
 lines show the call that hung. Expect a debug file of 1-2 MB for S3COMPAT and a longer run.
 The line format is described at the top of `common/vdebug.inc`.
+
+## Windows 9x driver test
+
+What S3's Windows 9x driver (Trio64V+/V2 driver 4.10.01.2108-2.41.07, `S3_2.DRV` and the mini-VDD
+`S3VDD.VXD`) does with the card can be seen without disassembling it: the function names in
+`S3VDD.VXD` show that it can set the memory clock to 50 MHz and back, fixes clocks after DOS boxes,
+post-processes VESA calls 4F00, 4F02 and 4F08, and traps the VGA and S3 ports of DOS boxes. The
+tools record what it actually does:
+
+1. In AUTOEXEC.BAT before Windows starts: `VGALOG /M` (33 KB resident), then `S3REGS before Windows`.
+2. On the Windows desktop, for each display setting of interest (for example 640x480x8 60 Hz,
+   800x600x16, 1024x768x8, 1280x1024x8 and 1600x1200x8 at 60 Hz, and the 24/32-bit depths):
+   `S3REGS32 1024x768x8 60Hz`, typed in an MS-DOS prompt window (it runs as a Win32 program) or in
+   Start, Run.
+3. One watched run: `S3REGS32 /W 120 events` (snapshot, 120 s of changes, closing snapshot). During
+   it: open an MS-DOS prompt, switch it to full screen (Alt+Enter) and back, close it; play a video
+   (ActiveMovie, AVI or MPEG, so the overlay is used); change the resolution once.
+4. In an MS-DOS prompt: `S3REGS dos box windowed`, then Alt+Enter and `S3REGS dos box full screen`.
+   These may show virtual values (the driver traps the ports of DOS boxes); compare with step 2.
+5. Exit to DOS (Shut Down, "Restart in MS-DOS mode", or leave WIN.COM): `S3REGS after Windows`, then
+   `VGALOG /D`. Bring S3REGS.TXT and VGALOG.BIN back.
+6. For a comparison, the same with the stock ROM (step 2 and 5 are enough).
+
+What to look for: SR10/SR11 on the desktop, in a full-screen DOS box and afterwards (does the driver
+run the memory at 50 MHz?); CR54, CR60, CR90-CR93, CR66, CR67, CR85, CR86, CR87 and SR15 (memory
+arbitration, FIFO, 1-cycle linear addressing) per mode, against what our BIOS sets for the same mode;
+CR58-CR5A and CR6D (does the driver use CR6D, which our booster uses, or rely on CR59/5A being the PCI
+base); and in VGALOG.BIN which INT 10h calls Windows makes to our BIOS and with which registers.
+
+S3REGS.TXT format (S3REGS and S3REGS32 write the same):
+
+    S3REGS 0.8 [label] DOS                    or  S3REGS32 0.8 [label] Win32
+    MISC=EF FEAT=00 PEL=FF MODE=59 VBE=0101 TICK=00000032   (MODE and VBE only from DOS)
+    SR00: 16 bytes SR00-SR0F                  SR10: SR10-SR1F
+    CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B shown as --, not read)
+    GR00: GR00-GR08
+    PCI00: 16 dwords of the PCI configuration header of 5333:8901
+    WATCH 120 s, ...                          (S3REGS32 /W only) then lines "+<ms> CR54 18->10"
+    END OF WATCH                              followed by the closing snapshot
+
+S3REGS32 reads the ports directly, which Windows 9x allows a Win32 program for ports no virtual
+device traps; on Windows NT it ends with an exception. It keeps the 3C4h, 3CEh and 3D4h indexes,
+SR08, CR38, CR39 and CF8h as found, and never touches the attribute controller or the cursor colour
+stack (CR45, CR4A, CR4B). It is built by NASM alone: the PE header is written out in
+`s3regs/s3regs32.asm`. The emulator runs it on a 32-bit CPU with the same register model
+(`vgaemu.Machine.run_pe32`).
 
 ## S3COMPAT reference data
 

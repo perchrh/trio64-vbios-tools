@@ -215,6 +215,8 @@ class Machine:
         if port == 0x61:
             r['p61'] ^= 0x30
             return r['p61']
+        if port == 0xCF8 and size == 4:
+            return r['pci']
         if 0xCFC <= port <= 0xCFF:                      # PCI config data, any device answers as the card
             reg = r['pci'] & 0xFC
             if reg == 0x10:                             # BAR0 is CR59/CR5A on the Trio64
@@ -669,6 +671,119 @@ class Machine:
         mu.reg_write(UC_X86_REG_CS, load + cs)
         mu.reg_write(UC_X86_REG_EFLAGS, 0x202)
         return self._go((load + cs) * 16 + ip, max_insn)
+
+    # ------------------------------------------------------------------ Win32 console programs
+    def run_pe32(self, exe, cmdline, sleep_hook=None, max_insn=200_000_000):
+        """Run a 32-bit Windows console program (PE, no relocations, KERNEL32 imports only) in a flat 32-bit
+        CPU of its own whose IN/OUT go to this machine's VGA/S3 and PCI model, as on the Windows 9x
+        desktop. Supported imports: ExitProcess, GetStdHandle, WriteFile, CreateFileA, SetFilePointer,
+        CloseHandle, GetCommandLineA, Sleep (advances GetTickCount; sleep_hook(ms_total) runs first),
+        GetTickCount. Returns a ComResult: stdout, files written, exit ('exit', code)."""
+        from unicorn import UC_MODE_32
+        from unicorn.x86_const import (UC_X86_REG_ESP, UC_X86_REG_EAX, UC_X86_REG_EIP, UC_X86_REG_EDX,
+                                       UC_X86_REG_ECX)
+        c = ComResult()
+        lfanew = struct.unpack_from('<I', exe, 0x3C)[0]
+        check_pe = exe[lfanew:lfanew + 4] == b'PE\0\0' and struct.unpack_from('<H', exe, lfanew + 4)[0] == 0x14C
+        if not check_pe:
+            raise ValueError('not a 32-bit PE')
+        nsec = struct.unpack_from('<H', exe, lfanew + 6)[0]
+        optsz = struct.unpack_from('<H', exe, lfanew + 20)[0]
+        o = lfanew + 24
+        entry, base, simg, shdr = (struct.unpack_from('<I', exe, o + 16)[0], struct.unpack_from('<I', exe, o + 28)[0],
+                                   struct.unpack_from('<I', exe, o + 56)[0], struct.unpack_from('<I', exe, o + 60)[0])
+        imp_rva = struct.unpack_from('<I', exe, o + 96 + 8)[0]
+        u = Uc(UC_ARCH_X86, UC_MODE_32)
+        u.mem_map(base, (simg + 0xFFF) & ~0xFFF)
+        u.mem_write(base, exe[:shdr])
+        for i in range(nsec):
+            s = o + optsz + 40 * i
+            vs, va, rs, rp = struct.unpack_from('<IIII', exe, s + 8)
+            u.mem_write(base + va, exe[rp:rp + rs])
+        STUBS, STACK, CMD = 0x70000000, 0x7F000000, 0x7E000000
+        u.mem_map(STUBS, 0x1000)
+        u.mem_map(STACK - 0x100000, 0x101000)
+        u.mem_map(CMD, 0x1000)
+        u.mem_write(CMD, cmdline.encode() + b'\0')
+        names = []
+        d = imp_rva
+        while True:
+            ilt, _, _, name, iat = struct.unpack('<IIIII', u.mem_read(base + d, 20))
+            if not name:
+                break
+            k = 0
+            while True:
+                hn = struct.unpack('<I', u.mem_read(base + (ilt or iat) + 4 * k, 4))[0]
+                if not hn:
+                    break
+                fn = bytes(u.mem_read(base + hn + 2, 64)).split(b'\0')[0].decode()
+                u.mem_write(base + iat + 4 * k, struct.pack('<I', STUBS + 4 * len(names)))
+                names.append(fn)
+                k += 1
+            d += 20
+        u.mem_write(STUBS, b'\xF4' * 0x1000)
+        st = {'tick': 0x10000, 'files': {}, 'h': {}, 'next': 8}
+
+        def ret(esp, nargs, val):
+            raddr = struct.unpack('<I', u.mem_read(esp, 4))[0]
+            u.reg_write(UC_X86_REG_EAX, val & 0xFFFFFFFF)
+            u.reg_write(UC_X86_REG_ESP, esp + 4 + 4 * nargs)
+            u.reg_write(UC_X86_REG_EIP, raddr)
+
+        def api(uc, addr, size, ud):
+            fn = names[(addr - STUBS) // 4]
+            esp = uc.reg_read(UC_X86_REG_ESP)
+            a = struct.unpack('<6I', uc.mem_read(esp + 4, 24))
+            if fn == 'ExitProcess':
+                c.exit = ('exit', a[0])
+                uc.emu_stop()
+            elif fn == 'GetCommandLineA':
+                ret(esp, 0, CMD)
+            elif fn == 'GetTickCount':
+                ret(esp, 0, st['tick'])
+            elif fn == 'Sleep':
+                st['tick'] += a[0]
+                if sleep_hook:
+                    sleep_hook(st['tick'] - 0x10000)
+                ret(esp, 1, 0)
+            elif fn == 'GetStdHandle':
+                ret(esp, 1, 1 if a[0] == 0xFFFFFFF5 else 2)
+            elif fn == 'CreateFileA':
+                nm = bytes(uc.mem_read(a[0], 128)).split(b'\0')[0].decode('latin1').upper()
+                h = st['next']
+                st['next'] += 4
+                st['h'][h] = nm
+                c.files.setdefault(nm, bytearray())
+                ret(esp, 7, h)
+            elif fn == 'SetFilePointer':
+                ret(esp, 4, 0)
+            elif fn == 'WriteFile':
+                data = bytes(uc.mem_read(a[1], a[2]))
+                if a[0] == 1:
+                    c.stdout.extend(data)
+                elif a[0] == 2:
+                    c.stderr.extend(data)
+                else:
+                    c.files[st['h'][a[0]]].extend(data)
+                if a[3]:
+                    uc.mem_write(a[3], struct.pack('<I', a[2]))
+                ret(esp, 5, 1)
+            elif fn == 'CloseHandle':
+                st['h'].pop(a[0], None)
+                ret(esp, 1, 1)
+            else:
+                raise RuntimeError('import %s not emulated' % fn)
+        u.hook_add(UC_HOOK_CODE, api, None, STUBS, STUBS + 0xFFF)
+        u.hook_add(UC_HOOK_INSN, lambda uc, port, size, ud: self._in(uc, port, size, ud), None, 1, 0, UC_X86_INS_IN)
+        u.hook_add(UC_HOOK_INSN, lambda uc, port, size, val, ud: self._out(uc, port, size, val, ud), None, 1, 0,
+                   UC_X86_INS_OUT)
+        u.mem_write(STACK - 16, struct.pack('<I', STUBS + 0xFF0))     # return address of the entry point
+        u.reg_write(UC_X86_REG_ESP, STACK - 16)
+        try:
+            u.emu_start(base + entry, STUBS + 0xFF0, count=max_insn)
+        except UcError as e:
+            c.exit = ('error', '%s at %08x' % (e, u.reg_read(UC_X86_REG_EIP)))
+        return c
 
     # ------------------------------------------------------------------ coverage
     def track_coverage(self):

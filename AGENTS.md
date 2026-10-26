@@ -9,7 +9,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The ROM is a 64 KB image. The lower 32 KB is BIOS 2.04.11 with our patches (currently -p11); the
   upper 32 KB is the Trio64V+ BIOS 1.03-08 and must stay byte-identical to the stock dump.
 - The patched ROM and its build scripts are kept outside this repository. This repository holds the
-  DOS test tools (VSHOW, S3TEST, S3COMPAT) and their documentation.
+  DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
+  the TSR S3ALIAS and their documentation.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a multiQ
   LCD (native 800x600, does not support 1280x1024 at all). "Out of range" on the multiQ in
   1280x1024 modes is the monitor, not the BIOS.
