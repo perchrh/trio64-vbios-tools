@@ -13,7 +13,6 @@ All tools need a 386 or later and run in plain DOS (no EMM386 needed).
 | S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop) | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze | `VGALOG`, then start the program; `VGALOG /U` to unload, `/H` for help; record format in `vgalog/vgalog.asm` |
-| S3F8X14.COM | TSR with the 8x14 font (and 9x14 alternates) for VGA BIOSes without one, such as ours: 350-line text modes, modes 0Fh/10h and AX=1101h/1111h/1122h/1130h get the 8x14 font as on the IBM BIOS | `S3F8X14`, `S3F8X14 /U` to unload, `/H` for help; 4.3 KB resident |
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
@@ -54,7 +53,7 @@ the checksums of both 32 KB halves in the file, and the FIFO fix with CR90 bit 7
 leaves it after a VESA mode (the model does not set it). The other tests check the BIOS registers, state blocks and
 default palettes of every VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of
 S3COMPAT run and give the same output with and without /V, the /V debug file format, and VGALOG and
-S3ALIAS install and unload, that S3F8X14 puts its 8x14 font everywhere the IBM BIOS uses one (on our ROM and on the other S3 BIOSes), and that the emulated DOS runs .EXE programs. The tools run with /V; their output and debug files are kept in
+S3ALIAS install and unload. The tools run with /V; their output and debug files are kept in
 `emu/logs/` (S3TEST.LOG, S3TEST.DBG, ...). The emulator models the VGA and S3 registers, one 64 KB planar window
 and a virtual clock that drives the timer, the BIOS tick and the retrace bit from the programmed
 timing (see `emu/vgaemu.py`), so refresh rates and planar memory tests mean something there. It has
@@ -178,10 +177,10 @@ No code was copied from another project; all ROM code was written for this BIOS.
 
 | TSR | Fixes | Why not in the ROM |
 | --- | --- | --- |
-| S3F8X14.COM (`s3f8x14/`) | No 8x14 font: AX=1130h BH=2 returns the 8x16 font, 350-line text shows cut 8x16 characters, mode 10h uses 21 rows of 16 lines | A 3.5 KB font does not fit in the free ROM space. The font is the standard IBM VGA 8x14 set from S3's BIOS 1.01.04; the TSR works on other BIOSes too |
+| 8x14 font TSR | AX=1130h BH=2 returns the 8x16 font; mode 10h uses 21 rows of 16 lines | A 3.5 KB font does not fit in the free ROM space (accepted for now) |
 | S3ALIAS.COM (`s3alias/`) | Pinball Illusions' S3 driver: AH=00 mode 49h becomes 59h, 4Bh becomes 5Ah | Remapping S3 mode numbers in the ROM would break programs that use this BIOS's own numbering |
 
-S3F8X14 covers the calls [FIX8X14](https://www.bttr-software.de/products/fix8x14/) 1.0.8 (BTTR Software, GPL) covers and more; no code was taken from it. FIX8X14 works on our BIOS only because BIOS 2.04.x asks for the 8x14 font through INT 10h AX=1130h BH=2; it leaves AX=1101h/1111h and the 350-line text modes to the BIOS, has no 9x14 alternates (AX=1130h BH=5, mode 07h at 350 lines) and returns CX = DL = 0 for AX=1130h BH=2.
+[8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/)
 
 ### Omitted: 1-cycle linear addressing (CR87 bit 1, SR15 bit 7)
 

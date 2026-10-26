@@ -11,8 +11,7 @@ ifdef ROMVER
 DEFS += -DROMVER="'$(ROMVER)'"
 endif
 
-all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-     build/S3F8X14.COM
+all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM
 
 build:
 	mkdir -p build
@@ -35,10 +34,6 @@ build/S3ALIAS.COM: s3alias/s3alias.asm common/version.inc | build
 
 build/VGALOG.COM: vgalog/vgalog.asm common/version.inc | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
-
-# s3f8x14.asm includes the font (font8x14.inc) from its own folder
-build/S3F8X14.COM: s3f8x14/s3f8x14.asm s3f8x14/font8x14.inc common/version.inc | build
-	$(NASM) -f bin -icommon/ -is3f8x14/ $(DEFS) -o $@ $<
 
 # Emulator tests (python3 with the unicorn package, see pyproject.toml):
 #   make emu-test ROM=path/to/S3V2P9.BIN
