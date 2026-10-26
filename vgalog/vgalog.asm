@@ -1,4 +1,4 @@
-; VGALOG.COM 0.8 - TSR that logs video BIOS mode sets and VBE calls of any program to VGALOG.BIN
+; VGALOG.COM - TSR that logs video BIOS mode sets and VBE calls of any program to VGALOG.BIN
 ;
 ; Purpose
 ;   Shows what a game or driver asks the video BIOS for, also when the program hangs: every logged call
@@ -21,10 +21,11 @@
 ;   A 'B' record without its 'A' record is the call that hung.
 ;
 ; Expected outcome
-;   The message "VGALOG 0.8 installed ..." at install; the watched program runs as without VGALOG.
+;   The message "VGALOG <version> installed ..." at install; the watched program runs as without VGALOG.
 ;   VGALOG.BIN size = 32 bytes per logged call.
 bits 16
 org 0x100
+%include "version.inc"
 start:  jmp init
 old10   dd 0
 indos   dd 0
@@ -177,5 +178,5 @@ init:   mov [mypsp],cs
         mov ax,0x4C01
         int 0x21
 fname   db 'VGALOG.BIN',0
-msg     db 'VGALOG 0.8 installed, logging INT 10h AH=00 and 4F01/4F02/4F06 to VGALOG.BIN',13,10,'$'
-msge    db 'VGALOG 0.8: cannot create VGALOG.BIN',13,10,'$'
+msg     db 'VGALOG ',VERSION,' installed, logging INT 10h AH=00 and 4F01/4F02/4F06 to VGALOG.BIN',13,10,'$'
+msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
