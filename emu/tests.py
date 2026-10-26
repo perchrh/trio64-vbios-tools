@@ -23,10 +23,10 @@ Tests
                    out): no default-DAC failures and no register differences except the known model
                    artefacts; with /V the output is the same and S3COMPAT.DBG is well formed
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
-                   caller's interrupt flag
+                   caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
 """
-import argparse, os, re, shutil, subprocess, sys, tempfile, time
+import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
@@ -282,7 +282,7 @@ def t_vgalog(c):
         raise Skip('no vgalog/ in this tree')
     com = c.tool('VGALOG.COM')
     m = c.machine()
-    r = m.run_com(com, '', seg=0x2000)
+    ri = r = m.run_com(com, '', seg=0x2000)
     check(r.exit and r.exit[0] == 'tsr', 'VGALOG did not stay resident: %s' % (r.exit,))
     log = r.files.get('VGALOG.BIN')
     check(log is not None, 'VGALOG.BIN not created')
@@ -300,6 +300,23 @@ def t_vgalog(c):
     check(len(log) == 3 * 32, 'VGALOG.BIN has %d bytes, expected 96 (3 logged calls)' % len(log))
     recs = [log[i:i + 16] for i in range(0, len(log), 16)]
     check([x[0] for x in recs] == [ord('B'), ord('A')] * 3, 'records not B/A pairs')
+    rh = m.run_com(com, '/H', seg=0x4000)
+    if b'/U' not in rh.stdout:
+        return 'no /U in this version'
+    r = m.run_com(com, '', seg=0x4000)
+    check(r.exit == ('exit', 1), 'second install not refused: %s' % (r.exit,))
+    r = m.run_com(com, '/U', seg=0x4000)
+    check(r.exit == ('exit', 0), '/U failed: %s %r' % (r.exit, bytes(r.stdout)))
+    check(5 not in m.handles, 'VGALOG.BIN not closed by /U')
+    seg, off = struct.unpack('<HH', m.mem(0x42, 2) + m.mem(0x40, 2))
+    check(seg == 0xC000, 'INT 10h vector not restored: %04X:%04X' % (seg, off))
+    n = len(log)
+    m.com, m.handles = ri, {5: 'VGALOG.BIN'}   # a resident copy would write here again
+    m.int10(0x0003)
+    m.com = None
+    check(len(log) == n, 'still logging after /U')
+    r = m.run_com(com, '/U', seg=0x4000)
+    check(r.exit == ('exit', 1), 'second /U not refused: %s' % (r.exit,))
 
 
 def t_s3alias(c):
