@@ -4,7 +4,9 @@
     python3 emu/tests.py --rom S3V2P9.BIN [--build build] [-k name] [-v]
     make emu-test ROM=S3V2P9.BIN
 
-The ROM image is not in the repository; pass the 64 KB image of the card. The tools are taken from
+The ROM image is not in the repository; pass the 64 KB image of the card. The tools run with /V;
+their output (NAME.LOG) and debug files (NAME.DBG, VGALOG.BIN) are kept in emu/logs (--logs).
+Run against the stock ROM, rom_patches and s3test list everything the patches add. The tools are taken from
 --build (run make first). Each test prints PASS, FAIL (with the reason) or SKIP; the exit code is 1
 when a test failed. The emulator has no video memory model and no real timing (see vgaemu.py), so the
 tests only check what the model can judge: BIOS register values, BIOS data, palettes, VBE results,
@@ -12,6 +14,11 @@ and that the tools behave the same with and without /V.
 
 Tests
   post             the ROM initialises and hooks INT 10h into C000
+  rom_patches      every change on top of the stock 2.04.11 ROM on its own, all failures listed: sign-on
+                   ROMVER, checksum, MCLK 59.96 MHz, pedestal off, 60 Hz defaults for 1280/1600, ATC
+                   flip-flop reset, FIFO fix (CR90), booster and LFB base restore, 4F01/4F03 with the
+                   booster, 4F06 BL=3, CR50 in 151h, and the refresh and line length of the patched
+                   timings (computed from the programmed registers)
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
@@ -86,10 +93,22 @@ def cga(i):
 
 # ---------------------------------------------------------------- helpers
 class Ctx:
-    def __init__(self, rom, build, verbose):
+    def __init__(self, rom, build, verbose, logs):
         self.rom = open(rom, 'rb').read()
         self.build = build
         self.verbose = verbose
+        self.logs = logs
+        os.makedirs(logs, exist_ok=True)
+
+    def save(self, name, res):
+        """Keep a tool run in the log folder: NAME.LOG (stdout and stderr) and every file it created."""
+        with open(os.path.join(self.logs, name + '.LOG'), 'wb') as f:
+            f.write(bytes(res.stdout))
+            if res.stderr:
+                f.write(b'\r\n--- stderr ---\r\n' + bytes(res.stderr))
+        for fn, data in res.files.items():
+            with open(os.path.join(self.logs, name + '-' + fn if not fn.startswith(name) else fn), 'wb') as f:
+                f.write(bytes(data))
 
     def machine(self, keys=None):
         m = Machine(self.rom, keys)
@@ -190,6 +209,134 @@ def t_vga_palettes(c):
     check(not errs, '; '.join(errs))
 
 
+# ---------------------------------------------------------------- the patches on top of the stock ROM
+def romver():
+    t = open(os.path.join(SRC, 'common', 'version.inc')).read()
+    return re.search(r"%define ROMVER '([^']*)'", t).group(1)
+
+
+def refresh(m, xres):
+    """Refresh in Hz predicted from the registers the BIOS programmed (as S3COMPAT's predict does),
+    and the total pixels per line (XRes * horizontal total / displayed, as S3COMPAT's line info)."""
+    r = m.r
+    seq, cr = r['seq'], r['crtc']
+    csel = (r['misc'] >> 2) & 3
+    if csel == 0:
+        clk = 25175e3
+    elif csel == 1:
+        clk = 28322e3
+    elif csel == 3:
+        n, mm = seq.get(0x12, 0), seq.get(0x13, 0)
+        rr = ((n >> 5) & 3) | (4 if n & 0x80 else 0)
+        clk = 14318180.0 * ((mm & 0x7F) + 2) / (((n & 0x1F) + 2) * (1 << rr))
+    else:
+        return None, None
+    if seq.get(1, 0) & 8:
+        clk /= 2
+    if csel == 3 and seq.get(0x15, 0) & 0x10:
+        clk /= 2
+    cw = 8 if seq.get(1, 0) & 1 else 9
+    htot = cr.get(0, 0) + (256 if cr.get(0x5D, 0) & 1 else 0) + 5
+    hdisp = cr.get(1, 0) + (256 if cr.get(0x5D, 0) & 2 else 0) + 1
+    c7 = cr.get(7, 0)
+    vtot = cr.get(6, 0) + (256 if c7 & 1 else 0) + (512 if c7 & 0x20 else 0) + \
+        (1024 if cr.get(0x5E, 0) & 1 else 0) + 2
+    hz = clk / (htot * cw * vtot)
+    cmode = cr.get(0x67, 0) >> 4
+    if csel == 3:
+        if cmode in (1, 3, 5):
+            hz *= 2
+        elif cmode == 0 and (seq.get(0x0B, 0) & 0xF0) == 0x70:
+            hz /= 2
+    return hz, round(xres * htot / hdisp)
+
+
+# VESA mode, expected refresh in Hz, expected total pixels per line (0 = not checked), patch
+TIMINGS = [(0x012E, 70.0, 0, 'stock 70 Hz'),
+           (0x0131, 59.7, 400, 'p4b: 320x240x8 at 60 Hz (640x480 halved)'),
+           (0x0133, 59.7, 400, 'p5/p6: 320x240x16 at 60 Hz'),
+           (0x0101, 59.7, 800, 'p6: 640x480x8 with an 800-pixel line'),
+           (0x0111, 59.7, 800, 'p6: 640x480x16 with an 800-pixel line'),
+           (0x0141, 72.2, 0, 'stock 72 Hz'),
+           (0x0103, 60.3, 0, '800x600 at 60 Hz'),
+           (0x0105, 60.1, 0, '1024x768 at 60 Hz'),
+           (0x0106, 60.2, 0, 'p9: 1280x1024x4 VESA DMT 60 Hz'),
+           (0x0107, 60.2, 0, 'p6: 1280x1024 default 60 Hz'),
+           (0x0120, 60.0, 0, 'p6: 1600x1200 default 60 Hz')]
+
+
+def t_rom_patches(c):
+    """Every change on top of the stock 2.04.11 ROM, checked on its own; all failures are reported."""
+    m = c.machine()
+    fails = []
+
+    def chk(cond, what):
+        if not cond:
+            fails.append(what)
+
+    rom = c.rom
+    ver = romver().encode()
+    chk(ver in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
+    chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
+    seq, cr = m.r['seq'], m.r['crtc']
+    base = cr.get(0x59, 0)                    # the real LFB base (bits 31-24), set before the BIOS ran
+    # POST
+    chk((seq.get(0x10), seq.get(0x11)) == (0x42, 0x41),
+        'MCLK: SR10/SR11 = %02X/%02X, expected 42/41 (59.96 MHz)' % (seq.get(0x10, 0), seq.get(0x11, 0)))
+    chk(seq.get(0x1A, 0) & 0x30 == 0x10, 'pedestal: SR1A = %02X after POST, expected bit 5 = 0, bit 4 = 1'
+        % seq.get(0x1A, 0))
+    chk(cr.get(0x41, 0) & 0xE0 == 0x80, 'refresh default 1280x1024: CR41 = %02X, expected bits 7-5 = 100b (60 Hz)'
+        % cr.get(0x41, 0))
+    chk(cr.get(0x52, 0) & 0x07 == 0x01, 'refresh default 1600x1200: CR52 = %02X, expected bits 2-0 = 001b (60 Hz)'
+        % cr.get(0x52, 0))
+    # attribute controller flip-flop
+    m.int10(0x0003)
+    m.r['aff'] = 1
+    m.int10(0x0003)
+    chk(m.r['aff'] == 0, 'flip-flop: the ATC flip-flop is still in the data state after a mode set')
+    chk(seq.get(0x1A, 0) & 0x20 == 0, 'pedestal: SR1A bit 5 set after mode 03')
+    # booster and LFB base
+    m.int10(0x4F02, bx=0x0101)
+    c58, c59, c5a, c6d = cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0)
+    chk(c58 & 0x13 == 0x10 and (c59, c5a) == (0, 0x0A) and c6d != 0,
+        'booster: 101h has CR58/59/5A/6D = %02X/%02X/%02X/%02X, expected LA on with a 64 KB window, '
+        '000Ah and the real base %02X in CR6D' % (c58, c59, c5a, c6d, base))
+    chk(c6d in (0, base), 'booster: CR6D = %02X, expected the real base %02X' % (c6d, base))
+    chk(m.int10(0x4F03)['bx'] == 0x0101, 'booster: 4F03 in 101h does not return 0101h')
+    m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
+    phys = struct.unpack('<I', m.mem(0x30028, 4))[0]
+    chk(phys == base << 24, 'booster: 4F01 PhysBasePtr %08X, expected the real base %08X' % (phys, base << 24))
+    r6 = m.int10(0x4F06, bx=3)
+    chk((r6['bx'], r6['cx']) == (4368, 4368), '4F06 BL=3 in 101h: %d/%d, expected 4368/4368' % (r6['bx'], r6['cx']))
+    chk(seq.get(0x1A, 0) & 0x20 == 0, 'pedestal: SR1A bit 5 set in 101h')
+    m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80        # as a VESA mode leaves it
+    m.int10(0x0003)
+    chk(cr.get(0x59, 0) == base and cr.get(0x5A, 0) == 0,
+        'base restore: mode 03 after 101h has CR59/5A = %02X/%02X, expected %02X/00'
+        % (cr.get(0x59, 0), cr.get(0x5A, 0), base))
+    chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 03 (CR90 = %02X)' % cr.get(0x90, 0))
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'base restore: linear addressing still on in mode 03')
+    m.int10(0x4F02, bx=0x4101)
+    chk(m.int10(0x4F03)['bx'] == 0x4101, 'LFB: 4F03 in 4101h does not return 4101h')
+    chk(cr.get(0x59, 0) == base, 'LFB: CR59 in 4101h = %02X, expected the real base %02X' % (cr.get(0x59, 0), base))
+    m.int10(0x4F02, bx=0x0151)
+    chk(cr.get(0x50, 0) == 0x40, 'CR50: 151h (512x384x8) has CR50 = %02X, expected 40h' % cr.get(0x50, 0))
+    # timings
+    for mode, want, hpix, what in TIMINGS:
+        m.int10(0x4F01, cx=mode, es=0x3000, di=0)
+        xres = struct.unpack('<H', m.mem(0x30012, 2))[0]
+        m.int10(0x4F02, bx=mode)
+        hz, h = refresh(m, xres)
+        if hz is None or abs(hz - want) > 0.5:
+            fails.append('timing %03Xh (%s): %s Hz, expected %.1f' % (mode, what, 'unknown' if hz is None
+                                                                       else '%.1f' % hz, want))
+        elif hpix and h != hpix:
+            fails.append('timing %03Xh (%s): %d pixels per line, expected %d' % (mode, what, h, hpix))
+    m.int10(0x0003)
+    check(not fails, '%d of the patches missing or wrong:\n    ' % len(fails) + '\n    '.join(fails))
+    return 'all patches present'
+
+
 S3TEST_MUST_PASS = ['ROM checksum', 'MCLK SR10 SR11', 'CR36 memory type', 'SR1A pedestal off',
                     'Refresh defaults', '4F03 in boosted 101h', '4F05 set bank 3', '4F03 in linear 4101h',
                     '4F06 BL=3', 'CR50 in 512x384x8']
@@ -197,29 +344,36 @@ S3TEST_MUST_PASS = ['ROM checksum', 'MCLK SR10 SR11', 'CR36 memory type', 'SR1A 
 
 def t_s3test(c):
     com = c.tool('S3TEST.COM')
-    r0 = c.machine().run_com(com, '')
-    check(r0.exit and r0.exit[0] == 'exit', 'S3TEST did not end: %s' % (r0.exit,))
-    out = r0.stdout.decode('latin1')
+    v = '/V' if has_verbose() else ''
+    r1 = c.machine().run_com(com, v)
+    c.save('S3TEST', r1)
+    check(r1.exit and r1.exit[0] == 'exit', 'S3TEST did not end: %s' % (r1.exit,))
+    out = r1.stdout.decode('latin1')
     check('Passed:' in out, 'no summary line')
+    bad = []
     for name in S3TEST_MUST_PASS:
         line = [l for l in out.split('\r\n') if l.startswith(name)]
-        check(line and line[0].rstrip().endswith('PASS'), 'not PASS: %s' % (line[0] if line else name))
-    if has_verbose():
-        r1 = c.machine().run_com(com, '/V')
-        check(r1.stdout == r0.stdout, 'output differs with /V')
+        if not (line and line[0].rstrip().endswith('PASS')):
+            bad.append(line[0].strip() if line else name + ' (missing)')
+    check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
-    return 'exit code %d' % r0.exit[1]
+        r0 = c.machine().run_com(com, '')
+        check(r1.stdout == r0.stdout, 'output differs without /V')
+    return 'exit code %d' % r1.exit[1]
 
 
 def t_vshow(c):
     com = c.tool('VSHOW.COM')
-    r0 = c.machine().run_com(com, '101')
-    check(r0.exit and r0.exit[0] == 'exit' and r0.exit[1] == 0, 'VSHOW 101 ended with %s' % (r0.exit,))
+    v = ' /V' if has_verbose() else ''
+    r1 = c.machine().run_com(com, '101' + v)
+    c.save('VSHOW', r1)
+    check(r1.exit and r1.exit[0] == 'exit' and r1.exit[1] == 0, 'VSHOW 101 ended with %s' % (r1.exit,))
     rh = c.machine().run_com(com, '/H')
     check(b'VSHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
-    if has_verbose():
-        r1 = c.machine().run_com(com, '101 /V')
-        check(r1.stdout == r0.stdout, 'output differs with /V')
+    if v:
+        r0 = c.machine().run_com(com, '101')
+        check(r1.stdout == r0.stdout, 'output differs without /V')
         lines = check_dbg(r1.files.get('VSHOW.DBG'), 'VSHOW.DBG')
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
@@ -254,7 +408,9 @@ def build_s3compat_vga(tmp):
 def t_s3compat_vga(c):
     with tempfile.TemporaryDirectory() as tmp:
         com = build_s3compat_vga(tmp)
-    r0 = c.machine().run_com(com, '')
+    v = '/V' if has_verbose() else ''
+    r0 = c.machine().run_com(com, v)
+    c.save('S3COMPAT', r0)
     check(r0.exit and r0.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r0.exit,))
     lines = r0.stdout.decode('latin1').split('\r\n')
     tests = [l for l in lines if l.startswith(('VGA ', 'Mode ', 'Text 80x50')) and
@@ -269,10 +425,10 @@ def t_s3compat_vga(c):
                 if not ALLOWED_DETAIL.match(tok):
                     bad.append(tok)
     check(not bad, 'unexpected differences: %s' % ' '.join(bad[:10]))
-    if has_verbose():
-        r1 = c.machine().run_com(com, '/V')
-        check(r1.stdout == r0.stdout, 'output differs with /V')
-        dl = check_dbg(r1.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
+    if v:
+        r1 = c.machine().run_com(com, '')
+        check(r1.stdout == r0.stdout, 'output differs without /V')
+        dl = check_dbg(r0.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         check(sum(1 for l in dl if l.startswith('D:TEST')) >= len(tests), 'fewer D:TEST records than tests')
     return '%d tests' % len(tests)
 
@@ -297,6 +453,7 @@ def t_vgalog(c):
         if want is not None:
             check(res['ax'] == want, 'AX=%04X returned AX=%04X' % (ax, res['ax']))
     m.com = None
+    c.save('VGALOG', ri)
     check(len(log) == 3 * 32, 'VGALOG.BIN has %d bytes, expected 96 (3 logged calls)' % len(log))
     recs = [log[i:i + 16] for i in range(0, len(log), 16)]
     check([x[0] for x in recs] == [ord('B'), ord('A')] * 3, 'records not B/A pairs')
@@ -322,6 +479,15 @@ def t_vgalog(c):
 def t_s3alias(c):
     com = c.tool('S3ALIAS.COM')
     m = c.machine()
+    runs = []
+    run = m.run_com
+
+    def logged(com_, tail, seg):
+        r = run(com_, tail, seg=seg)
+        runs.append(('S3ALIAS %s' % tail).encode() + b' -> ' + repr(r.exit).encode() + b'\r\n' + bytes(r.stdout))
+        open(os.path.join(c.logs, 'S3ALIAS.LOG'), 'wb').write(b'\r\n'.join(runs))
+        return r
+    m.run_com = logged
     r = m.run_com(com, '/H', seg=0x3000)
     if b'/U' not in r.stdout:
         raise Skip('S3ALIAS without /U and /H')
@@ -342,7 +508,8 @@ def t_s3alias(c):
     check(mode(0x49) == 0x49, '49h still mapped after /U')
 
 
-TESTS = [('post', t_post), ('vga_registers', t_vga_registers), ('vga_palettes', t_vga_palettes),
+TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
+         ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga),
          ('vgalog', t_vgalog), ('s3alias', t_s3alias)]
 
@@ -353,8 +520,10 @@ def main():
     ap.add_argument('--build', default=os.path.join(SRC, 'build'), help='folder with the built .COM files')
     ap.add_argument('-k', default='', help='run only tests whose name contains this text')
     ap.add_argument('-v', action='store_true', help='print tracebacks')
+    ap.add_argument('--logs', default=os.path.join(HERE, 'logs'),
+                    help='folder for the tool output and /V debug files (default emu/logs)')
     a = ap.parse_args()
-    c = Ctx(a.rom, a.build, a.v)
+    c = Ctx(a.rom, a.build, a.v, a.logs)
     failed = 0
     for name, fn in TESTS:
         if a.k not in name:
@@ -371,8 +540,9 @@ def main():
             if a.v:
                 import traceback
                 traceback.print_exc()
-        print('%-14s %-60s %5.0fs' % (name, res, time.time() - t0), flush=True)
-    print('%d failed' % failed)
+        first, _, rest = res.partition('\n')
+        print('%-14s %-60s %5.0fs' % (name, first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
+    print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
     sys.exit(1 if failed else 0)
 
 

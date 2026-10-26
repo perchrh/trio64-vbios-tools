@@ -41,7 +41,7 @@ build/VGALOG.COM: vgalog/vgalog.asm common/version.inc | build
 PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
 emu-test: all
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P9.BIN"; exit 2; }
-	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build
+	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs
 
 clean:
 	rm -rf build

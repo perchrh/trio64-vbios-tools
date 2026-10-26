@@ -5,8 +5,9 @@ What is emulated
     (far call to C000:0003) and then serves INT 10h.
   - A register-level model of the VGA and S3 ports: sequencer, CRTC (3D4/3B4), graphics controller,
     attribute controller with its flip-flop, misc output, DAC with read/write indexes, input status
-    (3DAh toggles retrace on every read), PCI configuration mechanism 1 (reports device 5333:8901),
-    PIT channels 0 and 2 (a counter that runs down a fixed amount per read), port 61h.
+    (3DAh toggles retrace on every read), PCI configuration mechanism 1,
+    PIT channels 0 and 2 (a counter that runs down a fixed amount per read), port 61h,
+    the card's PCI configuration header (BAR0 = E0000000, as on the real card).
   - The BIOS timer tick at 0040:006C advances every 20 reads.
   - A small DOS (INT 21h) for .COM programs: console and file output, create/close, IOCTL, InDOS,
     get/set vector, version, PSP, free memory, commit, terminate and stay resident. INT 16h returns
@@ -40,6 +41,12 @@ from unicorn.x86_const import *
 REGNAMES = ['MISC', 'FEAT', 'SR0', 'SR1', 'SR2', 'SR3', 'SR4'] + ['CR%02X' % i for i in range(25)] + \
            ['AR%02X' % i for i in range(21)] + ['GR%02X' % i for i in range(9)]
 
+# PCI configuration header of the card as read on the real hardware (VSHOW /V log): 5333:8901,
+# command 0003, class 030000, IRQ 10. BAR0 (E0000000 on the card) is read from CR59/CR5A, which the
+# Trio64 uses as the BAR.
+PCI_CONFIG = {0x00: 0x89015333, 0x04: 0x02000003, 0x08: 0x03000006,
+              0x2C: 0x89015333, 0x3C: 0x0000010A}
+
 IRET_SEG = 0x0060          # every unused vector points to 0060:0000 = IRET
 STUB = 0x7C00              # small code stubs (POST far call, INT 10h call) live here
 
@@ -68,6 +75,10 @@ class Machine:
         self.r = {'seq': {}, 'crtc': {}, 'gc': {}, 'atc': {}, 'misc': 0x67, 'feat': 0, 'si': 0, 'ci': 0,
                   'gi': 0, 'ai': 0, 'aff': 0, 'dac_w': 0, 'dac_c': 0, 'dac_r': 0, 'dac_rc': 0, 'pci': 0,
                   'st': 0, 'pit': {0x40: [0xFFFF, 0], 0x42: [0xFFFF, 0]}, 'p61': 0}
+        # the system BIOS has assigned BAR0 = E0000000 before the video ROM starts; on the Trio64 the
+        # BAR is CR59/CR5A (the linear frame buffer base)
+        self.r['crtc'][0x59] = 0xE0
+        self.r['crtc'][0x5A] = 0x00
         self.dac = [[0, 0, 0] for _ in range(256)]
         self.tick = 0
         self.keys = list(keys or [])
@@ -118,10 +129,14 @@ class Machine:
         if port == 0x61:
             r['p61'] ^= 0x30
             return r['p61']
-        if port == 0xCFC:
-            if (r['pci'] & 0xFC) == 0:
-                return 0x89015333 & (0xFFFFFFFF if size == 4 else 0xFFFF)
-            return 0
+        if 0xCFC <= port <= 0xCFF:                      # PCI config data, any device answers as the card
+            reg = r['pci'] & 0xFC
+            if reg == 0x10:                             # BAR0 is CR59/CR5A on the Trio64
+                cfg = (r['crtc'].get(0x59, 0) << 24) | (r['crtc'].get(0x5A, 0) << 16)
+            else:
+                cfg = PCI_CONFIG.get(reg, 0)
+            v = cfg >> (8 * (port - 0xCFC))
+            return v & {1: 0xFF, 2: 0xFFFF, 4: 0xFFFFFFFF}[size]
         return 0xFF if size == 1 else 0xFFFF
 
     def _out(self, uc, port, size, val, ud):
