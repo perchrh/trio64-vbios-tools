@@ -28,7 +28,9 @@ Tests
   s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
                    (banked memory, throughput); with /V the output is the same (except the Time spent
                    line) and S3TEST.DBG is well formed
-  vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed
+  vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
+                   monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT and shown once
+                   before the VSHOW /I list
   s3compat_vga     S3COMPAT's VGA, Mode X and VGA BIOS function parts (built with nasm from the source
                    with the rest cut out): every test passes (registers, BIOS data, refresh, planar
                    memory, palettes, AH=01h-1Ch, AH=13h, CGA scroll, graphics XOR, AX=1120h-1124h, the
@@ -368,6 +370,18 @@ def t_vshow(c):
     check(r1.exit and r1.exit[0] == 'exit' and r1.exit[1] == 0, 'VSHOW 101 ended with %s' % (r1.exit,))
     rh = c.machine().run_com(com, '/H')
     check(b'VSHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
+    # the monitor note: in the /H help of VSHOW, S3TEST and S3COMPAT, and once before the /I list
+    for tool, k in (('VSHOW.COM', 75), ('S3TEST.COM', 75), ('S3COMPAT.COM', 91)):
+        for sw in ('/H', '/?'):
+            r = rh if (tool, sw) == ('VSHOW.COM', '/H') else c.machine().run_com(c.tool(tool), sw)
+            out = r.stdout.replace(b'\r\n', b' ')
+            check(r.exit == ('exit', 0) and b'%d kHz' % k in out and b'CRT can be damaged' in out,
+                  '%s %s: no monitor note in the help' % (tool, sw))
+    ri = c.machine(keys=[0x011B]).run_com(com, '/I')
+    check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to quit' in ri.stdout,
+          'VSHOW /I: no monitor note before the list (Esc there quits)')
+    r2 = c.machine(keys=[0x1C0D, 0x011B]).run_com(com, '/I')
+    check(r2.stdout.count(b'75 kHz') == 1, 'VSHOW /I: the monitor note is not shown exactly once')
     if v:
         r0 = c.machine().run_com(com, '101')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
