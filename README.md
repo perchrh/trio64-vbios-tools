@@ -6,7 +6,7 @@ reference BIOS 2.04.07 with our changes in the lower 32 KB, zeros in the upper 3
 image itself is not in this repository; the changes it carries are described below, and `rompatch/`
 holds their source and the patcher that builds the image from the reference BIOS.
 
-All tools share one version number, currently 0.8 (set in `common/version.inc`), and print it on their first line of output.
+All tools share one version number, currently 1.0 (set in `common/version.inc`), and print it on their first line of output.
 All tools need a 386 or later and run in plain DOS (no EMM386 needed), except S3REGS32.EXE, which
 is for the Windows 9x desktop.
 
@@ -117,7 +117,7 @@ runs every emulator test while recording which ROM bytes execute, then `emu/code
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
 direct jump, call and word jump table, and reports the share the tests executed. Data (tables,
 fonts, strings, padding) and code nothing reaches (the routines our patches jump around) do not
-count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p14 is at
+count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p15 is at
 82.6 % (14362 of 17394 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths.
 
@@ -129,7 +129,7 @@ runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the 
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
 output, palettes, pages, fonts, AH=12h, AH=1Ah, AH=1Ch) and compares the registers a program gets
 back, the BIOS data area, video memory, the DAC and the standard VGA registers after each call. For
-2.04.07-p14 there is no difference: the patches in those paths (32-bit text scroll, planar fills,
+2.04.07-p15 there is no difference: the patches in those paths (32-bit text scroll, planar fills,
 AH=09h, VGA clear, font load) only change how fast it is done, and the mode set hook, the memory
 clock and the pedestal only touch S3 extended registers, which are not compared.
 
@@ -147,9 +147,7 @@ used). The result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 
 patch site is compared with the original code first (the replaced routines in full), and the result
 is checked before it is written: the lower half sums to 00 and declares 32 KB, the upper half is
 zeros, every DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of
-the build that passed every emulator test (1caad895...). The CR88 bit 1 tweak of the reference keeps
-comparing SR10/SR11 with the old MCLK values, so it stays off at 59.96 MHz, as in the 2.04.11 builds
-before p14.
+the build that passed every emulator test (1caad895...).
 
     python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN]
     make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
@@ -157,7 +155,7 @@ before p14.
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, the free bytes still 00, a 64 KB
 input giving the same result whatever its upper half holds, `--no-vco-fix`, and the inputs that must
-be refused (already patched, a p12, a p13 and the p14 patch site changed, a wrong checksum, and with
+be refused (already patched, three patch sites changed, a wrong checksum, and with
 `--stock` the card's stock 2.04.11).
 
 ## Debug log (/V)
@@ -210,7 +208,7 @@ base); and in VGALOG.BIN which INT 10h calls Windows makes to our BIOS and with 
 
 S3REGS.TXT format (S3REGS and S3REGS32 write the same):
 
-    S3REGS 0.8 [label] DOS                    or  S3REGS32 0.8 [label] Win32
+    S3REGS 1.0 [label] DOS                    or  S3REGS32 1.0 [label] Win32
     MISC=EF FEAT=00 PEL=FF MODE=59 VBE=0101 TICK=00000032   (MODE and VBE only from DOS)
     SR00: 16 bytes SR00-SR0F                  SR10: SR10-SR1F
     CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B shown as --, not read)
@@ -241,44 +239,73 @@ stack (CR45, CR4A, CR4B). It is built by NASM alone: the PE header is written ou
 The EGA and CGA default palettes are not tables: S3COMPAT computes them from the IBM rules
 (EGA: 2Ah per primary bit, 15h per secondary bit; CGA: bit 4 adds 15h to all three, colour 6 is brown).
 
-## VBIOS changes in 2.04.07-p15
+## Features and changes compared to the reference BIOS 2.04.07
 
-p15 differs from the S3 reference BIOS 2.04.07 in the lower 32 KB; the upper 32 KB is zeros. p15 is
-p14 with only that change (and the sign-on): up to p14 the upper half carried the card's Trio64V+ BIOS
-1.03-08 (for an older card), byte-identical to the stock dump; nothing in the lower BIOS uses it, and
-the ROM header declares 32 KB. The lower half checksums to 0, and every change keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO
-mode. p1-p13 were built on the card's stock 2.04.11 and carried over unchanged in function. In the
-emulator, 5980 scroll, text and teletype calls leave the same registers, memory and VGA state with
-the 2.04.07 builds of p12, p13 and p14 (and with 2.04.11 p12 and p13), and 855 mode set, font and
-VESA calls the same with 2.04.07 p13 and p14. About 200 bytes of the lower 32 KB
-are free: 0x7C8A-7CFA (113 bytes, free in the reference only), 0x7E1E-7E3F, 0x7E59-7E5F,
-0x7E79-7E7F, 0x7FB7-7FBF, 0x7FE3-7FFE. p10 (an extra VESA mode 182h, 320x400x8) was withdrawn.
+The ROM is the S3 Trio64V2/DX reference BIOS 2.04.07 with the changes below in the lower 32 KB; the
+upper 32 KB is zeros (the ROM header declares 32 KB). The lower half checksums to 0. Every change keeps
+the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
+Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
+behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
+200 bytes of the lower 32 KB are free: 0x7C8A-7CFA (113 bytes, free in the reference only),
+0x7E1E-7E3F, 0x7E59-7E5F, 0x7E79-7E7F, 0x7FB7-7FBF, 0x7FE3-7FFE.
 
-| Area | Change | Effect |
-| --- | --- | --- |
-| Base | The S3 reference BIOS 2.04.07 instead of the card's stock 2.04.11 (p1-p13 were built on 2.04.11), with the card's POST flags (0xD1 = 05h) and CR80 value (00h) | The same patches at the reference's addresses; its DCLK table is fixed (next row) |
-| DCLK VCO | 22 refresh entries of the reference ran the DCLK VCO at 145-162 MHz (each mode's refresh list starts at the entry its mode table pointer gives and runs downwards to the entry with bit 7 of byte 2 set); new M/N/R give the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N; several are the values of the 2.04.11 table) | The PLL in its specified range in every mode (S3COMPAT checks it) |
-| 1600x1200 (120h) | The reference's CRTC table has a vertical display end of 1201 lines (CR12 B0h); AFh as in 2.04.11 | 1200 lines, as 4F01 reports (S3COMPAT FAIL 0100 found it, in the emulator) |
-| Memory clock | MCLK 50.11 MHz to 59.96 MHz (SR11=41h, SR10=42h, VCO 239.8 MHz) | About 20% more memory bandwidth; 59.96 MHz is the 1-cycle EDO maximum (16.67 ns). CR36 bits 3-2 stay 00 |
-| Black level | Blank pedestal off at POST (header flag 0xD1 bit 1 cleared, SR1A bit 5 never set) | Deepest black, no grey lift |
-| Attribute controller | Input status read after every mode set resets the index/data flip-flop | Fixes programs that write port 3C0h right after a mode set |
-| FIFO fetch | CR90 bit 7 cleared after setting any VGA mode 00h-13h | Fixes stripes and garbage in Mode X and 360-wide modes after a VESA mode (Quake 360x200) |
-| 320x240x8 (131h) | New 60 Hz timing: 640x480 @ 60 Hz halved horizontally, double scanned | LCDs see standard 640x480 @ 60 Hz, no scaling waves |
-| 320x240x15/16 (132h, 133h) | Same 60 Hz timing at 2 clocks per pixel | Same as 131h |
-| 640x480 class | Line total 792/796 to 800 pixels in the 640x480 and 320x240 tables | Exact VESA 640x480 @ 60 Hz line of 800 pixels (31.3-31.5 kHz); one LCD preset covers every mode of that class |
-| 1280x1024, 1600x1200 | Default refresh 60 Hz (CR41 and CR52 refresh fields) | Works on 60 Hz LCDs; stock defaulted to rates LCDs reject |
-| 1280x1024x16 colours (106h) | Stock VESA DMT timing kept (108 MHz, 64 kHz, 60 Hz) | 14% above the 95 MHz single-clock datasheet limit but clean on this card; the CVT reduced-blanking timing tried in p8 made a 1280x1024-incapable LCD report out of range |
-| Banked VESA speed | Booster: banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB window at A0000h; real LFB base kept in CR6D and restored on the next mode set; 4F01 and 4F05/4F03 read it correctly | Banked writes at 83.7 MB/s, as fast as the LFB; VESA 1.2 games much faster |
-| Mode set clear | The 2 MB video memory clear of every S3/VESA mode set (p11) writes 32-bit words (rep stosd) instead of 16-bit ones, through the same 64 KB banks | Half the bus transactions; the clear is most of the 81 ms a mode set took on p9 (no change with the no-clear bit); 38.3 ms on the card with p12 |
-| VGA mode set (p12) | The clear of video memory in modes 00h-13h (2C2Dh) and the font load into plane 2 (1224h, every text mode set and AX=11xxh) write 32-bit words | Mode set 03h about half the video memory writes (9368 instead of 20632), modes 12h/13h 16384 instead of 32768; mode set 03h 3.0 ms on the card (4.4 ms with p9) |
-| VBE 4F05 (p12) | AX=4F05h BH=0 (set window) is handled at the INT 10h entry: unlock, CR58 test (refused in linear modes as before), SR04 for planar banks, CR6A; the 3C4h index is kept | 6 port writes and 3 reads instead of 13 writes and about 6 reads (15 us per call on the card with p9, 4.3 us with p12); get, errors and the window function (far call) are unchanged |
-| Mode 13h scroll (p12) | AH=06h moves and fills with 32-bit words, full screen and windows; AH=07h keeps the original code | Half the video memory reads and writes |
-| Text scroll (p13) | AH=06h/07h in text modes: the blank fill (full width, the clear screen of most programs and every line an AH=0Eh scroll adds) and the window line moves and fills use 32-bit stores, in both directions (the full-width move was 32-bit in stock) | A full-screen clear 1000 writes instead of 2000; windows half the writes per line |
-| Planar scroll (p13) | AH=06h/07h in modes 0Dh-12h: the set/reset fill writes 32-bit words; the moves stay bytes (write mode 1 copies through the 8-bit latches, a wider access would copy only the last byte) | A mode 12h clear 9600 writes instead of 38400 |
-| AH=09h text (p13) | Character and attribute written with 32-bit stores (both page paths) | Half the writes for counts above 1 |
-| VGA mode set clear (p14) | The p12 clear moved back in place: `xor bl,bl / mov es,bx / xor di,di / jmp wfill`, the same 9 bytes as the original `rep stosw` routine, using the p13 word fill | 32 bytes of free space back; the same 32-bit clear |
-| 512x384x8 (151h) | CR50 table byte 60h to 40h | Correct graphics engine pixel length (was the reserved 10b) |
-| VBE 4F06 BL=3 | Rewritten: BX = min(8184, memory / lines) rounded down to 8, CX = BX in pixels | Real maximum line length (4368 for 101h instead of 546) |
+Picture and monitor
+
+- **Black level:** the blank pedestal is off at POST (header flag 0xD1 bit 1 cleared, SR1A bit 5 never
+  set): the deepest black, no grey lift.
+- **60 Hz defaults for 1280x1024 and 1600x1200** (CR41/CR52 refresh fields): they work on 60 Hz LCDs;
+  the reference defaults to rates LCDs reject.
+- **640x480 class at exactly 800 pixels per line** (the reference has 792/796) in the 640x480 and
+  320x240 tables: the VESA 640x480 @ 60 Hz line (31.3-31.5 kHz), so one LCD preset covers every mode
+  of that class.
+- **320x240 at 60 Hz** (131h, 132h, 133h): new CRTC tables, 640x480 @ 60 Hz halved horizontally and
+  double scanned, so LCDs see a standard 640x480 @ 60 Hz signal without scaling waves; 132h/133h at 2
+  clocks per pixel.
+- **1600x1200 (120h):** vertical display end 1200 lines (CR12 AFh), as 4F01 reports; the reference
+  shows 1201.
+- **DCLK PLL in its specified range:** 22 refresh entries of the reference ran the VCO at 145-162 MHz;
+  new M/N/R give exactly the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N).
+  Each mode's refresh list starts at the entry its mode table pointer gives and runs downwards to the
+  entry with bit 7 of byte 2 set.
+- 1280x1024x16 colours (106h) keeps the VESA DMT timing (108 MHz, 64 kHz, 60 Hz): 14% above the 95 MHz
+  single-clock datasheet limit but clean on the card; a reduced-blanking timing made a
+  1280x1024-incapable LCD report out of range.
+
+Speed
+
+- **Memory clock 59.96 MHz** (SR11=41h, SR10=42h, VCO 239.8 MHz) instead of 50.11 MHz: about 20% more
+  memory bandwidth; 59.96 MHz is the 1-cycle EDO maximum (16.67 ns). CR36 bits 3-2 stay 00. The CR88
+  bit 1 tweak of the reference compares SR10/SR11 with the old MCLK values and so stays off.
+- **Banked VESA booster:** the banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB
+  window at A0000h; the real LFB base is kept in CR6D and restored on the next mode set, and 4F01 and
+  4F05/4F03 report it correctly. Banked writes at 83.7 MB/s, as fast as the LFB.
+- **Fast 4F05 set window:** AX=4F05h BH=0 is handled at the INT 10h entry (unlock, CR58 test, SR04 for
+  planar banks, CR6A; the 3C4h index is kept): 6 port writes and 3 reads instead of 13 writes and
+  about 6 reads, 4.3 us per call on the card. Get, errors and the window function are unchanged.
+- **32-bit video memory stores** where the reference uses 8- or 16-bit ones, with the same result:
+  - the 2 MB clear of every S3/VESA mode set (rep stosd through the same 64 KB banks; the clear is
+    most of a VESA mode set's time)
+  - the clear of modes 00h-13h and the font load into plane 2 (every text mode set and AX=11xxh):
+    mode set 03h with 9368 video writes instead of 20632, 12h/13h 16384 instead of 32768
+  - AH=06h scrolls in mode 13h (moves and fills, full screen and windows; AH=07h keeps the original
+    code)
+  - AH=06h/07h in the text modes: the blank fill (the clear screen of most programs and every line an
+    AH=0Eh scroll adds) and the window line moves and fills, in both directions
+  - AH=06h/07h in modes 0Dh-12h: the set/reset fill (the moves stay bytes: write mode 1 copies through
+    the 8-bit latches)
+  - AH=09h in the text modes, both page paths
+
+Fixes
+
+- **Attribute controller:** an input status read after every mode set resets the index/data
+  flip-flop, for programs that write port 3C0h right after a mode set.
+- **FIFO fetch:** CR90 bit 7 is cleared after setting any VGA mode 00h-13h; fixes stripes and garbage
+  in Mode X and 360-wide modes after a VESA mode (Quake 360x200).
+- **512x384x8 (151h):** CR50 40h, the correct graphics engine pixel length (the reference has the
+  reserved 10b).
+- **VBE 4F06 BL=3:** the real maximum line length, BX = min(8184, memory / lines) rounded down to 8 and
+  CX = BX in pixels (4368 in 101h with 2 MB, 8184 with 4 MB; the reference returns 546).
+- The card's POST flags (0xD1 = 05h) and CR80 POST value (00h).
 
 ### Byte-level changes
 
@@ -320,25 +347,25 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x0967-0968 | 28 42 | 3D 61 | DCLK PLL M, N/R for 37.59 MHz (70 Hz): VCO 150.3 to 300.7 MHz, same pixel clock |
 | 0x0B1A-0B1D | C2 9F A0 85 | C3 9F A0 86 | 640x480x15/16 @ 60 Hz: line total 800 |
 | 0x0CEE | B0 | AF | 1600x1200 @ 60 Hz: CR12 vertical display end AFh, 1200 lines (the reference has 1201) |
-| 0x1224-1226 | 50 51 8A | E9 3B 6B | font load: rep movsd per character (p12) |
-| 0x1227-1234 | old font loop (dead since p12) | code | `p13bfa.asm`: bfilla 1227 |
-| 0x143D-1441 | 2E 8E 06 48 1D | E9 80 6B 90 90 | S3/VESA mode set clear: rep stosd (p11) |
-| 0x1442-1453 | old clear loop (dead since p11) | code | `p13move.asm`: wmove 1442 |
+| 0x1224-1226 | 50 51 8A | E9 3B 6B | font load: rep movsd per character |
+| 0x1227-1234 | old font loop (dead after the jump) | code | `p13bfa.asm`: bfilla 1227 |
+| 0x143D-1441 | 2E 8E 06 48 1D | E9 80 6B 90 90 | S3/VESA mode set clear: rep stosd |
+| 0x1442-1453 | old clear loop (dead after the jump) | code | `p13move.asm`: wmove 1442 |
 | 0x20D3-20D4 | 7B 26 | 80 7E | INT 10h AH=00 table: mode set via the hook |
-| 0x210F-2111 | 80 FC 0E | E9 E9 5B | INT 10h entry: fast 4F05 BH=0 (p12) |
-| 0x2C2D-2C35 | 9 bytes | 9 bytes | VGA mode set clear: in place, rep stosw replaced by a jump to wfill (p14) |
-| 0x2ED5-2EDF | 11 bytes | 11 bytes | text scroll full width: blank fill with wfill (p13) |
-| 0x2EE4-2EF5 | 18 bytes | 18 bytes | text scroll window: line moves with wmove (p13) |
-| 0x2EF6-2F06 | 17 bytes | 17 bytes | text scroll window: blank lines with wfill (p13) |
-| 0x3126-3129 | 33 C0 F3 AA | E8 2F 4E 90 | planar scroll full width: fill with bfill (p13) |
-| 0x3171-317D | 13 bytes | 13 bytes | planar scroll window: fill lines with bfilla (p13) |
-| 0x31F5-31F7 | 3B 0E 4A | E9 86 4B | mode 13h scroll AH=06h: 32-bit (p12) |
-| 0x3513-3515 | F3 AB C3 | E9 AF 24 | AH=09h text: char/attribute with wfill (p13) |
-| 0x3519-351B | F3 AB C3 | E9 A9 24 | AH=09h text, page > 0: with wfill (p13) |
+| 0x210F-2111 | 80 FC 0E | E9 E9 5B | INT 10h entry: fast 4F05 BH=0 |
+| 0x2C2D-2C35 | 9 bytes | 9 bytes | VGA mode set clear: in place, rep stosw replaced by a jump to wfill |
+| 0x2ED5-2EDF | 11 bytes | 11 bytes | text scroll full width: blank fill with wfill |
+| 0x2EE4-2EF5 | 18 bytes | 18 bytes | text scroll window: line moves with wmove |
+| 0x2EF6-2F06 | 17 bytes | 17 bytes | text scroll window: blank lines with wfill |
+| 0x3126-3129 | 33 C0 F3 AA | E8 2F 4E 90 | planar scroll full width: fill with bfill |
+| 0x3171-317D | 13 bytes | 13 bytes | planar scroll window: fill lines with bfilla |
+| 0x31F5-31F7 | 3B 0E 4A | E9 86 4B | mode 13h scroll AH=06h: 32-bit |
+| 0x3513-3515 | F3 AB C3 | E9 AF 24 | AH=09h text: char/attribute with wfill |
+| 0x3519-351B | F3 AB C3 | E9 A9 24 | AH=09h text, page > 0: with wfill |
 | 0x56DD-56DF | E8 9B CF | E8 A0 27 | VBE 4F02: mode set via the hook |
 | 0x56F7-56FC | C7 06 FE 04 00 00 | E8 F6 27 90 90 90 | VBE 4F02 end: booster |
 | 0x59BB-59BF | B8 FF 03 33 D2 | E8 B3 25 EB F8 | VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret |
-| 0x59C0-59E2 | old 4F06 BL=3 code (dead since p8) | code | `p13fill.asm`: wfillt 59C0, wfill 59C5 |
+| 0x59C0-59E2 | old 4F06 BL=3 code (dead after the call) | code | `p13fill.asm`: wfillt 59C0, wfill 59C5 |
 | 0x5CCF-5CD2 | 8B C3 0B C0 | E8 6C 22 90 | LFB base read: real base while the booster is on |
 | 0x5CED-5CEF | 25 00 10 | E8 5F 22 | 4F05/4F03 linear test ignores the booster window |
 | 0x7CFB-7E1D | 00 | code | `p12ext.asm`: int10x 7CFB, font 7D62, scr13 7D7E |
@@ -348,7 +375,7 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | D8 | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | D7 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
@@ -374,7 +401,7 @@ No code was copied from another project; all ROM code was written for this BIOS.
 The Trio64V2 datasheet (section 3.5) describes a faster linear addressing path: CR87 bit 1 = 1
 enables 1-cycle linear addressing of video memory, "the memory must be capable of supporting this
 mode", and the default with SR0A bit 7 and SR15 bit 7 set is 2-cycle operation. It was tried on top
-of the p7 booster in 640x480x8 (101h) with a write benchmark and a 320 KB pattern check (VLIN2):
+of the booster in 640x480x8 (101h) with a write benchmark and a 320 KB pattern check (VLIN2):
 
 | SR15 bit 7 | CR87 bit 1 | Write speed | Data errors |
 | --- | --- | --- | --- |

@@ -27,7 +27,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The RAM must stay treated as 1-cycle EDO (CR36 bits 3-2 = 00). MCLK is 59.96 MHz, the 1-cycle EDO
   maximum. Do not raise it.
 - Blank pedestal off (SR1A bit 5 = 0): the deepest black is wanted.
-- Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in both halves.
+- Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in the lower
+  32 KB; the upper 32 KB is zeros.
 - Base every change on the reference image plus explicit patches with byte assertions, so a build
   fails when the bytes under a patch are not what the patch expects. Addresses go into
   `rompatch/bios.inc` (the patcher reads it too), patch sites and their original bytes into
@@ -61,7 +62,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
-- All tools share one version number (0.8 now), `VERSION` in `common/version.inc`; never write the
+- All tools share one version number (1.0 now), `VERSION` in `common/version.inc`; never write the
   number into a tool's strings, use `VERSION` (and `ROMVER` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.
 

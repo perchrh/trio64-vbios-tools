@@ -6,7 +6,7 @@
 ; ROMVER   the ROM sign-on version S3TEST expects (its signature test and title line). Override:
 ;              make ROMVER=2.04.07-p13   (or: nasm -DROMVER="'2.04.07-p13'" ...)
 %ifndef VERSION
-%define VERSION '0.8'
+%define VERSION '1.0'
 %endif
 %ifndef ROMVER
 %define ROMVER '2.04.07-p15'
