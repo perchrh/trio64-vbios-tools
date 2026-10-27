@@ -8,3 +8,4 @@ __pycache__/
 .venv/
 *.egg-info/
 emu/logs/
+emu/logs4/

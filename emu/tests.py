@@ -75,7 +75,7 @@ Tests
                    IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
   -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
-                   patch call tools card emu; --list shows them)
+                   patch call tools card emu vram; --list shows them; vram = depends on the memory size)
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
   --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
@@ -1288,15 +1288,18 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
 # itself), patch (our changes to the reference BIOS), call (how the BIOS is called: registers, flags,
 # invalid input), tools (our DOS tools, not the BIOS), and where it runs: card = a tool that also runs
-# on the card, whose hardware log decides; emu = only in the emulator.
+# on the card, whose hardware log decides; emu = only in the emulator. vram: the result depends on
+# the video memory size (the VESA mode list, 4F06 maximum, the mode set clear of the whole memory, the
+# LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
+# functions, the tools) give the same output with 2 and 4 MB.
 TAGS = {
-    'version': 'rom emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu',
+    'version': 'rom emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch card', 'vshow': 'vbe tools card',
-    's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card', 's3compat_full': 'cga ega vga vbe s3 card',
+    's3test': 'rom cga ega vga vbe s3 patch card vram', 'vshow': 'vbe tools card vram',
+    's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools card', 's3regs': 'tools s3 card',
-    'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu',
-    'windows': 'call vga vbe emu', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
+    'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
+    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
 }
 
 
@@ -1357,7 +1360,7 @@ def main():
     ap.add_argument('--build', default=os.path.join(SRC, 'build'), help='folder with the built .COM files')
     ap.add_argument('-k', default='', help='run only tests whose name contains this text')
     ap.add_argument('-t', default='', help='run only tests with one of these categories (comma list: mda, cga, '
-                    'ega, vga, vbe, s3, rom, patch, call, tools, card, emu)')
+                    'ega, vga, vbe, s3, rom, patch, call, tools, card, emu, vram)')
     ap.add_argument('--list', action='store_true', help='list the tests with their categories')
     ap.add_argument('-v', action='store_true', help='print tracebacks')
     ap.add_argument('--logs', default=os.path.join(HERE, 'logs'),

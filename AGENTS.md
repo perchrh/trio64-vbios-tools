@@ -103,8 +103,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   common/version.inc together; the emulator test `version` fails when they differ or when the ROM
   under test is older.
 - Memory configurations: the ROM supports 2 MB (the test card) and 4 MB (the 86C775 maximum, CR36
-  bits 7-5 = 000b) of video memory. Run the emulator tests with both (`make emu-test ROM=...` and
-  `make emu-test ROM=... VRAM=4`); a test's expected values follow the memory size, not a fixed 2 MB.
+  bits 7-5 = 000b) of video memory. `make emu-test ROM=...` runs every test with 2 MB and the ones
+  tagged `vram` (their result depends on the memory size) again with 4 MB; a new test that reads the
+  memory size or the VESA mode list gets the tag. Expected values follow the memory size, never a
+  fixed 2 MB.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
   every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive
   descent and does not count data, padding or code nothing reaches). A new patch or a new BIOS

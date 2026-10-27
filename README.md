@@ -57,7 +57,9 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
     .venv/bin/pip install .
     make emu-test ROM=path/to/S3V2P15.BIN
 
-`make emu-test ROM=... VRAM=4` runs the model with 4 MB (the CR36 strapping of a 4 MB card; the
+`make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
+the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
+the others give the same output with both sizes). `make emu-test ROM=... VRAM=4` runs every test with 4 MB (the CR36 strapping of a 4 MB card; the
 86C775 supports 2 and 4 MB): the BIOS then lists the modes up to 4 MB (1280x1024x15/16, 1152x864x32,
 1024x768x32) and the tests expect what follows from 4 MB (4F06 BL=3 maximum line 8184, the modes 4F01
 marks supported). With 4 MB S3COMPAT gives WARN 02 for 1024x768x32, 1152x864x32 and 1280x1024x15/16:
