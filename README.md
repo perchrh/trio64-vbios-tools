@@ -78,6 +78,30 @@ the banks, the LFB or planar windows above 64 KB are left to the card. In the mo
 (colour compare), the GR03 rotate and logic functions, the DAC state register and the PIC are now
 modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
 
+### Test categories
+
+Every test has categories: the standard its expected values come from (`mda`, `cga`, `ega`, `vga`:
+the IBM BIOS of that adapter; `vbe`: VESA; `s3`: the chip and its datasheet; `rom`: the image itself),
+`patch` (our changes to the reference BIOS), `call` (how the BIOS is called: registers, flags, invalid
+input) and `tools` (our DOS tools), and where it runs: `card` (a tool that also runs on the card, so
+the hardware log decides) or `emu` (emulator only). `python3 emu/tests.py --list` shows them;
+`-t cga,ega` runs only those tests.
+
+S3TEST and S3COMPAT put the category in a 5-column field in front of every result line (`ROM`, `MDA`,
+`CGA`, `EGA`, `VGA`, `VBE`, `S3`) and end with one summary line per category, for example
+
+    EGA  Mode 10h                                   Hz 70.0/70.0 31.4kHz H800 V449  WARN 01
+    VBE  4F07 start incl. CR69 above 256K           PASS
+    ...
+    VGA  PASS 28  FAIL 0  WARN 0  INFO 0
+
+A BIOS mode is in the category of the adapter that introduced it (07h/0Fh MDA, 00h-06h CGA, 0Dh-10h
+EGA, 11h-13h VGA, VESA modes VBE); a BIOS function in that of the BIOS that defined it (AH=00h-0Fh
+and 13h CGA, AH=10h AL=00h-03h, AH=11h and AH=12h BL=10h/20h EGA, the DAC functions, AH=12h BL=30h-36h
+and AH=1Ah-1Ch VGA). The emulator tests check that every result line has a category, that mode lines
+have the right one, and that the summary counts the lines. Logs from before this change have no
+category column: compare from the sixth column.
+
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)

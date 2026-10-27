@@ -73,6 +73,8 @@ Tests
                    4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
                    IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
+  -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
+                   patch call tools card emu; --list shows them)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
   --profile FILE   per test: the INT 10h calls and the ROM bytes it executes or reads (emu/mutants.py)
@@ -369,6 +371,42 @@ def t_rom_patches(c):
 
 # S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)
 S3TEST_MODEL_LIMITS = ('Banked data check', 'Banked write throughput')
+RESULT_RE = r'  (PASS|FAIL [0-9A-F]+|FAIL|WARN [0-9A-F]+|INFO)$'
+CATS = ('ROM', 'MDA', 'CGA', 'EGA', 'VGA', 'VBE', 'S3')
+
+
+def mode_cat(mode):
+    """The category of a BIOS mode: the IBM adapter that introduced it, VBE for VESA modes."""
+    if mode >= 0x100:
+        return 'VBE'
+    mode &= 0x7F
+    return 'MDA' if mode in (7, 0x0F) else 'CGA' if mode <= 6 else 'EGA' if 0x0D <= mode <= 0x10 else 'VGA'
+
+
+def tagged(text, tool):
+    """The result lines of S3TEST/S3COMPAT as (category, line without the category column); every
+    result line must start with a category in a 5-column field, and the summary by category at the
+    end must count the same lines."""
+    lines = text.split('\r\n')
+    out = []
+    for l in lines:
+        if re.search(RESULT_RE, l.rstrip()):
+            m = re.match(r'^(%s) +(?=\S)' % '|'.join(CATS), l)
+            check(m and m.end() == 5, '%s: result line without a category column: %r' % (tool, l))
+            out.append((m.group(1), l[5:].rstrip()))
+    sums = {}
+    for l in lines:
+        m = re.match(r'^(%s) +PASS (\d+)  FAIL (\d+)(?:  WARN (\d+))?  INFO (\d+)$' % '|'.join(CATS), l)
+        if m:
+            sums[m.group(1)] = (int(m.group(2)), int(m.group(3)), int(m.group(4) or 0), int(m.group(5)))
+    if sums:
+        got = {}
+        for cat, l in out:
+            k = 0 if l.endswith('PASS') else 1 if re.search(r'FAIL( [0-9A-F]+)?$', l) else 2 if 'WARN' in l[-8:] else 3
+            got.setdefault(cat, [0, 0, 0, 0])[k] += 1
+        check({k: tuple(v) for k, v in got.items()} == sums, '%s: summary by category %s, the lines give %s'
+              % (tool, sums, got))
+    return out
 
 
 def t_s3test(c):
@@ -379,7 +417,11 @@ def t_s3test(c):
     check(r1.exit and r1.exit[0] == 'exit', 'S3TEST did not end: %s' % (r1.exit,))
     out = r1.stdout.decode('latin1')
     check('Passed:' in out, 'no summary line')
-    results = [l for l in out.split('\r\n') if l.rstrip().endswith(('PASS', 'FAIL'))]
+    tl = tagged(out, 'S3TEST')
+    results = [l for cat, l in tl if l.endswith(('PASS', 'FAIL'))]
+    for cat, l in tl:
+        m = re.match(r'Mode ([0-9A-F]{4}) ', l)
+        check(not m or cat == mode_cat(int(m.group(1), 16) & 0xBFFF), 'S3TEST: %s line in category %s' % (l[:9], cat))
     check(len(results) >= 30, 'only %d result lines' % len(results))
     bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
@@ -474,7 +516,7 @@ def t_s3compat_vbe(c):
     r = c.machine().run_com(com, '')
     c.save('S3CVBE', r)
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
-    lines = r.stdout.decode('latin1').split('\r\n')
+    lines = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
     names = ('4F00 capabilities', '4F04 state masks', 'VBE invalid', 'VBE undefined', '4F0A table',
              '4F10 power', '4F15 DDC', '4F14 S3 OEM', 'DCLK VCO')
     tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
@@ -494,12 +536,16 @@ def t_s3compat_vga(c):
     c.save('S3COMPAT', r0)
     check(r0.exit and r0.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r0.exit,))
     lines = r0.stdout.decode('latin1').split('\r\n')
-    tests = [l for l in lines if re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
-    vga = [l for l in tests if l.startswith(('VGA ', 'Mode ', 'Text 80x50'))]
+    tl = tagged(r0.stdout.decode('latin1'), 'S3COMPAT')
+    tests = [l for _, l in tl]
+    for cat, l in tl:
+        m = re.match(r'Mode ([0-9A-F]{2})h', l)
+        check(not m or cat == mode_cat(int(m.group(1), 16)), 'S3COMPAT: %s in category %s' % (l[:12], cat))
+    vga = [l for l in tests if l.startswith(('Mode ', 'Text 80x50'))]
     func = [l for l in tests if l.startswith(('AH=', 'AX=', 'DAC '))]
     check(len(vga) >= 17 + 6, 'only %d VGA/Mode X lines' % len(vga))
     check(len(func) >= 35, 'only %d VGA BIOS function lines' % len(func))
-    known = (('VGA 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
+    known = (('Mode 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
              ('Chip ID', 'INFO'), ('AH=12 BL=20', 'WARN 01'))     # 2.04.07 has no alternate print screen
     bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
            not any(l.startswith(a) and l.rstrip().endswith(b) for a, b in known)]
@@ -518,7 +564,7 @@ def t_s3compat_vga(c):
 S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] .*FAIL 0020$',
                          r'4F05 bank set/get \+ WinFuncPtr .*FAIL 0004$',
                          r'Banked window and LFB same memory .*WARN 01$']
-S3COMPAT_KNOWN = [r'VGA 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
+S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
                   r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
                   r'.*INFO$']
 
@@ -529,8 +575,7 @@ def t_s3compat_full(c):
     r = c.machine().run_com(com, '/Q', max_insn=3_000_000_000)
     c.save('S3CFULL', r)
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
-    lines = r.stdout.decode('latin1').split('\r\n')
-    tests = [l.rstrip() for l in lines if re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
+    tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
     check(len(tests) >= 230, 'only %d result lines' % len(tests))
     bad = [l.strip() for l in tests if not l.endswith('PASS') and
            not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + S3COMPAT_KNOWN)]
@@ -1150,12 +1195,30 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch)]
 
+# Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
+# ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
+# itself), patch (our changes to the reference BIOS), call (how the BIOS is called: registers, flags,
+# invalid input), tools (our DOS tools, not the BIOS), and where it runs: card = a tool that also runs
+# on the card, whose hardware log decides; emu = only in the emulator.
+TAGS = {
+    'version': 'rom emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu',
+    'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
+    's3test': 'rom cga ega vga vbe s3 patch card', 'vshow': 'vbe tools card',
+    's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card', 's3compat_full': 'cga ega vga vbe s3 card',
+    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools card', 's3regs': 'tools s3 card',
+    'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu',
+    'windows': 'call vga vbe emu', 'display_switch': 'vga emu',
+}
+
 
 def main():
     ap = argparse.ArgumentParser(description='emulator tests for the Trio64V2 VBIOS tools')
     ap.add_argument('--rom', required=True, help='64 KB VBIOS image')
     ap.add_argument('--build', default=os.path.join(SRC, 'build'), help='folder with the built .COM files')
     ap.add_argument('-k', default='', help='run only tests whose name contains this text')
+    ap.add_argument('-t', default='', help='run only tests with one of these categories (comma list: mda, cga, '
+                    'ega, vga, vbe, s3, rom, patch, call, tools, card, emu)')
+    ap.add_argument('--list', action='store_true', help='list the tests with their categories')
     ap.add_argument('-v', action='store_true', help='print tracebacks')
     ap.add_argument('--logs', default=os.path.join(HERE, 'logs'),
                     help='folder for the tool output and /V debug files (default emu/logs)')
@@ -1175,6 +1238,11 @@ def main():
                     help='instructions an INT 10h call of a test may take before it counts as a hang (default %d; '
                          'the 4F15h EDID read of the windows test has its own 200 million)' % Machine.call_limit)
     a = ap.parse_args()
+    assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
+    if a.list:
+        for n, _ in TESTS:
+            print('%-15s %s' % (n, TAGS[n]))
+        return
     Machine.call_limit = a.call_limit
     prof, cur = {}, ['']
     if a.profile:
@@ -1206,6 +1274,8 @@ def main():
         tests = [(t, byname[t]) for t in a.tests.split(',')]
     for name, fn in tests:
         if a.k not in name:
+            continue
+        if a.t and not set(a.t.split(',')) & set(TAGS[name].split()):
             continue
         if a.x and failed:
             break

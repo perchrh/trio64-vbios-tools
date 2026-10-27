@@ -71,7 +71,21 @@ org 0x100
         call ps
         db %1,0
 %endmacro
-%macro TB 1+
+; Test categories, printed in front of every result line and counted for the summary by category:
+; the standard the expected values come from (IBM MDA/CGA/EGA/VGA BIOS, VESA VBE) or the S3 chip.
+C_MDA   equ 0
+C_CGA   equ 1
+C_EGA   equ 2
+C_VGA   equ 3
+C_VBE   equ 4
+C_S3    equ 5
+NCAT    equ 6
+%macro TB 2+                            ; category, title
+        mov byte [tcat],%1
+        call tbegin
+        db %2,0
+%endmacro
+%macro TBK 1+                           ; title; the category is already in [tcat]
         call tbegin
         db %1,0
 %endmacro
@@ -180,10 +194,11 @@ start:  cld
         int 0x21
 .gs:    call save_screen
         PS 'S3COMPAT ',VERSION,' - VGA/SVGA/VESA compatibility test for the Trio64V2 VBIOS',13,10
+        PS 'Category column: MDA CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
         PS '  8 refresh  10 memory  20 default DAC (256/EGA/CGA)  40 refresh vs CRTC/PLL math',13,10
-        PS 'VGA xxh 350 = the mode at 350 scan lines (AH=12 BL=30 first).',13,10
+        PS 'Mode xxh 350 = the mode at 350 scan lines (AH=12 BL=30 first).',13,10
         PS 'VESA fail bits: 1 4F01  2 window  4 layout  8 set/4F03  10 refresh  20 memory',13,10
         PS '  40 4F06  80 4F07/4F09  100 CRTC geometry vs 4F01  200 datasheet clock/colour',13,10
         PS '  400 refresh vs CRTC/PLL math  800 datasheet memory mapping (CR31/CR58-5A)',13,10
@@ -235,7 +250,9 @@ start:  cld
         PS '  Info: '
         movzx eax,word [ninfo]
         call pdec
-        PS 13,10,'Time spent: '         ; run time (own line, so logs compare without it)
+        PS 13,10
+        call catsum
+        PS 'Time spent: '         ; run time (own line, so logs compare without it)
         call runtime
         PS ' s',13,10
         mov byte [tofile],1             ; console: buffer is printed now, in text mode
@@ -285,7 +302,7 @@ bios_id:
 ; CR30 = chip ID (E1h), then the PCI revision ID (configuration byte 08h) of device 5333:8901, which
 ; should equal CR2F. The test card reads 89 01 06 E1 and PCI 06. No pass or fail.
 chip_id:
-        TB 'Chip ID CR2D 2E 2F 30, PCI rev ...... '
+        TB C_S3,'Chip ID CR2D 2E 2F 30, PCI rev ...... '
         call unlock
         RC 0x2D
         call phex2
@@ -328,7 +345,7 @@ chip_id:
 ;   2 CR36 bits 3-2 not 00 (not 1-cycle EDO) or MCLK above 60 MHz (1-cycle EDO needs >= 16.67 ns)
 post_tests:
         call unlock
-        TB 'MCLK PLL (SR10/SR11) vs datasheet'
+        TB C_S3,'MCLK PLL (SR10/SR11) vs datasheet'
         call tdots
         RS 0x10
         mov [pn],al
@@ -513,7 +530,7 @@ restore_screen:
 ; registers in statelist, and all of VRAM zeroed through the 64 KB window (fail bit 1: 4F02 101h failed).
 setup:  ; log what the card looked like, then put it into a known state
         call unlock
-        TB 'Initial state: mode '
+        TB C_VGA,'Initial state: mode '
         mov al,[omode]
         call phex2
         PS ' rows '
@@ -539,7 +556,7 @@ setup:  ; log what the card looked like, then put it into a known state
         jmp .l
 .d:     mov byte [infoflag],1
         call tend
-        TB 'Setup: mode 03, baseline, VRAM zeroed'
+        TB C_VGA,'Setup: mode 03, baseline, VRAM zeroed'
         call flush
         mov ax,3
         int 0x10
@@ -599,7 +616,7 @@ zero_vram:                              ; all banks to 0 through the 64K window,
 ; zeroed again (fail 1) and mode 03 set.
 cleanup:
         PS 13,10,'--- Final state ---',13,10
-        TB 'Mode 03 after all tests vs baseline'
+        TB C_VGA,'Mode 03 after all tests vs baseline'
         call flush
         mov ax,3
         int 0x10
@@ -623,7 +640,7 @@ cleanup:
         mov dx,4
         call extchk
         call tend
-        TB 'Cleanup: VRAM zeroed, mode 03'
+        TB C_VGA,'Cleanup: VRAM zeroed, mode 03'
         call flush
         call zero_vram
         jnc .z
@@ -691,7 +708,10 @@ prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131
 ; The 350-line entries select 350 scan lines with AH=12h BL=30h AL=01h first and go back to 400 after.
 ; Expect PASS for every entry (WARN 01 for mode 10h).
 vga_one:
-        TB 'VGA '
+        mov si,[ent]
+        mov al,[si]
+        call modecat
+        TBK 'Mode '
         mov si,[ent]
         mov al,[si]
         call phex2
@@ -1141,7 +1161,7 @@ modex_all:
         jne .s
         jmp .l
 .t:     ; 80x50 text
-        TB 'Text 80x50 (AX=1112)'
+        TB C_VGA,'Text 80x50 (AX=1112)'
         cmp byte [pass],2
         jne .t1
         PS ' (pass 2)'
@@ -1284,7 +1304,7 @@ bios_tests:
         ; ---- cursor
         mov ax,3
         int 0x10
-        TB 'AH=01/02/03 cursor + emulation'
+        TB C_CGA,'AH=01/02/03 cursor + emulation'
         call tdots
         mov ah,1
         mov cx,0x0607
@@ -1355,7 +1375,7 @@ bios_tests:
         int 0x10
         call tend
         ; ---- light pen
-        TB 'AH=04 light pen not present'
+        TB C_CGA,'AH=04 light pen not present'
         call tdots
         mov ah,4
         int 0x10
@@ -1364,7 +1384,7 @@ bios_tests:
         FAILB 1
 .l1:    call tend
         ; ---- pages
-        TB 'AH=05 pages (mode 03 p3, mode 0D p7)'
+        TB C_CGA,'AH=05 pages (mode 03 p3, mode 0D p7)'
         call tdots
         mov ax,3
         int 0x10
@@ -1426,7 +1446,7 @@ bios_tests:
 bios_gaps:
         mov ax,4
         int 0x10
-        TB 'AH=0B CGA background, border, palette'
+        TB C_CGA,'AH=0B CGA background, border, palette'
         call tdots
         mov ax,0x0B00                   ; palette 0 (intensity of the mode set kept)
         mov bx,0x0100
@@ -1483,7 +1503,7 @@ bios_gaps:
 .a9:    mov ax,3
         int 0x10
         call tend
-        TB 'AX=1018/1019 PEL mask'
+        TB C_VGA,'AX=1018/1019 PEL mask'
         call tdots
         mov ax,0x1018
         mov bl,0x0F
@@ -1508,7 +1528,7 @@ bios_gaps:
         je .p3
         FAILB 4
 .p3:    call tend
-        TB 'AX=1100-1104, 1110 text fonts'
+        TB C_EGA,'AX=1100-1104, 1110 text fonts'
         call tdots
         mov ax,3
         int 0x10
@@ -1603,7 +1623,7 @@ bios_gaps:
 .f9:    mov ax,3
         int 0x10
         call tend
-        TB 'AH=12 BL=20 alternate print screen'
+        TB C_EGA,'AH=12 BL=20 alternate print screen'
         call tdots
         push es
         xor ax,ax
@@ -1843,7 +1863,7 @@ bios_more:
 ; ---------------------------------------------------------------- AH=13h
 t13:    mov ax,3
         int 0x10
-        TB 'AH=13h write string'
+        TB C_CGA,'AH=13h write string'
         call tdots
         call tfill
         mov ah,2                        ; cursor at (5,10)
@@ -2004,7 +2024,7 @@ s13e    db 'PG'
 s13f    db 'Q'
 
 ; ---------------------------------------------------------------- CGA graphics scroll
-tcgas:  TB 'AH=06/07 CGA graphics scroll 04h/06h'
+tcgas:  TB C_CGA,'AH=06/07 CGA graphics scroll 04h/06h'
         call tdots
         mov si,cgatab
 .n:     cmp word [si],0
@@ -2144,7 +2164,7 @@ cgatab: ;   AX      BX      CX      DX      c0  c1  r0  r1  shift / bytes per co
         dw 0
 
 ; ---------------------------------------------------------------- AH=09h/0Ah XOR in graphics modes
-txor:   TB 'AH=09/0A graphics glyph and XOR'
+txor:   TB C_CGA,'AH=09/0A graphics glyph and XOR'
         call tdots
         mov si,xortab
 .m:     cmp byte [si],0
@@ -2273,7 +2293,7 @@ xcheckc:
 xortab: db 0x04,3,1, 0x06,1,2, 0x0D,0x0C,4, 0x12,0x0E,8, 0
 
 ; ---------------------------------------------------------------- AX=1120h-1124h
-tfont:  TB 'AX=1120-1124 graphics fonts'
+tfont:  TB C_EGA,'AX=1120-1124 graphics fonts'
         call tdots
         mov ax,0x12
         int 0x10
@@ -2392,7 +2412,7 @@ f21tab: db 1,14, 2,25, 3,43, 0,0
 f2xtab: db 0x22,2,14, 0x23,3,8, 0x24,6,16, 0,0
 
 ; ---------------------------------------------------------------- video save pointer table
-tsave:  TB 'Video save pointer table 0040:00A8'
+tsave:  TB C_EGA,'Video save pointer table 0040:00A8'
         call tdots
         push es
         xor ax,ax
@@ -2540,7 +2560,7 @@ xbits   db 0
 scroll_test:
         mov ax,3
         int 0x10
-        TB 'AH=06/07 scroll full and window'
+        TB C_CGA,'AH=06/07 scroll full and window'
         call tdots
         call tfill
         mov ax,0x0601
@@ -2593,7 +2613,9 @@ scroll_test:
 ; 2 AH=0A keeps the attribute, 4 AH=0Eh teletype position. Graphics modes 04h, 0Dh, 12h, 13h:
 ; AH=09 then AH=08 must read the same character back (fail 1).
 textio: mov byte [tmpb],1
-.m:     TB 'AH=08/09/0A/0E text I/O mode '
+.m:     mov al,[tmpb]
+        call modecat
+        TBK 'AH=08/09/0A/0E text I/O mode '
         mov al,[tmpb]
         call phex2
         call flush
@@ -2660,7 +2682,8 @@ textio: mov byte [tmpb],1
         jz .gd
         mov [tmpb],al
         push si
-        TB 'AH=09/08 graphics char mode '
+        call modecat
+        TBK 'AH=09/08 graphics char mode '
         mov al,[tmpb]
         call phex2
         call flush
@@ -2720,7 +2743,9 @@ pixels: mov si,pxtab
 .m:     cmp byte [si],0xFF
         je .d
         mov [ent],si
-        TB 'AH=0C/0D pixels mode '
+        mov al,[si]
+        call modecat
+        TBK 'AH=0C/0D pixels mode '
         mov si,[ent]
         mov al,[si]
         call phex2
@@ -2830,7 +2855,7 @@ pxy:    mov si,[ent]                    ; -> CX,DX for point [vi]
 palette_tests:
         mov ax,0x12
         int 0x10
-        TB 'AX=1000/1007 palette register'
+        TB C_EGA,'AX=1000/1007 palette register'
         call tdots
         mov ax,0x1000
         mov bx,0x0502
@@ -2847,7 +2872,7 @@ palette_tests:
         je .b
         FAILB 2
 .b:     call tend
-        TB 'AX=1001/1008 overscan'
+        TB C_EGA,'AX=1001/1008 overscan'
         call tdots
         mov ax,0x1001
         mov bh,0x0F
@@ -2866,7 +2891,7 @@ palette_tests:
         xor bh,bh
         int 0x10
         call tend
-        TB 'AX=1002/1009 all palette regs'
+        TB C_EGA,'AX=1002/1009 all palette regs'
         call tdots
         mov ax,0x1002
         mov dx,paltab
@@ -2884,7 +2909,7 @@ palette_tests:
 .e:     call tend
         mov ax,3
         int 0x10
-        TB 'AX=1003 blink/intensity'
+        TB C_EGA,'AX=1003 blink/intensity'
         call tdots
         mov ax,0x1003
         xor bl,bl
@@ -2903,7 +2928,7 @@ palette_tests:
         jnz .g
         FAILB 2
 .g:     call tend
-        TB 'AX=1010/1015, 1012/1017 DAC'
+        TB C_VGA,'AX=1010/1015, 1012/1017 DAC'
         call tdots
         mov ax,0x1010
         mov bx,5
@@ -2952,7 +2977,7 @@ palette_tests:
         je .j
         FAILB 4
 .j:     call tend
-        TB 'DAC mask/status regs 3C6/3C7'
+        TB C_VGA,'DAC mask/status regs 3C6/3C7'
         call tdots
         mov dx,0x3C6
         in al,dx
@@ -2978,7 +3003,7 @@ palette_tests:
 .k3:    call tend
         mov ax,0x12
         int 0x10
-        TB 'AX=1013/101A colour paging'
+        TB C_VGA,'AX=1013/101A colour paging'
         call tdots
         mov ax,0x1013
         mov bx,0x0100
@@ -3001,7 +3026,7 @@ palette_tests:
         call tend
         mov ax,0x13
         int 0x10
-        TB 'AX=101B grey summing vs IBM'
+        TB C_VGA,'AX=101B grey summing vs IBM'
         call tdots
         mov ax,0x101B
         xor bx,bx
@@ -3081,7 +3106,7 @@ paltab  db 0,1,2,3,4,5,0x14,7,0x38,0x39,0x3A,0x3B,0x3C,0x3D,0x3E,0x3D,0
 saverest:
         mov ax,3
         int 0x10
-        TB 'AH=1C save/restore video state'
+        TB C_VGA,'AH=1C save/restore video state'
         call tdots
         mov ax,0x1C00
         mov cx,7
@@ -3164,7 +3189,7 @@ saverest:
 ;   1111/1112/1114 load   1 BIOS rows/height wrong, 2 CR09 character height wrong
 fonts:  mov ax,3
         int 0x10
-        TB 'AX=1130 BH=3 8x8 font'
+        TB C_EGA,'AX=1130 BH=3 8x8 font'
         call tdots
         mov bh,3
         call fptr
@@ -3182,7 +3207,7 @@ fonts:  mov ax,3
         jz .f2
         FAILB 2
 .f2:    call tend
-        TB 'AX=1130 BH=4 8x8 upper half'
+        TB C_EGA,'AX=1130 BH=4 8x8 upper half'
         call tdots
         mov bh,4
         call fptr
@@ -3193,7 +3218,7 @@ fonts:  mov ax,3
         jz .u2
         FAILB 1
 .u2:    call tend
-        TB 'AX=1130 BH=6 8x16 font'
+        TB C_EGA,'AX=1130 BH=6 8x16 font'
         call tdots
         mov bh,6
         call fptr
@@ -3206,7 +3231,7 @@ fonts:  mov ax,3
         jz .f3
         FAILB 2
 .f3:    call tend
-        TB 'AX=1130 BH=2 8x14 font'
+        TB C_EGA,'AX=1130 BH=2 8x14 font'
         call tdots
         mov bh,2
         call fptr
@@ -3217,7 +3242,7 @@ fonts:  mov ax,3
 .f4:    call tend
         mov ax,0x13
         int 0x10
-        TB 'AX=1130 BH=1 INT43 in mode 13'
+        TB C_EGA,'AX=1130 BH=1 INT43 in mode 13'
         call tdots
         mov bh,1
         call fptr
@@ -3239,7 +3264,10 @@ fonts:  mov ax,3
         mov ax,[si]
         xor bl,bl
         int 0x10
-        TB 'AX='
+        mov si,[ent]
+        mov al,[si+4]                   ; the category from fldtab
+        mov [tcat],al
+        TBK 'AX='
         mov si,[ent]
         mov ax,[si]
         call phex4
@@ -3269,12 +3297,12 @@ fonts:  mov ax,3
         mov ax,3
         int 0x10
         ret
-fldtab  dw 0x1111
-        db 27,14,0
+fldtab  dw 0x1111                       ; AX, rows - 1, height, category
+        db 27,14,C_EGA
         dw 0x1112
-        db 49,8,0
+        db 49,8,C_EGA
         dw 0x1114
-        db 24,16,0
+        db 24,16,C_VGA
 g8      db 0x7E,0x81,0xA5,0x81,0xBD,0x99,0x81,0x7E
 g8u     db 0x78,0xCC,0xC0,0xCC,0x78,0x18,0x0C,0x78
 g16     db 0x00,0x00,0x7E,0x81,0xA5,0x81,0x81,0xBD,0x99,0x81,0x81,0x7E,0x00,0x00,0x00,0x00
@@ -3310,7 +3338,7 @@ fcmp:   ; DX:AX font, BX = bytes/char, SI = expected glyph 1, CX = len -> ZF
 ;   BL=32 video       1 not supported or CR01 changed
 ;   BL=33 grey        1 not supported, 2 grey summing not applied in 13h, 4 still applied after off
 ;   BL=36 screen      1 SR01 bit 5 not set/cleared
-altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
+altsel: TB C_VGA,'AH=12 BL=30 350 / 400 scan lines'
         call tdots
         mov ax,0x1201
         mov bl,0x30
@@ -3342,7 +3370,7 @@ altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
         je .d
         FAILB 4
 .d:     call tend
-        TB 'AH=12 BL=31 default palette loading'
+        TB C_VGA,'AH=12 BL=31 default palette loading'
         call tdots
         mov ax,0x1201
         mov bl,0x31
@@ -3379,7 +3407,7 @@ altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
         je .i
 .h:     FAILB 4
 .i:     call tend
-        TB 'AH=12 BL=32 video disable/enable'
+        TB C_VGA,'AH=12 BL=32 video disable/enable'
         call tdots
         mov ax,0x1201
         mov bl,0x32
@@ -3397,7 +3425,7 @@ altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
         je .k
 .j:     FAILB 1
 .k:     call tend
-        TB 'AH=12 BL=33 grey summing on mode set'
+        TB C_VGA,'AH=12 BL=33 grey summing on mode set'
         call tdots
         mov ax,0x1200
         mov bl,0x33
@@ -3443,7 +3471,7 @@ altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
 .n:     call tend
         mov ax,3
         int 0x10
-        TB 'AH=12 BL=36 screen off/on (SR01.5)'
+        TB C_VGA,'AH=12 BL=36 screen off/on (SR01.5)'
         call tdots
         mov ax,0x1201
         mov bl,0x36
@@ -3469,7 +3497,7 @@ altsel: TB 'AH=12 BL=30 350 / 400 scan lines'
 misc_bios:
         mov ax,3
         int 0x10
-        TB 'AH=1A display combination code'
+        TB C_VGA,'AH=1A display combination code'
         call tdots
         mov ax,0x1A00
         int 0x10
@@ -3484,7 +3512,7 @@ misc_bios:
         je .b
 .a:     FAILB 1
 .b:     call tend
-        TB 'AH=12 BL=10 EGA info'
+        TB C_EGA,'AH=12 BL=10 EGA info'
         call tdots
         mov ah,0x12
         mov bl,0x10
@@ -3493,7 +3521,7 @@ misc_bios:
         je .c
         FAILB 1
 .c:     call tend
-        TB 'AH=1B static functionality table'
+        TB C_VGA,'AH=1B static functionality table'
         call tdots
         mov di,dsbuf
         xor bx,bx
@@ -3568,7 +3596,7 @@ vesa_global:
         mov si,vbeinfo
         mov cx,256
         call vblk
-        TB '4F00 VESA sig: '
+        TB C_VBE,'4F00 VESA sig: '
         mov ax,[vbeinfo+4]
         mov al,ah
         call phex2
@@ -3622,7 +3650,7 @@ vesa_global:
         mov ax,[vbeinfo+0x12]
         mov [banks],ax
         ; OEM string
-        TB 'OEM string: '
+        TB C_VBE,'OEM string: '
         push ds
         lds si,[vbeinfo+6]
         mov cx,48
@@ -3648,7 +3676,7 @@ vesa_global:
         mov si,vbe2buf
         mov cx,512
         call vblk
-        TB '4F00 VBE2 sig, 512 byte block'
+        TB C_VBE,'4F00 VBE2 sig, 512 byte block'
         call tdots
         cmp word [tmpw],0x004F
         jne .v1
@@ -3689,7 +3717,7 @@ vesa_global:
         jb .v3
 .v4:    call tend
         ; required standard modes present
-        TB 'Standard modes 100-107,110-11A listed'
+        TB C_VBE,'Standard modes 100-107,110-11A listed'
         call tdots
         mov si,reqmodes
 .rq:    lodsw
@@ -3712,7 +3740,7 @@ vesa_global:
         jmp .rq
 .rqd:   call tend
         ; 4F08: DAC is 6 bit only
-        TB '4F08 DAC width (6 bit hardware)'
+        TB C_VBE,'4F08 DAC width (6 bit hardware)'
         call tdots
         mov ax,0x4F08
         mov bx,0x0800
@@ -3738,7 +3766,7 @@ vesa_global:
 .f8:    FAILB 1
 .r8:    call tend
         ; 4F04 size
-        TB '4F04 state buffer size'
+        TB C_VBE,'4F04 state buffer size'
         call tdots
         mov ax,0x4F04
         xor dl,dl
@@ -3755,7 +3783,7 @@ vesa_global:
         FAILB 1
 .s4:    call tend
         ; 4F0A
-        TB '4F0A protected mode interface'
+        TB C_VBE,'4F0A protected mode interface'
         call tdots
         push es
         mov ax,0x4F0A
@@ -3776,7 +3804,7 @@ vesa_global:
 .fa:    FAILB 1
 .ra:    call tend
         ; 4F01 guard
-        TB '4F01 writes 256 bytes only'
+        TB C_VBE,'4F01 writes 256 bytes only'
         call tdots
         mov di,mibuf
         mov cx,512
@@ -3871,7 +3899,7 @@ presmode:                               ; print WxHxBPP
 ; Expect PASS (106h WARN 02).
 vesa_one:
         mov byte [lfbav],0
-        TB 'VESA '
+        TB C_VBE,'VESA '
         mov ax,[vm]
         call phex4
         call getinfo
@@ -4246,7 +4274,7 @@ lastoff:                                ; EBX = offset of last dword of visible 
 ; linear bit, 20 first/last dword through the LFB (INT 15h AH=87h copies) wrong, 800 mapping rules.
 ; Warn 20: INT 15h AH=87h not available (LFB not testable).
 vesa_lfb:
-        TB 'VESA '
+        TB C_VBE,'VESA '
         mov ax,[vm]
         or ax,0x4000
         call phex4
@@ -4837,7 +4865,7 @@ svga_modes:
         inc word [mi]
         jmp .l
 .d:     ret
-.bad:   TB 'VESA list differs from ROM table, skipped'
+.bad:   TB C_VBE,'VESA list differs from ROM table, skipped'
         WARNB 1
         call tend
         ret
@@ -4845,7 +4873,7 @@ svga_modes:
 ; Fail bits: 1 AH=0Fh or 40:49 mode number wrong, 2 registers (extlist) differ from the 4F02 set,
 ; 4 first/last byte through the window wrong. INFO when 4F01 marks the mode unsupported.
 svga_one:
-        TB 'AH=00 '
+        TB C_S3,'AH=00 '
         mov al,[im]
         call phex2
         PS 'h = VESA '
@@ -4954,7 +4982,7 @@ vesa_more:
         mov bx,0x101
         call setm
         ; ---- capabilities vs 4F08
-        TB '4F00 capabilities vs 4F08'
+        TB C_VBE,'4F00 capabilities vs 4F08'
         call tdots
         mov di,palbuf2
         mov dword [di],'VBE2'
@@ -4988,7 +5016,7 @@ vesa_more:
         FAILB 2
 .c2:    call tend
         ; ---- 4F04 state masks
-        TB '4F04 state masks'
+        TB C_VBE,'4F04 state masks'
         call tdots
         mov bx,0x101
         call setm
@@ -5119,7 +5147,7 @@ vesa_more:
         call setm
         call tend
         ; ---- invalid subfunctions
-        TB 'VBE invalid subfunctions refused'
+        TB C_VBE,'VBE invalid subfunctions refused'
         call tdots
         mov bx,0x101
         call setm
@@ -5149,7 +5177,7 @@ vesa_more:
         int 0x10
         call tend
         ; ---- undefined functions
-        TB 'VBE undefined functions 4F0B-4F1F'
+        TB C_VBE,'VBE undefined functions 4F0B-4F1F'
         call tdots
         mov bx,0x101
         call setm
@@ -5188,7 +5216,7 @@ vesa_more:
         FAILB 2
 .ud:    call tend
         ; ---- 4F0A table
-        TB '4F0A table layout'
+        TB C_VBE,'4F0A table layout'
         call tdots
         push es
         mov ax,0x4F0A
@@ -5236,7 +5264,7 @@ vesa_more:
 .tx:    pop es
         call tend
         ; ---- 4F10
-        TB '4F10 power management (DPMS)'
+        TB C_VBE,'4F10 power management (DPMS)'
         call tdots
         mov ax,0x4F10
         xor bl,bl
@@ -5317,7 +5345,7 @@ vesa_more:
         call setm
         call tend
         ; ---- 4F15
-        TB '4F15 DDC EDID'
+        TB C_VBE,'4F15 DDC EDID'
         call tdots
         mov ax,0x4F15
         xor bl,bl
@@ -5390,7 +5418,7 @@ vesa_more:
 ;   1 VCO outside 170-340 MHz (the first ones are listed as mode@Hz), 2 the refresh registers CR41,
 ;     CR52, CR6B not as before afterwards (they are written back directly)
 ; The monitor sees every rate of every mode (up to 85 Hz at 1280x1024); an LCD may show out of range.
-tvco:   TB 'DCLK VCO at every refresh rate'
+tvco:   TB C_S3,'DCLK VCO at every refresh rate'
         call tdots
         call unlock
         RC 0x41
@@ -5531,7 +5559,7 @@ tvco:   TB 'DCLK VCO at every refresh rate'
 ;  20 the rates read at the start written back: CR41, CR52 and CR6B as before the test
 ; The monitor sees every rate of these modes (up to 85 Hz, 1280x1024 at 43 Hz interlaced); an LCD may
 ; show out of range for a moment.
-t4f14:  TB '4F14 S3 OEM functions'
+t4f14:  TB C_S3,'4F14 S3 OEM functions'
         call tdots
         mov ax,0x4F14
         xor bx,bx
@@ -5843,7 +5871,7 @@ vesa_func:
         mov word [vm],0x101
         call getinfo
         ; invalid mode
-        TB '4F01/4F02 reject invalid mode 17Fh'
+        TB C_VBE,'4F01/4F02 reject invalid mode 17Fh'
         call tdots
         mov bx,0x101
         call setm
@@ -5868,7 +5896,7 @@ vesa_func:
         FAILB 4
 .c:     call tend
         ; clear / don't clear
-        TB '4F02 clear / D15 keep memory'
+        TB C_VBE,'4F02 clear / D15 keep memory'
         call tdots
         mov bx,0x101
         call setm
@@ -5896,7 +5924,7 @@ vesa_func:
         FAILB 2
 .d3:    call tend
         ; banking
-        TB '4F05 bank set/get + WinFuncPtr'
+        TB C_VBE,'4F05 bank set/get + WinFuncPtr'
         call tdots
         mov bx,0x101
         call setm
@@ -5957,7 +5985,7 @@ vesa_func:
         FAILB 8
 .e3:    call tend
         ; logical scan line
-        TB '4F06 logical width 1024/2048/max'
+        TB C_VBE,'4F06 logical width 1024/2048/max'
         call tdots
         mov bx,0x101
         call setm
@@ -6030,7 +6058,7 @@ vesa_func:
         mov word [mibuf+0x10],640
         call tend
         ; display start
-        TB '4F07 start incl. CR69 above 256K'
+        TB C_VBE,'4F07 start incl. CR69 above 256K'
         call tdots
         mov bx,0x101
         call setm
@@ -6050,7 +6078,7 @@ vesa_func:
         FAILB 4
 .g1:    call tend
         ; palette
-        TB '4F09 256 entries, DAC readback'
+        TB C_VBE,'4F09 256 entries, DAC readback'
         call tdots
         mov bx,0x101
         call setm
@@ -6132,7 +6160,7 @@ vesa_func:
         FAILB 8
 .p7:    call tend
         ; save / restore
-        TB '4F04 save/restore round trip'
+        TB C_VBE,'4F04 save/restore round trip'
         call tdots
         mov bx,0x101
         call setm
@@ -6315,7 +6343,7 @@ markchk:                                ; -> EAX, EDX
 ; before reading: catches MCLK too fast for the RAM and bank aliasing. Fail bit 1, the error count and
 ; the first bad address are printed. Expect 0 errors at 59.96 MHz.
 vram_test:
-        TB 'VRAM all banks, 2 patterns (MCLK)'
+        TB C_S3,'VRAM all banks, 2 patterns (MCLK)'
         call tdots
         mov bx,0x101
         call setm
@@ -6404,7 +6432,7 @@ vram_test:
 ; write the last 256 bytes through the LFB and read through the last bank. Fail bits 1 and 2;
 ; WARN 01 when INT 15h AH=87h is not available.
 lfb_cross:
-        TB 'Banked window and LFB same memory'
+        TB C_VBE,'Banked window and LFB same memory'
         call tdots
         mov bx,0x101
         call setm
@@ -6815,6 +6843,7 @@ tbegin: mov word [fails],0
         VS 'D:TEST '                    ; /V: test name and a flushed debug log
         call vstrz
         call vnl
+        call pcat
 .l:     lodsb
         or al,al
         jz .e
@@ -6836,6 +6865,8 @@ tbeginx:
         mov word [warns],0
         mov byte [mm_n],0
         mov byte [infoflag],0
+        mov byte [tcat],C_VGA           ; Mode X / Mode Y
+        call pcat
         VS 'D:TEST (mode X)',13,10
         mov word [vname],0
         push ax
@@ -6870,8 +6901,75 @@ flush:  cmp byte [tofile],1
         pop ds
         popa
 .r:     ret
+; Summary by category: one line per category with results, e.g. "VGA    PASS 40  FAIL 0  WARN 0  INFO 0"
+catsum: xor cx,cx
+.l:     mov bx,cx
+        shl bx,3
+        add bx,catcnt
+        mov ax,[bx]
+        or ax,[bx+2]
+        or ax,[bx+4]
+        or ax,[bx+6]
+        jz .n
+        mov [tcat],cl
+        call pcat
+        PS 'PASS '
+        movzx eax,word [bx]
+        call pdec
+        PS '  FAIL '
+        movzx eax,word [bx+2]
+        call pdec
+        PS '  WARN '
+        movzx eax,word [bx+4]
+        call pdec
+        PS '  INFO '
+        movzx eax,word [bx+6]
+        call pdec
+        PS 13,10
+.n:     inc cx
+        cmp cx,NCAT
+        jb .l
+        ret
+
+; the category of [tcat] as a 5-character column
+pcat:   push ax
+        push si
+        movzx si,byte [tcat]
+        imul si,si,5
+        add si,catnames
+        mov ah,5
+.c:     lodsb
+        call putc
+        dec ah
+        jnz .c
+        pop si
+        pop ax
+        ret
+
+; AL = VGA BIOS mode -> [tcat]: 07h/0Fh MDA, 00h-06h CGA, 0Dh-10h EGA, others VGA
+modecat:
+        push ax
+        and al,0x7F
+        mov ah,C_MDA
+        cmp al,0x07
+        je .s
+        cmp al,0x0F
+        je .s
+        mov ah,C_CGA
+        cmp al,0x06
+        jbe .s
+        mov ah,C_EGA
+        cmp al,0x0D
+        jb .v
+        cmp al,0x10
+        jbe .s
+.v:     mov ah,C_VGA
+.s:     mov [tcat],ah
+        pop ax
+        ret
+
 tdots:  push ax
-.l:     cmp byte [col],38
+.l:     cmp byte [col],43
         jae .r
         mov al,' '
         call putc
@@ -6879,30 +6977,39 @@ tdots:  push ax
 .r:     pop ax
         ret
 tend:   push ax
+        push bx
+        movzx bx,byte [tcat]
+        shl bx,3                        ; catcnt: 4 words per category (PASS, FAIL, WARN, INFO)
+        add bx,catcnt
         cmp word [fails],0
         jne .f
         cmp byte [infoflag],0
         jne .i
         cmp word [warns],0
         jne .w
+        inc word [bx]
         inc word [npass]
         PS '  PASS',13,10
         jmp .x
-.f:     inc word [nfail]
+.f:     inc word [bx+2]
+        inc word [nfail]
         PS '  FAIL '
         mov ax,[fails]
         call phex4
         PS 13,10
         jmp .x
-.w:     inc word [nwarn]
+.w:     inc word [bx+4]
+        inc word [nwarn]
         PS '  WARN '
         mov al,[warns]
         call phex2
         PS 13,10
         jmp .x
-.i:     inc word [ninfo]
+.i:     inc word [bx+6]
+        inc word [ninfo]
         PS '  INFO',13,10
-.x:     call mm_flush
+.x:     pop bx
+        call mm_flush
         cmp byte [vflag],1              ; /V: copy the result line(s), then a register dump
         jne .nv
         pusha
@@ -7204,6 +7311,7 @@ s_start db 'S3COMPAT ',VERSION,': the test takes about 3 minutes. The screen wil
         db 'constantly. Wait for the DOS prompt to come back.',13,10
         db 'Press any key to start, Esc to cancel.',13,10
 s_start_len equ $-s_start
+catnames db 'MDA  CGA  EGA  VGA  VBE  S3   '
 s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS',13,10
         db '  S3COMPAT [/Q] [/V] > S3COMPAT.LOG',13,10
         db '  /Q                  skip the 2 MB VRAM test',13,10
@@ -7270,6 +7378,8 @@ banks   dw 32
 sbsize  dw 0
 align 4
 tmpd    dd 0
+tcat    db C_VGA
+catcnt  times NCAT*4 dw 0
 tmpd2   dd 0
 t0      dd 0
 runt0   dd 0                            ; BIOS tick when the test started (after the key)
