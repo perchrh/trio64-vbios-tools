@@ -126,6 +126,10 @@ def revert_mutants(rom, ref):
 EXPECTED = {
     'int10 AH=12 BL=20': 'the BIOS has no alternate print screen: a RET in 2.04.07 too (S3COMPAT WARN)',
     'int10 AX=4F15 BL=1': 'the model has no DDC lines; S3COMPAT reads the EDID on the card only',
+    # refresh entries of S3 modes 3Dh/4Dh (VESA 119h/11Ah, 1280x1024 at 15/16 bpp, 2.5 MB): the card
+    # and the model have 2 MB, so the BIOS refuses these modes and no test can set them
+    'revert 084F-0850': '1280x1024x15/16 at 43 Hz: needs 2.5 MB, the card has 2 MB (mode refused)',
+    'revert 0879-087A': '1280x1024x15/16 at 85 Hz: needs 2.5 MB, the card has 2 MB (mode refused)',
 }
 
 
