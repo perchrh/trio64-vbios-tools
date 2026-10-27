@@ -7,6 +7,7 @@
 ;
 ; Usage
 ;   S3TEST [/V] > S3TEST.LOG
+;   S3TEST /H (or /?) prints the parameters and the monitor note below.
 ;   /V  debug log in S3TEST.DBG (common/vdebug.inc): every INT 10h call (except during the throughput
 ;       benchmark), the result line, a register dump after every test and the raw retrace counts.
 ;       The normal output is the same with or without /V.
@@ -14,7 +15,7 @@
 ;   Exit code 0 = every test passed, 1 = at least one failed.
 ;   Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at 60 Hz is
 ;   64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be damaged by
-;   a line frequency above its range. S3TEST prints this on stderr when it starts.
+;   a line frequency above its range. The /H help says so.
 ;   The report ends with "Time spent: x.y s", the run time from the BIOS tick (with /V it includes
 ;   writing the debug log, so it is the one line that differs from a run without /V).
 ;
@@ -92,7 +93,11 @@ start:  cld
         cmp al,'/'
         jne .op
         lodsb
+        cmp al,'?'
+        je .hlp
         and al,0xDF
+        cmp al,'H'
+        je .hlp
         cmp al,'V'
         jne .op
         mov ax,cs
@@ -106,12 +111,13 @@ start:  cld
 .vm:    mov dx,s_vnomem
         mov ah,9
         int 0x21
-.opd:   mov dx,s_mon                    ; monitor note on stderr (not redirected by >)
-        mov cx,s_mon_len
-        mov bx,2
-        mov ah,0x40
+        jmp .opd
+.hlp:   mov dx,s_help                   ; /H, /?: the parameters and the monitor note
+        mov ah,9
         int 0x21
-        mov dx,s_title
+        mov ax,0x4C00
+        int 0x21
+.opd:   mov dx,s_title
         call puts
         mov ax,[bp_]
         mov [vls],ax
@@ -2169,9 +2175,14 @@ s_fail  db '  FAIL',13,10,'$'
 s_sum1  db 13,10,'Passed: $'
 s_sum2  db '  Failed: $'
 s_sum3  db 13,10,'$'
-s_mon   db 'S3TEST ',VERSION,': the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). Do not run',13,10
-        db 'it with a fixed-frequency or low-end CRT monitor that cannot take it; LCDs are safe.',13,10
-s_mon_len equ $-s_mon
+s_help  db 'S3TEST ',VERSION,' - regression test for the Trio64V2/DX VBIOS ',ROMVER,13,10
+        db '  S3TEST [/V] > S3TEST.LOG',13,10
+        db '  /V                  debug log in S3TEST.DBG (BIOS calls, registers, timing)',13,10
+        db '  /H, /?              this help',13,10
+        db 'Exit code 0 = every test passed, 1 = at least one failed.',13,10
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10,'$'
 s_sum4  db 'Time spent: $'
 s_sum5  db ' s',13,10,'$'
 

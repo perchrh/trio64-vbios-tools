@@ -8,6 +8,7 @@
 ;
 ; Usage
 ;   S3COMPAT [/Q] [/V] > S3COMPAT.LOG
+;   S3COMPAT /H (or /?) prints the parameters and the monitor note below.
 ;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VSHOW)
 ;   /V  debug log in S3COMPAT.DBG (common/vdebug.inc): every INT 10h call with registers and duration,
 ;       a register dump and the result line after every test, 4F00/4F01/AH=1Bh blocks, per-frame
@@ -25,7 +26,7 @@
 ;   Monitor: the test sets line frequencies up to 91 kHz (1280x1024 at 85 Hz, 4F14 refresh test) and
 ;   75 kHz (1600x1200 at 60 Hz), and the DPMS test stops the syncs for a moment. LCDs refuse what they
 ;   cannot show; an old fixed-frequency or low-end CRT can be damaged by a line frequency above its
-;   range. The notice before the key press says so.
+;   range. The /H help says so.
 ;   The last line, "Time spent: x.y s", is the run time from the key press on, from the BIOS tick
 ;   (with /V it includes writing the debug log, so it is the one line that differs without /V).
 ;
@@ -113,7 +114,11 @@ start:  cld
         cmp al,'/'
         jne .op
         lodsb
+        cmp al,'?'
+        je .hlp
         and al,0xDF
+        cmp al,'H'
+        je .hlp
         cmp al,'Q'
         jne .o3
         mov byte [quick],1
@@ -121,6 +126,11 @@ start:  cld
         jne .op
         mov byte [vreq],1
         jmp .op
+.hlp:   mov dx,s_help                   ; /H, /?: the parameters and the monitor note
+        mov ah,9
+        int 0x21
+        mov ax,0x4C00
+        int 0x21
 .opd:   mov ax,0x4400                   ; stdout a file? then write + commit after every test step
         mov bx,1
         int 0x21
@@ -6698,11 +6708,18 @@ EXTN    equ ($-extlist)/2
 
 s_start db 'S3COMPAT ',VERSION,': the test takes about 3 minutes. The screen will change modes',13,10
         db 'constantly. Wait for the DOS prompt to come back.',13,10
-        db 'Monitor: line frequencies up to 91 kHz (1280x1024 at 85 Hz in the 4F14 refresh test)',13,10
-        db 'and 75 kHz (1600x1200 at 60 Hz). LCDs are safe (they show out of range); do not run it',13,10
-        db 'with a fixed-frequency or low-end CRT that cannot take them, it can be damaged.',13,10
         db 'Press any key to start, Esc to cancel.',13,10
 s_start_len equ $-s_start
+s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS',13,10
+        db '  S3COMPAT [/Q] [/V] > S3COMPAT.LOG',13,10
+        db '  /Q                  skip the 2 MB VRAM test',13,10
+        db '  /V                  debug log in S3COMPAT.DBG (BIOS calls, registers, timing)',13,10
+        db '  /H, /?              this help',13,10
+        db 'About 3 minutes; a key starts it, Esc cancels. Exit code 0 = no FAIL, 1 = a FAIL.',13,10
+        db 'Monitor: line frequencies up to 91 kHz (1280x1024 at 85 Hz in the 4F14 refresh test)',13,10
+        db 'and 75 kHz (1600x1200 at 60 Hz). An LCD shows out of range and takes no harm; an old',13,10
+        db 'fixed-frequency or low-end CRT can be damaged by a line frequency above its range:',13,10
+        db 'do not use one.',13,10,'$'
 s_vname db 'S3COMPAT.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
 s_nomem db 'Not enough memory (needs 256 KB free).',13,10,'$'

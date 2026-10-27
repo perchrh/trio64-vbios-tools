@@ -28,7 +28,8 @@
 ;                            intended timing (for example 1280x1024 DMT: 60.0 Hz, 64.0 kHz, 1066 lines)
 ;   Monitor: the BIOS's default timings reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at
 ;   60 Hz is 64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be
-;   damaged by a line frequency above its range. VSHOW prints this on stderr before it sets a mode.
+;   damaged by a line frequency above its range. The /H help says so, and /I shows it on the screen
+;   once, before the mode list (a key goes on, Esc quits).
 ;   Errors are printed as "VSHOW <version>: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
 ;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw.
 ;
@@ -147,19 +148,7 @@ start:  cld
         call dputs
 .vd:    pop cx
         pop bx
-.d1:    cmp byte [allm],0               ; a mode or /A, /I: the monitor note on stderr first
-        jne .w
-        jcxz .d2
-.w:     push bx
-        push cx
-        mov dx,s_mon
-        mov cx,s_mon_len
-        mov bx,2
-        mov ah,0x40
-        int 0x21
-        pop cx
-        pop bx
-.d2:    cmp byte [allm],1
+.d1:    cmp byte [allm],1
         je runall
         cmp byte [allm],2
         je menu
@@ -595,7 +584,16 @@ menu:   mov dword [vib],'VBE2'
         jmp vexit
 .draw:  mov ax,3
         int 0x10
-        mov ah,1                        ; hide the cursor
+        cmp byte [warned],0             ; the first time: the monitor note, a key to go on
+        jne .dr1
+        mov byte [warned],1
+        mov dx,s_mon
+        call dputs
+        xor ah,ah
+        int 0x16
+        cmp al,27
+        je .quit
+.dr1:   mov ah,1                        ; hide the cursor
         mov cx,0x2000
         int 0x10
         call mdraw
@@ -1593,11 +1591,15 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db '  /H, /?, /HELP       this help',13,10
         db 'Each mode shows a white frame, the pattern, the mode, measured refresh,',13,10
         db 'line frequency and total lines; any key returns.',13,10
-        db 'Monitor: up to 75 kHz line frequency (1600x1200 at 60 Hz). LCDs are safe (they show',13,10
-        db 'out of range); an old fixed-frequency or low-end CRT can be damaged above its range.',13,10,'$'
-s_mon   db 'VSHOW ',VERSION,': the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). Do not use',13,10
-        db 'a fixed-frequency or low-end CRT monitor that cannot take it; LCDs are safe.',13,10
-s_mon_len equ $-s_mon
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10,'$'
+s_mon   db 'VSHOW ',VERSION,' interactive mode',13,10,13,10
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10
+        db 13,10,'Press any key to go on, Esc to quit.',13,10,'$'
+warned  db 0
 s_vname db 'VSHOW.DBG',0
 s_vnomem db 'VSHOW ',VERSION,': not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
 s_bad   db 'VSHOW ',VERSION,': bad argument.',13,10,13,10,'$'
