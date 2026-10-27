@@ -15,6 +15,7 @@
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
 ;   /V                   debug log in VSHOW.DBG (see common/vdebug.inc): every INT 10h call, 4F00/4F01
 ;                        blocks, registers and per-frame timer counts of each mode shown
+;   /S                   silent: no monitor warning and no key press before the modes (batch runs)
 ;
 ; The test picture and what to expect
 ;   16 colour bars           every bar a solid, distinct colour (direct colour modes use the 4F01 masks)
@@ -28,8 +29,9 @@
 ;                            intended timing (for example 1280x1024 DMT: 60.0 Hz, 64.0 kHz, 1066 lines)
 ;   Monitor: the BIOS's default timings reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at
 ;   60 Hz is 64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be
-;   damaged by a line frequency above its range. The /H help says so, and /I shows it on the screen
-;   once, before the mode list (a key goes on, Esc quits).
+;   damaged by a line frequency above its range. Before a mode or /A, VSHOW prints this on stderr and
+;   waits for a key (Esc cancels); /I shows it on the screen once, before the mode list. /S skips the
+;   warning and the key. The /H help says so too.
 ;   Errors are printed as "VSHOW <version>: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
 ;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw.
 ;
@@ -115,8 +117,13 @@ start:  cld
         mov byte [allm],2
         jmp .p
 .sw4:   cmp al,'v'
-        jne .sw5
+        jne .sw4s
         mov byte [vreq],1
+        jmp .p
+.sw4s:  cmp al,'s'
+        jne .sw5
+        mov byte [silent],1
+        mov byte [warned],1             ; /I: no notice either
         jmp .p
 .sw5:   cmp al,'?'
         je .help
@@ -148,11 +155,30 @@ start:  cld
         call dputs
 .vd:    pop cx
         pop bx
-.d1:    cmp byte [allm],1
-        je runall
-        cmp byte [allm],2
-        je menu
+.d1:    cmp byte [allm],2
+        je menu                         ; /I shows the notice on the screen before its list
+        cmp byte [allm],1
+        je .w
         jcxz list
+.w:     cmp byte [silent],1             ; a mode or /A: the monitor warning on stderr and a key
+        je .d2
+        push bx
+        push cx
+        mov dx,s_monw
+        mov cx,s_monw_len
+        mov bx,2
+        mov ah,0x40
+        int 0x21
+        xor ah,ah
+        int 0x16
+        pop cx
+        pop bx
+        cmp al,27                       ; Esc cancels
+        jne .d2
+        mov ax,0x4C00
+        jmp vexit
+.d2:    cmp byte [allm],1
+        je runall
         mov [mode],bx
         jmp show
 
@@ -1588,6 +1614,7 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db '  /L                  1-pixel vertical line pattern (LCD clock/phase adjustment)',13,10
         db '                      instead of the colour bars',13,10
         db '  /V                  debug log: raw BIOS calls, registers and timing in VSHOW.DBG',13,10
+        db '  /S                  silent: no monitor warning, no key press before the modes',13,10
         db '  /H, /?, /HELP       this help',13,10
         db 'Each mode shows a white frame, the pattern, the mode, measured refresh,',13,10
         db 'line frequency and total lines; any key returns.',13,10
@@ -1598,8 +1625,15 @@ s_mon   db 'VSHOW ',VERSION,' interactive mode',13,10,13,10
         db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
         db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
         db 'by a line frequency above its range: do not use one.',13,10
-        db 13,10,'Press any key to go on, Esc to quit.',13,10,'$'
+        db 13,10,'Press any key to continue, Esc to cancel.',13,10,'$'
+s_monw  db 'VSHOW ',VERSION,13,10
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10
+        db 'Press any key to continue, Esc to cancel.',13,10
+s_monw_len equ $-s_monw
 warned  db 0
+silent  db 0                            ; /S given
 s_vname db 'VSHOW.DBG',0
 s_vnomem db 'VSHOW ',VERSION,': not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
 s_bad   db 'VSHOW ',VERSION,': bad argument.',13,10,13,10,'$'

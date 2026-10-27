@@ -33,8 +33,8 @@ Tests
                    line) and S3TEST.DBG is well formed
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
                    monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT, shown once
-                   before the VSHOW /I list, and S3TEST and S3COMPAT print it on stderr with a key
-                   prompt, where Esc cancels (s3test, s3compat_vga: /S prints nothing)
+                   before the VSHOW /I list, and S3TEST, S3COMPAT and VSHOW (a mode, /A) print it on
+                   stderr with a key prompt, where Esc cancels (/S prints nothing)
   s3compat_vga     S3COMPAT's VGA, Mode X and VGA BIOS function parts (built with nasm from the source
                    with the rest cut out): every test passes (registers, BIOS data, refresh, planar
                    memory, palettes, AH=01h-1Ch, AH=13h, CGA scroll, graphics XOR, AX=1120h-1124h, the
@@ -451,6 +451,8 @@ def t_vshow(c):
     r1 = c.machine().run_com(com, '101' + v)
     c.save('VSHOW', r1)
     check(r1.exit and r1.exit[0] == 'exit' and r1.exit[1] == 0, 'VSHOW 101 ended with %s' % (r1.exit,))
+    check(b'75 kHz' in bytes(r1.stderr or b'') and b'Press any key to continue' in bytes(r1.stderr or b''),
+          'VSHOW 101: no monitor warning with a key prompt on stderr')
     rh = c.machine().run_com(com, '/H')
     check(b'VSHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
     # the monitor note: in the /H help of VSHOW, S3TEST and S3COMPAT, and once before the /I list
@@ -460,19 +462,20 @@ def t_vshow(c):
             out = r.stdout.replace(b'\r\n', b' ')
             check(r.exit == ('exit', 0) and b'%d kHz' % k in out and b'CRT can be damaged' in out,
                   '%s %s: no monitor note in the help' % (tool, sw))
-    for tool, k in (('S3TEST.COM', 75), ('S3COMPAT.COM', 91)):
-        r = c.machine(keys=[0x011B]).run_com(c.tool(tool), '')
+    for tool, k, arg in (('S3TEST.COM', 75, ''), ('S3COMPAT.COM', 91, ''), ('VSHOW.COM', 75, '101')):
+        r = c.machine(keys=[0x011B]).run_com(c.tool(tool), arg)
         err = bytes(r.stderr or b'').replace(b'\r\n', b' ')
         check(r.exit == ('exit', 0) and b'%d kHz' % k in err and b'Press any key to continue' in err
               and b'PASS' not in bytes(r.stdout), '%s: the monitor warning, then Esc does not cancel' % tool)
     ri = c.machine(keys=[0x011B]).run_com(com, '/I')
-    check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to quit' in ri.stdout,
+    check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to cancel' in ri.stdout,
           'VSHOW /I: no monitor note before the list (Esc there quits)')
     r2 = c.machine(keys=[0x1C0D, 0x011B]).run_com(com, '/I')
     check(r2.stdout.count(b'75 kHz') == 1, 'VSHOW /I: the monitor note is not shown exactly once')
     if v:
-        r0 = c.machine().run_com(com, '101')
+        r0 = c.machine().run_com(com, '101 /S')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
+        check(b'kHz' not in bytes(r0.stderr or b''), 'VSHOW /S: the monitor warning is still printed')
         lines = check_dbg(r1.files.get('VSHOW.DBG'), 'VSHOW.DBG')
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
