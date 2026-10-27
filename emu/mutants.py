@@ -28,7 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(SRC, 'rompatch'))
 
-ORDER = ('post,rom_patches,vga_registers,vga_palettes,mono,errors,s3compat_vga,s3compat_vbe,windows,vgalog,'
+ORDER = ('post,rom_patches,vga_registers,vga_palettes,mono,errors,display_switch,s3compat_vga,s3compat_vbe,windows,vgalog,'
          'vgalog_mem,s3alias,s3regs,dos_exe,vshow,s3test,s3compat_full')
 
 
@@ -121,6 +121,8 @@ def revert_mutants(rom, ref):
 # mutants that survive and why: no emulator test can see them (the result is the same) or the model
 # lacks the hardware
 EXPECTED = {
+    'int10 AH=12 BL=20': 'the BIOS has no alternate print screen: a RET in 2.04.07 too (S3COMPAT WARN)',
+    'int10 AX=4F15 BL=1': 'the model has no DDC lines; S3COMPAT reads the EDID on the card only',
 }
 
 

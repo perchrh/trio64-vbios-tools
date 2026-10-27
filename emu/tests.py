@@ -72,6 +72,7 @@ Tests
                    returns with IF=0 and no timer tick; the driver sequence 4F00, 4F01 for every mode,
                    4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
                    IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
+  display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
   --coverage FILE  records the ROM bytes all tests execute and read, for emu/codemap.py (test coverage)
@@ -497,7 +498,7 @@ def t_s3compat_vga(c):
     check(len(vga) >= 17 + 6, 'only %d VGA/Mode X lines' % len(vga))
     check(len(func) >= 35, 'only %d VGA BIOS function lines' % len(func))
     known = (('VGA 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
-             ('Chip ID', 'INFO'))
+             ('Chip ID', 'INFO'), ('AH=12 BL=20', 'WARN 01'))     # 2.04.07 has no alternate print screen
     bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
            not any(l.startswith(a) and l.rstrip().endswith(b) for a, b in known)]
     details = [l.strip() for l in lines if l.startswith('      ')]
@@ -1124,11 +1125,26 @@ def t_windows(c):
     return '%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(calls), len(modes))
 
 
+def t_display_switch(c):
+    """AH=12h BL=35h display switch (emulator only: on the card AL=02h turns the video off). IBM: AL=02h
+    switches the active video off and saves its state in the 128-byte buffer at ES:DX, AL = 12h when
+    supported."""
+    m = c.machine()
+    m.int10(0x03)
+    m.mu.mem_write(0x30000, b'\x55' * 128)
+    r = m.int10(0x1202, bx=0x35, es=0x3000, dx=0)
+    check(r['ax'] & 0xFF == 0x12, 'AX=1202h BL=35h: AL=%02X, expected 12h (supported)' % (r['ax'] & 0xFF))
+    check(m.mem(0x30000, 128) != b'\x55' * 128, 'AX=1202h BL=35h: nothing saved in the switch state buffer')
+    m.int10(0x1203, bx=0x35, es=0x3000, dx=0)
+    m.int10(0x03)
+    return 'AL=02h: AL=12h, state saved'
+
+
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows)]
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch)]
 
 
 def main():

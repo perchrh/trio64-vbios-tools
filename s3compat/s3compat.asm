@@ -1416,7 +1416,13 @@ bios_tests:
 ;                         41h * 32 holds the glyph, 2 AX=1101h BL=0: 'A' there is the glyph of the
 ;                         8x14 table of AX=1130h BH=2 (CX bytes; this BIOS has no 8x14 font and gives
 ;                         the 8x16 one, the known WARN of the font tests; 'A' is overwritten with AAh
-;                         first, so a call that does nothing fails)
+;                         first, so a call that does nothing fails), 4 AX=1102h: the 8x8 glyph of
+;                         AX=1130h BH=3, 8 AX=1104h: the 8x16 glyph of BH=6, 10h AX=1110h (8x8 user
+;                         glyph): in plane 2, 20h and recalculated: BDA 485h = 8, 484h = 49, CR09 = 7,
+;                         40h AX=1103h: SR03 = the block specifier BL (05h, then 00h)
+;   AH=12h BL=20h         WARN 1 INT 05h (cleared first) does not point into the video BIOS segment
+;                         (INT 10h's) afterwards: no alternate print screen. Known: 2.04.07 has none,
+;                         the subfunction is a RET (IBM's VGA BIOS has one)
 bios_gaps:
         mov ax,4
         int 0x10
@@ -1502,7 +1508,7 @@ bios_gaps:
         je .p3
         FAILB 4
 .p3:    call tend
-        TB 'AX=1100/1101 text font loads'
+        TB 'AX=1100-1104, 1110 text fonts'
         call tdots
         mov ax,3
         int 0x10
@@ -1518,9 +1524,115 @@ bios_gaps:
         mov ax,0x1101
         xor bl,bl
         int 0x10
+        mov bh,6                        ; no 8x14 font (known): AX=1130h BH=2 gives the 8x16 table
+        call fptr
+        mov [tmpd],ax
+        mov [tmpd+2],dx
         mov bh,2
-        call fptr                       ; DX:AX = the 8x14 table, CX bytes per character
+        call fptr
+        mov cx,14
+        cmp ax,[tmpd]
+        jne .f1b
+        cmp dx,[tmpd+2]
+        jne .f1b
+        mov cx,16
+.f1b:   mov bh,2
+        call romglyph
+        je .f2
+        FAILB 2
+.f2:    mov bp,aa16                     ; AX=1102h: the 8x8 font
+        call ld1
+        mov ax,0x1102
+        xor bl,bl
+        int 0x10
+        mov bh,3
+        mov cx,8
+        call romglyph
+        je .f3
+        FAILB 4
+.f3:    mov bp,aa16                     ; AX=1104h: the 8x16 font
+        call ld1
+        mov ax,0x1104
+        xor bl,bl
+        int 0x10
+        mov bh,6
+        mov cx,16
+        call romglyph
+        je .f4
+        FAILB 8
+.f4:    push cs                         ; AX=1110h: a user 8x8 glyph with recalculation
+        pop es
+        mov bp,g8
+        mov ax,0x1110
+        mov bx,0x0800
+        mov cx,1
+        mov dx,0x41
+        int 0x10
+        mov si,g8
+        mov cx,8
+        call pl2cmp
+        je .f5
+        FAILB 0x10
+.f5:    push es
+        xor ax,ax
+        mov es,ax
+        mov ax,[es:0x484]               ; 484h rows - 1, 485h height
+        pop es
+        cmp ax,0x0831                   ; 400 lines / 8 = 50 rows
+        jne .f6
+        RC 9
+        and al,0x1F
+        cmp al,7
+        je .f7
+.f6:    FAILB 0x20
+.f7:    mov ax,3
+        int 0x10
+        mov ax,0x1103                   ; AX=1103h: block specifier into SR03
+        mov bl,0x05
+        int 0x10
+        RS 3
+        cmp al,0x05
+        jne .f8
+        mov ax,0x1103
+        xor bl,bl
+        int 0x10
+        RS 3
+        or al,al
+        jz .f9
+.f8:    FAILB 0x40
+.f9:    mov ax,3
+        int 0x10
+        call tend
+        TB 'AH=12 BL=20 alternate print screen'
+        call tdots
+        push es
+        xor ax,ax
+        mov es,ax
+        mov eax,[es:0x14]               ; INT 05h, cleared for the test
+        mov [tmpd],eax
+        mov dword [es:0x14],0
+        mov ah,0x12
+        mov bl,0x20
+        int 0x10
+        mov ax,[es:0x16]
+        cmp ax,[es:0x42]                ; the video BIOS segment (INT 10h)
+        jne .r1
+        cmp word [es:0x14],0
+        jne .r2
+.r1:    PS 'not implemented (IBM sets INT 05h)'  ; 2.04.07: BL=20h is a RET
+        WARNB 1
+.r2:    mov eax,[tmpd]
+        mov [es:0x14],eax
+        pop es
+        call tend
+        ret
+
+; BH = AX=1130h font, CX = its bytes per character (AX=1130h returns the current height in CX, not
+; the font's): 'A' in plane 2 (block 0) must be its glyph -> ZF
+romglyph:
         mov [tmpw],cx
+        call fptr                       ; DX:AX table
+        mov cx,[tmpw]
         push ds
         mov ds,dx
         imul si,cx,0x41
@@ -1533,11 +1645,6 @@ bios_gaps:
         mov si,palbuf2
         mov cx,[tmpw]
         call pl2cmp
-        je .f2
-        FAILB 2
-.f2:    mov ax,3
-        int 0x10
-        call tend
         ret
 
 ; AX=1100h: one glyph (ES:BP, 16 bytes) for 'A' in block 0
@@ -4839,7 +4946,8 @@ setm:   mov ax,0x4F02
 ;                               match (standby: HSYNC off, suspend: VSYNC off, off: both, datasheet bits
 ;                               5-4 and 7-6), 4 back on: SR0D sync bits not 00 or state not 0. The
 ;                               monitor sees the syncs stop for a moment
-;   4F15 DDC EDID               INFO when DDC2 is not offered. WARN 1 the EDID read failed (can be the
+;   4F15 DDC EDID               INFO when DDC2 is not offered, WARN 2 when 4F15 is not supported at all
+;                               (AL not 4Fh; VBE/DDC is optional, this BIOS has it). WARN 1 the EDID read failed (can be the
 ;                               monitor or cable), FAIL 2 the 128 bytes read have no EDID header or a
 ;                               wrong checksum
 vesa_more:
@@ -5162,9 +5270,11 @@ vesa_more:
         jne .pf1
         push cx
         mov ax,0x4F10
-        mov bl,2
+        mov bx,0xFF02                   ; BH = FFh: a get that does nothing must not pass
         int 0x10
         pop cx
+        cmp ax,0x004F
+        jne .pf1
         cmp bh,cl
         je .pr
 .pf1:   FAILB 1
@@ -5192,8 +5302,10 @@ vesa_more:
         mov bx,0x0001
         int 0x10
         mov ax,0x4F10
-        mov bl,2
+        mov bx,0xFF02
         int 0x10
+        cmp ax,0x004F
+        jne .pf4
         or bh,bh
         jnz .pf4
         mov al,0x0D
@@ -5214,7 +5326,14 @@ vesa_more:
         push es
         int 0x10
         pop es
-        cmp ax,0x004F
+        cmp al,0x4F
+        je .dq
+        PS 'not supported (AL='         ; VBE/DDC is optional, but this BIOS has it
+        call phex2
+        PS ') '
+        WARNB 2
+        jmp .de
+.dq:    cmp ax,0x004F
         jne .dn
         mov [tmpw],bx
         PS 'caps '
@@ -5578,6 +5697,8 @@ badsub: ;   AX      BX      fail bit
 ;   invalid mode 17Fh   1 4F01 accepted, 2 4F02 accepted, 4 current mode changed
 ;   clear / D15         1 memory cleared despite D15, 2 not cleared without it
 ;   4F05 + WinFuncPtr   1 get bank, 2 no WinFuncPtr, 4 far call does not switch, 8 get after far call
+;                       (the gets start with DX = FFFFh and must return AX = 004Fh, so a no-op fails;
+;                       the same for the 4F07 and 4F10 gets: CX/DX, BH = FFh first)
 ;   4F06                1 set 1024 pixels (or CR13/CR51 pitch), 2 set 2048 bytes,
 ;                       4 BL=3 maximum not min(8184, memory / 480) rounded down to 8 (p8 fix)
 ;   4F07                1 start address (CR0C/CR0D/CR69 bits 3-0) or read back, 4 wait-for-retrace set
@@ -5651,10 +5772,13 @@ vesa_func:
         int 0x10
         mov ax,0x4F05
         mov bx,0x0100
+        mov dx,0xFFFF                   ; a get that does nothing must not pass
         int 0x10
+        cmp ax,0x004F
+        jne .e0
         cmp dx,7
         je .e
-        FAILB 1
+.e0:    FAILB 1
 .e:     mov eax,[mibuf+0x0C]
         or eax,eax
         jnz .e1
@@ -5689,9 +5813,13 @@ vesa_func:
         FAILB 4
 .e2:    mov ax,0x4F05
         mov bx,0x0100
+        mov dx,0xFFFF
         int 0x10
+        cmp ax,0x004F
+        jne .e2f
         cmp dx,9
         je .e3
+.e2f:
         FAILB 8
 .e3:    call tend
         ; logical scan line
@@ -5996,7 +6124,11 @@ startchk:                               ; CX=x DX=y in 101h, pitch 640
         jne .f
         mov ax,0x4F07
         mov bx,1
+        mov cx,0xFFFF                   ; a get that does nothing must not pass
+        mov dx,cx
         int 0x10
+        cmp ax,0x004F
+        jne .f
         cmp cx,[tmpw]
         jne .f
         cmp dx,[tmpw2]
