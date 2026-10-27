@@ -576,6 +576,10 @@ S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] 
 S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
                   r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
                   r'.*INFO$']
+# with 4 MB the BIOS (2.04.07, unchanged by the patches) offers modes whose default DCLK is above the
+# datasheet maximum for their depth (50 MHz at 32 bpp, 95 MHz at 15/16 bpp): WARN 02, as 106h
+S3COMPAT_KNOWN_4MB = [r'VESA 0118 .*WARN 02$', r'VESA 0164 .*WARN 02$', r'VESA 0119 .*WARN 02$',
+                      r'VESA 011A .*WARN 02$']
 
 
 def t_s3compat_full(c):
@@ -587,7 +591,8 @@ def t_s3compat_full(c):
     tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
     check(len(tests) >= 230, 'only %d result lines' % len(tests))
     bad = [l.strip() for l in tests if not l.endswith('PASS') and
-           not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + S3COMPAT_KNOWN)]
+           not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + S3COMPAT_KNOWN +
+                   (S3COMPAT_KNOWN_4MB if Machine.vram == 4 else []))]
     check(not bad, '%d lines not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     lim = sum(1 for l in tests if any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS))
     return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
@@ -1013,7 +1018,25 @@ def t_errors(c):
     # 5. VBE: unsupported mode, invalid ranges, OEM errors
     m.int10(0x4F02, bx=0x0101)
     s0 = vga_state(m)
-    for bx in (0x0118, 0x0164, 0x0119, 0x011A, 0x01FF, 0x017F, 0x0200):
+    # the modes of the 4F00h list that 4F01h marks unsupported (too large for the memory: 118h, 164h,
+    # 119h, 11Ah with 2 MB), and numbers that are no mode at all
+    m.mu.mem_write(0x30000, b'VBE2')
+    m.int10(0x4F00, es=0x3000, di=0)
+    loff, lseg = struct.unpack('<HH', m.mem(0x3000E, 4))
+    big = []
+    for k in range(120):
+        v = word(m, lseg * 16 + loff + 2 * k)
+        if v == 0xFFFF:
+            break
+        m.int10(0x4F01, cx=v, es=0x3000, di=0x400)
+        if not m.mem(0x30400, 1)[0] & 1:
+            big.append(v)
+    if Machine.vram == 2:
+        chk(set(big) >= {0x118, 0x164, 0x119, 0x11A}, '2 MB: 118h/164h/119h/11Ah not all marked unsupported: %s'
+            % ' '.join('%03X' % v for v in big))
+    m.int10(0x4F02, bx=0x0101)
+    s0 = vga_state(m)
+    for bx in big + [0x01FF, 0x017F, 0x0200]:
         r = m.int10(0x4F02, bx=bx)
         chk(r['ax'] != 0x004F, '4F02 BX=%04X accepted' % bx)
         chk(vga_state(m) == s0, '4F02 BX=%04X (refused) changed the video state' % bx)
@@ -1029,7 +1052,8 @@ def t_errors(c):
     chk({k: m.r['crtc'].get(k, 0) for k in (0x41, 0x52, 0x6B)} == cr0, '4F14 refused calls changed CR41/CR52/CR6B')
     r = m.int10(0x4F06, bx=0, cx=0xFFF8)
     if r['ax'] == 0x004F:                            # VBE 2.0: accepted only if the memory holds it
-        chk(r['bx'] * r['dx'] <= 2 * 1024 * 1024, '4F06 CX=FFF8h: %d bytes x %d lines do not fit 2 MB' % (r['bx'], r['dx']))
+        chk(r['bx'] * r['dx'] <= Machine.vram * 1024 * 1024, '4F06 CX=FFF8h: %d bytes x %d lines do not fit %d MB'
+            % (r['bx'], r['dx'], Machine.vram))
     m.int10(0x03)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return 'undefined functions and subfunctions, invalid modes, DF, VBE refusals'

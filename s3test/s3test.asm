@@ -53,7 +53,8 @@
 ;   320 KB written through banks 0-4 and read back: 0 errors
 ;   Banked write throughput at least 60000 KB/s (the booster; 83700 KB/s measured on p7)
 ;   4F03 in 4101h reports 4101h
-;   4F06 BL=3 in 101h: 4368 bytes and 4368 pixels (2 MB / 480 lines, rounded down to 8)
+;   4F06 BL=3 in 101h: the memory (CR36 strapping) / 480 lines rounded down to 8, at most 8184 (the
+;                    10-bit CR13/CR51 offset): 4368 bytes and pixels with 2 MB, 8184 with 4 MB
 ;   CR50 in 151h (512x384x8) = 40h (pixel length 00, was the reserved 10b in stock)
 ;   ATC flip-flop: left in the data state before a mode set, it is back in the index state after
 ;   VGA mode set clear (p12): after filling video memory, mode 13h leaves A000 all 00, mode 12h all four
@@ -662,7 +663,29 @@ t_func: mov ax,0x4F02
         cmp word [tmp],0x4101
         sete al
         call result
-        ; p8: 4F06 BL=3 maximum line length in 101h = 4368 bytes / 4368 pixels (2 MB / 480 lines)
+        ; p8: 4F06 BL=3 maximum line length in 101h: the video memory (CR36 bits 7-5 strapping, datasheet:
+        ; 000b 4 MB, 100b 2 MB, 110b 1 MB) / 480 lines rounded down to 8, at most 8184 (the 10-bit
+        ; CR13/CR51 offset in 8-byte units): 4368 with 2 MB, 8184 with 4 MB
+        call unlock
+        mov al,0x36
+        call rdcr
+        mov bl,ah
+        and bl,0xE0
+        mov eax,1024*1024
+        cmp bl,0xC0                     ; 110b: 1 MB
+        je .mm
+        shl eax,1                       ; 100b and the others: 2 MB
+        or bl,bl
+        jnz .mm
+        shl eax,1                       ; 000b: 4 MB
+.mm:    xor edx,edx
+        mov ecx,480
+        div ecx
+        and ax,0xFFF8
+        cmp eax,8184
+        jbe .mx
+        mov ax,8184
+.mx:    mov [m_exp6],ax
         mov ax,0x4F02
         mov bx,0x0101
         int 0x10
@@ -673,6 +696,14 @@ t_func: mov ax,0x4F02
         mov [tmp2],bx
         mov [m_meas],cx
         mov dx,s_f06
+        call puts
+        movzx eax,word [m_exp6]
+        call pdec
+        mov al,'/'
+        call putc
+        movzx eax,word [m_exp6]
+        call pdec
+        mov dx,s_f06b
         call puts
         movzx eax,word [tmp2]
         call pdec
@@ -688,9 +719,10 @@ t_func: mov ax,0x4F02
         call phex4
         jmp .f6
 .s6:
-        cmp word [tmp2],4368
+        mov ax,[m_exp6]
+        cmp [tmp2],ax
         jne .f6
-        cmp word [m_meas],4368
+        cmp [m_meas],ax
         jne .f6
         mov al,1
         jmp .r6
@@ -2276,7 +2308,8 @@ s_f05   db 'VBE  4F05 set bank 3 / get (004F 0003) ... $'
 s_dat   db 'VBE  Banked data check 320 KB, errors .... $'
 s_thr   db 'VBE  Banked write throughput (>=60000) ... $'
 s_kbs   db ' KB/s$'
-s_f06   db 'VBE  4F06 BL=3 max line 101h (4368/4368) $'
+s_f06   db 'VBE  4F06 BL=3 max line 101h ($'
+s_f06b  db ') $'
 s_c50   db 'S3   CR50 in 512x384x8 151h (40) ........ $'
 s_ff    db 'VGA  ATC flip-flop reset by mode set ..... $'
 s_vclr  db 'VGA  VGA mode set clear 13h 12h 03h ..... $'
@@ -2314,6 +2347,7 @@ s_sum4  db 'Time spent: $'
 s_sum5  db ' s',13,10,'$'
 
 npass   dw 0
+m_exp6  dw 0                            ; expected 4F06 BL=3 maximum line in 101h
 lst     dw 0                            ; start of the current result line in obuf
 catcnt  times 7*3 dw 0                  ; per category: PASS, FAIL, INFO
 vls     dw 0                    ; /V: start of the current line in obuf

@@ -128,14 +128,14 @@ EXPECTED = {
     'int10 AX=4F15 BL=1': 'the model has no DDC lines; S3COMPAT reads the EDID on the card only',
     # refresh entries of S3 modes 3Dh/4Dh (VESA 119h/11Ah, 1280x1024 at 15/16 bpp, 2.5 MB): the card
     # and the model have 2 MB, so the BIOS refuses these modes and no test can set them
-    'revert 084F-0850': '1280x1024x15/16 at 43 Hz: needs 2.5 MB, the card has 2 MB (mode refused)',
-    'revert 0879-087A': '1280x1024x15/16 at 85 Hz: needs 2.5 MB, the card has 2 MB (mode refused)',
+    'revert 084F-0850': '1280x1024x15/16 at 43 Hz: needs 2.5 MB, refused with 2 MB (--vram 4 kills it)',
+    'revert 0879-087A': '1280x1024x15/16 at 85 Hz: needs 2.5 MB, refused with 2 MB (--vram 4 kills it)',
 }
 
 
-def run(m, rom_path, tmp, timeout, tests, limit):
+def run(m, rom_path, tmp, timeout, tests, limit, vram):
     name, what = m
-    args = [sys.executable, os.path.join(HERE, 'tests.py'), '-x', '--tests', ','.join(tests),
+    args = [sys.executable, os.path.join(HERE, 'tests.py'), '-x', '--tests', ','.join(tests), '--vram', str(vram),
             '--call-limit', str(limit), '--logs', tempfile.mkdtemp(dir=tmp)]
     if isinstance(what, str):
         args += ['--rom', rom_path, '--noop', what]
@@ -175,6 +175,8 @@ def main():
     ap.add_argument('-k', default='', help='only mutants whose name contains this text')
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--timeout', type=int, default=1800)
+    ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
+                    help='video memory of the model (tests.py --vram): 2 MB (the card) or 4 MB')
     ap.add_argument('--call-limit', type=int, default=10_000_000,
                     help='instructions an INT 10h call of a test may take in a mutant before it counts as a hang')
     ap.add_argument('--profile', metavar='FILE', default=os.path.join(HERE, 'logs', 'profile.json'),
@@ -207,17 +209,17 @@ def main():
     prof = None
     if os.path.exists(a.profile):
         prof = json.load(open(a.profile))
-        if prof.get('rom') != sha or prof.get('call_limit') != a.call_limit:
+        if prof.get('rom') != sha or prof.get('call_limit') != a.call_limit or prof.get('vram', 2) != a.vram:
             prof = None
     if prof is None:
         pf = os.path.join(tmp, 'profile.json')
         r = subprocess.run([sys.executable, os.path.join(HERE, 'tests.py'), '--rom', a.rom, '--profile', pf,
-                            '--call-limit', str(a.call_limit), '--logs', tempfile.mkdtemp(dir=tmp)],
+                            '--call-limit', str(a.call_limit), '--vram', str(a.vram), '--logs', tempfile.mkdtemp(dir=tmp)],
                            capture_output=True, text=True)
         if r.returncode:
             print('the unchanged ROM does not pass every test (with --call-limit %d):\n%s' % (a.call_limit, r.stdout))
             return 2
-        prof = {'rom': sha, 'call_limit': a.call_limit, 'tests': json.load(open(pf))}
+        prof = {'rom': sha, 'call_limit': a.call_limit, 'vram': a.vram, 'tests': json.load(open(pf))}
         json.dump(prof, open(a.profile, 'w'))
     order = [t for t in ORDER.split(',') if t in prof['tests']]
 
@@ -246,7 +248,7 @@ def main():
                 print(line, flush=True)
                 lf.write(line + '\n')
                 res.append((m[0], line[25:33].strip()))
-        for name, st, why, dt in ex.map(lambda mt: run(mt[0], a.rom, tmp, a.timeout, mt[1], a.call_limit), todo):
+        for name, st, why, dt in ex.map(lambda mt: run(mt[0], a.rom, tmp, a.timeout, mt[1], a.call_limit, a.vram), todo):
             line = '%-24s %-8s %-70s %5.0fs' % (name, st, why or EXPECTED.get(name, ''), dt)
             print(line, flush=True)
             lf.write(line + '\n')

@@ -53,6 +53,12 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
     .venv/bin/pip install .
     make emu-test ROM=path/to/S3V2P14.BIN
 
+`make emu-test ROM=... VRAM=4` runs the model with 4 MB (the CR36 strapping of a 4 MB card; the
+86C775 supports 2 and 4 MB): the BIOS then lists the modes up to 4 MB (1280x1024x15/16, 1152x864x32,
+1024x768x32) and the tests expect what follows from 4 MB (4F06 BL=3 maximum line 8184, the modes 4F01
+marks supported). With 4 MB S3COMPAT gives WARN 02 for 1024x768x32, 1152x864x32 and 1280x1024x15/16:
+their default pixel clock is above the datasheet maximum for the depth, as in the reference BIOS.
+
 `make emu-test` uses `.venv` when it exists, otherwise `python3`; `pip install unicorn` into any
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
 the working copy without being committed.
