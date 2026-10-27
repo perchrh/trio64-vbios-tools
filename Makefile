@@ -51,9 +51,11 @@ build/S3REGS32.EXE: s3regs/s3regs32.asm common/version.inc | build
 #   make emu-test ROM=path/to/S3V2P15.BIN [VRAM=4]   (VRAM: the memory the model reports, 2 or 4 MB)
 # Uses the virtual environment .venv when there is one, otherwise python3 (override with PYTHON=...).
 PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
+# emu-test runs this many tests at a time (default: every CPU; JOBS=1 for one after the other)
+JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 emu-test: all
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P15.BIN"; exit 2; }
-	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs $(if $(VRAM),--vram $(VRAM))
+	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs -j $(JOBS) $(if $(VRAM),--vram $(VRAM))
 
 # Test coverage of the ROM code (needs capstone too: pip install .[coverage]); fails under 80 %
 #   make coverage ROM=S3V2P15.BIN

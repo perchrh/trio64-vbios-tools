@@ -63,6 +63,11 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 marks supported). With 4 MB S3COMPAT gives WARN 02 for 1024x768x32, 1152x864x32 and 1280x1024x15/16:
 their default pixel clock is above the datasheet maximum for the depth, as in the reference BIOS.
 
+The tests are independent: `make emu-test` runs as many at a time as the machine has CPUs, each in
+its own process, the long ones (the full S3COMPAT, VSHOW /R, the S3COMPAT VBE part) first; `JOBS=1`
+runs them one after the other, `python3 emu/tests.py -j N` sets the number. The full S3COMPAT run
+(about 8 minutes) is the lower limit of the total time.
+
 `make emu-test` uses `.venv` when it exists, otherwise `python3`; `pip install unicorn` into any
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
 the working copy without being committed.

@@ -79,6 +79,7 @@ Tests
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
   --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
+  -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
   --profile FILE   per test: the INT 10h calls and the ROM bytes it executes or reads (emu/mutants.py)
@@ -1299,6 +1300,57 @@ TAGS = {
 }
 
 
+# rough run times (s, 2 MB) to start the long tests first when they run in parallel
+DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 'windows': 60,
+            'stores': 55, 's3compat_vga': 45}
+
+
+def run_test(c, name, fn, verbose):
+    """One test: returns (result text, failed, seconds)."""
+    t0 = time.time()
+    bad = False
+    try:
+        note = fn(c)
+        res = 'PASS' + ('  (%s)' % note if note else '')
+    except Skip as e:
+        res = 'SKIP  %s' % e
+    except Exception as e:  # noqa: BLE001 - report every kind of failure as a test result
+        bad = True
+        res = 'FAIL  %s' % e
+        if verbose:
+            import traceback
+            traceback.print_exc()
+    return res, bad, time.time() - t0
+
+
+def _worker(args):
+    c, name, verbose = args
+    print('%-14s started' % name, flush=True)
+    res, bad, dt = run_test(c, name, dict(TESTS)[name], verbose)
+    return name, res, bad, dt, Machine.noop_hits
+
+
+def run_parallel(c, tests, a):
+    """Run the tests in a.j processes (fork: the Machine settings are inherited), the long ones
+    first; prints each result when it is done. Returns the number of failed tests."""
+    import multiprocessing
+    order = sorted(tests, key=lambda t: -DURATION.get(t[0], 5))
+    failed = hits = 0
+    ctx = multiprocessing.get_context('fork')
+    with ctx.Pool(a.j) as pool:
+        for name, res, bad, dt, h in pool.imap_unordered(_worker, [(c, n, a.v) for n, _ in order]):
+            failed += bad
+            hits += h
+            first, _, rest = res.partition('\n')
+            print('%-14s %-60s %5.0fs' % (name, first, dt) + ('\n' + rest if rest else ''), flush=True)
+            if a.x and failed:
+                pool.terminate()
+                break
+    if a.noop:
+        print('noop: %d INT 10h calls matched %s' % (hits, a.noop))
+    return failed
+
+
 def main():
     ap = argparse.ArgumentParser(description='emulator tests for the Trio64V2 VBIOS tools')
     ap.add_argument('--rom', required=True, help='64 KB VBIOS image')
@@ -1325,6 +1377,9 @@ def main():
     ap.add_argument('--call-limit', type=int, default=Machine.call_limit,
                     help='instructions an INT 10h call of a test may take before it counts as a hang (default %d; '
                          'the 4F15h EDID read of the windows test has its own 200 million)' % Machine.call_limit)
+    ap.add_argument('-j', type=int, default=1, metavar='N',
+                    help='run N tests at a time, each in its own process (default 1; not with --coverage, '
+                         '--profile or --calls). Each test prints a line when it starts and its result when done')
     ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
                     help='video memory the CR36 strapping reports: 2 MB (the card, default) or 4 MB (the '
                          '86C775 maximum; the model still has one 64 KB window, no banked or linear memory)')
@@ -1364,31 +1419,22 @@ def main():
     if a.tests:
         byname = dict(TESTS)
         tests = [(t, byname[t]) for t in a.tests.split(',')]
+    tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))]
+    if a.j > 1 and not (a.coverage or a.profile or a.calls):
+        failed = run_parallel(c, tests, a)
+        print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+        sys.exit(1 if failed else 0)
     for name, fn in tests:
-        if a.k not in name:
-            continue
-        if a.t and not set(a.t.split(',')) & set(TAGS[name].split()):
-            continue
         if a.x and failed:
             break
         cur[0] = name
         if a.profile:
             Machine.calls = prof.setdefault(name, {'cov': [], 'calls': set()})['calls']
         print('%-14s ' % name, end='', flush=True)       # the test that is running now
-        t0 = time.time()
-        try:
-            note = fn(c)
-            res = 'PASS' + ('  (%s)' % note if note else '')
-        except Skip as e:
-            res = 'SKIP  %s' % e
-        except Exception as e:  # noqa: BLE001 - report every kind of failure as a test result
-            failed += 1
-            res = 'FAIL  %s' % e
-            if a.v:
-                import traceback
-                traceback.print_exc()
+        res, bad, dt = run_test(c, name, fn, a.v)
+        failed += bad
         first, _, rest = res.partition('\n')
-        print('%-60s %5.0fs' % (first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
+        print('%-60s %5.0fs' % (first, dt) + ('\n' + rest if rest else ''), flush=True)
     print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
     if a.calls:
         with open(a.calls, 'w') as f:
