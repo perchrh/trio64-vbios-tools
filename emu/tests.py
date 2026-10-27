@@ -51,6 +51,14 @@ Tests
   s3regs           S3REGS.COM and S3REGS32.EXE (the Win32 one on a 32-bit CPU with the same register
                    model, vgaemu.run_pe32) write the same snapshot, keep indexes and locks, and
                    S3REGS32 /W logs register changes with their time (cursor registers ignored)
+  mono             (emulator only) monochrome addressing: mode 07h from colour and back (CRTC port, MISC,
+                   equipment word bits 4-5, BDA), text output, cursor and scrolls at B000, 350 lines,
+                   mode 0Fh pixels and characters, every DCC table pair through AX=1A01h/1A00h, a mixed
+                   sequence of mono and colour mode sets
+  errors           (emulator only) invalid input changes nothing: undefined AH values keep every
+                   register, invalid mode numbers, undefined AH=10h/11h/12h/1Ah subfunctions keep AL,
+                   AX=1C03h, DF set by the caller, refused 4F02h modes, 4F09h at the last entry,
+                   4F14h refusals (CR41/CR52/CR6B unchanged), 4F06h widths that do not fit
   --coverage FILE  records the ROM bytes all tests execute and read, for emu/codemap.py (test coverage)
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
@@ -61,6 +69,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
 from unicorn import UC_HOOK_INSN  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
+                               UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
+                               UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_EFLAGS,
                                UC_X86_REG_BX, UC_X86_REG_DX, UC_X86_REG_CS, UC_X86_REG_SS, UC_X86_REG_SP,
                                UC_X86_INS_IN, UC_X86_INS_OUT)
 
@@ -700,11 +710,228 @@ def t_s3regs(c):
     return 'DOS and Win32 snapshots equal, watch logs 3 changes'
 
 
+# ---------------------------------------------------------------- emulator-only suites
+# These change the equipment word, switch between the monochrome and the colour adapter addressing
+# and feed the BIOS invalid input: harmless on the model, not something to do to the test machine.
+# Expected values from the IBM PC AT and PS/2 BIOS interface (INT 10h) and the VBE 2.0 specification.
+
+def int10x(m, ax, bx=0, cx=0, dx=0, si=0, di=0, bp=0, es=0, std=False):
+    """INT 10h like Machine.int10, optionally with DF set by the caller; returns all 16-bit registers."""
+    mu = m.mu
+    mu.mem_write(0x7D00, (b'\xFD' if std else b'\xFC') + b'\xCD\x10\xF4')
+    for reg, v in ((UC_X86_REG_AX, ax), (UC_X86_REG_BX, bx), (UC_X86_REG_CX, cx), (UC_X86_REG_DX, dx),
+                   (UC_X86_REG_SI, si), (UC_X86_REG_DI, di), (UC_X86_REG_BP, bp)):
+        mu.reg_write(reg, v)
+    for reg, v in ((UC_X86_REG_CS, 0), (UC_X86_REG_SS, 0), (UC_X86_REG_SP, 0x7000), (UC_X86_REG_DS, 0),
+                   (UC_X86_REG_ES, es), (UC_X86_REG_EFLAGS, 0x202)):
+        mu.reg_write(reg, v)
+    mu.emu_start(0x7D00, 0x7D03, count=50_000_000)
+    return {k: mu.reg_read(r) for k, r in (('ax', UC_X86_REG_AX), ('bx', UC_X86_REG_BX), ('cx', UC_X86_REG_CX),
+                                            ('dx', UC_X86_REG_DX), ('si', UC_X86_REG_SI), ('di', UC_X86_REG_DI),
+                                            ('bp', UC_X86_REG_BP), ('es', UC_X86_REG_ES))}
+
+
+def word(m, a):
+    return struct.unpack('<H', m.mem(a, 2))[0]
+
+
+def vga_state(m):
+    """Standard VGA registers, BIOS data area, video memory and DAC (to see that nothing changed)."""
+    r = m.r
+    return (r['misc'], tuple(r['seq'].get(i, 0) for i in range(5)), tuple(r['crtc'].get(i, 0) for i in range(0x19)),
+            tuple(r['gc'].get(i, 0) for i in range(9)), tuple(r['atc'].get(i, 0) for i in range(0x15)),
+            m.mem(0x400, 0x100), m.mem(0xA0000, 0x20000), tuple(bytes(p) for p in m.planes), tuple(map(tuple, m.dac)))
+
+
+def text_pattern(r, c):
+    return ((7 * c + 13 * r) & 0xFF) | ((((5 * c + 11 * r) & 0x7F) | 0) << 8)
+
+
+def t_mono(c):
+    """Monochrome addressing (mode 07h at B000, CRTC at 3B4h, mode 0Fh) and the equipment word."""
+    m = c.machine()
+    fails = []
+
+    def chk(cond, what):
+        if not cond:
+            fails.append(what)
+
+    def setequip(bits):
+        m.mu.mem_write(0x410, struct.pack('<H', (word(m, 0x410) & ~0x30) | bits))
+    # 1. mode 07h from colour, mode 03h back: CRTC port, MISC bit 0, equipment bits 4-5 (IBM VGA BIOS:
+    #    30h for the monochrome modes, 20h for 80-column colour), geometry
+    for eq in (0x20, 0x30):
+        setequip(eq)
+        m.int10(0x07)
+        chk(word(m, 0x463) == 0x3B4 and m.r['misc'] & 1 == 0, 'mode 07h (equipment %02X): CRTC %04X MISC %02X'
+            % (eq, word(m, 0x463), m.r['misc']))
+        chk(word(m, 0x410) & 0x30 == 0x30, 'mode 07h: equipment video bits %02X, expected 30h' % (word(m, 0x410) & 0x30))
+        chk((m.mem(0x449, 1)[0], m.mem(0x44A, 1)[0], m.mem(0x484, 1)[0], m.mem(0x485, 1)[0]) == (7, 80, 24, 16),
+            'mode 07h: BDA mode/columns/rows/height %s' % m.mem(0x449, 1).hex())
+        m.int10(0x03)
+        chk(word(m, 0x463) == 0x3D4 and m.r['misc'] & 1 == 1 and word(m, 0x410) & 0x30 == 0x20,
+            'mode 03h after 07h: CRTC %04X MISC %02X equipment %02X' % (word(m, 0x463), m.r['misc'], word(m, 0x410) & 0x30))
+    # 2. text in mode 07h: B000, cursor in the 3B4h CRTC
+    m.int10(0x07)
+    m.mu.mem_write(0xB0000, b''.join(struct.pack('<H', text_pattern(r, k)) for r in range(25) for k in range(80)))
+    m.int10(0x0200, bx=0, dx=0x0102)
+    m.int10(0x0951, bx=0x0070, cx=3)
+    chk(m.mem(0xB0000 + (80 + 2) * 2, 6) == b'\x51\x70' * 3, 'mode 07h AH=09h: B000 cells %s' % m.mem(0xB0000 + 164, 6).hex())
+    cr = m.r['crtc']
+    chk((cr.get(0x0E, 0) << 8 | cr.get(0x0F, 0)) == 80 + 2, 'mode 07h cursor in CR0E/CR0F (3B4h): %04X'
+        % (cr.get(0x0E, 0) << 8 | cr.get(0x0F, 0)))
+    r = m.int10(0x0800, bx=0)
+    chk(r['ax'] == 0x7051, 'mode 07h AH=08h: %04X' % r['ax'])
+    m.int10(0x0E5A, bx=0)
+    chk(m.mem(0xB0000 + (80 + 2) * 2, 2) == b'\x5A\x70', 'mode 07h AH=0Eh did not write at the cursor')
+    # scroll up 2 in a window, down 1 full screen: every cell against the pattern
+    m.mu.mem_write(0xB0000, b''.join(struct.pack('<H', text_pattern(r, k)) for r in range(25) for k in range(80)))
+    m.int10(0x0602, bx=0x0700, cx=0x0305, dx=0x0A14)
+    exp = [[text_pattern(r, k) for k in range(80)] for r in range(25)]
+    for r in range(3, 11):
+        for k in range(5, 21):
+            exp[r][k] = text_pattern(r + 2, k) if r <= 8 else 0x0720
+    m.int10(0x0701, bx=0x0F00, cx=0, dx=0x184F)
+    exp = [[0x0F20] * 80] + exp[:24]
+    got = struct.unpack('<2000H', m.mem(0xB0000, 4000))
+    bad = [(r, k) for r in range(25) for k in range(80) if got[r * 80 + k] != exp[r][k]]
+    chk(not bad, 'mode 07h AH=06h/07h: %d cells differ, first %s' % (len(bad), bad[:3]))
+    # 3. 350 lines: 14-line characters (IBM: AH=12h BL=30h AL=1 then the mode set)
+    m.int10(0x1201, bx=0x30)
+    m.int10(0x07)
+    chk(m.mem(0x485, 1)[0] == 14 and m.mem(0x484, 1)[0] == 24, 'mode 07h at 350 lines: height %d rows %d'
+        % (m.mem(0x485, 1)[0], m.mem(0x484, 1)[0] + 1))
+    m.int10(0x1202, bx=0x30)
+    # 4. mode 0Fh (640x350 monochrome graphics, planes 0 and 2): pixel values 0, 1, 4, 5 read back,
+    #    a character reads back, CRTC at 3B4h
+    m.int10(0x0F)
+    chk(word(m, 0x463) == 0x3B4 and word(m, 0x410) & 0x30 == 0x30, 'mode 0Fh: CRTC %04X equipment %02X'
+        % (word(m, 0x463), word(m, 0x410) & 0x30))
+    for k, v in enumerate((0, 1, 4, 5, 1, 0)):
+        m.int10(0x0C00 | v, bx=0, cx=100 + k * 37, dx=50 + k * 41)
+        r = m.int10(0x0D00, bx=0, cx=100 + k * 37, dx=50 + k * 41)
+        chk(r['ax'] & 0xFF == v, 'mode 0Fh AH=0Ch/0Dh pixel %d: read %d' % (v, r['ax'] & 0xFF))
+    m.int10(0x0200, bx=0, dx=0x0304)
+    m.int10(0x0941, bx=0x0001, cx=1)
+    r = m.int10(0x0800, bx=0)
+    chk(r['ax'] & 0xFF == 0x41, "mode 0Fh AH=09h/08h: read %02X, expected 'A'" % (r['ax'] & 0xFF))
+    m.int10(0x0601, bx=0, cx=0, dx=0x184F)       # up one row: the 'A' is now in row 2
+    m.int10(0x0200, bx=0, dx=0x0204)
+    r = m.int10(0x0800, bx=0)
+    chk(r['ax'] & 0xFF == 0x41, "mode 0Fh AH=06h: 'A' not one row up (read %02X)" % (r['ax'] & 0xFF))
+    # 5. display combination code: each pair of the BIOS's DCC table (save pointer table, secondary
+    #    table, DCC table; 4-byte header, then 2 bytes an entry: the alternate, then the active display)
+    #    set with AX=1A01h reads back with AX=1A00h as the same pair: BX in either order (the BIOS, as
+    #    IBM's, gives the display that matches the current mono/colour addressing as the active one), and
+    #    BDA 48Ah holds the index of that table entry (IBM PS/2)
+    sp = struct.unpack('<HH', m.mem(0x4A8, 4))
+    sec = struct.unpack('<HH', m.mem(sp[1] * 16 + sp[0] + 16, 4))
+    pairs = []
+    if sec != (0, 0):
+        dcc = struct.unpack('<HH', m.mem(sec[1] * 16 + sec[0] + 2, 4))
+        t = m.mem(dcc[1] * 16 + dcc[0], 4 + 2 * 16)
+        pairs = [(t[5 + 2 * k], t[4 + 2 * k]) for k in range(min(t[0], 16))]    # (active, alternate)
+    chk(pairs, 'no DCC table found through 0040:00A8')
+    for k, (a, b) in enumerate(pairs):
+        r1 = m.int10(0x1A01, bx=(b << 8) | a)
+        r2 = m.int10(0x1A00)
+        chk(r1['ax'] & 0xFF == 0x1A and r2['bx'] in ((b << 8) | a, (a << 8) | b) and pairs.index((a, b)) ==
+            m.mem(0x48A, 1)[0], 'AX=1A01h BX=%04X: read back %04X, index %d (expected %d)'
+            % ((b << 8) | a, r2['bx'], m.mem(0x48A, 1)[0], k))
+    m.int10(0x1A01, bx=0x0008)
+    # 6. mono and colour modes in turn: every switch leaves the BIOS data and MISC consistent
+    for mode in (0x07, 0x12, 0x0F, 0x03, 0x07, 0x07, 0x01, 0x0F, 0x13, 0x07):
+        m.int10(mode)
+        mono = mode in (0x07, 0x0F)
+        chk(m.mem(0x449, 1)[0] == mode and word(m, 0x463) == (0x3B4 if mono else 0x3D4) and
+            (m.r['misc'] & 1) == (0 if mono else 1) and word(m, 0x410) & 0x30 == (0x30 if mono else 0x20),
+            'mode %02X in the sequence: BDA %02X, CRTC %04X, MISC %02X, equipment %02X'
+            % (mode, m.mem(0x449, 1)[0], word(m, 0x463), m.r['misc'], word(m, 0x410) & 0x30))
+    m.int10(0x03)
+    check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
+    return 'mode 07h/0Fh, equipment word, %d DCC pairs' % len(pairs)
+
+
+def t_errors(c):
+    """Invalid input: the BIOS must refuse it and change nothing."""
+    m = c.machine()
+    fails = []
+
+    def chk(cond, what):
+        if not cond:
+            fails.append(what)
+
+    m.int10(0x03)
+    # 1. undefined functions: AH=14h-19h, 1Dh-4Eh, 50h-FFh return every register as given, change nothing
+    s0 = vga_state(m)
+    for ah in list(range(0x14, 0x1A)) + list(range(0x1D, 0x4F)) + list(range(0x50, 0x100)):
+        ax = (ah << 8) | 0x5A
+        r = int10x(m, ax, bx=0x2222, cx=0x4444, dx=0x6666, si=0x7777, di=0x8888, bp=0x9999, es=0x1234)
+        chk(r == dict(ax=ax, bx=0x2222, cx=0x4444, dx=0x6666, si=0x7777, di=0x8888, bp=0x9999, es=0x1234),
+            'AH=%02Xh changed registers: %s' % (ah, r))
+    chk(vga_state(m) == s0, 'undefined functions changed the video state')
+    # 2. invalid mode numbers for AH=00h: the mode stays (no mode in the BIOS tables)
+    for mode in (0x14, 0x15, 0x16, 0x17, 0x18, 0x1B, 0x1F, 0x20, 0x60, 0x7F):
+        m.int10(0x03)
+        s0 = vga_state(m)
+        m.int10(mode)
+        chk(vga_state(m) == s0, 'AH=00h AL=%02Xh changed the video state (mode now %02X)' % (mode, m.mem(0x449, 1)[0]))
+    # 3. undefined subfunctions: AH=10h, 11h, 12h, 1Ah keep AL (AL = 12h/1Ah means supported), change
+    #    nothing
+    m.int10(0x03)
+    s0 = vga_state(m)
+    bad = [(0x1000 | al, 0) for al in (0x04, 0x05, 0x06, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x11, 0x14, 0x16, 0x1C, 0x1D, 0x1F)]
+    bad += [(0x1100 | al, 0) for al in (0x05, 0x06, 0x0F, 0x13, 0x15, 0x1F, 0x25, 0x2F, 0x31, 0x40)]
+    bad += [(0x1200, bl) for bl in (0x00, 0x0F, 0x11, 0x1F, 0x21, 0x2F, 0x37, 0x3F, 0x40, 0xFF)]
+    bad += [(0x1A02, 0), (0x1AFF, 0)]
+    for ax, bl in bad:
+        r = int10x(m, ax, bx=bl, cx=0, dx=0, es=0x3000)
+        chk(r['ax'] == ax, 'AX=%04Xh BL=%02Xh: AX=%04X (AL changed: claims support)' % (ax, bl, r['ax']))
+    chk(vga_state(m) == s0, 'undefined subfunctions changed the video state')
+    s0 = vga_state(m)
+    int10x(m, 0x1C03, cx=0x0007, bx=0, es=0x3000)      # AL=1Ch comes back for any AL (known), but no change
+    chk(vga_state(m) == s0, 'AX=1C03h changed the video state')
+    # 4. the caller's direction flag: a scroll and a string write with DF set give the same result
+    for std in (False, True):
+        m.int10(0x03)
+        m.mu.mem_write(0xB8000, b''.join(struct.pack('<H', text_pattern(r, k)) for r in range(25) for k in range(80)))
+        m.mu.mem_write(0x30000, b'Hello')
+        int10x(m, 0x0602, bx=0x1E00, cx=0x0203, dx=0x0C30, std=std)
+        int10x(m, 0x1301, bx=0x0007, cx=5, dx=0x1010, bp=0, es=0x3000, std=std)
+        out = m.mem(0xB8000, 4000)
+        if not std:
+            ref = out
+    chk(out == ref, 'DF set by the caller changes AH=06h/13h results')
+    # 5. VBE: unsupported mode, invalid ranges, OEM errors
+    m.int10(0x4F02, bx=0x0101)
+    s0 = vga_state(m)
+    for bx in (0x0118, 0x0164, 0x0119, 0x011A, 0x01FF, 0x017F, 0x0200):
+        r = m.int10(0x4F02, bx=bx)
+        chk(r['ax'] != 0x004F, '4F02 BX=%04X accepted' % bx)
+        chk(vga_state(m) == s0, '4F02 BX=%04X (refused) changed the video state' % bx)
+    m.mu.mem_write(0x30000, bytes([0x15, 0x2A, 0x3F, 0]))    # 4F09h at the last entry: blue, green, red
+    r = m.int10(0x4F09, bx=0, cx=1, dx=255, es=0x3000, di=0)
+    chk(r['ax'] == 0x004F and tuple(m.dac[255]) == (0x3F, 0x2A, 0x15), '4F09 entry 255: %04X %s' % (r['ax'], m.dac[255]))
+    s0 = vga_state(m)
+    cr0 = {k: m.r['crtc'].get(k, 0) for k in (0x41, 0x52, 0x6B)}
+    for bx, cx, di in ((0x0001, 0x0101, 59), (0x0001, 0x0101, 0), (0x0001, 0x0103, 100), (0x0301, 0x0101, 60),
+                       (0x0801, 0x0101, 60), (0x0008, 0, 0), (0x000F, 0, 0), (0x0001, 0x0177, 60)):
+        r = int10x(m, 0x4F14, bx=bx, cx=cx, di=di)
+        chk(r['ax'] != 0x004F, '4F14 BX=%04X CX=%04X DI=%d accepted' % (bx, cx, di))
+    chk({k: m.r['crtc'].get(k, 0) for k in (0x41, 0x52, 0x6B)} == cr0, '4F14 refused calls changed CR41/CR52/CR6B')
+    r = m.int10(0x4F06, bx=0, cx=0xFFF8)
+    if r['ax'] == 0x004F:                            # VBE 2.0: accepted only if the memory holds it
+        chk(r['bx'] * r['dx'] <= 2 * 1024 * 1024, '4F06 CX=FFF8h: %d bytes x %d lines do not fit 2 MB' % (r['bx'], r['dx']))
+    m.int10(0x03)
+    check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
+    return 'undefined functions and subfunctions, invalid modes, DF, VBE refusals'
+
+
 TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe)]
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors)]
 
 
 def main():

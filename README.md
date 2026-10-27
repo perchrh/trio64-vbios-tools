@@ -24,6 +24,12 @@ Each source file starts with a header that says what is tested and which outcome
 each test routine has a comment block with its fail and warn bits. S3TEST and S3COMPAT end their log
 with `Time spent: x.y s`, the run time measured with the BIOS tick.
 
+Monitor: VSHOW and S3TEST set modes up to a 75 kHz line frequency (1600x1200 at 60 Hz), S3COMPAT up
+to 91 kHz (1280x1024 at 85 Hz in its 4F14 refresh test). An LCD refuses a signal it cannot show (out
+of range) and takes no harm; an old fixed-frequency or low-end CRT can be damaged by a line frequency
+above its range, so do not run these tools with one. Each tool prints this on stderr before it sets a
+mode.
+
 All tools share one version number and S3TEST checks for one ROM version; both are set in
 `common/version.inc` (`VERSION`, `ROMVER`) and can be overridden for a build, for example
 `make clean && make VERSION=0.9 ROMVER=2.04.07-p15`.

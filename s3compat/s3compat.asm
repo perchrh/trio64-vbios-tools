@@ -22,6 +22,10 @@
 ;   <test name> ... <details>  PASS | FAIL xxxx | WARN xx | INFO
 ;   FAIL/WARN carry a bit mask per test, explained at the routine and in the log header. Detail lines
 ;   show REG=actual(expected), masked to the bits under test. INFO lines report without judging.
+;   Monitor: the test sets line frequencies up to 91 kHz (1280x1024 at 85 Hz, 4F14 refresh test) and
+;   75 kHz (1600x1200 at 60 Hz), and the DPMS test stops the syncs for a moment. LCDs refuse what they
+;   cannot show; an old fixed-frequency or low-end CRT can be damaged by a line frequency above its
+;   range. The notice before the key press says so.
 ;   The last line, "Time spent: x.y s", is the run time from the key press on, from the BIOS tick
 ;   (with /V it includes writing the debug log, so it is the one line that differs without /V).
 ;
@@ -6694,6 +6698,9 @@ EXTN    equ ($-extlist)/2
 
 s_start db 'S3COMPAT ',VERSION,': the test takes about 3 minutes. The screen will change modes',13,10
         db 'constantly. Wait for the DOS prompt to come back.',13,10
+        db 'Monitor: line frequencies up to 91 kHz (1280x1024 at 85 Hz in the 4F14 refresh test)',13,10
+        db 'and 75 kHz (1600x1200 at 60 Hz). LCDs are safe (they show out of range); do not run it',13,10
+        db 'with a fixed-frequency or low-end CRT that cannot take them, it can be damaged.',13,10
         db 'Press any key to start, Esc to cancel.',13,10
 s_start_len equ $-s_start
 s_vname db 'S3COMPAT.DBG',0
