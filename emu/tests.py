@@ -32,8 +32,9 @@ Tests
                    (banked memory, throughput); with /V the output is the same (except the Time spent
                    line) and S3TEST.DBG is well formed
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
-                   monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT and shown once
-                   before the VSHOW /I list
+                   monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT, shown once
+                   before the VSHOW /I list, and S3TEST and S3COMPAT print it on stderr with a key
+                   prompt, where Esc cancels (s3test, s3compat_vga: /S prints nothing)
   s3compat_vga     S3COMPAT's VGA, Mode X and VGA BIOS function parts (built with nasm from the source
                    with the rest cut out): every test passes (registers, BIOS data, refresh, planar
                    memory, palettes, AH=01h-1Ch, AH=13h, CGA scroll, graphics XOR, AX=1120h-1124h, the
@@ -436,8 +437,11 @@ def t_s3test(c):
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
-        r0 = c.machine().run_com(com, '')
+        r0 = c.machine().run_com(com, '/S')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
+        check(b'kHz' not in bytes(r0.stderr or b''), 'S3TEST /S: the monitor warning is still printed')
+    check(b'75 kHz' in bytes(r1.stderr or b'') and b'Press any key' in bytes(r1.stderr or b''),
+          'S3TEST: no monitor warning with a key prompt on stderr')
     return 'exit code %d' % r1.exit[1]
 
 
@@ -456,6 +460,11 @@ def t_vshow(c):
             out = r.stdout.replace(b'\r\n', b' ')
             check(r.exit == ('exit', 0) and b'%d kHz' % k in out and b'CRT can be damaged' in out,
                   '%s %s: no monitor note in the help' % (tool, sw))
+    for tool, k in (('S3TEST.COM', 75), ('S3COMPAT.COM', 91)):
+        r = c.machine(keys=[0x011B]).run_com(c.tool(tool), '')
+        err = bytes(r.stderr or b'').replace(b'\r\n', b' ')
+        check(r.exit == ('exit', 0) and b'%d kHz' % k in err and b'Press any key to continue' in err
+              and b'PASS' not in bytes(r.stdout), '%s: the monitor warning, then Esc does not cancel' % tool)
     ri = c.machine(keys=[0x011B]).run_com(com, '/I')
     check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to quit' in ri.stdout,
           'VSHOW /I: no monitor note before the list (Esc there quits)')
@@ -561,7 +570,8 @@ def t_s3compat_vga(c):
     details = [l.strip() for l in lines if l.startswith('      ')]
     check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad + details[:6]))
     if v:
-        r1 = c.machine().run_com(com, '')
+        r1 = c.machine().run_com(com, '/S')
+        check(b'kHz' not in bytes(r1.stderr or b''), 'S3COMPAT /S: the notice is still printed')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
         dl = check_dbg(r0.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         check(sum(1 for l in dl if l.startswith('D:TEST')) >= len(tests), 'fewer D:TEST records than tests')

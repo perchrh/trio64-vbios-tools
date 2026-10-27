@@ -9,6 +9,7 @@
 ; Usage
 ;   S3COMPAT [/Q] [/V] > S3COMPAT.LOG
 ;   S3COMPAT /H (or /?) prints the parameters and the monitor note below.
+;   /S  silent: no start notice and monitor warning on stderr, no key press (for batch runs).
 ;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VSHOW)
 ;   /V  debug log in S3COMPAT.DBG (common/vdebug.inc): every INT 10h call with registers and duration,
 ;       a register dump and the result line after every test, 4F00/4F01/AH=1Bh blocks, per-frame
@@ -26,7 +27,8 @@
 ;   Monitor: the test sets line frequencies up to 91 kHz (1280x1024 at 85 Hz, 4F14 refresh test) and
 ;   75 kHz (1600x1200 at 60 Hz), and the DPMS test stops the syncs for a moment. LCDs refuse what they
 ;   cannot show; an old fixed-frequency or low-end CRT can be damaged by a line frequency above its
-;   range. The /H help says so.
+;   range. The start notice on stderr says so and waits for a key (Esc cancels); /S skips both, and
+;   the /H help says so too.
 ;   The last line, "Time spent: x.y s", is the run time from the key press on, from the BIOS tick
 ;   (with /V it includes writing the debug log, so it is the one line that differs without /V).
 ;
@@ -133,7 +135,10 @@ start:  cld
         and al,0xDF
         cmp al,'H'
         je .hlp
-        cmp al,'Q'
+        cmp al,'S'
+        jne .o2
+        mov byte [silent],1
+.o2:    cmp al,'Q'
         jne .o3
         mov byte [quick],1
 .o3:    cmp al,'V'
@@ -159,7 +164,9 @@ start:  cld
         out 0x40,al
         out 0x40,al
         sti
-        mov dx,s_start                  ; notice on stderr (not redirected by >)
+        cmp byte [silent],1             ; /S: no notice, no key
+        je .go
+        mov dx,s_start                  ; notice and monitor warning on stderr (not redirected by >)
         mov cx,s_start_len
         mov bx,2
         mov ah,0x40
@@ -7309,12 +7316,17 @@ EXTN    equ ($-extlist)/2
 
 s_start db 'S3COMPAT ',VERSION,': the test takes about 3 minutes. The screen will change modes',13,10
         db 'constantly. Wait for the DOS prompt to come back.',13,10
-        db 'Press any key to start, Esc to cancel.',13,10
+        db 'Monitor: line frequencies up to 91 kHz (1280x1024 at 85 Hz in the 4F14 refresh test)',13,10
+        db 'and 75 kHz (1600x1200 at 60 Hz). An LCD shows out of range and takes no harm; an old',13,10
+        db 'fixed-frequency or low-end CRT can be damaged by a line frequency above its range:',13,10
+        db 'do not use one.',13,10
+        db 'Press any key to continue, Esc to cancel.',13,10
 s_start_len equ $-s_start
 catnames db 'MDA  CGA  EGA  VGA  VBE  S3   '
 s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS',13,10
-        db '  S3COMPAT [/Q] [/V] > S3COMPAT.LOG',13,10
+        db '  S3COMPAT [/Q] [/V] [/S] > S3COMPAT.LOG',13,10
         db '  /Q                  skip the 2 MB VRAM test',13,10
+        db '  /S                  silent: no start notice and monitor warning, no key press',13,10
         db '  /V                  debug log in S3COMPAT.DBG (BIOS calls, registers, timing)',13,10
         db '  /H, /?              this help',13,10
         db 'About 3 minutes; a key starts it, Esc cancels. Exit code 0 = no FAIL, 1 = a FAIL.',13,10
@@ -7340,6 +7352,7 @@ orows   dw 0
 ostart  dw 0
 tofile  db 0
 quick   db 0
+silent  db 0                            ; /S given
 vreq    db 0                            ; /V given
 vline0  dw 0                            ; log buffer offset where the current test started
 vname   dw 0                            ; its name (TB text), 0 = none

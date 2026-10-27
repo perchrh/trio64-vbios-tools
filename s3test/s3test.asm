@@ -8,6 +8,7 @@
 ; Usage
 ;   S3TEST [/V] > S3TEST.LOG
 ;   S3TEST /H (or /?) prints the parameters and the monitor note below.
+;   /S  silent: no monitor warning on stderr, no key press (for batch runs).
 ;   /V  debug log in S3TEST.DBG (common/vdebug.inc): every INT 10h call (except during the throughput
 ;       benchmark), the result line, a register dump after every test and the raw retrace counts.
 ;       The normal output is the same with or without /V.
@@ -15,7 +16,8 @@
 ;   Exit code 0 = every test passed, 1 = at least one failed.
 ;   Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at 60 Hz is
 ;   64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be damaged by
-;   a line frequency above its range. The /H help says so.
+;   a line frequency above its range. S3TEST prints this on stderr at the start and waits for a
+;   key (Esc cancels); /S skips both. The /H help says so too.
 ;   The report ends with "Time spent: x.y s", the run time from the BIOS tick (with /V it includes
 ;   writing the debug log, so it is the one line that differs from a run without /V).
 ;
@@ -99,8 +101,34 @@ start:  cld
         and al,0xDF
         cmp al,'H'
         je .hlp
-        cmp al,'V'
+        cmp al,'S'
+        jne .o1
+        mov byte [silent],1
+        jmp .op
+.o1:    cmp al,'V'
         jne .op
+        mov byte [vwant],1
+        jmp .op
+.hlp:   mov dx,s_help                   ; /H, /?: the parameters and the monitor note
+        mov ah,9
+        int 0x21
+        mov ax,0x4C00
+        int 0x21
+.opd:   cmp byte [silent],1             ; the monitor warning on stderr and a key, unless /S
+        je .opt
+        mov dx,s_mon
+        mov cx,s_mon_len
+        mov bx,2
+        mov ah,0x40
+        int 0x21
+        xor ah,ah
+        int 0x16
+        cmp al,27                       ; Esc cancels
+        jne .opt
+        mov ax,0x4C00
+        int 0x21
+.opt:   cmp byte [vwant],1              ; /V: debug log in S3TEST.DBG
+        jne .opv
         mov ax,cs
         add ax,0x2000
         cmp ax,[2]
@@ -108,17 +136,11 @@ start:  cld
         sub ax,0x1000
         mov dx,s_vname
         call vinit
-        jmp .opd
+        jmp .opv
 .vm:    mov dx,s_vnomem
         mov ah,9
         int 0x21
-        jmp .opd
-.hlp:   mov dx,s_help                   ; /H, /?: the parameters and the monitor note
-        mov ah,9
-        int 0x21
-        mov ax,0x4C00
-        int 0x21
-.opd:   mov dx,s_title
+.opv:   mov dx,s_title
         call puts
         mov ax,[bp_]
         mov [vls],ax
@@ -2333,11 +2355,20 @@ s_sum1  db 13,10,'Passed: $'
 s_sum2  db '  Failed: $'
 s_sum3  db 13,10,'$'
 s_cp    db 'PASS $'
+s_mon   db 'S3TEST ',VERSION,13,10
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10
+        db 'Press any key to continue, Esc to cancel.',13,10
+s_mon_len equ $-s_mon
+silent  db 0                            ; /S given
+vwant   db 0                            ; /V given
 s_cf    db '  FAIL $'
 s_ci    db '  INFO $'
 s_help  db 'S3TEST ',VERSION,' - regression test for the Trio64V2/DX VBIOS ',ROMVER,13,10
-        db '  S3TEST [/V] > S3TEST.LOG',13,10
+        db '  S3TEST [/V] [/S] > S3TEST.LOG',13,10
         db '  /V                  debug log in S3TEST.DBG (BIOS calls, registers, timing)',13,10
+        db '  /S                  silent: no monitor warning, no key press',13,10
         db '  /H, /?              this help',13,10
         db 'Exit code 0 = every test passed, 1 = at least one failed.',13,10
         db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
