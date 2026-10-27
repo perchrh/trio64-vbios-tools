@@ -575,6 +575,7 @@ class Machine:
     noop = None
     noop_hits = 0
     calls = None                                        # a set: (AX, BX, DL) of every INT 10h call after POST
+    call_limit = 50_000_000                             # instructions an INT 10h call of a test may take
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):
@@ -623,9 +624,12 @@ class Machine:
         mu.reg_write(UC_X86_REG_ES, es)
         mu.reg_write(UC_X86_REG_EFLAGS, 0x202)
         try:
-            mu.emu_start(0x7D00, 0x7D02, count=50_000_000)
+            mu.emu_start(0x7D00, 0x7D02, count=Machine.call_limit)
         except UcError as e:
             raise RuntimeError('INT 10h AX=%04X: %s' % (ax, e))
+        if self._reg(UC_X86_REG_IP) != 0x7D02 or self._reg(UC_X86_REG_CS) != 0:
+            raise RuntimeError('INT 10h AX=%04X did not return within %d instructions (hang at %04X:%04X)'
+                               % (ax, Machine.call_limit, self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP)))
         return {k: self._reg(v) for k, v in (('ax', UC_X86_REG_AX), ('bx', UC_X86_REG_BX), ('cx', UC_X86_REG_CX),
                                               ('dx', UC_X86_REG_DX), ('es', UC_X86_REG_ES), ('bp', UC_X86_REG_BP),
                                               ('flags', UC_X86_REG_EFLAGS))}

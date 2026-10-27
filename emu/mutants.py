@@ -11,7 +11,10 @@ then no test notices that the feature is missing.
 Mutants
   int10  one INT 10h function or subfunction returns at the ROM's entry with every register unchanged
          (tests.py --noop; the calls POST makes itself still run)
-  (an INT 10h function no test calls survives without a run: one run of all tests with --calls first)
+  Each mutant runs only the tests that can see it: those that call its INT 10h function, or execute or
+  read its changed ROM bytes (one profile run of every test on the unchanged ROM first, kept in
+  emu/logs/profile.json for that ROM). An INT 10h call of a test that takes more than --call-limit
+  instructions (10 million) is a hang and kills the mutant.
   ret    a call target of the p12-p14 code returns at once (a RET at its first byte): wfill, wmove,
          bfill, the mode set hook, ...
   revert one patch site of the reference BIOS put back as it was (needs --ref): a data change, a jump
@@ -126,10 +129,10 @@ EXPECTED = {
 }
 
 
-def run(m, rom_path, tmp, timeout):
+def run(m, rom_path, tmp, timeout, tests, limit):
     name, what = m
-    args = [sys.executable, os.path.join(HERE, 'tests.py'), '-x', '--tests', ORDER,
-            '--logs', tempfile.mkdtemp(dir=tmp)]
+    args = [sys.executable, os.path.join(HERE, 'tests.py'), '-x', '--tests', ','.join(tests),
+            '--call-limit', str(limit), '--logs', tempfile.mkdtemp(dir=tmp)]
     if isinstance(what, str):
         args += ['--rom', rom_path, '--noop', what]
     else:
@@ -168,6 +171,11 @@ def main():
     ap.add_argument('-k', default='', help='only mutants whose name contains this text')
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--timeout', type=int, default=1800)
+    ap.add_argument('--call-limit', type=int, default=10_000_000,
+                    help='instructions an INT 10h call of a test may take in a mutant before it counts as a hang')
+    ap.add_argument('--profile', metavar='FILE', default=os.path.join(HERE, 'logs', 'profile.json'),
+                    help='per-test INT 10h calls and ROM bytes (tests.py --profile on the unchanged ROM); made '
+                         'when missing or for another ROM')
     ap.add_argument('--resume', metavar='FILE', help='take the results of the mutants already in FILE (an earlier '
                     'mutants.txt) and run only the others')
     a = ap.parse_args()
@@ -187,19 +195,44 @@ def main():
         for line in open(a.resume):
             if line[25:33].strip() in ('killed', 'SURVIVED'):
                 done[line[:25].strip()] = line.rstrip('\n')
-    # one run of every test records the INT 10h calls: a function no test calls survives without a run
-    callf = os.path.join(tmp, 'calls.txt')
-    subprocess.run([sys.executable, os.path.join(HERE, 'tests.py'), '--rom', a.rom, '--calls', callf,
-                    '--logs', tempfile.mkdtemp(dir=tmp)], capture_output=True)
-    calls = [tuple(int(x, 16) for x in l.split()) for l in open(callf)]
+    # which tests can see each mutant: one run of every test on the unchanged ROM records per test the
+    # INT 10h calls and the ROM bytes it executes or reads; a mutant runs only the tests that call its
+    # function or reach its bytes (in ORDER), and survives at once when no test does
+    import hashlib, json
+    sha = hashlib.sha256(rom).hexdigest()
+    prof = None
+    if os.path.exists(a.profile):
+        prof = json.load(open(a.profile))
+        if prof.get('rom') != sha or prof.get('call_limit') != a.call_limit:
+            prof = None
+    if prof is None:
+        pf = os.path.join(tmp, 'profile.json')
+        r = subprocess.run([sys.executable, os.path.join(HERE, 'tests.py'), '--rom', a.rom, '--profile', pf,
+                            '--call-limit', str(a.call_limit), '--logs', tempfile.mkdtemp(dir=tmp)],
+                           capture_output=True, text=True)
+        if r.returncode:
+            print('the unchanged ROM does not pass every test (with --call-limit %d):\n%s' % (a.call_limit, r.stdout))
+            return 2
+        prof = {'rom': sha, 'call_limit': a.call_limit, 'tests': json.load(open(pf))}
+        json.dump(prof, open(a.profile, 'w'))
+    order = [t for t in ORDER.split(',') if t in prof['tests']]
+
+    def tests_for(m):
+        name, what = m
+        if isinstance(what, str):
+            return [t for t in order if matches(what, [tuple(c) for c in prof['tests'][t]['calls']])]
+        changed = [i for i in range(0x8000) if what[i] != rom[i]]
+        return [t for t in order if any(a0 <= i <= b0 for a0, b0 in prof['tests'][t]['rom'] for i in changed)]
     todo = []
     for m in ms:
         if m[0] in done:
             continue
-        if isinstance(m[1], str) and not matches(m[1], calls):
-            done[m[0]] = '%-24s %-8s %-70s %5.0fs' % (m[0], 'SURVIVED', 'never called by any test', 0)
+        ts = tests_for(m)
+        if not ts:
+            why = 'never called by any test' if isinstance(m[1], str) else 'no test executes or reads these bytes'
+            done[m[0]] = '%-24s %-8s %-70s %5.0fs' % (m[0], 'SURVIVED', why, 0)
             continue
-        todo.append(m)
+        todo.append((m, ts))
     logf = os.path.join(HERE, 'logs', 'mutants.txt')
     os.makedirs(os.path.dirname(logf), exist_ok=True)
     with ThreadPoolExecutor(a.j) as ex, open(logf, 'w') as lf:
@@ -209,7 +242,7 @@ def main():
                 print(line, flush=True)
                 lf.write(line + '\n')
                 res.append((m[0], line[25:33].strip()))
-        for name, st, why, dt in ex.map(lambda m: run(m, a.rom, tmp, a.timeout), todo):
+        for name, st, why, dt in ex.map(lambda mt: run(mt[0], a.rom, tmp, a.timeout, mt[1], a.call_limit), todo):
             line = '%-24s %-8s %-70s %5.0fs' % (name, st, why or EXPECTED.get(name, ''), dt)
             print(line, flush=True)
             lf.write(line + '\n')

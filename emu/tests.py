@@ -75,6 +75,8 @@ Tests
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
+  --profile FILE   per test: the INT 10h calls and the ROM bytes it executes or reads (emu/mutants.py)
+  --call-limit N   instructions an INT 10h call of a test may take (default 50 million)
   --coverage FILE  records the ROM bytes all tests execute and read, for emu/codemap.py (test coverage)
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
@@ -775,7 +777,9 @@ def int10x(m, ax, bx=0, cx=0, dx=0, si=0, di=0, bp=0, es=0, std=False):
     for reg, v in ((UC_X86_REG_CS, 0), (UC_X86_REG_SS, 0), (UC_X86_REG_SP, 0x7000), (UC_X86_REG_DS, 0),
                    (UC_X86_REG_ES, es), (UC_X86_REG_EFLAGS, 0x202)):
         mu.reg_write(reg, v)
-    mu.emu_start(0x7D00, 0x7D03, count=50_000_000)
+    mu.emu_start(0x7D00, 0x7D03, count=Machine.call_limit)
+    if mu.reg_read(UC_X86_REG_IP) != 0x7D03:
+        raise AssertionError('INT 10h AX=%04X did not return within %d instructions' % (ax, Machine.call_limit))
     return {k: mu.reg_read(r) for k, r in (('ax', UC_X86_REG_AX), ('bx', UC_X86_REG_BX), ('cx', UC_X86_REG_CX),
                                             ('dx', UC_X86_REG_DX), ('si', UC_X86_REG_SI), ('di', UC_X86_REG_DI),
                                             ('bp', UC_X86_REG_BP), ('es', UC_X86_REG_ES))}
@@ -980,7 +984,7 @@ R32 = (('eax', UC_X86_REG_EAX), ('ebx', UC_X86_REG_EBX), ('ecx', UC_X86_REG_ECX)
        ('esi', UC_X86_REG_ESI), ('edi', UC_X86_REG_EDI), ('ebp', UC_X86_REG_EBP))
 
 
-def int10w(m, regs, ds=0, es=0, flags=0x202, count=50_000_000):
+def int10w(m, regs, ds=0, es=0, flags=0x202, count=None):
     """INT 10h with 32-bit registers and DS/ES as the Windows INT 10h interfaces pass them
     (VIDEO_X86_BIOS_ARGUMENTS / INT10_BIOS_ARGUMENTS). Returns the 32-bit registers, DS, ES; raises
     when the call does not return within count instructions (a hang)."""
@@ -991,7 +995,7 @@ def int10w(m, regs, ds=0, es=0, flags=0x202, count=50_000_000):
     for reg, v in ((UC_X86_REG_CS, 0), (UC_X86_REG_SS, 0), (UC_X86_REG_SP, 0x7000), (UC_X86_REG_DS, ds),
                    (UC_X86_REG_ES, es), (UC_X86_REG_EFLAGS, flags)):
         mu.reg_write(reg, v)
-    mu.emu_start(0x7D00, 0x7D02, count=count)
+    mu.emu_start(0x7D00, 0x7D02, count=count or Machine.call_limit)
     if mu.reg_read(UC_X86_REG_IP) != 0x7D02 or mu.reg_read(UC_X86_REG_CS) != 0:
         raise AssertionError('INT 10h EAX=%08X did not return (hang at %04X:%04X)'
                              % (regs.get('eax', 0), mu.reg_read(UC_X86_REG_CS), mu.reg_read(UC_X86_REG_IP)))
@@ -1061,7 +1065,7 @@ def t_windows(c):
                                ('4F15 read', dict(eax=0x4F15, ebx=1, ecx=0, edx=0, edi=0)),
                                ('AH=00 13h', dict(eax=0x0013)), ('AH=00 03h', dict(eax=0x0003))]:
         try:                                            # the DDC read bit-bangs 128 bytes: 60M instructions
-            int10w(m, regs, ds=BUF, es=BUF, flags=0x002, count=200_000_000 if name == '4F15 read' else 20_000_000)
+            int10w(m, regs, ds=BUF, es=BUF, flags=0x002, count=200_000_000 if name == '4F15 read' else None)
         except AssertionError as e:
             chk(False, '%s with IF=0 and no tick: %s' % (name, e))
     # the S3 Windows 9x driver: 4F00, 4F01 for the modes, 4F02, 4F08 to 8 bits, the palette, a mode
@@ -1165,7 +1169,22 @@ def main():
                          '"ax=4F14,bl=02" (hex values; several patterns separated by ";"), see emu/mutants.py')
     ap.add_argument('--calls', metavar='FILE', help='write every distinct INT 10h call after POST (AX BX DL, '
                     'hex, one per line) to FILE (emu/mutants.py: which functions the tests call)')
+    ap.add_argument('--profile', metavar='FILE', help='write per test the INT 10h calls and the ROM bytes of the '
+                    'lower 32 KB it executes or reads to FILE (JSON, for emu/mutants.py: which tests can see a change)')
+    ap.add_argument('--call-limit', type=int, default=Machine.call_limit,
+                    help='instructions an INT 10h call of a test may take before it counts as a hang (default %d; '
+                         'the 4F15h EDID read of the windows test has its own 200 million)' % Machine.call_limit)
     a = ap.parse_args()
+    Machine.call_limit = a.call_limit
+    prof, cur = {}, ['']
+    if a.profile:
+        init0 = Machine.__init__
+
+        def init_prof(self, *args, **kw):
+            init0(self, *args, **kw)
+            prof.setdefault(cur[0], {'cov': [], 'calls': set()})['cov'].append(self.track_coverage())
+        Machine.__init__ = init_prof
+        Machine.calls = set()
     if a.calls:
         Machine.calls = set()
     if a.noop:
@@ -1190,6 +1209,9 @@ def main():
             continue
         if a.x and failed:
             break
+        cur[0] = name
+        if a.profile:
+            Machine.calls = prof.setdefault(name, {'cov': [], 'calls': set()})['calls']
         t0 = time.time()
         try:
             note = fn(c)
@@ -1211,6 +1233,28 @@ def main():
                 f.write('%04X %04X %02X\n' % (ax, bx, dl))
     if a.noop:
         print('noop: %d INT 10h calls matched %s' % (Machine.noop_hits, a.noop))
+    if a.profile:
+        import json
+        out = {}
+        for name, d in prof.items():
+            touched = bytearray(0x8000)
+            for cc, dd in d['cov']:
+                for i in range(0x8000):
+                    if cc[i] or dd[i]:
+                        touched[i] = 1
+            runs, i = [], 0
+            while i < 0x8000:
+                if touched[i]:
+                    j = i
+                    while j < 0x8000 and touched[j]:
+                        j += 1
+                    runs.append([i, j - 1])
+                    i = j
+                else:
+                    i += 1
+            out[name] = {'calls': sorted(d['calls']), 'rom': runs}
+        with open(a.profile, 'w') as f:
+            json.dump(out, f)
     if a.coverage:
         code, data = bytearray(0x8000), bytearray(0x8000)
         for cc, dd in covs:
