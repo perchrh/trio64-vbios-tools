@@ -517,7 +517,7 @@ S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] 
                          r'4F05 bank set/get \+ WinFuncPtr .*FAIL 0004$',
                          r'Banked window and LFB same memory .*WARN 01$']
 S3COMPAT_KNOWN = [r'VGA 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
-                  r'VESA 0106 .*WARN 02$',
+                  r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
                   r'.*INFO$']
 
 
