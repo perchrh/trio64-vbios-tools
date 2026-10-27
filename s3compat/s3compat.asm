@@ -329,7 +329,7 @@ chip_id:
         RC 0x30
         call phex2
         PS ', PCI '
-        cmp byte [chip],CHIP_NONE       ; chipfind: 5333:8901/8811/8810
+        cmp byte [chip],CHIP_NONE       ; chipfind: 5333:8901 or 8811
         je .np
         mov ax,[chipdev]
         call phex4

@@ -472,7 +472,7 @@ snapshot:
         cmp ebx,9
         jb .gr
         call crlf
-        mov esi,s_pci                   ; PCI 5333:8901, 8811 or 8810 (the Trio64 family), mechanism 1
+        mov esi,s_pci                   ; PCI 5333:8901 or 8811 (the Trio64 family), mechanism 1
         call str
         mov dx,0xCF8
         in eax,dx
@@ -485,9 +485,7 @@ snapshot:
         in eax,dx
         cmp eax,0x89015333              ; Trio64V2/DX/GX
         je .fo
-        cmp eax,0x88115333              ; Trio64, Trio64V+
-        je .fo
-        cmp eax,0x88105333              ; Trio32
+        cmp eax,0x88115333              ; Trio32, Trio64, Trio64V+
         je .fo
         add ecx,0x800
         cmp ecx,0x80010000

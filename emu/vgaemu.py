@@ -63,12 +63,13 @@ PCI_CONFIG = {0x00: 0x89015333, 0x04: 0x02000003, 0x08: 0x03000006,
 
 # The chips of the Trio64 family the model can be: PCI device ID, the ID registers CR2D/CR2E/CR2F
 # (CR2F = PCI revision) and CR30, and the DCLK PLL post divider: 2 bits (SR12 bits 6-5) on the
-# Trio64/V+, 3 bits with SR12 bit 7 on the Trio64V2. XFree86 s3 driver: device 8811 is the Trio32/64,
-# the Trio64V+ from revision 40h; 8901 is the Trio64V2/DX/GX.
+# Trio32/64/V+, 3 bits with SR12 bit 7 on the Trio64V2. Datasheets: device 8811 for the Trio32 and
+# Trio64 (CR2E 10h / 11h) and the Trio64V+ (CR2E 11h, CR2F 4xh); 8901 is the Trio64V2/DX/GX.
 CHIPS = {
     'v2':     dict(name='Trio64V2/DX', dev=0x8901, ids=(0x89, 0x01, 0x06, 0xE1), r3=True),
     'vplus':  dict(name='Trio64V+', dev=0x8811, ids=(0x88, 0x11, 0x40, 0xE1), r3=False),
     'trio64': dict(name='Trio64', dev=0x8811, ids=(0x88, 0x11, 0x00, 0xE1), r3=False),
+    'trio32': dict(name='Trio32', dev=0x8811, ids=(0x88, 0x10, 0x00, 0xE1), r3=False),
 }
 
 IRET_SEG = 0x0060          # every unused vector points to 0060:0000 = IRET

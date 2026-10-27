@@ -297,7 +297,7 @@ t_chip: call unlock
         jmp .c
 .p:     mov dx,s_pci
         call puts
-        call chipfind                   ; 5333:8901/8811/8810 (common/chip.inc)
+        call chipfind                   ; 5333:8901 or 8811 (common/chip.inc)
         jc .np
         mov ax,[chipdev]
         call phex4
