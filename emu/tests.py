@@ -467,6 +467,10 @@ def t_vshow(c):
         err = bytes(r.stderr or b'').replace(b'\r\n', b' ')
         check(r.exit == ('exit', 0) and b'%d kHz' % k in err and b'Press any key to continue' in err
               and b'PASS' not in bytes(r.stdout), '%s: the monitor warning, then Esc does not cancel' % tool)
+    rr = c.machine(keys=[]).run_com(com, '/R /S', max_insn=6_000_000_000)   # robot: no keys at all
+    out = rr.stdout.decode('latin1')
+    check(rr.exit == ('exit', 0) and 'stopped' not in out and len(re.findall(r'Mode 0[0-9A-F]{3}', out)) >= 20,
+          'VSHOW /R /S did not run through the modes without keys: %s' % (rr.exit,))
     ri = c.machine(keys=[0x011B]).run_com(com, '/I')
     check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to cancel' in ri.stdout,
           'VSHOW /I: no monitor note before the list (Esc there quits)')

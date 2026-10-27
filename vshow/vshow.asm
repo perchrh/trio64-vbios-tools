@@ -11,6 +11,9 @@
 ;                        any key returns to the list, L toggles the line pattern, Esc quits
 ;   VSHOW /A [/L]        every graphics mode in turn: picture and info per mode, a beep when the mode
 ;                        is up, any key for the next mode, Esc stops; a summary is printed at the end
+;   VSHOW /R [/L]        robot: as /A, but each mode stays about 0.5 s (9 BIOS ticks) and no key is
+;                        needed (Esc still stops), no beep; for logs of every mode switch:
+;                        VSHOW /R /V /S > VSHOW.LOG
 ;   VSHOW /H, /?, /HELP  parameter list
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
 ;   /V                   debug log in VSHOW.DBG (see common/vdebug.inc): every INT 10h call, 4F00/4F01
@@ -72,7 +75,8 @@ start:  cld
         or ah,0x20
         cmp ah,'h'                      ; trailing h
         jne .h1
-        jcxz .bad
+        or cx,cx
+        jz .bad
         jmp .p
 .h1:    sub al,'0'
         cmp al,9
@@ -112,7 +116,12 @@ start:  cld
         jne .sw3
         mov byte [allm],1
         jmp .p
-.sw3:   cmp al,'i'
+.sw3:   cmp al,'r'                      ; /R robot: /A without keys
+        jne .sw3i
+        mov byte [allm],1
+        mov byte [robot],1
+        jmp .p
+.sw3i:  cmp al,'i'
         jne .sw4
         mov byte [allm],2
         jmp .p
@@ -490,9 +499,13 @@ runall: mov dword [vib],'VBE2'
         mov [mode],ax
         call showone
         jc .skip
-        xor ah,ah                       ; any key: next, Esc: stop
+        cmp byte [robot],1
+        jne .k
+        call rwait                      ; /R: about 0.5 s, then the next mode (Esc still stops)
+        jmp .k1
+.k:     xor ah,ah                       ; any key: next, Esc: stop
         int 0x16
-        mov [lastkey],al
+.k1:    mov [lastkey],al
         call fmt1                       ; result line (fmt* write tbuf through DI)
         mov di,[rptr]
         mov si,tbuf
@@ -890,8 +903,34 @@ rcpyd:  lodsb                           ; copy '$'-terminated SI to DI
 .r:     ret
 
 ; Audible confirmation that a mode is up (useful when the monitor shows nothing or 'out of range').
+; /R: wait 9 BIOS ticks (about 0.5 s) with the mode on the screen; AL = 27 when Esc was pressed in
+; the meantime (the key is taken), else 0
+rwait:  push es
+        push bx
+        xor ax,ax
+        mov es,ax
+        mov bx,[es:0x46C]
+.w:     mov ah,1                        ; a key waiting?
+        int 0x16
+        jz .n
+        xor ah,ah
+        int 0x16
+        cmp al,27
+        je .x
+.n:     mov ax,[es:0x46C]
+        sub ax,bx
+        cmp ax,9
+        jb .w
+        xor al,al
+.x:     pop bx
+        pop es
+        ret
+
 beep:   ; 1 kHz on the PC speaker for about 0.15 s (PIT channel 2)
-        push es
+        cmp byte [robot],1              ; /R: no beep
+        jne .b
+        ret
+.b:     push es
         mov al,0xB6
         out 0x43,al
         mov ax,1193
@@ -1611,6 +1650,8 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db '                      any key returns to the list, L toggles the pattern, Esc quits',13,10
         db '  VSHOW /A [/L]       every graphics mode in turn: beep when shown,',13,10
         db '                      any key = next mode, Esc = stop, summary at the end',13,10
+        db '  VSHOW /R [/L]       robot: as /A, each mode about 0.5 s, no keys (Esc stops); for',13,10
+        db '                      logs of every mode switch, e.g. VSHOW /R /V /S > VSHOW.LOG',13,10
         db '  /L                  1-pixel vertical line pattern (LCD clock/phase adjustment)',13,10
         db '                      instead of the colour bars',13,10
         db '  /V                  debug log: raw BIOS calls, registers and timing in VSHOW.DBG',13,10
@@ -1680,6 +1721,7 @@ lines   db 0
 vreq    db 0                            ; /V given
 allm    db 0
 lastkey db 0
+robot   db 0                            ; /R given
 wnum    db 0
 ncol    db 0
 col     db 0
