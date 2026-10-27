@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
-"""s3p12.py - apply the p12 patch set to an S3 Trio64V2/DX video BIOS (86C775/86C785).
+"""s3patch.py - apply the p12 or p13 patch set to an S3 Trio64V2/DX video BIOS (86C775/86C785).
 
-    python3 rompatch/s3p12.py IN.BIN -o OUT.BIN [--upper STOCK.BIN] [--no-vco-fix] [--nasm nasm] [-q]
-    make rom IN=IN.BIN OUT=OUT.BIN [UPPER=STOCK.BIN]
+    python3 rompatch/s3patch.py IN.BIN -o OUT.BIN [--target p13|p12] [--upper STOCK.BIN] [--no-vco-fix]
+                                [--nasm nasm] [-q]
+    make rom IN=IN.BIN OUT=OUT.BIN [TARGET=p12] [UPPER=STOCK.BIN]
 
 Needs python3 (no packages) and nasm 2.x.
 
 Supported base BIOS versions (the lower 32 KB, sign-on "S3 86C775/86C785 Video BIOS. Version ..."):
-  2.04.11  the Gainward/Cardex stock BIOS of the ICUVGA-GW503A board; the result is byte for byte the
-           p12 build (S3V2P12.BIN), checked against its SHA-256 when the input is the known stock image
+  2.04.11  the Gainward/Cardex stock BIOS of the ICUVGA-GW503A board; with --target p12 the result is
+           byte for byte the p12 build (S3V2P12.BIN), with p13 (the default) the p13 build; both are
+           checked against their SHA-256 when the input is the known stock image
   2.04.07  the S3 reference BIOS; same patches, with the addresses of that version; with the stock
            upper half the result is checked against the SHA-256 of the build the emulator tests passed
+
+Targets
+  p12      everything up to p12 (below)
+  p13      p12 plus 32-bit stores in the text scroll (AH=06h/07h fills, window line moves), the planar
+           scroll fills (modes 0Dh-12h) and AH=09h in text modes: p13df.asm, p13fill.asm, p13move.asm
+           and p13bfill.asm, the last three partly in dead code that p8 and p11 left (P13A, P13B)
 
 Input
   IN.BIN   64 KB image (lower half BIOS 2.04.xx, upper half the Trio64V+ BIOS 1.03-08), or the 32 KB
@@ -30,7 +38,7 @@ What is applied (the README of trio64-vbios-tools, section "Byte-level changes",
   VCO    (unless --no-vco-fix) every refresh entry whose DCLK PLL runs its VCO below 170 MHz gets a
          larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz
          (smallest R, then smallest N; 2.04.07 has 30 such entries in 16 places, 2.04.11 none)
-  sign-on "-p12" after the version number, checksum byte 7FFF
+  sign-on "-p12" or "-p13" after the version number, checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: both 32 KB halves sum to 00,
@@ -38,18 +46,22 @@ the upper half is unchanged, every DCLK VCO in 170-340 MHz (unless --no-vco-fix)
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-TOOL = 'p12'
+TARGETS = ('p12', 'p13')
 FREE_START, FREE_END = 0x7CFB, 0x7FE3          # the code and tables go here (end exclusive)
 
-# Known images: SHA-256 of the 64 KB input -> SHA-256 of the result. The stock entry is the p12 build.
+# Known images: (SHA-256 of the 64 KB input, target) -> SHA-256 of the result
+STOCK_SHA = '0451420801d1912338cd812b21c43f4ea812bd51299a25790c9e7d118ff00a2f'
+REF_SHA = 'd79bb2a44c246c1292633147ccee4e7525544ed56167cb476ccfc7060a3b8930'   # 2.04.07 + stock upper half
+KNOWN_INPUT = {STOCK_SHA: 'stock 2.04.11 (Gainward ICUVGA-GW503A)',
+               REF_SHA: 'S3 reference 2.04.07 (32 KB, SHA-256 25d64cd7...) with the stock upper half'}
 KNOWN = {
-    '0451420801d1912338cd812b21c43f4ea812bd51299a25790c9e7d118ff00a2f':
-        ('stock 2.04.11 (Gainward ICUVGA-GW503A)', 'S3V2P12.BIN',
-         '165c2185c98e4dbad25013b71dc0b26f0fe14aab0ab7fd1975961e4a3839e772'),
-    # S3 reference 2.04.07 (32 KB, SHA-256 25d64cd7...) with the stock upper half
-    'd79bb2a44c246c1292633147ccee4e7525544ed56167cb476ccfc7060a3b8930':
-        ('S3 reference 2.04.07 with the stock upper half', 'the 2.04.07-p12 build (emulator tests passed)',
-         'c13fcbe0daefa43871087c7b3c80b8b1312aa73934a28989f0972756f61badd6'),
+    (STOCK_SHA, 'p12'): ('S3V2P12.BIN', '165c2185c98e4dbad25013b71dc0b26f0fe14aab0ab7fd1975961e4a3839e772'),
+    (REF_SHA, 'p12'): ('the 2.04.07-p12 build (emulator tests passed)',
+                       'c13fcbe0daefa43871087c7b3c80b8b1312aa73934a28989f0972756f61badd6'),
+    (STOCK_SHA, 'p13'): ('the 2.04.11-p13 build (S3V2P13.BIN, emulator tests passed)',
+                         '5c3242cb5510754a76e0c0612790afcfb684948494a62d5f5ec033e189105d45'),
+    (REF_SHA, 'p13'): ('the 2.04.07-p13 build (emulator tests passed)',
+                       'b050b04536cd4a2d0faeacd05d9a044c457dff8e61b3eb8f2fae2353bb2ac024'),
 }
 
 # ------------------------------------------------------------------ per-version addresses
@@ -59,16 +71,20 @@ PROFILES = {
     '2.04.11': dict(
         sym=dict(MODESET=0x2686, UNLOCK=0x125C, GETCRTC=0x126C, RDREG=0x2179, MEMSIZE=0x1B1A,
                  SEG_SCR=0x1D4F, SEG_BDA=0x1D51, SEG_VID=0x1D53, INT_AH0E=0x2161, INT_NEXT=0x211F,
-                 SCR_FULL=0x3206, SCR_WIN=0x322D, CLR_RET=0x1457),
+                 SCR_FULL=0x3206, SCR_WIN=0x322D, CLR_RET=0x1457, P13A=0x59E1, P13B=0x1442, P13C=0x1227, DFDN=0x7FAF),
         site=dict(modetab=0x20DE, m4f02=0x56FA, boost=0x5718, bl3=0x59D8, base=0x5CF2, lfb=0x5D0E,
-                  clr=0x143D, int10=0x2118, vclr=0x2C34, font=0x1224, scr=0x3200, memsize=0x1B1A),
+                  clr=0x143D, int10=0x2118, vclr=0x2C34, font=0x1224, scr=0x3200, memsize=0x1B1A,
+                  old4f06=0x59E1, txfull=0x2EE0, txwmov=0x2EEF, txwfil=0x2F01, plfull=0x3131,
+                  plwin=0x317C, ah09a=0x351D, ah09b=0x3521),
         d1=0x07, d3=0x00),
     '2.04.07': dict(
         sym=dict(MODESET=0x267B, UNLOCK=0x125C, GETCRTC=0x126C, RDREG=0x216E, MEMSIZE=0x1B0F,
                  SEG_SCR=0x1D44, SEG_BDA=0x1D46, SEG_VID=0x1D48, INT_AH0E=0x2156, INT_NEXT=0x2114,
-                 SCR_FULL=0x31FB, SCR_WIN=0x3222, CLR_RET=0x1457),
+                 SCR_FULL=0x31FB, SCR_WIN=0x3222, CLR_RET=0x1457, P13A=0x59C0, P13B=0x1442, P13C=0x1227, DFDN=0x7FAF),
         site=dict(modetab=0x20D3, m4f02=0x56D9, boost=0x56F7, bl3=0x59B7, base=0x5CCD, lfb=0x5CE9,
-                  clr=0x143D, int10=0x210D, vclr=0x2C29, font=0x1224, scr=0x31F5, memsize=0x1B0F),
+                  clr=0x143D, int10=0x210D, vclr=0x2C29, font=0x1224, scr=0x31F5, memsize=0x1B0F,
+                  old4f06=0x59C0, txfull=0x2ED5, txwmov=0x2EE4, txwfil=0x2EF6, plfull=0x3126,
+                  plwin=0x3171, ah09a=0x3512, ah09b=0x3516),
         d1=0x02, d3=0x10),
 }
 
@@ -94,6 +110,16 @@ SIG = dict(
     rdreg='ee 42 8a e0 ec 4a 86 c4 c3',
     ah0e='e9 ?? ?? e9 ?? ?? e9 ?? ?? 8b c6 80 fc 4f',
     segs='00 00 00 00 00 a0',
+    # p13: the old 4F06 BL=3 routine after its first 5 bytes (dead once p8 calls the new one)
+    old4f06='8b da 8a 5c 09 f7 e3 8b c8 e8 ?? ?? 33 c0 8b 5c 05 f7 f3 3b c1 77 02 8b c8 89 4e 12 c1 e8 03 '
+            '89 46 16 c7 46 0e 00 00 eb cf',
+    txfull='8b cb b0 20 8a 66 03 f3 ab eb 27',              # text scroll full width: blank fill, jmp
+    txwmov='51 56 8b c7 f3 a5 8b f8 5e 59 03 f3 03 fb fe ce 75 ee',   # text window: line moves
+    txwfil='b0 20 8a 66 03 51 57 f3 ab 5f 59 03 fb fe ca 75 f4',      # text window: blank lines
+    plfull='33 c0 f3 aa ef fe c0 ef 83 c4 04 c3',          # planar full width: set/reset fill
+    plwin='33 c0 8b f1 f3 aa 03 fb 8b ce 4a 75 f5 ba ce 03',  # planar window: fill lines
+    ah09a='97 f3 ab c3',                                   # AH=09h text: char/attribute words
+    ah09b='e8 ?? ?? f3 ab c3',                             # AH=09h text, page > 0
 )
 
 # Data patches at fixed offsets, same in both versions: (offset, old, new, purpose)
@@ -109,14 +135,20 @@ DATA = [
 
 # ------------------------------------------------------------------ the new code (nasm)
 # The sources sit next to this script; bios.inc holds the 2.04.11 addresses as defaults and every file
-# is assembled with -D for the BIOS being patched. (file, ROM offset, labels the patch sites use)
+# is assembled with -D for the BIOS being patched, and with -DL_<label> for the labels of the blocks
+# before it. (target, file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels)
 HERE = os.path.dirname(os.path.abspath(__file__))
 BLOCKS = [
-    ('p12ext.asm', 0x7CFB, ('int10x', 'vclr', 'font', 'scr13')),
-    ('crtc240.asm', 0x7E40, ('crtc8', 'crtc16')),
-    ('hooks.asm', 0x7E80, ('hook', 'boost', 'basefix', 'lfbchk')),
-    ('vbe4f06.asm', 0x7F71, ('bl3',)),
-    ('clear32.asm', 0x7FC0, ('clear',)),
+    ('p12', 'p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'vclr', 'font', 'scr13')),
+    ('p12', 'crtc240.asm', 0x7E40, 0x40, ('crtc8', 'crtc16')),
+    ('p12', 'hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'boost', 'basefix', 'lfbchk')),
+    ('p12', 'vbe4f06.asm', 0x7F71, 0x7FAF - 0x7F71, ('bl3',)),
+    ('p12', 'clear32.asm', 0x7FC0, 0x7FE3 - 0x7FC0, ('clear',)),
+    ('p13', 'p13df.asm', 'DFDN', 0x7FC0 - 0x7FAF, ('dfdn',)),
+    ('p13', 'p13fill.asm', 'P13A', 41, ('wfillt', 'wfill')),       # dead: old 4F06 BL=3 code
+    ('p13', 'p13move.asm', 'P13B', 21, ('wmove',)),                # dead: old clear loop (p11)
+    ('p13', 'p13bfill.asm', 0x7F58, 0x7F71 - 0x7F58, ('bfill0', 'bfill')),
+    ('p13', 'p13bfa.asm', 'P13C', 14, ('bfilla',)),                # dead: old font loop (p12)
 ]
 
 
@@ -144,20 +176,25 @@ def call_target(img, at):
     return (at + 3 + struct.unpack_from('<h', img, at + 1)[0]) & 0xFFFF
 
 
-def assemble(sym, nasm, srcdir=HERE):
-    """Assemble the blocks with the addresses in sym. Returns [(offset, bytes, file)] and the labels."""
-    tmp = tempfile.mkdtemp(prefix='s3p12_')
+def assemble(sym, nasm, target='p13', srcdir=HERE):
+    """Assemble the blocks of the target with the addresses in sym. Returns [(offset, bytes, file)] and
+    the labels."""
+    tmp = tempfile.mkdtemp(prefix='s3patch_')
     try:
         out, labels = [], {}
-        for name, org, want in BLOCKS:
+        for lvl, name, org, room, want in BLOCKS:
+            if TARGETS.index(lvl) > TARGETS.index(target):
+                continue
+            org = sym[org] if isinstance(org, str) else org
             src = os.path.join(srcdir, name)
             if not os.path.exists(src):
-                raise PatchError('%s not found (keep the .asm files and bios.inc next to s3p12.py)' % src)
+                raise PatchError('%s not found (keep the .asm files and bios.inc next to s3patch.py)' % src)
             binf, mapf = os.path.join(tmp, name + '.bin'), os.path.join(tmp, name + '.map')
             with open(os.path.join(tmp, name), 'w') as f:  # the source plus a map file for the labels
                 f.write('%%include "%s"\n[map symbols %s]\n' % (src.replace('\\', '/'), mapf.replace('\\', '/')))
             cmd = [nasm, '-f', 'bin', '-i' + srcdir + os.sep, '-o', binf] + \
-                  ['-D%s=0x%04X' % kv for kv in sorted(sym.items())] + [os.path.join(tmp, name)]
+                  ['-D%s=0x%04X' % kv for kv in sorted(sym.items())] + \
+                  ['-DL_%s=0x%04X' % kv for kv in sorted(labels.items())] + [os.path.join(tmp, name)]
             try:
                 r = subprocess.run(cmd, capture_output=True, text=True)
             except OSError as e:
@@ -176,13 +213,13 @@ def assemble(sym, nasm, srcdir=HERE):
                 labels[k] = got[k]
             if got[want[0]] != org:
                 raise PatchError('%s: assembled at %04X, expected %04X' % (name, got[want[0]], org))
+            if len(code) > room:
+                raise PatchError('%s: %d bytes, only %d free at %04X' % (name, len(code), room, org))
             out.append((org, code, name))
         out.sort()
         for (o1, c1, n1), (o2, c2, n2) in zip(out, out[1:]):
             if o1 + len(c1) > o2:
                 raise PatchError('%s overlaps %s' % (n1, n2))
-        if out[0][0] < FREE_START or out[-1][0] + len(out[-1][1]) > FREE_END:
-            raise PatchError('code outside %04X-%04X' % (FREE_START, FREE_END - 1))
         return out, labels
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -243,7 +280,7 @@ def vco_fix(d, log, lo=170.0):
 
 
 # ------------------------------------------------------------------ the patcher
-def patch(lo, nasm='nasm', vcofix=True):
+def patch(lo, nasm='nasm', vcofix=True, target='p13'):
     """lo: the lower 32 KB. Returns (new lower 32 KB, version, log lines)."""
     d = bytearray(lo)
     log = []
@@ -307,11 +344,11 @@ def patch(lo, nasm='nasm', vcofix=True):
         put(off, old, new, why)
 
     # 3. code
-    blocks, lab = assemble(sym, nasm)
+    blocks, lab = assemble(sym, nasm, target)
     for off, code, name in blocks:
         d[off:off + len(code)] = code
-        log.append('%04X-%04X  %-11s %s' % (off, off + len(code) - 1, name,
-                   ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[0] == name for k in b[2])))
+        log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
+                   ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[1] == name for k in b[4])))
 
     def jmp(at, to):
         return b'\xE9' + rel16(at, 3, to)
@@ -342,6 +379,35 @@ def patch(lo, nasm='nasm', vcofix=True):
     a = site['scr']
     put(a, '3b 0e 4a', jmp(a, lab['scr13']), 'mode 13h scroll AH=06h: 32-bit (p12)')
 
+    if target == 'p13':
+        def jcc(op, at, to):                # short conditional or unconditional jump at 'at'
+            r = to - (at + 2)
+            assert -128 <= r <= 127
+            return bytes([op, r & 0xFF])
+
+        a = site['txfull']                  # mov cx,bx / call wfillt / jmp short (the old target)
+        back = a + 11 + d[a + 10] - (0x100 if d[a + 10] > 0x7F else 0)
+        new = b'\x8b\xcb' + call(a + 2, lab['wfillt']) + jcc(0xEB, a + 5, back)
+        put(a, SIG['txfull'], new + b'\x90' * (11 - len(new)), 'text scroll full width: blank fill with wfill (p13)')
+        a = site['txwmov']                  # push cx/si/di, call wmove, pop, next line
+        new = b'\x51\x56\x57' + call(a + 3, lab['wmove']) + b'\x5f\x5e\x59\x03\xf3\x03\xfb\xfe\xce'
+        new += jcc(0x75, a + len(new), a)
+        put(a, SIG['txwmov'], new + b'\x90' * (18 - len(new)), 'text scroll window: line moves with wmove (p13)')
+        a = site['txwfil']                  # mov al,20h / mov ah,[bp+3] / call wfill / next line
+        new = b'\xb0\x20\x8a\x66\x03' + call(a + 5, lab['wfill']) + b'\x03\xfb\xfe\xca'
+        new += jcc(0x75, a + len(new), a + 5)
+        put(a, SIG['txwfil'], new + b'\x90' * (17 - len(new)), 'text scroll window: blank lines with wfill (p13)')
+        a = site['plfull']
+        put(a, '33 c0 f3 aa', call(a, lab['bfill0']) + b'\x90', 'planar scroll full width: fill with bfill (p13)')
+        a = site['plwin']                   # xor ax,ax / call bfilla (DI moved as rep stosb) / next line
+        new = b'\x33\xc0' + call(a + 2, lab['bfilla']) + b'\x03\xfb\x4a'
+        new += jcc(0x75, a + len(new), a + 2)
+        put(a, SIG['plwin'][:38], new + b'\x90' * (13 - len(new)), 'planar scroll window: fill lines with bfill (p13)')
+        a = site['ah09a'] + 1
+        put(a, 'f3 ab c3', jmp(a, lab['wfill']), 'AH=09h text: char/attribute with wfill (p13)')
+        a = site['ah09b'] + 3
+        put(a, 'f3 ab c3', jmp(a, lab['wfill']), 'AH=09h text, page > 0: with wfill (p13)')
+
     # 4. DCLK VCO
     if vcofix:
         vlog = []
@@ -353,7 +419,7 @@ def patch(lo, nasm='nasm', vcofix=True):
     # 5. sign-on and checksum
     s = m.start(1)
     end = d.index(b'\x00', s)
-    txt = bytes(d[s:end]).replace(ver.encode(), (ver + '-' + TOOL).encode(), 1)
+    txt = bytes(d[s:end]).replace(ver.encode(), (ver + '-' + target).encode(), 1)
     pad = d.index(b'\x00', s)
     stop = pad
     while stop < 0x100 and d[stop] == 0:
@@ -389,10 +455,11 @@ def verify(img, upper, vcofix):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='apply the p12 patch set to an S3 Trio64V2/DX BIOS 2.04.11 or 2.04.07')
+    ap = argparse.ArgumentParser(description='apply the p12 or p13 patch set to an S3 Trio64V2/DX BIOS 2.04.11 or 2.04.07')
     ap.add_argument('input', help='64 KB image, or the 32 KB lower half')
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
     ap.add_argument('--upper', help='source of the upper 32 KB (64 KB image or 32 KB file) for a 32 KB input')
+    ap.add_argument('--target', choices=TARGETS, default=TARGETS[-1], help='patch level (default %(default)s)')
     ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
@@ -416,28 +483,28 @@ def main():
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         if upper[:2] != b'\x55\xAA' or sum(upper) & 0xFF:
             raise PatchError('upper 32 KB: no 55AAh header or checksum not 00')
-        new_lo, ver, log = patch(lo, a.nasm, not a.no_vco_fix)
+        new_lo, ver, log = patch(lo, a.nasm, not a.no_vco_fix, a.target)
         img = new_lo + upper
         errs = verify(img, upper, not a.no_vco_fix)
-        known = KNOWN.get(hashlib.sha256(lo + upper).hexdigest())
+        in_sha = hashlib.sha256(lo + upper).hexdigest()
+        known = None if a.no_vco_fix else KNOWN.get((in_sha, a.target))
         out_sha = hashlib.sha256(img).hexdigest()
-        if known and not a.no_vco_fix:
-            if out_sha != known[2]:
-                errs.append('result differs from %s (SHA-256 %s, expected %s)' % (known[1], out_sha, known[2]))
+        if known and out_sha != known[1]:
+            errs.append('result differs from %s (SHA-256 %s, expected %s)' % (known[0], out_sha, known[1]))
         if errs:
             raise PatchError('result check failed:\n  ' + '\n  '.join(errs))
     except (PatchError, OSError) as e:
-        print('s3p12: %s' % e, file=sys.stderr)
+        print('s3patch: %s' % e, file=sys.stderr)
         return 1
     with open(a.output, 'wb') as f:
         f.write(img)
     if not a.quiet:
-        print('base %s%s' % (ver, ' = ' + known[0] if known else ''))
+        print('base %s%s' % (ver, ' = ' + KNOWN_INPUT[in_sha] if in_sha in KNOWN_INPUT else ''))
         for line in log:
             print('  ' + line)
     print('%s: %s-%s, checksums %02X/%02X (both halves sum to 00), SHA-256 %s%s'
-          % (a.output, ver, TOOL, img[0x7FFF], img[0xFFFF], out_sha,
-             ', identical to ' + known[1] if known and not a.no_vco_fix else ''))
+          % (a.output, ver, a.target, img[0x7FFF], img[0xFFFF], out_sha,
+             ', identical to ' + known[0] if known else ''))
     return 0
 
 

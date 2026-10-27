@@ -6,11 +6,12 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 ## Project context
 
 - Hardware: Gainward S3 Trio64V2/DX (86C775), 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901.
-- The ROM is a 64 KB image. The lower 32 KB is BIOS 2.04.11 with our patches (currently -p12); the
+- The ROM is a 64 KB image. The lower 32 KB is BIOS 2.04.11 with our patches (currently -p13); the
   upper 32 KB is the Trio64V+ BIOS 1.03-08 and must stay byte-identical to the stock dump.
 - The patched ROM images are kept outside this repository. `rompatch/` holds the ROM code (nasm) and
-  `s3p12.py`, which builds p12 from the stock 2.04.11 dump or the S3 reference 2.04.07 with byte
-  assertions; it must keep reproducing the p12 SHA-256 from the stock dump (`make rom-test`). The
+  `s3patch.py`, which builds p13 (or p12 with `--target p12`) from the stock 2.04.11 dump or the S3
+  reference 2.04.07 with byte assertions; it must keep reproducing the pinned p12 and p13 SHA-256 from
+  the stock dump (`make rom-test`); a new patch level gets a new target and a new pinned hash. The
   repository also holds the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a multiQ

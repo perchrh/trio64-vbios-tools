@@ -1,7 +1,7 @@
 # Trio64V2/DX VBIOS test tools
 
 DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX card
-(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.11-p12.
+(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.11-p13.
 The ROM image itself is not in this repository; the changes it carries are described below, and
 `rompatch/` holds their source and a patcher that builds the image from the stock or the S3 reference
 BIOS.
@@ -13,7 +13,7 @@ is for the Windows 9x desktop.
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
-| S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop) | `S3TEST > S3TEST.LOG` |
+| S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings) | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them | `VGALOG` (or `VGALOG /M`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
@@ -69,17 +69,18 @@ never touches.
 ## ROM patcher
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets) and
-`s3p12.py`, which applies the whole p12 change set to a clean BIOS. It needs python3 (no packages) and
-NASM:
+`s3patch.py`, which applies the whole p13 change set (or p12 with `--target p12`) to a clean BIOS. It
+needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3p12.py STOCK.BIN -o S3V2P12.BIN
-    python3 rompatch/s3p12.py REF2047.BIN --upper STOCK.BIN -o S3V2P12R.BIN
-    make rom IN=STOCK.BIN OUT=S3V2P12.BIN [UPPER=STOCK.BIN]
+    python3 rompatch/s3patch.py STOCK.BIN -o S3V2P13.BIN
+    python3 rompatch/s3patch.py STOCK.BIN --target p12 -o S3V2P12.BIN
+    python3 rompatch/s3patch.py REF2047.BIN --upper STOCK.BIN -o S3V2P13R.BIN
+    make rom IN=STOCK.BIN OUT=S3V2P13.BIN [TARGET=p12] [UPPER=STOCK.BIN]
 
 | Base | Result |
 | --- | --- |
-| 2.04.11, the stock dump of the card (64 KB) | Byte for byte the p12 build: the tool checks the SHA-256 (165c2185...) and stops if it differs |
-| 2.04.07, the S3 reference BIOS (32 KB, with `--upper` for the Trio64V+ half) | 2.04.07-p12: the same patches at that version's addresses, the stock board flags (0xD1 = 05h, CR80 = 00h), and 16 refresh entries whose DCLK VCO ran at 145-162 MHz moved into 170-340 MHz at the same pixel clock (`--no-vco-fix` leaves them). Checked against the SHA-256 of the build that passed every emulator test |
+| 2.04.11, the stock dump of the card (64 KB) | Byte for byte the p13 build (SHA-256 5c3242cb...) or, with `--target p12`, the p12 build (165c2185...); the tool checks the SHA-256 and stops if it differs |
+| 2.04.07, the S3 reference BIOS (32 KB, with `--upper` for the Trio64V+ half) | 2.04.07-p13 (or -p12): the same patches at that version's addresses, the stock board flags (0xD1 = 05h, CR80 = 00h), and 16 refresh entries whose DCLK VCO ran at 145-162 MHz moved into 170-340 MHz at the same pixel clock (`--no-vco-fix` leaves them). Checked against the SHA-256 of the builds that passed every emulator test |
 
 The addresses the new code uses are in `rompatch/bios.inc` (2.04.11 defaults); for 2.04.07 the tool
 passes that version's addresses with -D. Every patch site is compared with the original code first
@@ -87,13 +88,14 @@ passes that version's addresses with -D. Every patch site is compared with the o
 00, the upper half is unchanged, every DCLK VCO is in range. The CR88 bit 1 tweak of both versions
 keeps comparing SR10/SR11 with the old MCLK values, as in 2.04.11-p12, so it stays off at 59.96 MHz.
 
-    python3 rompatch/test_s3p12.py --stock STOCK.BIN --ref REF2047.BIN --p12 S3V2P12.BIN
-    make rom-test STOCK=STOCK.BIN REF=REF2047.BIN P12=S3V2P12.BIN
+    python3 rompatch/test_s3patch.py --stock STOCK.BIN --ref REF2047.BIN --p12 S3V2P12.BIN --p13 S3V2P13.BIN
+    make rom-test STOCK=STOCK.BIN REF=REF2047.BIN P12=S3V2P12.BIN P13=S3V2P13.BIN
 
-runs the checksum tests: the stock image gives the p12 SHA-256 (and the same bytes as `--p12`), the
-reference gives its pinned SHA-256, both halves of every result sum to 00 with the right byte at
-7FFFh, the VCO check, and five inputs that must be refused (already patched, a patch site changed, a
-wrong checksum, an unknown version, a 32 KB image without `--upper`).
+runs the checksum tests: the stock image gives the p12 and p13 SHA-256 (and the same bytes as `--p12`
+and `--p13`), p13 differs from p12 only inside the p13 ranges, the reference gives its pinned SHA-256
+for both targets, both halves of every result sum to 00 with the right byte at 7FFFh, the VCO check,
+and six inputs that must be refused (already patched, a p12 and a p13 patch site changed, a wrong
+checksum, an unknown version, a 32 KB image without `--upper`).
 
 ## Debug log (/V)
 
@@ -176,13 +178,14 @@ stack (CR45, CR4A, CR4B). It is built by NASM alone: the PE header is written ou
 The EGA and CGA default palettes are not tables: S3COMPAT computes them from the IBM rules
 (EGA: 2Ah per primary bit, 15h per secondary bit; CGA: bit 4 adds 15h to all three, colour 6 is brown).
 
-## VBIOS changes in 2.04.11-p12
+## VBIOS changes in 2.04.11-p13
 
-p12 differs from the stock 2.04.11 dump in the lower 32 KB only. The upper 32 KB (Trio64V+ BIOS
+p13 differs from the stock 2.04.11 dump in the lower 32 KB only. The upper 32 KB (Trio64V+ BIOS
 1.03-08, for an older card) is byte-identical to stock, both halves checksum to 0, and every change
-keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO mode. About 57 bytes of the
-lower 32 KB are still free (0x7F58-7F70, 0x7FAF-7FBF, 0x7FE3-7FEF, 0x7E3E-7E3F). p10 (an extra
-VESA mode 182h, 320x400x8) was withdrawn and is in neither p11 nor p12.
+keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO mode. About 24 bytes of the
+lower 32 KB are still free (0x7FB7-7FBF, 0x7FE3-7FEF, 0x7E3E-7E3F); p13 also reuses 90 bytes of code
+that p8, p11 and p12 had left unreachable. p10 (an extra VESA mode 182h, 320x400x8) was withdrawn
+and is in neither p11, p12 nor p13.
 
 | Area | Change | Effect |
 | --- | --- | --- |
@@ -200,6 +203,9 @@ VESA mode 182h, 320x400x8) was withdrawn and is in neither p11 nor p12.
 | VGA mode set (p12) | The clear of video memory in modes 00h-13h (2C38h) and the font load into plane 2 (1224h, every text mode set and AX=11xxh) write 32-bit words | Mode set 03h about half the video memory writes (9368 instead of 20632), modes 12h/13h 16384 instead of 32768; mode set 03h 3.0 ms on the card (4.4 ms with p9) |
 | VBE 4F05 (p12) | AX=4F05h BH=0 (set window) is handled at the INT 10h entry: unlock, CR58 test (refused in linear modes as before), SR04 for planar banks, CR6A; the 3C4h index is kept | 6 port writes and 3 reads instead of 13 writes and about 6 reads (15 us per call on the card with p9, 4.3 us with p12); get, errors and the window function (far call) are unchanged |
 | Mode 13h scroll (p12) | AH=06h moves and fills with 32-bit words, full screen and windows; AH=07h keeps the original code | Half the video memory reads and writes |
+| Text scroll (p13) | AH=06h/07h in text modes: the blank fill (full width, the clear screen of most programs and every line an AH=0Eh scroll adds) and the window line moves and fills use 32-bit stores, in both directions (the full-width move was 32-bit in stock) | A full-screen clear 1000 writes instead of 2000; windows half the writes per line |
+| Planar scroll (p13) | AH=06h/07h in modes 0Dh-12h: the set/reset fill writes 32-bit words; the moves stay bytes (write mode 1 copies through the 8-bit latches, a wider access would copy only the last byte) | A mode 12h clear 9600 writes instead of 38400 |
+| AH=09h text (p13) | Character and attribute written with 32-bit stores (both page paths) | Half the writes for counts above 1 |
 | 512x384x8 (151h) | CR50 table byte 60h to 40h | Correct graphics engine pixel length (was the reserved 10b) |
 | VBE 4F06 BL=3 | Rewritten: BX = min(8184, memory / lines) rounded down to 8, CX = BX in pixels | Real maximum line length (4368 for 101h instead of 546) |
 
@@ -207,9 +213,9 @@ VESA mode 182h, 320x400x8) was withdrawn and is in neither p11 nor p12.
 
 Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x8000 up is untouched.
 
-| Offset | Stock | p12 | Purpose |
+| Offset | Stock | p13 | Purpose |
 | --- | --- | --- | --- |
-| 0x0079 | 2.04.11 | 2.04.11-p12 | Sign-on string (copyright line moved into the padding before 0x00AB) |
+| 0x0079 | 2.04.11 | 2.04.11-p13 | Sign-on string (copyright line moved into the padding before 0x00AB) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 (M) = 41h, SR10 (N/R) = 42h |
 | 0x00D1 | 07 | 05 | POST flags: bit 1 (blank pedestal) cleared |
 | 0x00DE | 08 | 88 | CR41 refresh fields: 1280 field = 4 (60 Hz) |
@@ -220,6 +226,15 @@ Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x80
 | 0x095C | 60 | 40 | CR50 for 512x384x8 / x32 |
 | 0x0B1A-0B1D | C2 9F A0 85 | C3 9F A0 86 | 640x480x15/16 @ 60 Hz: line total 800 |
 | 0x1224-1226 | push ax / push cx / mov cl,bh | jmp 7D82 | Font load: 32-bit copy per character (p12) |
+| 0x1227-1234 | old font loop (unreachable since p12) | code | p13: bfilla, planar window fill that leaves DI as rep stosb (`p13bfa.asm`) |
+| 0x1442-1453 | old clear loop (unreachable since p11) | code | p13: wmove, 32-bit line move (`p13move.asm`) |
+| 0x2EE0-2EEA | mov cx,bx / ... / rep stosw / jmp | mov cx,bx / call wfillt / jmp, nop x4 | Text scroll full width: blank fill (p13) |
+| 0x2EEF-2F00 | window move loop with rep movsw | push / call wmove / pop, nop | Text scroll window: line moves (p13) |
+| 0x2F01-2F11 | window fill loop with rep stosw | call wfill per line, nop x3 | Text scroll window: blank lines (p13) |
+| 0x3131-3134 | xor ax,ax / rep stosb | call bfill0 / nop | Planar scroll full width: fill (p13) |
+| 0x317C-3188 | window fill loop with rep stosb | call bfilla per line, nop x3 | Planar scroll window: fill (p13) |
+| 0x351E-3520, 0x3524-3526 | rep stosw / ret | jmp wfill | AH=09h text, page 0 and other pages (p13) |
+| 0x59E1-5A03 | old 4F06 BL=3 code (unreachable since p8) | code | p13: wfillt/wfill, 32-bit word fill (`p13fill.asm`) |
 | 0x143D-1441 | mov es,[cs:1D53] | jmp 7FC0, nop x2 | Mode set clear: bank loop with rep stosd at 0x7FC0 |
 | 0x211A-211C | cmp ah,0Eh | jmp 7CFB | INT 10h entry: fast 4F05 BH=0 (p12) |
 | 0x2C38-2C3A | xor bl,bl / mov es,bx | jmp 7D62 | VGA mode set clear with rep stosd (p12) |
@@ -233,10 +248,12 @@ Offsets are in the 64 KB image (C000:offset when shadowed); everything from 0x80
 | 0x7E40-7E58 | 00 | CRTC table | 320x240x8 @ 60 Hz |
 | 0x7E60-7E78 | 00 | CRTC table | 320x240x15/16 @ 60 Hz |
 | 0x7E80-7F57 | 00 | code | Mode set hook, LFB base restore, booster, base fix, linear test |
+| 0x7F58-7F70 | 00 | code | p13: bfill0/bfill, 32-bit byte fill (`p13bfill.asm`) |
 | 0x7F71-7FAE | 00 | code | 4F06 BL=3 routine |
+| 0x7FAF-7FB6 | 00 | code | p13: dfdn, direction flag test shared by the p13 helpers (`p13df.asm`) |
 | 0x7CFB-7E3D | 00 | code | p12: fast 4F05 (7CFB), VGA clear (7D62), font load (7D82), mode 13h scroll (7D9E); source `p12ext.asm` with the ROM build |
 | 0x7FC0-7FE2 | 00 | code | Mode set clear: 16384 x rep stosd per 64 KB bank (CR6A), EAX kept for the caller |
-| 0x7FFF | 77 | AA | Checksum of the lower 32 KB |
+| 0x7FFF | 77 | EB | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
