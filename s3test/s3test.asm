@@ -53,7 +53,8 @@
 ;   320 KB written through banks 0-4 and read back: 0 errors
 ;   Banked write throughput at least 60000 KB/s (the booster; 83700 KB/s measured on p7)
 ;   4F03 in 4101h reports 4101h
-;   4F06 BL=3 in 101h: 4368 bytes and 4368 pixels (2 MB / 480 lines, rounded down to 8)
+;   4F06 BL=3 in 101h: the memory (CR36 strapping) / 480 lines rounded down to 8, at most 8184 (the
+;                    10-bit CR13/CR51 offset): 4368 bytes and pixels with 2 MB, 8184 with 4 MB
 ;   CR50 in 151h (512x384x8) = 40h (pixel length 00, was the reserved 10b in stock)
 ;   ATC flip-flop: left in the data state before a mode set, it is back in the index state after
 ;   VGA mode set clear (p12): after filling video memory, mode 13h leaves A000 all 00, mode 12h all four
@@ -121,6 +122,7 @@ start:  cld
         call puts
         mov ax,[bp_]
         mov [vls],ax
+        mov [lst],ax
         call t_rom
         call t_chip
         call t_post
@@ -164,6 +166,7 @@ start:  cld
         call pdec
         mov dx,s_sum3
         call puts
+        call catsum
         mov dx,s_sum4                   ; run time (own line, so logs compare without it)
         call puts
         call runtime
@@ -290,7 +293,9 @@ t_chip: call unlock
         jmp .e
 .np:    mov dx,s_na
         call puts
-.e:     mov dx,s_info
+.e:     mov al,2
+        call ccount
+        mov dx,s_info
         call puts
         ret
 
@@ -392,6 +397,7 @@ t_mode: VS 'D:TEST mode '
         call measure            ; -> AX = Hz*10
         mov [m_meas],ax
         call linelen
+        call mcat                       ; the category: the VGA BIOS standard of the mode, VBE above 0FFh
         mov dx,s_mode
         call puts
         mov ax,[m_mode]
@@ -657,7 +663,29 @@ t_func: mov ax,0x4F02
         cmp word [tmp],0x4101
         sete al
         call result
-        ; p8: 4F06 BL=3 maximum line length in 101h = 4368 bytes / 4368 pixels (2 MB / 480 lines)
+        ; p8: 4F06 BL=3 maximum line length in 101h: the video memory (CR36 bits 7-5 strapping, datasheet:
+        ; 000b 4 MB, 100b 2 MB, 110b 1 MB) / 480 lines rounded down to 8, at most 8184 (the 10-bit
+        ; CR13/CR51 offset in 8-byte units): 4368 with 2 MB, 8184 with 4 MB
+        call unlock
+        mov al,0x36
+        call rdcr
+        mov bl,ah
+        and bl,0xE0
+        mov eax,1024*1024
+        cmp bl,0xC0                     ; 110b: 1 MB
+        je .mm
+        shl eax,1                       ; 100b and the others: 2 MB
+        or bl,bl
+        jnz .mm
+        shl eax,1                       ; 000b: 4 MB
+.mm:    xor edx,edx
+        mov ecx,480
+        div ecx
+        and ax,0xFFF8
+        cmp eax,8184
+        jbe .mx
+        mov ax,8184
+.mx:    mov [m_exp6],ax
         mov ax,0x4F02
         mov bx,0x0101
         int 0x10
@@ -668,6 +696,14 @@ t_func: mov ax,0x4F02
         mov [tmp2],bx
         mov [m_meas],cx
         mov dx,s_f06
+        call puts
+        movzx eax,word [m_exp6]
+        call pdec
+        mov al,'/'
+        call putc
+        movzx eax,word [m_exp6]
+        call pdec
+        mov dx,s_f06b
         call puts
         movzx eax,word [tmp2]
         call pdec
@@ -683,9 +719,10 @@ t_func: mov ax,0x4F02
         call phex4
         jmp .f6
 .s6:
-        cmp word [tmp2],4368
+        mov ax,[m_exp6]
+        cmp [tmp2],ax
         jne .f6
-        cmp word [m_meas],4368
+        cmp [m_meas],ax
         jne .f6
         mov al,1
         jmp .r6
@@ -1670,6 +1707,8 @@ time3:  push dx
         mov ecx,1193182
         div ecx
         call pdec10
+        mov al,2
+        call ccount
         mov dx,s_tinfo
         call puts
         ret
@@ -1961,8 +2000,124 @@ bench:  push es
         mov [kbs],eax
         ret
 
+; Test categories: every result line starts with one (5 columns): the standard the expected values
+; come from (IBM CGA/EGA/VGA BIOS, VESA VBE), the S3 chip, or the ROM image itself. The summary
+; counts the lines per category.
+NCAT    equ 7
+catnames db 'ROM  MDA  CGA  EGA  VGA  VBE  S3   '
+
+; AL = 0 pass, 1 fail, 2 info: count it for the category at the start of the current line (lst)
+ccount: pusha
+        push es
+        push ds
+        pop es
+        movzx bx,al
+        shl bx,1
+        xor cx,cx
+.c:     mov si,cx
+        imul si,si,5
+        add si,catnames
+        mov di,[lst]
+        push cx
+        mov cx,3
+        repe cmpsb
+        pop cx
+        je .f
+        inc cx
+        cmp cx,NCAT
+        jb .c
+        jmp .x                          ; no category (cannot happen)
+.f:     imul si,cx,6
+        add si,bx
+        inc word [catcnt+si]
+.x:     mov ax,[bp_]                    ; the next line starts after this one
+        add ax,8                        ; (the result text and CR LF follow)
+        mov [lst],ax
+        pop es
+        popa
+        ret
+
+; mode [m_mode] -> its category printed: 07h/0Fh MDA, 00h-06h CGA, 0Dh-10h EGA, other VGA modes VGA,
+; VESA modes (100h and up) VBE
+mcat:   pusha
+        mov ax,[m_mode]
+        mov si,5                        ; VBE
+        cmp ax,0x100
+        jae .p
+        and al,0x7F
+        mov si,1                        ; MDA
+        cmp al,0x07
+        je .p
+        cmp al,0x0F
+        je .p
+        mov si,2                        ; CGA
+        cmp al,0x06
+        jbe .p
+        mov si,3                        ; EGA
+        cmp al,0x0D
+        jb .v
+        cmp al,0x10
+        jbe .p
+.v:     mov si,4                        ; VGA
+.p:     imul si,si,5
+        add si,catnames
+        push es
+        push ds
+        pop es
+        mov di,[bp_]
+        mov cx,5
+        rep movsb
+        pop es
+        mov [bp_],di
+        popa
+        ret
+
+; Summary by category, one line each with its counts ("VGA  PASS 12  FAIL 0  INFO 1")
+catsum: xor cx,cx
+.l:     mov bx,cx
+        imul bx,bx,6
+        mov ax,[catcnt+bx]
+        or ax,[catcnt+bx+2]
+        or ax,[catcnt+bx+4]
+        jz .n
+        push cx
+        mov si,cx
+        imul si,si,5
+        add si,catnames
+        push es
+        push ds
+        pop es
+        mov di,[bp_]
+        mov cx,5
+        rep movsb
+        pop es
+        mov [bp_],di
+        mov dx,s_cp
+        call puts
+        movzx eax,word [catcnt+bx]
+        call pdec
+        mov dx,s_cf
+        call puts
+        movzx eax,word [catcnt+bx+2]
+        call pdec
+        mov dx,s_ci
+        call puts
+        movzx eax,word [catcnt+bx+4]
+        call pdec
+        mov dx,s_sum3
+        call puts
+        pop cx
+.n:     inc cx
+        cmp cx,NCAT
+        jb .l
+        ret
+
 ; Print PASS (AL=1) or FAIL (AL=0) and count it.
 result: push ax                 ; AL=1 pass
+        push ax
+        xor al,1                        ; ccount: 0 pass, 1 fail
+        call ccount
+        pop ax
         or al,al
         jz .f
         inc word [npass]
@@ -2124,57 +2279,62 @@ modelist:
 
 s_vname db 'S3TEST.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
-s_title db 'S3TEST ',VERSION,' - Trio64V2/DX VBIOS ',ROMVER,' test suite',13,10,13,10,'$'
+s_title db 'S3TEST ',VERSION,' - Trio64V2/DX VBIOS ',ROMVER,' test suite',13,10
+        db 'Category column: ROM (image), CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10,13,10,'$'
 s_romver db ROMVER
 ROMVLEN equ $-s_romver
-s_sig   db 'ROM signature ',ROMVER,' ............ $'
+s_sig   db 'ROM  ROM signature ',ROMVER,' ............ $'
 s_nover db '(no version string)$'
-s_cks   db 'ROM checksum (C000:0000-7FFF) = $'
-s_chip  db 'Chip ID CR2D 2E 2F 30, PCI rev ...... $'
+s_cks   db 'ROM  ROM checksum (C000:0000-7FFF) = $'
+s_chip  db 'S3   Chip ID CR2D 2E 2F 30, PCI rev ...... $'
 s_pci   db ', PCI $'
 s_na    db 'n/a$'
 s_info  db '  INFO',13,10,'$'
-s_mclk  db 'MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'
-s_edo   db 'CR36 memory type (bits 3-2 = 00 EDO)  $'
-s_ped   db 'SR1A pedestal off, bit 4 set ........ $'
-s_ref   db 'Refresh defaults CR41 CR52 (88 x1) .. $'
+s_mclk  db 'S3   MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'
+s_edo   db 'S3   CR36 memory type (bits 3-2 = 00 EDO)  $'
+s_ped   db 'S3   SR1A pedestal off, bit 4 set ........ $'
+s_ref   db 'S3   Refresh defaults CR41 CR52 (88 x1) .. $'
 s_mode  db 'Mode $'
 s_st    db ' st $'
 s_hz    db ' Hz $'
 s_exp   db ' (exp $'
 s_line  db ') line $'
 s_regs  db ') CR58 59 5A 6D 90 SR1A: $'
-s_f03   db '4F03 in boosted 101h (0101) ......... $'
-s_f03l  db '4F03 in linear 4101h (4101) ......... $'
-s_f01   db '4F01 PhysBasePtr = real base ........ $'
+s_f03   db 'VBE  4F03 in boosted 101h (0101) ......... $'
+s_f03l  db 'VBE  4F03 in linear 4101h (4101) ......... $'
+s_f01   db 'VBE  4F01 PhysBasePtr = real base ........ $'
 s_0000  db '0000$'
-s_f05   db '4F05 set bank 3 / get (004F 0003) ... $'
-s_dat   db 'Banked data check 320 KB, errors .... $'
-s_thr   db 'Banked write throughput (>=60000) ... $'
+s_f05   db 'VBE  4F05 set bank 3 / get (004F 0003) ... $'
+s_dat   db 'VBE  Banked data check 320 KB, errors .... $'
+s_thr   db 'VBE  Banked write throughput (>=60000) ... $'
 s_kbs   db ' KB/s$'
-s_f06   db '4F06 BL=3 max line 101h (4368/4368) $'
-s_c50   db 'CR50 in 512x384x8 151h (40) ........ $'
-s_ff    db 'ATC flip-flop reset by mode set ..... $'
-s_vclr  db 'VGA mode set clear 13h 12h 03h ..... $'
-s_font  db 'Font load 8x16 and 8x8 in plane 2 .. $'
-s_scr   db 'Mode 13h scroll AH=06h/07h data .... $'
-s_txs   db 'Text scroll AH=06h/07h cells ....... $'
-s_ah09  db 'AH=09h text char/attribute count ... $'
-s_pls   db 'Planar scroll 12h/0Dh AH=06h/07h ... $'
-s_pl6a  db 'Planar scroll S3 6Ah AH=06h/07h .... $'
-s_bank  db '4F05 regs, SR index, CR6A, planar, LFB $'
-s_t03   db 'Time: mode set 03h (ms) ............ $'
-s_t101  db 'Time: 4F02 101h with clear (ms) .... $'
-s_t05   db 'Time: 4F05 set window (us) ......... $'
-s_tscr  db 'Time: mode 13h scroll AH=06h (ms) .. $'
-s_ttcl  db 'Time: text clear AH=06h AL=0 (ms) .. $'
-s_tpcl  db 'Time: mode 12h clear AH=06h AL=0 (ms) $'
+s_f06   db 'VBE  4F06 BL=3 max line 101h ($'
+s_f06b  db ') $'
+s_c50   db 'S3   CR50 in 512x384x8 151h (40) ........ $'
+s_ff    db 'VGA  ATC flip-flop reset by mode set ..... $'
+s_vclr  db 'VGA  VGA mode set clear 13h 12h 03h ..... $'
+s_font  db 'EGA  Font load 8x16 and 8x8 in plane 2 .. $'
+s_scr   db 'VGA  Mode 13h scroll AH=06h/07h data .... $'
+s_txs   db 'CGA  Text scroll AH=06h/07h cells ....... $'
+s_ah09  db 'CGA  AH=09h text char/attribute count ... $'
+s_pls   db 'EGA  Planar scroll 12h/0Dh AH=06h/07h ... $'
+s_pl6a  db 'S3   Planar scroll S3 6Ah AH=06h/07h .... $'
+s_bank  db 'VBE  4F05 regs, SR index, CR6A, planar, LFB $'
+s_t03   db 'CGA  Time: mode set 03h (ms) ............ $'
+s_t101  db 'VBE  Time: 4F02 101h with clear (ms) .... $'
+s_t05   db 'VBE  Time: 4F05 set window (us) ......... $'
+s_tscr  db 'VGA  Time: mode 13h scroll AH=06h (ms) .. $'
+s_ttcl  db 'CGA  Time: text clear AH=06h AL=0 (ms) .. $'
+s_tpcl  db 'VGA  Time: mode 12h clear AH=06h AL=0 (ms) $'
 s_tinfo db '  INFO',13,10,'$'
 s_pass  db '  PASS',13,10,'$'
 s_fail  db '  FAIL',13,10,'$'
 s_sum1  db 13,10,'Passed: $'
 s_sum2  db '  Failed: $'
 s_sum3  db 13,10,'$'
+s_cp    db 'PASS $'
+s_cf    db '  FAIL $'
+s_ci    db '  INFO $'
 s_help  db 'S3TEST ',VERSION,' - regression test for the Trio64V2/DX VBIOS ',ROMVER,13,10
         db '  S3TEST [/V] > S3TEST.LOG',13,10
         db '  /V                  debug log in S3TEST.DBG (BIOS calls, registers, timing)',13,10
@@ -2187,6 +2347,9 @@ s_sum4  db 'Time spent: $'
 s_sum5  db ' s',13,10,'$'
 
 npass   dw 0
+m_exp6  dw 0                            ; expected 4F06 BL=3 maximum line in 101h
+lst     dw 0                            ; start of the current result line in obuf
+catcnt  times 7*3 dw 0                  ; per category: PASS, FAIL, INFO
 vls     dw 0                    ; /V: start of the current line in obuf
 nfail   dw 0
 bp_     dw 0
