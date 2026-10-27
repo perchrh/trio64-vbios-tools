@@ -1147,7 +1147,11 @@ def main():
     ap.add_argument('--noop', default='', metavar='SPEC',
                     help='mutation test: INT 10h calls matching SPEC do nothing, e.g. "ah=06" or '
                          '"ax=4F14,bl=02" (hex values; several patterns separated by ";"), see emu/mutants.py')
+    ap.add_argument('--calls', metavar='FILE', help='write every distinct INT 10h call after POST (AX BX DL, '
+                    'hex, one per line) to FILE (emu/mutants.py: which functions the tests call)')
     a = ap.parse_args()
+    if a.calls:
+        Machine.calls = set()
     if a.noop:
         Machine.noop = [{k.strip().lower(): int(v, 16) for k, v in (f.split('=') for f in pat.split(','))}
                         for pat in a.noop.split(';')]
@@ -1185,6 +1189,10 @@ def main():
         first, _, rest = res.partition('\n')
         print('%-14s %-60s %5.0fs' % (name, first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
     print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+    if a.calls:
+        with open(a.calls, 'w') as f:
+            for ax, bx, dl in sorted(Machine.calls):
+                f.write('%04X %04X %02X\n' % (ax, bx, dl))
     if a.noop:
         print('noop: %d INT 10h calls matched %s' % (Machine.noop_hits, a.noop))
     if a.coverage:

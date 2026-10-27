@@ -1277,7 +1277,9 @@ modex_one:
 ;   AH=01/02/03 cursor   1 CR0A/CR0B not 0D/0E for shape 0607h (emulation), 2 AH=03 shape,
 ;                        4 CR0E/CR0F or AH=03 position, 8 emulation off (AH=12 BL=34) not honoured
 ;   AH=04 light pen      1 a light pen reported (the VGA has none)
-;   AH=05 pages          1 CR0C/CR0D start address not page * page size (mode 03 page 3, 0Dh page 7)
+;   AH=05 pages          1 CR0C/CR0D start address not 40:4E, 2 40:62 not the page or 40:4E not page *
+;                        page size of the IBM BIOS (mode 03h: 1000h, 0Dh: 2000h), so a call that does
+;                        nothing fails too
 bios_tests:
         ; ---- cursor
         mov ax,3
@@ -1368,11 +1370,15 @@ bios_tests:
         int 0x10
         mov ax,0x0503
         int 0x10
+        mov ax,0x0003                   ; page 3, start 3 * 1000h
+        mov cx,0x3000
         call pgchk
         mov ax,0x0D
         int 0x10
         mov ax,0x0507
         int 0x10
+        mov ax,0x0007                   ; page 7, start 7 * 2000h
+        mov cx,0xE000
         call pgchk
         mov ax,0x0500
         int 0x10
@@ -1393,12 +1399,233 @@ bios_tests:
         call altsel
         ; ---- DCC, static table, EGA info
         call misc_bios
+        ; ---- AH=0Bh, PEL mask, text font loads
+        call bios_gaps
         ret
 
-; Active page start in CR0C/CR0D must equal 40:4E (halved in word mode).
-pgchk:  push es
+; Functions no other test checks (found by emu/mutants.py: each one turned into a call that does
+; nothing passed every test). Expected values from the IBM PC AT/PS/2 BIOS interface and the IBM mode
+; tables (vgaref.inc, mode 04h: AR00 00h, AR01-03 13h/15h/17h = palette 1 with intensity, BDA 466h 30h).
+;   AH=0Bh CGA colours    mode 04h: 1 BH=1 BL=0: AR01-03 = 12h/14h/16h (palette 0, intensity kept),
+;                         2 BDA 466h bit 5 = 0, 4 BH=1 BL=1: AR01-03 = 13h/15h/17h and bit 5 = 1,
+;                         8 BH=0 BL=01h: background AR00 = 01h, 10h border AR11 = 01h, 20h BDA 466h
+;                         = 21h (colour 1, palette 1, BL bit 4 = 0: intensity off) and AR01-03 =
+;                         03h/05h/07h; mode 03h: 40h BH=0 BL=04h: border AR11 = 04h
+;   AX=1018h/1019h PEL    1 AX=1018h BL=0Fh: 3C6h = 0Fh, 2 AX=1019h returns BL = 0Fh, 4 BL=FFh back
+;   AX=1100h/1101h fonts  mode 03h: 1 AX=1100h (ES:BP glyph, CX=1, DX=41h, BL=0, BH=16): plane 2 at
+;                         41h * 32 holds the glyph, 2 AX=1101h BL=0: 'A' there is the glyph of the
+;                         8x14 table of AX=1130h BH=2 (CX bytes; this BIOS has no 8x14 font and gives
+;                         the 8x16 one, the known WARN of the font tests; 'A' is overwritten with AAh
+;                         first, so a call that does nothing fails)
+bios_gaps:
+        mov ax,4
+        int 0x10
+        TB 'AH=0B CGA background, border, palette'
+        call tdots
+        mov ax,0x0B00                   ; palette 0 (intensity of the mode set kept)
+        mov bx,0x0100
+        int 0x10
+        mov si,cgap0
+        call ar13
+        je .a1
+        FAILB 1
+.a1:    call rd466
+        test al,0x20
+        jz .a2
+        FAILB 2
+.a2:    mov ax,0x0B00                   ; palette 1
+        mov bx,0x0101
+        int 0x10
+        mov si,cgap1
+        call ar13
+        jne .a3
+        call rd466
+        test al,0x20
+        jnz .a4
+.a3:    FAILB 4
+.a4:    mov ax,0x0B00                   ; background blue, BL bit 4 = 0: intensity off
+        mov bx,0x0001
+        int 0x10
+        mov ax,0x0004                   ; AR00
+        call readreg
+        cmp al,0x01
+        je .a5
+        FAILB 8
+.a5:    mov ax,0x1104                   ; AR11 overscan
+        call readreg
+        cmp al,0x01
+        je .a6
+        FAILB 0x10
+.a6:    call rd466
+        and al,0x3F
+        cmp al,0x21
+        jne .a7
+        mov si,cgap1n
+        call ar13
+        je .a8
+.a7:    FAILB 0x20
+.a8:    mov ax,3
+        int 0x10
+        mov ax,0x0B00
+        mov bx,0x0004
+        int 0x10
+        mov ax,0x1104
+        call readreg
+        cmp al,0x04
+        je .a9
+        FAILB 0x40
+.a9:    mov ax,3
+        int 0x10
+        call tend
+        TB 'AX=1018/1019 PEL mask'
+        call tdots
+        mov ax,0x1018
+        mov bl,0x0F
+        int 0x10
+        mov dx,0x3C6
+        in al,dx
+        cmp al,0x0F
+        je .p1
+        FAILB 1
+.p1:    mov ax,0x1019
+        xor bx,bx
+        int 0x10
+        cmp bl,0x0F
+        je .p2
+        FAILB 2
+.p2:    mov ax,0x1018
+        mov bl,0xFF
+        int 0x10
+        mov dx,0x3C6
+        in al,dx
+        cmp al,0xFF
+        je .p3
+        FAILB 4
+.p3:    call tend
+        TB 'AX=1100/1101 text font loads'
+        call tdots
+        mov ax,3
+        int 0x10
+        mov bp,g16                      ; ES:BP = our glyph
+        call ld1
+        mov si,g16
+        mov cx,16
+        call pl2cmp
+        je .f1
+        FAILB 1
+.f1:    mov bp,aa16                     ; 'A' = AAh, then the ROM 8x14 font into block 0
+        call ld1
+        mov ax,0x1101
+        xor bl,bl
+        int 0x10
+        mov bh,2
+        call fptr                       ; DX:AX = the 8x14 table, CX bytes per character
+        mov [tmpw],cx
+        push ds
+        mov ds,dx
+        imul si,cx,0x41
+        add si,ax
+        mov di,palbuf2
+        push cs
+        pop es
+        rep movsb
+        pop ds
+        mov si,palbuf2
+        mov cx,[tmpw]
+        call pl2cmp
+        je .f2
+        FAILB 2
+.f2:    mov ax,3
+        int 0x10
+        call tend
+        ret
+
+; AX=1100h: one glyph (ES:BP, 16 bytes) for 'A' in block 0
+ld1:    push cs
+        pop es
+        mov ax,0x1100
+        mov bx,0x1000
+        mov cx,1
+        mov dx,0x41
+        int 0x10
+        ret
+
+; BDA 466h (CGA palette register value) -> AL
+rd466:  push es
         xor ax,ax
         mov es,ax
+        mov al,[es:0x466]
+        pop es
+        ret
+
+; AR01-AR03 against the 3 bytes at SI -> ZF
+ar13:   mov ah,1
+.l:     mov al,4
+        push ax
+        call readreg
+        mov bl,al
+        pop ax
+        cmp bl,[si]
+        jne .x
+        inc si
+        inc ah
+        cmp ah,4
+        jb .l
+.x:     ret
+
+; plane 2 at 41h * 32 (the font of 'A' in block 0) against CX bytes at SI -> ZF
+pl2cmp: push es
+        mov dx,0x3C4
+        mov ax,0x0402
+        out dx,ax
+        mov ax,0x0704
+        out dx,ax
+        mov dx,0x3CE
+        mov ax,0x0204
+        out dx,ax
+        mov ax,0x0005
+        out dx,ax
+        mov ax,0x0406
+        out dx,ax
+        mov ax,0xA000
+        mov es,ax
+        mov di,0x41*32
+        repe cmpsb
+        pushf
+        mov dx,0x3C4                    ; back to text mode access
+        mov ax,0x0302
+        out dx,ax
+        mov ax,0x0304
+        out dx,ax
+        mov dx,0x3CE
+        mov ax,0x0004
+        out dx,ax
+        mov ax,0x1005
+        out dx,ax
+        mov ax,0x0E06
+        out dx,ax
+        popf
+        pop es
+        ret
+
+cgap0   db 0x12,0x14,0x16
+cgap1   db 0x13,0x15,0x17
+cgap1n  db 0x03,0x05,0x07
+aa16    times 16 db 0xAA
+
+; AL = page, CX = its start (IBM page size): 40:62 and 40:4E must say so (FAILB 2), and the start in
+; CR0C/CR0D must equal 40:4E (halved in word mode; FAILB 1).
+pgchk:  push es
+        push ax
+        xor ax,ax
+        mov es,ax
+        pop ax
+        cmp al,[es:0x462]
+        jne .bd
+        cmp cx,[es:0x44E]
+        je .bk
+.bd:    FAILB 2
+.bk:
         mov bl,[es:0x462]
         mov cx,[es:0x44E]
         pop es
@@ -2653,6 +2880,7 @@ palette_tests:
         mov bx,0x0301
         int 0x10
         mov ax,0x101A
+        mov bx,0xFFFF                   ; a call that does nothing must not pass
         int 0x10
         cmp bx,0x0301
         je .l

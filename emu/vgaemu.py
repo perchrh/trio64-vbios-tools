@@ -198,7 +198,7 @@ class Machine:
                 r['dac_rc'] = 0
                 r['dac_r'] = (r['dac_r'] + 1) & 255
             return v
-        if port == 0x3C6: return 0xFF
+        if port == 0x3C6: return r.get('pel', 0xFF)        # DAC pixel mask (AX=1018h/1019h)
         if port == 0x3C7: return r.get('dac_st', 0)     # DAC state: 3 after a read index, 0 after a write index
         if port == 0x3C4: return r['si']
         if port in (0x3D4, 0x3B4): return r['ci']
@@ -252,6 +252,7 @@ class Machine:
                 else: r['atc'][r['ai'] & 0x1F] = v
                 r['aff'] ^= 1
             elif p == 0x3C2: r['misc'] = v
+            elif p == 0x3C6: r['pel'] = v
             elif p in (0x3DA, 0x3BA): r['feat'] = v
             elif p == 0x3C8:
                 r['dac_w'] = v
@@ -564,7 +565,7 @@ class Machine:
         self.mu.mem_write(STUB, b'\x9A\x03\x00\x00\xC0\xF4')          # call far C000:0003 ; hlt
         self._start(0, STUB, STUB + 5, 50_000_000)
         off, seg = struct.unpack('<HH', self.mu.mem_read(0x40, 4))
-        if Machine.noop:
+        if Machine.noop or Machine.calls is not None:
             self._noop_hook(seg * 16 + off)
         return seg, off
 
@@ -573,13 +574,16 @@ class Machine:
     # IRET with every register unchanged). Set Machine.noop before the machines are made.
     noop = None
     noop_hits = 0
+    calls = None                                        # a set: (AX, BX, DL) of every INT 10h call after POST
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):
             ax, bx = self._reg(UC_X86_REG_AX), self._reg(UC_X86_REG_BX)
             dx = self._reg(UC_X86_REG_DX)
             v = {'ax': ax, 'ah': ax >> 8, 'al': ax & 0xFF, 'bx': bx, 'bh': bx >> 8, 'bl': bx & 0xFF, 'dl': dx & 0xFF}
-            if not any(all(v[k] == x for k, x in pat.items()) for pat in Machine.noop):
+            if Machine.calls is not None:
+                Machine.calls.add((ax, bx, dx & 0xFF))
+            if not Machine.noop or not any(all(v[k] == x for k, x in pat.items()) for pat in Machine.noop):
                 return
             Machine.noop_hits += 1
             ss, sp = self._reg(UC_X86_REG_SS), self._reg(UC_X86_REG_SP)

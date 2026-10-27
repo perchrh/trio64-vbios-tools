@@ -11,6 +11,7 @@ then no test notices that the feature is missing.
 Mutants
   int10  one INT 10h function or subfunction returns at the ROM's entry with every register unchanged
          (tests.py --noop; the calls POST makes itself still run)
+  (an INT 10h function no test calls survives without a run: one run of all tests with --calls first)
   ret    a call target of the p12-p14 code returns at once (a RET at its first byte): wfill, wmove,
          bfill, the mode set hook, ...
   revert one patch site of the reference BIOS put back as it was (needs --ref): a data change, a jump
@@ -148,6 +149,15 @@ def run(m, rom_path, tmp, timeout):
     return name, 'SURVIVED', '', time.time() - t0
 
 
+def matches(spec, calls):
+    pats = [{k: int(v, 16) for k, v in (f.split('=') for f in spec.split(','))}]
+    for ax, bx, dl in calls:
+        v = {'ax': ax, 'ah': ax >> 8, 'al': ax & 0xFF, 'bx': bx, 'bh': bx >> 8, 'bl': bx & 0xFF, 'dl': dl}
+        if any(all(v[k] == x for k, x in p.items()) for p in pats):
+            return True
+    return False
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
     ap.add_argument('--rom', required=True)
@@ -156,6 +166,8 @@ def main():
     ap.add_argument('-k', default='', help='only mutants whose name contains this text')
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--timeout', type=int, default=1800)
+    ap.add_argument('--resume', metavar='FILE', help='take the results of the mutants already in FILE (an earlier '
+                    'mutants.txt) and run only the others')
     a = ap.parse_args()
     rom = open(a.rom, 'rb').read()
     ms = int10_mutants() + ret_mutants(rom)
@@ -168,10 +180,34 @@ def main():
         return 0
     tmp = tempfile.mkdtemp(prefix='mutants_')
     res = []
+    done = {}
+    if a.resume and os.path.exists(a.resume):
+        for line in open(a.resume):
+            if line[25:33].strip() in ('killed', 'SURVIVED'):
+                done[line[:25].strip()] = line.rstrip('\n')
+    # one run of every test records the INT 10h calls: a function no test calls survives without a run
+    callf = os.path.join(tmp, 'calls.txt')
+    subprocess.run([sys.executable, os.path.join(HERE, 'tests.py'), '--rom', a.rom, '--calls', callf,
+                    '--logs', tempfile.mkdtemp(dir=tmp)], capture_output=True)
+    calls = [tuple(int(x, 16) for x in l.split()) for l in open(callf)]
+    todo = []
+    for m in ms:
+        if m[0] in done:
+            continue
+        if isinstance(m[1], str) and not matches(m[1], calls):
+            done[m[0]] = '%-24s %-8s %-70s %5.0fs' % (m[0], 'SURVIVED', 'never called by any test', 0)
+            continue
+        todo.append(m)
     logf = os.path.join(HERE, 'logs', 'mutants.txt')
     os.makedirs(os.path.dirname(logf), exist_ok=True)
     with ThreadPoolExecutor(a.j) as ex, open(logf, 'w') as lf:
-        for name, st, why, dt in ex.map(lambda m: run(m, a.rom, tmp, a.timeout), ms):
+        for m in ms:
+            if m[0] in done:
+                line = done[m[0]]
+                print(line, flush=True)
+                lf.write(line + '\n')
+                res.append((m[0], line[25:33].strip()))
+        for name, st, why, dt in ex.map(lambda m: run(m, a.rom, tmp, a.timeout), todo):
             line = '%-24s %-8s %-70s %5.0fs' % (name, st, why or EXPECTED.get(name, ''), dt)
             print(line, flush=True)
             lf.write(line + '\n')
