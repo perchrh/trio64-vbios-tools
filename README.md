@@ -81,7 +81,7 @@ from the stock dump of the card (or a 32 KB file of it), unchanged. Only 2.04.07
 patch site is compared with the original code first (the replaced routines in full), and the result
 is checked before it is written: both halves sum to 00, the upper half is unchanged, every DCLK VCO
 is in 170-340 MHz, and with the known reference image and stock upper half the SHA-256 is the one of
-the build that passed every emulator test (654b6b2e...). The CR88 bit 1 tweak of the reference keeps
+the build that passed every emulator test (f7ed681c...). The CR88 bit 1 tweak of the reference keeps
 comparing SR10/SR11 with the old MCLK values, so it stays off at 59.96 MHz, as in the 2.04.11 builds
 before p14.
 
@@ -189,7 +189,8 @@ are free: 0x7C8A-7CFA (113 bytes, free in the reference only), 0x7E1E-7E3F, 0x7E
 | Area | Change | Effect |
 | --- | --- | --- |
 | Base | The S3 reference BIOS 2.04.07 instead of the card's stock 2.04.11 (p1-p13 were built on 2.04.11), with the card's POST flags (0xD1 = 05h) and CR80 value (00h) | The same patches at the reference's addresses; its DCLK table is fixed (next row) |
-| DCLK VCO | 16 refresh entries of the reference ran the DCLK VCO at 145-162 MHz; new M/N/R give the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N; several are the values of the 2.04.11 table) | The PLL in its specified range in every mode (S3COMPAT checks it) |
+| DCLK VCO | 22 refresh entries of the reference ran the DCLK VCO at 145-162 MHz (each mode's refresh list starts at the entry its mode table pointer gives and runs downwards to the entry with bit 7 of byte 2 set); new M/N/R give the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N; several are the values of the 2.04.11 table) | The PLL in its specified range in every mode (S3COMPAT checks it) |
+| 1600x1200 (120h) | The reference's CRTC table has a vertical display end of 1201 lines (CR12 B0h); AFh as in 2.04.11 | 1200 lines, as 4F01 reports (S3COMPAT FAIL 0100 found it, in the emulator) |
 | Memory clock | MCLK 50.11 MHz to 59.96 MHz (SR11=41h, SR10=42h, VCO 239.8 MHz) | About 20% more memory bandwidth; 59.96 MHz is the 1-cycle EDO maximum (16.67 ns). CR36 bits 3-2 stay 00 |
 | Black level | Blank pedestal off at POST (header flag 0xD1 bit 1 cleared, SR1A bit 5 never set) | Deepest black, no grey lift |
 | Attribute controller | Input status read after every mode set resets the index/data flip-flop | Fixes programs that write port 3C0h right after a mode set |
@@ -228,22 +229,29 @@ card's Trio64V+ BIOS, unchanged. Code blocks are listed with their labels; the s
 | 0x0649-064A | 36 43 | 6E 63 | DCLK PLL M, N/R for 40.09 MHz (70 Hz): VCO 160.4 to 320.7 MHz, same pixel clock |
 | 0x069D-069E | 63 48 | 63 63 | DCLK PLL M, N/R for 36.15 MHz (85 Hz): VCO 144.6 to 289.2 MHz, same pixel clock |
 | 0x06AB-06AC | 63 48 | 63 63 | DCLK PLL M, N/R for 36.15 MHz (56 Hz): VCO 144.6 to 289.2 MHz, same pixel clock |
+| 0x06B9-06BA | 36 43 | 6E 63 | DCLK PLL M, N/R for 40.09 MHz (60 Hz): VCO 160.4 to 320.7 MHz, same pixel clock |
+| 0x070D-070E | 28 22 | 3D 41 | DCLK PLL M, N/R for 75.17 MHz (70 Hz): VCO 150.3 to 300.7 MHz, same pixel clock |
 | 0x071B-071C | 1F 21 | 40 41 | DCLK PLL M, N/R for 78.75 MHz (75 Hz): VCO 157.5 to 315.0 MHz, same pixel clock |
 | 0x0737-0738 | 1F 21 | 40 41 | DCLK PLL M, N/R for 78.75 MHz (43 Hz): VCO 157.5 to 315.0 MHz, same pixel clock |
 | 0x0761-0762 | 1F 01 | 40 21 | DCLK PLL M, N/R for 157.50 MHz (85 Hz): VCO 157.5 to 315.0 MHz, same pixel clock |
 | 0x07B5-07B6 | 63 48 | 63 63 | DCLK PLL M, N/R for 36.15 MHz (85 Hz): VCO 144.6 to 289.2 MHz, same pixel clock |
 | 0x07C3-07C4 | 63 48 | 63 63 | DCLK PLL M, N/R for 36.15 MHz (56 Hz): VCO 144.6 to 289.2 MHz, same pixel clock |
+| 0x07D1-07D2 | 36 43 | 6E 63 | DCLK PLL M, N/R for 40.09 MHz (60 Hz): VCO 160.4 to 320.7 MHz, same pixel clock |
+| 0x0825-0826 | 28 22 | 3D 41 | DCLK PLL M, N/R for 75.17 MHz (70 Hz): VCO 150.3 to 300.7 MHz, same pixel clock |
+| 0x0833-0834 | 1F 21 | 40 41 | DCLK PLL M, N/R for 78.75 MHz (75 Hz): VCO 157.5 to 315.0 MHz, same pixel clock |
 | 0x084F-0850 | 1F 21 | 40 41 | DCLK PLL M, N/R for 78.75 MHz (43 Hz): VCO 157.5 to 315.0 MHz, same pixel clock |
 | 0x0879-087A | 1F 01 | 40 21 | DCLK PLL M, N/R for 157.50 MHz (85 Hz): VCO 157.5 to 315.0 MHz, same pixel clock |
 | 0x0895-0896 | 20 01 | 42 21 | DCLK PLL M, N/R for 162.27 MHz (60 Hz): VCO 162.3 to 324.5 MHz, same pixel clock |
 | 0x089F-08A3 | C1 03 82 48 33 | 40 7E 82 3C 28 | 320x240x8 refresh entry: CRTC table 7E40h, 60 Hz, 25.06 MHz |
 | 0x08AD-08B1 | F5 0C 82 48 33 | 60 7E 82 3C 28 | 320x240x15/16 refresh entry: CRTC table 7E60h, 60 Hz |
+| 0x08DB-08DC | 36 23 | 6E 43 | DCLK PLL M, N/R for 80.18 MHz (60 Hz): VCO 160.4 to 320.7 MHz, same pixel clock |
 | 0x0913-0914 | 36 23 | 6E 43 | DCLK PLL M, N/R for 80.18 MHz (60 Hz): VCO 160.4 to 320.7 MHz, same pixel clock |
 | 0x094B-094C | 28 22 | 3D 41 | DCLK PLL M, N/R for 75.17 MHz (60 Hz): VCO 150.3 to 300.7 MHz, same pixel clock |
 | 0x0959-095A | 28 42 | 3D 61 | DCLK PLL M, N/R for 37.59 MHz (70 Hz): VCO 150.3 to 300.7 MHz, same pixel clock |
 | 0x095C | 60 | 40 | CR50 for 512x384x8/x32 |
 | 0x0967-0968 | 28 42 | 3D 61 | DCLK PLL M, N/R for 37.59 MHz (70 Hz): VCO 150.3 to 300.7 MHz, same pixel clock |
 | 0x0B1A-0B1D | C2 9F A0 85 | C3 9F A0 86 | 640x480x15/16 @ 60 Hz: line total 800 |
+| 0x0CEE | B0 | AF | 1600x1200 @ 60 Hz: CR12 vertical display end AFh, 1200 lines (the reference has 1201) |
 | 0x1224-1226 | 50 51 8A | E9 3B 6B | font load: rep movsd per character (p12) |
 | 0x1227-1234 | old font loop (dead since p12) | code | `p13bfa.asm`: bfilla 1227 |
 | 0x143D-1441 | 2E 8E 06 48 1D | E9 80 6B 90 90 | S3/VESA mode set clear: rep stosd (p11) |
@@ -272,7 +280,7 @@ card's Trio64V+ BIOS, unchanged. Code blocks are listed with their labels; the s
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | 88 | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | D8 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 

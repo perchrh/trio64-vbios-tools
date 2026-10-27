@@ -15,14 +15,15 @@ Input
 What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level changes")
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
          value 00h, CR41/CR52 60 Hz defaults for 1280x1024 and 1600x1200, 640x480 line total 800,
-         320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384
+         320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384, 1600x1200 vertical display
+         end (1200 lines, the reference has 1201)
   code   assembled with nasm from the .asm files next to this script, at the addresses in bios.inc:
          p12ext.asm (fast 4F05, 32-bit font load, 32-bit mode 13h scroll), crtc240.asm (320x240 CRTC
          tables), hooks.asm (mode set hook with LFB base restore, FIFO fix and ATC flip-flop reset;
          booster; LFB base and linear test fixes), vbe4f06.asm (4F06 BL=3), clear32.asm (32-bit S3/VESA
          mode set clear), p13*.asm (32-bit text and planar scroll fills, text window moves, AH=09h);
          p14: the VGA mode set clear in place as a jump to wfill
-  VCO    (unless --no-vco-fix) the 16 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
+  VCO    (unless --no-vco-fix) the 22 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
          larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz
   sign-on "2.04.07-p14", checksum byte 7FFF
 
@@ -37,7 +38,7 @@ LEVEL = 'p14'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
 REF_UPPER_SHA = 'd79bb2a44c246c1292633147ccee4e7525544ed56167cb476ccfc7060a3b8930'  # + stock upper half
-RESULT_SHA = '654b6b2e8958b9b7bb62548371083c76839281b6ba4f19dca35bedae98e424c6'  # 2.04.07-p14, emulator tests passed
+RESULT_SHA = 'f7ed681c2ee330be0e7c2c333d0d6080a35bc6024ebc248f8a6e7bcb12b67c8f'  # 2.04.07-p14, emulator tests passed
 FREE_START, FREE_END = 0x7CFB, 0x7FE3   # free space the new code and tables use (end exclusive)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -106,6 +107,7 @@ DATA = [
     (0x08AD, 'f5 0c 82 48 33', '60 7e 82 3c 28', '320x240x15/16 refresh entry: CRTC table 7E60h, 60 Hz'),
     (0x095C, '60', '40', 'CR50 for 512x384x8/x32'),
     (0x0B1A, 'c2 9f a0 85', 'c3 9f a0 86', '640x480x15/16 @ 60 Hz: line total 800'),
+    (0x0CEE, 'b0', 'af', '1600x1200 @ 60 Hz: CR12 vertical display end AFh, 1200 lines (the reference has 1201)'),
 ]
 
 # The new code: (file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels the
@@ -198,7 +200,9 @@ def pll(m, nr):
 
 def refresh_entries(img):
     """The refresh entries of the S3 mode table at 0158h: 9 bytes per mode (mode, VGA parameter pointer,
-    4 flag bytes, refresh list pointer); each list has 14-byte entries, bit 7 of byte 2 marks the last."""
+    4 flag bytes, refresh list pointer). A list has 14-byte entries (CRTC table pointer, refresh index
+    in bits 2-0 of byte 2, Hz, PLL M, N/R, ...); the pointer gives its last (highest refresh) entry and
+    the list runs downwards to the entry with bit 7 of byte 2 set."""
     seen, o = [], 0x158
     while o < 0x400 and img[o] != 0xFF:
         r = struct.unpack_from('<H', img, o + 7)[0]
@@ -209,9 +213,9 @@ def refresh_entries(img):
                     seen.append(e)
                 if img[e + 2] & 0x80:
                     break
-                e += 14
+                e -= 14
         o += 9
-    return seen
+    return sorted(seen)
 
 
 def vco_fix(d, log, lo=170.0):

@@ -9,7 +9,7 @@ half, the Trio64V+ BIOS, goes into the result unchanged), S3V2P14.BIN a build to
 byte. No ROM image is in the repository.
 
 Tests
-  build          the reference plus the stock upper half gives the tested build: SHA-256 654b6b2e...,
+  build          the reference plus the stock upper half gives the tested build: SHA-256 f7ed681c...,
                  sign-on 2.04.07-p14, byte-identical to --rom when given
   checksums      both 32 KB halves sum to 00, byte 7FFFh is the one that makes the lower half sum to 00,
                  the upper half equals the input's, 55AAh headers in place
@@ -18,7 +18,7 @@ Tests
                  can use them
   input_64k      a 64 KB image with the reference in the lower half and the stock upper half gives the
                  same result without --upper
-  novco          --no-vco-fix keeps the 16 refresh entries below 170 MHz and still checksums
+  novco          --no-vco-fix keeps the 22 refresh entries below 170 MHz and still checksums
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte
                  changed at a patch site (p12, p13 and p14 sites, with the checksum corrected), a wrong
                  checksum, another BIOS version (the stock 2.04.11), a 32 KB input without --upper
@@ -123,7 +123,7 @@ def main():
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
     rc, nimg, err = run(tmp, ref, ['--no-vco-fix'], upper=upper)
     low = len(vco_out(nimg)) if nimg else -1
-    result('novco', rc == 0 and low == 16 and not image_checks(nimg, upper), err or '%d entries below 170 MHz kept' % low)
+    result('novco', rc == 0 and low == 22 and not image_checks(nimg, upper), err or '%d entries below 170 MHz kept' % low)
 
     s = s3patch.SITES
     cases = [('already patched', img[:0x8000], upper),
