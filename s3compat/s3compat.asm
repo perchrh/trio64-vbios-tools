@@ -5381,6 +5381,140 @@ vesa_more:
 .df:    FAILB 2
 .de:    call tend
         call t4f14
+        call tvco
+        ret
+
+; DCLK VCO at every refresh rate (Trio64V2 datasheet: the DCLK PLL VCO runs at 170-340 MHz; the mode
+; tests check it at the default rates only). For every mode of 4F00h (text too) and every rate its 4F14h
+; BH=02h list gives: the rate set with 4F14h BH=00h, the mode with 4F02h, then SR12/SR13 read back:
+;   1 VCO outside 170-340 MHz (the first ones are listed as mode@Hz), 2 the refresh registers CR41,
+;     CR52, CR6B not as before afterwards (they are written back directly)
+; The monitor sees every rate of every mode (up to 85 Hz at 1280x1024); an LCD may show out of range.
+tvco:   TB 'DCLK VCO at every refresh rate'
+        call tdots
+        call unlock
+        RC 0x41
+        mov [r41],al
+        RC 0x52
+        mov [r52],al
+        RC 0x6B
+        mov [r6b],al
+        mov di,palbuf2
+        mov dword [di],'VBE2'
+        mov ax,0x4F00
+        int 0x10
+        push ds                         ; the mode list to dsl
+        lds si,[palbuf2+0x0E]
+        push cs
+        pop es
+        mov di,dsl
+        mov cx,120
+.ml:    lodsw
+        stosw
+        cmp ax,0xFFFF
+        je .mle
+        loop .ml
+        mov word [es:di],0xFFFF
+.mle:   pop ds
+        mov word [vi],0                 ; rates checked
+        mov byte [tmpb],0               ; bad ones listed
+        mov si,dsl
+.m:     lodsw
+        cmp ax,0xFFFF
+        je .done
+        mov [vm],ax
+        push si
+        mov cx,ax
+        mov ax,0x4F01
+        mov di,mibuf
+        int 0x10
+        cmp ax,0x004F
+        jne .mn
+        test byte [mibuf],0x01          ; supported (graphics and the 132-column text modes)
+        jz .mn
+        xor dx,dx
+.r:     push dx
+        mov ax,0x4F14                   ; BH=2: rate DX of the mode
+        mov bx,0x0201
+        mov cx,[vm]
+        int 0x10
+        mov [tmpw],di
+        mov [tmpw2],dx
+        pop dx
+        cmp ax,0x004F
+        jne .mn
+        mov ax,0x4F14                   ; set it
+        mov bx,0x0001
+        mov cx,[vm]
+        mov di,[tmpw]
+        int 0x10
+        mov ax,0x4F02
+        mov bx,[vm]
+        int 0x10
+        cmp ax,0x004F
+        jne .rn
+        inc word [vi]
+        mov dx,0x3CC
+        in al,dx
+        and al,0x0C
+        cmp al,0x0C                     ; DCLK from the PLL (clock select 3)
+        jne .rn
+        mov al,0x12
+        call rdsrx
+        push ax
+        mov al,0x13
+        call rdsrx
+        pop bx
+        mov al,bh                       ; AL = SR12 (N, R), AH = SR13 (M)
+        call pllcalc
+        cmp dword [vco],170000
+        jb .bad
+        cmp dword [vco],340000
+        jbe .rn
+.bad:   FAILB 1
+        cmp byte [tmpb],6
+        jae .rn
+        inc byte [tmpb]
+        PS ' '
+        mov ax,[vm]
+        call phex4
+        mov al,'@'
+        call putc
+        movzx eax,word [tmpw]
+        call pdec
+.rn:    mov dx,[tmpw2]
+        or dx,dx
+        jnz .r
+.mn:    pop si
+        jmp .m
+.done:  call unlock                     ; the refresh registers back as found
+        mov dx,0x3D4
+        mov al,0x41
+        mov ah,[r41]
+        out dx,ax
+        mov al,0x52
+        mov ah,[r52]
+        out dx,ax
+        mov al,0x6B
+        mov ah,[r6b]
+        out dx,ax
+        RC 0x41
+        cmp al,[r41]
+        jne .rf
+        RC 0x52
+        cmp al,[r52]
+        jne .rf
+        RC 0x6B
+        cmp al,[r6b]
+        je .re
+.rf:    FAILB 2
+.re:    mov ax,3
+        int 0x10
+        PS ' '
+        movzx eax,word [vi]
+        call pdec
+        PS ' rates'
+        call tend
         ret
 
 ; S3 OEM functions AX=4F14h (no S3 document at hand: each result is checked against an independent

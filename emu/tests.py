@@ -474,7 +474,7 @@ def t_s3compat_vbe(c):
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     lines = r.stdout.decode('latin1').split('\r\n')
     names = ('4F00 capabilities', '4F04 state masks', 'VBE invalid', 'VBE undefined', '4F0A table',
-             '4F10 power', '4F15 DDC', '4F14 S3 OEM')
+             '4F10 power', '4F15 DDC', '4F14 S3 OEM', 'DCLK VCO')
     tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
     check(len(tests) == len(names), 'only %d of the %d VBE lines: %s' % (len(tests), len(names), tests))
     # the model has no DDC lines: 4F15 must say so (INFO), everything else PASS
