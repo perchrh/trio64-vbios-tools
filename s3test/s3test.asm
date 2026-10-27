@@ -12,6 +12,9 @@
 ;       The normal output is the same with or without /V.
 ;   Output is buffered while the video modes switch and written to stdout at the end.
 ;   Exit code 0 = every test passed, 1 = at least one failed.
+;   Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at 60 Hz is
+;   64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be damaged by
+;   a line frequency above its range. S3TEST prints this on stderr when it starts.
 ;   The report ends with "Time spent: x.y s", the run time from the BIOS tick (with /V it includes
 ;   writing the debug log, so it is the one line that differs from a run without /V).
 ;
@@ -63,7 +66,8 @@
 ;   AH=09h text (p13): counts 1, 2, 3, 5, 80 on page 0 and 3 on page 1, every cell of page 0 checked
 ;                    (fail bits 1-20h)
 ;   Planar scroll (p13): modes 12h and 0Dh, AH=06h/07h full screen and windows (widths 16, 18, 3),
-;                    AL=0, every byte of the four planes checked (fail bits 1-80h)
+;                    AL=0, every byte of the four planes checked (fail bits 1-80h); the S3 mode 6Ah
+;                    (800x600x4) on its own line (fail bits 1 AH=06h full, 2 AH=07h window, 4 AL=0)
 ;   4F05 (p12 fast path): registers and the 3C4h index kept, CR6A set, planar 102h bank x 4 in CR6A and
 ;                    0040:00FE, refused in linear 4101h (fail bits 1, 2, 4, 8, 10h)
 ;   Timings, INFO lines not counted: mode set 03h, 4F02 101h with the clear, one 4F05, one mode 13h
@@ -102,7 +106,12 @@ start:  cld
 .vm:    mov dx,s_vnomem
         mov ah,9
         int 0x21
-.opd:   mov dx,s_title
+.opd:   mov dx,s_mon                    ; monitor note on stderr (not redirected by >)
+        mov cx,s_mon_len
+        mov bx,2
+        mov ah,0x40
+        int 0x21
+        mov dx,s_title
         call puts
         mov ax,[bp_]
         mov [vls],ax
@@ -1244,8 +1253,17 @@ t_plscr:
         VS 'D:TEST planar scroll'
         call vnl
         call vflush
-        mov byte [tmp],0
         mov si,plstab
+        mov dx,s_pls
+        call plrun
+        VS 'D:TEST planar scroll 6Ah'
+        call vnl
+        call vflush
+        mov si,plst6a
+        mov dx,s_pl6a
+; SI = table, DX = result text
+plrun:  mov byte [tmp],0
+        push dx
 .n:     cmp word [si],0
         je .e
         push si
@@ -1280,7 +1298,7 @@ t_plscr:
         jmp .n
 .e:     mov ax,0x0003
         int 0x10
-        mov dx,s_pls
+        pop dx
         jmp bits_result
 
 ; Q(p, x, y) into AL: plane [plp], CX = x, DX = y
@@ -1441,6 +1459,17 @@ plstab: ;   AX      BX      CX      DX      c0  c1  r0  r1  shift  -   bit  mode
         dw 0x0701, 0x0600, 0x0305, 0x0A16, 5,  22, 3,  10, -1
         db 0, 0x80
         dw 0x0D
+        dw 0
+; S3 mode 6Ah (800x600x4, 100 bytes a line, 16-line characters, all in the first 64 KB of each plane)
+plst6a: dw 0x0601, 0x0E00, 0x0000, 0x2463, 0,  99, 0,  36, 1
+        db 0, 1
+        dw 0x6A
+        dw 0x0702, 0x0500, 0x0305, 0x1440, 5,  64, 3,  20, -2
+        db 0, 2
+        dw 0x6A
+        dw 0x0600, 0x0B00, 0x0102, 0x0503, 2,  3,  1,  5,  99
+        db 0, 4
+        dw 0x6A
         dw 0
 
 ; ---------------- VBE 4F05 (p12: fast path from the INT 10h entry) ----------------
@@ -2126,6 +2155,7 @@ s_scr   db 'Mode 13h scroll AH=06h/07h data .... $'
 s_txs   db 'Text scroll AH=06h/07h cells ....... $'
 s_ah09  db 'AH=09h text char/attribute count ... $'
 s_pls   db 'Planar scroll 12h/0Dh AH=06h/07h ... $'
+s_pl6a  db 'Planar scroll S3 6Ah AH=06h/07h .... $'
 s_bank  db '4F05 regs, SR index, CR6A, planar, LFB $'
 s_t03   db 'Time: mode set 03h (ms) ............ $'
 s_t101  db 'Time: 4F02 101h with clear (ms) .... $'
@@ -2139,6 +2169,9 @@ s_fail  db '  FAIL',13,10,'$'
 s_sum1  db 13,10,'Passed: $'
 s_sum2  db '  Failed: $'
 s_sum3  db 13,10,'$'
+s_mon   db 'S3TEST ',VERSION,': the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). Do not run',13,10
+        db 'it with a fixed-frequency or low-end CRT monitor that cannot take it; LCDs are safe.',13,10
+s_mon_len equ $-s_mon
 s_sum4  db 'Time spent: $'
 s_sum5  db ' s',13,10,'$'
 

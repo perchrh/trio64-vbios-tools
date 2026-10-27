@@ -98,6 +98,15 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - A functional change is verified on the real card: S3TEST and S3COMPAT logs from the test machine are
   the final word. Compare with the previous log: the pass, fail and warn counts and every changed line
   should be explained.
+- Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
+  every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive
+  descent and does not count data, padding or code nothing reaches). A new patch or a new BIOS
+  function path comes with a test that runs it; `--list` shows the code no test reaches.
+- EGA/CGA goal: in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves exactly like the
+  unpatched reference BIOS 2.04.07: same registers back, BIOS data, video memory, DAC and standard VGA
+  registers after every call (`make ref-compare REF=... UPPER=... ROM=...`, emu/refcompare.py). Our
+  changes there are speed only (32-bit stores) or VGA/S3 extended registers; a change that makes a
+  difference in those modes needs a reason in README.md.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and
   the DOS tools on top of it, under Unicorn with a VGA register model (`make emu-test ROM=...`). It
   models registers, a planar window and a virtual clock (refresh rates there follow the programmed

@@ -199,7 +199,7 @@ class Machine:
                 r['dac_r'] = (r['dac_r'] + 1) & 255
             return v
         if port == 0x3C6: return 0xFF
-        if port == 0x3C7: return 3
+        if port == 0x3C7: return r.get('dac_st', 0)     # DAC state: 3 after a read index, 0 after a write index
         if port == 0x3C4: return r['si']
         if port in (0x3D4, 0x3B4): return r['ci']
         if port == 0x3CE: return r['gi']
@@ -212,6 +212,8 @@ class Machine:
             if p['ff'] == 0:
                 p['latch'] = None
             return v
+        if port == 0x20:                                # PIC IRR/ISR: nothing pending, the model counts
+            return 0                                    # the BIOS tick at once (_ticks)
         if port == 0x61:
             r['p61'] ^= 0x30
             return r['p61']
@@ -253,9 +255,11 @@ class Machine:
             elif p in (0x3DA, 0x3BA): r['feat'] = v
             elif p == 0x3C8:
                 r['dac_w'] = v
+                r['dac_st'] = 0
                 r['dac_c'] = 0
             elif p == 0x3C7:
                 r['dac_r'] = v
+                r['dac_st'] = 3
                 r['dac_rc'] = 0
             elif p == 0x3C9:
                 self.dac[r['dac_w']][r['dac_c']] = v & 0x3F
@@ -311,9 +315,12 @@ class Machine:
         mode = gc.get(5, 0) & 3
         mask, sr_en, sr_val = gc.get(8, 0xFF), gc.get(1, 0), gc.get(0, 0)
         mapmask = sr.get(2, 0x0F)
-        for k in range(size):
+        rot, fn = gc.get(3, 0) & 7, (gc.get(3, 0) >> 3) & 3     # GR03: rotate count, function (0 replace,
+        for k in range(size):                                   # 1 AND, 2 OR, 3 XOR with the latch)
             off = (addr + k) & 0xFFFF
             cpu = (val >> (8 * k)) & 0xFF
+            if rot:
+                cpu = ((cpu >> rot) | (cpu << (8 - rot))) & 0xFF
             for p in range(4):
                 if not mapmask & (1 << p):
                     continue
@@ -326,20 +333,37 @@ class Machine:
                         d = 0xFF if sr_val & (1 << p) else 0
                     else:
                         d = cpu
+                    if fn == 1:
+                        d &= self.latch[p]
+                    elif fn == 2:
+                        d |= self.latch[p]
+                    elif fn == 3:
+                        d ^= self.latch[p]
                     d = (d & mask) | (self.latch[p] & ~mask & 0xFF)
                 self.planes[p][off] = d
 
     def _vread(self, uc, acc, addr, size, val, ud):
         """Before the CPU reads a planar address: load the latches and put the selected plane's bytes
-        into RAM, so the read returns them (read mode 0)."""
+        (read mode 0) or the colour compare result (read mode 1: GR02 colour, GR07 colour don't care)
+        into RAM, so the read returns them."""
         if not self._planar():
             return
-        plane = self.r['gc'].get(4, 0) & 3
+        gc = self.r['gc']
+        plane = gc.get(4, 0) & 3
+        cmode = gc.get(5, 0) & 0x08                     # read mode 1: colour compare
+        ccol, cdc = gc.get(2, 0), gc.get(7, 0x0F)
         data = bytearray()
         for k in range(size):
             off = (addr + k) & 0xFFFF
             self.latch = [self.planes[p][off] for p in range(4)]
-            data.append(self.planes[plane][off])
+            if cmode:
+                v = 0xFF
+                for p in range(4):
+                    if cdc & (1 << p):
+                        v &= ~(self.latch[p] ^ (0xFF if ccol & (1 << p) else 0)) & 0xFF
+                data.append(v)
+            else:
+                data.append(self.planes[plane][off])
         uc.mem_write(addr, bytes(data))
 
     def _ticks(self):
@@ -540,7 +564,32 @@ class Machine:
         self.mu.mem_write(STUB, b'\x9A\x03\x00\x00\xC0\xF4')          # call far C000:0003 ; hlt
         self._start(0, STUB, STUB + 5, 50_000_000)
         off, seg = struct.unpack('<HH', self.mu.mem_read(0x40, 4))
+        if Machine.noop:
+            self._noop_hook(seg * 16 + off)
         return seg, off
+
+    # mutation testing: INT 10h calls that match one of these register patterns (dicts of 'ah', 'al',
+    # 'ax', 'bh', 'bl', 'bx', 'dl' -> value) return at the ROM's entry as if the function did nothing (an
+    # IRET with every register unchanged). Set Machine.noop before the machines are made.
+    noop = None
+    noop_hits = 0
+
+    def _noop_hook(self, entry):
+        def hit(uc, addr, size, ud):
+            ax, bx = self._reg(UC_X86_REG_AX), self._reg(UC_X86_REG_BX)
+            dx = self._reg(UC_X86_REG_DX)
+            v = {'ax': ax, 'ah': ax >> 8, 'al': ax & 0xFF, 'bx': bx, 'bh': bx >> 8, 'bl': bx & 0xFF, 'dl': dx & 0xFF}
+            if not any(all(v[k] == x for k, x in pat.items()) for pat in Machine.noop):
+                return
+            Machine.noop_hits += 1
+            ss, sp = self._reg(UC_X86_REG_SS), self._reg(UC_X86_REG_SP)
+            ip, cs, fl = struct.unpack('<HHH', uc.mem_read(ss * 16 + sp, 6))
+            uc.reg_write(UC_X86_REG_SP, (sp + 6) & 0xFFFF)
+            uc.reg_write(UC_X86_REG_EFLAGS, (self._reg(UC_X86_REG_EFLAGS) & ~0xFFFF) | fl)
+            uc.reg_write(UC_X86_REG_CS, cs)
+            uc.reg_write(UC_X86_REG_IP, ip)
+        self.mu.hook_add(UC_HOOK_CODE, hit, None, entry, entry)
+        self.mu.ctl_remove_cache(entry, entry + 1)      # POST has run the entry: retranslate it with the hook
 
     def _start(self, cs, ip, until, count, ss=0, sp=0x7000):
         mu = self.mu
@@ -788,14 +837,16 @@ class Machine:
     # ------------------------------------------------------------------ coverage
     def track_coverage(self):
         """Record which bytes of C000:0000-7FFF are executed (code) or read as data; returns (code, data)
-        bytearrays that fill in while the machine runs."""
+        bytearrays that fill in while the machine runs. code: bit 0 executed, bit 1 a basic block starts
+        there."""
         code = bytearray(0x8000)
         data = bytearray(0x8000)
 
         def blk(uc, addr, size, ud):
             if 0xC0000 <= addr < 0xC8000:
                 for a in range(addr, min(addr + size, 0xC8000)):
-                    code[a - 0xC0000] = 1
+                    code[a - 0xC0000] |= 1
+                code[addr - 0xC0000] |= 2               # bit 1: a block (and so an instruction) starts here
 
         def rd(uc, acc, addr, size, val, ud):
             for a in range(addr, min(addr + size, 0xC8000)):
