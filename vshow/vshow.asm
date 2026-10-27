@@ -545,7 +545,10 @@ runall: mov dword [vib],'VBE2'
         mov di,[rptr]
         mov byte [di],0
         mov dx,s_res
-        call dputs
+        cmp byte [robot],1
+        jne .rh
+        mov dx,s_resr                   ; /R: say so in the header
+.rh:    call dputs
         mov dx,rbuf
         call dputz
         mov ax,0x4C00
@@ -1716,6 +1719,7 @@ s_colon0 db ': ',0
 s_skip  db ', skipped',13,10,0
 s_stopped db 'Stopped with Esc.',13,10,0
 s_res   db 'VSHOW ',VERSION,' /A results:',13,10,'$'
+s_resr  db 'VSHOW ',VERSION,' /R results:',13,10,'$'
 
 lines   db 0
 vreq    db 0                            ; /V given
