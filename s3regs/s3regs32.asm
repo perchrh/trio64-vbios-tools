@@ -1,4 +1,4 @@
-; S3REGS32.EXE - register snapshot of the Trio64V2/DX from the Windows 9x desktop (Win32 console)
+; S3REGS32.EXE - register snapshot of a Trio64-family card from the Windows 9x desktop (Win32 console)
 ;
 ; Purpose
 ;   The same snapshot as S3REGS.COM (format in the README, section "Windows 9x driver test"), taken
@@ -472,7 +472,7 @@ snapshot:
         cmp ebx,9
         jb .gr
         call crlf
-        mov esi,s_pci                   ; PCI 5333:8901, mechanism 1
+        mov esi,s_pci                   ; PCI 5333:8901, 8811 or 8810 (the Trio64 family), mechanism 1
         call str
         mov dx,0xCF8
         in eax,dx
@@ -483,7 +483,11 @@ snapshot:
         out dx,eax
         mov dx,0xCFC
         in eax,dx
-        cmp eax,0x89015333
+        cmp eax,0x89015333              ; Trio64V2/DX/GX
+        je .fo
+        cmp eax,0x88115333              ; Trio64, Trio64V+
+        je .fo
+        cmp eax,0x88105333              ; Trio32
         je .fo
         add ecx,0x800
         cmp ecx,0x80010000
@@ -636,7 +640,7 @@ s_watch2 db ' s, changes as +<ms> REG old->new (CR46-4F not compared):',13,10,0
 s_end   db 'END OF WATCH',13,10,0
 s_ok    db 'S3REGS32 ',VERSION,': written to S3REGS.TXT',13,10,0
 s_ferr  db 'S3REGS32 ',VERSION,': cannot write S3REGS.TXT',13,10,0
-s_use   db 'S3REGS32 ',VERSION,' - Trio64V2 register snapshot from the Windows 9x desktop, appended to S3REGS.TXT',13,10
+s_use   db 'S3REGS32 ',VERSION,' - Trio64-family register snapshot from the Windows 9x desktop, appended to S3REGS.TXT',13,10
         db '  S3REGS32 [label]       one snapshot with an optional label',13,10
         db '  S3REGS32 /W n [label]  snapshot, then log every register change for n seconds (every 100 ms)',13,10
         db '  S3REGS32 /H, /?        this help',13,10,0

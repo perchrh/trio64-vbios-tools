@@ -1,4 +1,4 @@
-; S3REGS.COM - register snapshot of the Trio64V2/DX for comparing states (DOS)
+; S3REGS.COM - register snapshot of a Trio64-family card (Trio32, Trio64, Trio64V+, Trio64V2) for comparing states (DOS)
 ;
 ; Purpose
 ;   Writes the registers the BIOS and drivers program to S3REGS.TXT, in the same text format as
@@ -280,19 +280,12 @@ snapshot:
         mov dx,0x3CE
         mov al,[gri]
         out dx,al
-        ; PCI configuration of 5333:8901
+        ; PCI configuration of the card (5333:8901, 8811 or 8810, common/chip.inc)
         mov si,s_pci
         call str
-        push di
-        mov ax,0xB102
-        mov cx,0x8901
-        mov dx,0x5333
-        xor si,si
-        int 0x1A
-        pop di
+        call chipfind
         jc .np
-        or ah,ah
-        jnz .np
+        mov bx,[chipbx]
         xor si,si
 .pc:    mov al,' '
         stosb
@@ -366,11 +359,12 @@ s_dash4 db '----',0
 s_sr    db 'SR',0
 s_cr    db 'CR',0
 s_gr    db 'GR00:',0
+%include "chip.inc"
 s_pci   db 'PCI00:',0
 s_na    db ' n/a',0
 s_ok    db 'S3REGS ',VERSION,': snapshot appended to S3REGS.TXT',13,10,'$'
 s_ferr  db 'S3REGS ',VERSION,': cannot write S3REGS.TXT',13,10,'$'
-s_use   db 'S3REGS ',VERSION,' - Trio64V2 register snapshot, appended to S3REGS.TXT',13,10
+s_use   db 'S3REGS ',VERSION,' - Trio64-family register snapshot, appended to S3REGS.TXT',13,10
         db '  S3REGS [label]      one snapshot with an optional label (up to 60 characters)',13,10
         db '  S3REGS /H, /?, /HELP  this help',13,10
         db 'For the Windows 9x desktop use S3REGS32.EXE (same format).',13,10,'$'

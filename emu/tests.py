@@ -78,6 +78,7 @@ Tests
                    patch call tools card emu vram; --list shows them; vram = depends on the memory size)
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
+  --chip v2|vplus|trio64   the chip of the model (default v2, the card)
   --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
   -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
@@ -1383,11 +1384,15 @@ def main():
     ap.add_argument('-j', type=int, default=1, metavar='N',
                     help='run N tests at a time, each in its own process (default 1; not with --coverage, '
                          '--profile or --calls). Each test prints a line when it starts and its result when done')
+    ap.add_argument('--chip', choices=('v2', 'vplus', 'trio64'), default='v2',
+                    help='the chip the model is (vgaemu.CHIPS): v2 = Trio64V2/DX (the card, default), vplus = '
+                         'Trio64V+, trio64 = Trio64; ID registers, PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
                     help='video memory the CR36 strapping reports: 2 MB (the card, default) or 4 MB (the '
                          '86C775 maximum; the model still has one 64 KB window, no banked or linear memory)')
     a = ap.parse_args()
     Machine.vram = a.vram
+    Machine.chip = a.chip
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
     if a.list:
         for n, _ in TESTS:

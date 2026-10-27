@@ -61,6 +61,16 @@ REGNAMES = ['MISC', 'FEAT', 'SR0', 'SR1', 'SR2', 'SR3', 'SR4'] + ['CR%02X' % i f
 PCI_CONFIG = {0x00: 0x89015333, 0x04: 0x02000003, 0x08: 0x03000006,
               0x2C: 0x89015333, 0x3C: 0x0000010A}
 
+# The chips of the Trio64 family the model can be: PCI device ID, the ID registers CR2D/CR2E/CR2F
+# (CR2F = PCI revision) and CR30, and the DCLK PLL post divider: 2 bits (SR12 bits 6-5) on the
+# Trio64/V+, 3 bits with SR12 bit 7 on the Trio64V2. XFree86 s3 driver: device 8811 is the Trio32/64,
+# the Trio64V+ from revision 40h; 8901 is the Trio64V2/DX/GX.
+CHIPS = {
+    'v2':     dict(name='Trio64V2/DX', dev=0x8901, ids=(0x89, 0x01, 0x06, 0xE1), r3=True),
+    'vplus':  dict(name='Trio64V+', dev=0x8811, ids=(0x88, 0x11, 0x40, 0xE1), r3=False),
+    'trio64': dict(name='Trio64', dev=0x8811, ids=(0x88, 0x11, 0x00, 0xE1), r3=False),
+}
+
 IRET_SEG = 0x0060          # every unused vector points to 0060:0000 = IRET
 DOS_STUB = 0x0520          # INT 21h vector 0050:0020: INT F1h (the emulated DOS), RETF 2 (keeps its flags)
 MEM_TOP = 0x9000           # first segment after conventional memory available to programs
@@ -129,7 +139,7 @@ class Machine:
             clk = 28322e3
         elif csel == 3:
             n, m = seq.get(0x12, 0), seq.get(0x13, 0)
-            rr = ((n >> 5) & 3) | (4 if n & 0x80 else 0)
+            rr = ((n >> 5) & 3) | (4 if n & 0x80 and CHIPS[Machine.chip]['r3'] else 0)
             clk = 14318180.0 * ((m & 0x7F) + 2) / (((n & 0x1F) + 2) * (1 << rr))
         else:
             return None, None, 19886, 525
@@ -170,6 +180,9 @@ class Machine:
         r = self.r
         self.t += 3                                     # about one ISA I/O cycle
         if port == 0x3C5:
+            if r['si'] == 0x17:                         # SR17 clock synthesizer test counter: it runs (the
+                r['sr17'] = (r.get('sr17', 0) + 1) & 0xFF  # Trio64/V+ BIOS waits for it to change after
+                return r['sr17']                        # a PLL reset at POST)
             v = r['seq'].get(r['si'], 0)
             return v & 0xFE if r['si'] == 4 else v      # SR04 bit 0 is reserved and reads 0
         if port in (0x3B4, 0x3B5, 0x3BA) and r['misc'] & 1:
@@ -179,7 +192,8 @@ class Machine:
         if port in (0x3D5, 0x3B5):
             i = r['ci']
             # Trio64V2 rev 06, EDO; CR36 bits 7-5 = the strapped memory size (100b 2 MB, 000b 4 MB)
-            fixed = {0x30: 0xE1, 0x2D: 0x89, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x12 if Machine.vram == 4 else 0x92}
+            c = CHIPS[Machine.chip]['ids']
+            fixed = {0x2D: c[0], 0x2E: c[1], 0x2F: c[2], 0x30: c[3], 0x36: 0x12 if Machine.vram == 4 else 0x92}
             return fixed.get(i, r['crtc'].get(i, 0))
         if port == 0x3CF: return r['gc'].get(r['gi'], 0)
         if port == 0x3C1: return r['atc'].get(r['ai'] & 0x1F, 0)
@@ -225,7 +239,7 @@ class Machine:
             if reg == 0x10:                             # BAR0 is CR59/CR5A on the Trio64
                 cfg = (r['crtc'].get(0x59, 0) << 24) | (r['crtc'].get(0x5A, 0) << 16)
             else:
-                cfg = PCI_CONFIG.get(reg, 0)
+                cfg = self._pci_cfg(reg)
             v = cfg >> (8 * (port - 0xCFC))
             return v & {1: 0xFF, 2: 0xFFFF, 4: 0xFFFFFFFF}[size]
         return 0xFF if size == 1 else 0xFFFF
@@ -415,11 +429,20 @@ class Machine:
         uc.reg_write(UC_X86_REG_CS, seg)
         uc.reg_write(UC_X86_REG_IP, off)
 
+    def _pci_cfg(self, reg):
+        """The PCI configuration dword at reg for the chip of the model (device ID and revision)."""
+        c = CHIPS[Machine.chip]
+        if reg in (0x00, 0x2C):
+            return (c['dev'] << 16) | 0x5333
+        if reg == 0x08:
+            return 0x03000000 | c['ids'][2]
+        return PCI_CONFIG.get(reg, 0)
+
     def _pci_read(self, reg):
         reg &= 0xFC
         if reg == 0x10:
             return (self.r['crtc'].get(0x59, 0) << 24) | (self.r['crtc'].get(0x5A, 0) << 16)
-        return PCI_CONFIG.get(reg, 0)
+        return self._pci_cfg(reg)
 
     def _pcibios(self, uc):
         """PCI BIOS 2.1: the card is bus 0, device 9 (BX = 0048h), the only device."""
@@ -435,7 +458,7 @@ class Machine:
             return
         if al == 0x02:                                  # find device CX, vendor DX, index SI
             ok = (self._reg(UC_X86_REG_DX), self._reg(UC_X86_REG_CX), self._reg(UC_X86_REG_SI)) == \
-                (0x5333, 0x8901, 0)
+                (0x5333, CHIPS[Machine.chip]['dev'], 0)
         elif al == 0x03:                                # find class ECX, index SI
             ok = (self._reg(UC_X86_REG_ECX) & 0xFFFFFF) == 0x030000 and self._reg(UC_X86_REG_SI) == 0
         elif al in (0x08, 0x09, 0x0A):                  # read config byte/word/dword
@@ -578,6 +601,7 @@ class Machine:
     calls = None                                        # a set: (AX, BX, DL) of every INT 10h call after POST
     call_limit = 50_000_000                             # instructions an INT 10h call of a test may take
     vram = 2                                            # MB the CR36 strapping reports: 2 (the card) or 4
+    chip = 'v2'                                         # CHIPS key: v2 (the card), vplus, trio64
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):

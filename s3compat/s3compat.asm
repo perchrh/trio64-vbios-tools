@@ -1,10 +1,11 @@
-; S3COMPAT.COM - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS (386+)
+; S3COMPAT.COM - VGA / SVGA / VESA compatibility test for Trio64-family video BIOSes (386+)
 ;
 ; Purpose
 ;   Tests the video BIOS, not the chip: does every standard VGA mode and BIOS function behave like the
 ;   IBM VGA BIOS, does every VESA mode the BIOS lists work banked and linear, and are the registers the
-;   BIOS programs inside the limits of the Trio64V2 datasheet. Test ideas follow VGATEST (PC Tech
-;   Journal 1988), SVGATEST, VBETest and X-VESA.
+;   BIOS programs inside the limits of the chip (Trio32, Trio64, Trio64V+ or Trio64V2/DX/GX, found
+;   through PCI by common/chip.inc, which holds each chip's VCO range and DCLK maxima and their
+;   sources). Test ideas follow VGATEST (PC Tech Journal 1988), SVGATEST, VBETest and X-VESA.
 ;
 ; Usage
 ;   S3COMPAT [/Q] [/V] > S3COMPAT.LOG
@@ -200,7 +201,12 @@ start:  cld
         mov ah,9
         int 0x21
 .gs:    call save_screen
-        PS 'S3COMPAT ',VERSION,' - VGA/SVGA/VESA compatibility test for the Trio64V2 VBIOS',13,10
+        call chipfind                   ; the chip and its datasheet limits (common/chip.inc)
+        PS 'S3COMPAT ',VERSION,' - VGA/SVGA/VESA compatibility test for Trio64-family video BIOSes',13,10
+        PS 'Chip: '
+        call chipname
+        call psd
+        PS 13,10
         PS 'Category column: MDA CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
@@ -323,22 +329,16 @@ chip_id:
         RC 0x30
         call phex2
         PS ', PCI '
-        mov ax,0xB102                   ; find 5333:8901, index 0
-        mov cx,0x8901
-        mov dx,0x5333
-        xor si,si
-        int 0x1A
-        jc .np
-        or ah,ah
-        jnz .np
-        mov ax,0xB108                   ; read configuration byte 08h (revision ID) -> CL
-        mov di,8
-        int 0x1A
-        jc .np
-        or ah,ah
-        jnz .np
-        mov al,cl
+        cmp byte [chip],CHIP_NONE       ; chipfind: 5333:8901/8811/8810
+        je .np
+        mov ax,[chipdev]
+        call phex4
+        PS ' rev '
+        mov al,[chiprev]
         call phex2
+        call sp1
+        call chipname
+        call psd
         jmp .e
 .np:    PS 'n/a'
 .e:     mov byte [infoflag],1
@@ -348,8 +348,10 @@ chip_id:
 ; POST state checked against the datasheet
 
 ; POST state against the datasheet. Fail bits:
-;   1 MCLK PLL VCO outside 135-340 MHz or N = 0
-;   2 CR36 bits 3-2 not 00 (not 1-cycle EDO) or MCLK above 60 MHz (1-cycle EDO needs >= 16.67 ns)
+;   1 MCLK PLL VCO outside 135 MHz to the chip's VCO maximum (340 MHz Trio64V2, 270 MHz Trio64/V+)
+;     or N = 0
+;   2 Trio64V2 only: CR36 bits 3-2 not 00 (not 1-cycle EDO) or MCLK above 60 MHz (1-cycle EDO needs
+;     >= 16.67 ns)
 post_tests:
         call unlock
         TB C_S3,'MCLK PLL (SR10/SR11) vs datasheet'
@@ -369,7 +371,8 @@ post_tests:
         call pkhz
         cmp dword [vco],135000
         jb .f1
-        cmp dword [vco],340000
+        mov eax,[vcomax]
+        cmp [vco],eax
         ja .f1
         test byte [pn],0x1F
         jz .f1
@@ -380,6 +383,8 @@ post_tests:
         PS ' CR36='
         mov al,[tmpb]
         call phex2
+        cmp byte [chip],CHIP_T64V2      ; the EDO rule is the Trio64V2's (CR36 bits 3-2)
+        jne .ok
         test byte [tmpb],0x0C           ; 00 = 1-cycle EDO
         jnz .f2
         cmp dword [fout],60000          ; 1-cycle EDO: MCLK cycle >= 16.67 ns
@@ -390,7 +395,7 @@ post_tests:
 
 ; AL = N byte (SR10/SR12 style), AH = M byte -> [vco], [fout] in kHz
 
-; PLL: f = 14.31818 MHz * (M+2) / ((N+2) * 2^R); R is 2 bits plus bit 7 of the N byte (Trio64V2).
+; PLL: f = 14.31818 MHz * (M+2) / ((N+2) * 2^R); R is 2 bits, plus bit 7 of the N byte on the Trio64V2.
 pllcalc:
         push ebx
         push ecx
@@ -406,6 +411,8 @@ pllcalc:
         and dl,3
         test al,0x80
         jz .r
+        cmp byte [r3bit],1              ; bit 7 is R bit 2 on the Trio64V2 only
+        jne .r
         or dl,4
 .r:     mov [prr],dl
         mov eax,14318
@@ -419,6 +426,18 @@ pllcalc:
         pop edx
         pop ecx
         pop ebx
+        ret
+
+psd:    push si                         ; print the '$' string at DX to the log
+        push ax
+        mov si,dx
+.l:     lodsb
+        cmp al,'$'
+        je .e
+        call putc
+        jmp .l
+.e:     pop ax
+        pop si
         ret
 
 pkhz:   push eax                        ; print EAX kHz as MHz with 2 decimals
@@ -4385,12 +4404,13 @@ pos24   db 8,16,8,8,8,0
 ; pitch (CR13 + CR51 bits 5-4 / CR43 bit 2, unit from CR31/CR14/CR17) = 4F01 BytesPerScanLine,
 ; vertical display end = YRes * character height, horizontal display end a multiple of XRes (fail 100);
 ; CR67 colour mode fits the bpp, packed 24 bpp needs SR0B 7xh, clock doubling (CR67 mode 1) needs
-; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO 170-340 MHz (fail 200);
-; the maximum is the Trio64V2 datasheet's (section 3.6), the minimum the range XFree86 uses for the
-; Trio64V2/DX/GX DCLK PLL (s3_Trio64DAC.c, 170000-340000 kHz); every mode of p9 is at 200-325 MHz.
-; The MCLK check in post_tests keeps the Trio64V+ datasheet minimum of 135 MHz.
+; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO in the chip's range
+; (fail 200): 170-340 MHz on the Trio64V2 (datasheet section 3.6 and XFree86 s3_Trio64DAC.c), 135-270
+; MHz on the Trio32/64/V+ (XFree86). The MCLK check in post_tests keeps the Trio64V+ datasheet minimum
+; of 135 MHz.
 
-; DCLK above 95 MHz (170 doubled, 75 packed 24, 50 at 32 bpp) is WARN 02; CR50 pixel length
+; DCLK above the chip's maximum is WARN 02 (Trio64V2: 95 MHz, 170 doubled, 75 packed 24, 50 at 32 bpp;
+; Trio32/64/V+: 80, 135 doubled, 50, 50); CR50 pixel length
 ; WARN 04; interlace WARN 10.
 dschk:  call rdall
         ; CRTC pitch (CR13 + CR51 5-4, or CR43 bit 2) in the addressing unit (CR31.3 -> dwords)
@@ -4522,9 +4542,10 @@ dschk:  call rdall
 .d2:    ; PLL limits
         cmp byte [csel],3
         jne .mm
-        cmp dword [vco],170000
+        mov eax,[vco]                   ; the chip's VCO range (common/chip.inc)
+        cmp eax,[vcomin]
         jb .vb
-        cmp dword [vco],340000
+        cmp eax,[vcomax]
         ja .vb
         test byte [q_rs12],0x1F
         jnz .lim
@@ -4533,16 +4554,16 @@ dschk:  call rdall
         mov eax,[vco]
         call pkhz
         call sp1
-.lim:   mov eax,95000
+.lim:   mov eax,[dsingle]
         cmp byte [cmode],1
         jne .l1
-        mov eax,170000
+        mov eax,[ddouble]
 .l1:    cmp byte [cmode],7
         jne .l2
-        mov eax,75000
+        mov eax,[dpack24]
 .l2:    cmp byte [cmode],13
         jne .l3
-        mov eax,50000
+        mov eax,[d32]
 .l3:    cmp [dclk],eax
         jbe .mm
         WARNB 2
@@ -5419,10 +5440,10 @@ vesa_more:
         call tvco
         ret
 
-; DCLK VCO at every refresh rate (Trio64V2 datasheet: the DCLK PLL VCO runs at 170-340 MHz; the mode
+; DCLK VCO at every refresh rate (the chip's VCO range, 170-340 MHz on the Trio64V2; the mode
 ; tests check it at the default rates only). For every mode of 4F00h (text too) and every rate its 4F14h
 ; BH=02h list gives: the rate set with 4F14h BH=00h, the mode with 4F02h, then SR12/SR13 read back:
-;   1 VCO outside 170-340 MHz (the first ones are listed as mode@Hz), 2 the refresh registers CR41,
+;   1 VCO outside the chip's range (the first ones are listed as mode@Hz), 2 the refresh registers CR41,
 ;     CR52, CR6B not as before afterwards (they are written back directly)
 ; The monitor sees every rate of every mode (up to 85 Hz at 1280x1024); an LCD may show out of range.
 tvco:   TB C_S3,'DCLK VCO at every refresh rate'
@@ -5502,9 +5523,10 @@ tvco:   TB C_S3,'DCLK VCO at every refresh rate'
         pop bx
         mov al,bh                       ; AL = SR12 (N, R), AH = SR13 (M)
         call pllcalc
-        cmp dword [vco],170000
+        mov eax,[vco]
+        cmp eax,[vcomin]
         jb .bad
-        cmp dword [vco],340000
+        cmp eax,[vcomax]
         jbe .rn
 .bad:   FAILB 1
         cmp byte [tmpb],6
@@ -7257,6 +7279,7 @@ pdec10: push eax
 ; ======================================================================
 ; /V debug log (shared with VSHOW and S3TEST)
 %include "vdebug.inc"
+%include "chip.inc"
 
 ; ======================================================================
 ; data
@@ -7323,7 +7346,7 @@ s_start db 'S3COMPAT ',VERSION,': the test takes about 3 minutes. The screen wil
         db 'Press any key to continue, Esc to cancel.',13,10
 s_start_len equ $-s_start
 catnames db 'MDA  CGA  EGA  VGA  VBE  S3   '
-s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS',13,10
+s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for Trio64-family video BIOSes',13,10
         db '  S3COMPAT [/Q] [/V] [/S] > S3COMPAT.LOG',13,10
         db '  /Q                  skip the 2 MB VRAM test',13,10
         db '  /S                  silent: no start notice and monitor warning, no key press',13,10
