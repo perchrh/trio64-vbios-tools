@@ -2,7 +2,7 @@
 #
 #   python3 -m venv .venv
 #   .venv/bin/pip install .
-#   make emu-test ROM=path/to/S3V2P9.BIN      (uses .venv/bin/python3 when it exists)
+#   make emu-test ROM=path/to/S3V2P14.BIN      (uses .venv/bin/python3 when it exists)
 #
 #   .venv/bin/pip install .[coverage]         (also capstone, for make coverage)
 #

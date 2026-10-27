@@ -2,7 +2,7 @@
 NASM ?= nasm
 
 # Versions come from common/version.inc; override for one build with
-#   make clean && make VERSION=0.9 ROMVER=2.04.11-p10
+#   make clean && make VERSION=0.9 ROMVER=2.04.07-p13
 DEFS :=
 ifdef VERSION
 DEFS += -DVERSION="'$(VERSION)'"
@@ -44,11 +44,11 @@ build/S3REGS32.EXE: s3regs/s3regs32.asm common/version.inc | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
 
 # Emulator tests (python3 with the unicorn package, see pyproject.toml):
-#   make emu-test ROM=path/to/S3V2P9.BIN
+#   make emu-test ROM=path/to/S3V2P14.BIN
 # Uses the virtual environment .venv when there is one, otherwise python3 (override with PYTHON=...).
 PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
 emu-test: all
-	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P9.BIN"; exit 2; }
+	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P14.BIN"; exit 2; }
 	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs
 
 # Test coverage of the ROM code (needs capstone too: pip install .[coverage]); fails under 80 %

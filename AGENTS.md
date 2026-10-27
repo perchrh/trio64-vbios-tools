@@ -98,6 +98,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - A functional change is verified on the real card: S3TEST and S3COMPAT logs from the test machine are
   the final word. Compare with the previous log: the pass, fail and warn counts and every changed line
   should be explained.
+- The tests are for the newest ROM: a new level changes `LEVEL` in rompatch/s3patch.py and `ROMVER` in
+  common/version.inc together; the emulator test `version` fails when they differ or when the ROM
+  under test is older.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
   every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive
   descent and does not count data, padding or code nothing reaches). A new patch or a new BIOS

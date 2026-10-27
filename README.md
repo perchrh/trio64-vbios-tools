@@ -51,7 +51,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P9.BIN
+    make emu-test ROM=path/to/S3V2P14.BIN
 
 `make emu-test` uses `.venv` when it exists, otherwise `python3`; `pip install unicorn` into any
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in

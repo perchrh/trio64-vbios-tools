@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """tests.py - emulator tests for the Trio64V2 VBIOS and the DOS tools (needs python3 and unicorn).
 
-    python3 emu/tests.py --rom S3V2P9.BIN [--build build] [-k name] [-v]
-    make emu-test ROM=S3V2P9.BIN
+    python3 emu/tests.py --rom S3V2P14.BIN [--build build] [-k name] [-v]
+    make emu-test ROM=S3V2P14.BIN
 
 The ROM image is not in the repository; pass the 64 KB image of the card. The tools run with /V;
 their output (NAME.LOG) and debug files (NAME.DBG, VGALOG.BIN) are kept in emu/logs (--logs).
@@ -13,6 +13,9 @@ that drives the PIT, the BIOS tick and the retrace bit (see vgaemu.py). It has n
 video memory and no real bus speed, so those results stay with the hardware runs.
 
 Tests
+  version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
+                   the level rompatch/s3patch.py builds (2.04.07-p14), and the ROM under test carries
+                   that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER and the checksums of both 32 KB halves in
                    the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
@@ -193,6 +196,19 @@ def check_dbg(dbg, name):
 
 
 # ---------------------------------------------------------------- tests
+def t_version(c):
+    """The tests are for the newest ROM: S3TEST's expected version (common/version.inc) is the level
+    s3patch.py builds, and the ROM under test carries that sign-on."""
+    want = latest()
+    check(romver() == want, 'common/version.inc ROMVER is %s, but rompatch/s3patch.py builds %s: update ROMVER'
+          % (romver(), want))
+    m = re.search(rb'Version ([0-9.]+(-p\d+)?)', c.rom[:0x100])
+    got = m.group(1).decode() if m else '(no sign-on)'
+    check(got == want, 'the ROM is %s, the tests are for the newest ROM %s (make rom ... OUT=S3V2%s.BIN)'
+          % (got, want, want.split('-')[-1].upper()))
+    return want
+
+
 def t_post(c):
     m = Machine(c.rom)
     seg, off = m.post()
@@ -257,8 +273,17 @@ def t_vga_palettes(c):
 
 # ---------------------------------------------------------------- the patches on top of the stock ROM
 def romver():
+    """The ROM version S3TEST is built to expect (common/version.inc)."""
     t = open(os.path.join(SRC, 'common', 'version.inc')).read()
     return re.search(r"%define ROMVER '([^']*)'", t).group(1)
+
+
+def latest():
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p14)."""
+    t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
+    lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
+    ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
+    return '%s-%s' % (ver, lv)
 
 
 def t_rom_patches(c):
@@ -1085,7 +1110,7 @@ def t_windows(c):
     return '%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(calls), len(modes))
 
 
-TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
+TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
