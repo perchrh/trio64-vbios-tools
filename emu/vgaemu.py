@@ -564,7 +564,32 @@ class Machine:
         self.mu.mem_write(STUB, b'\x9A\x03\x00\x00\xC0\xF4')          # call far C000:0003 ; hlt
         self._start(0, STUB, STUB + 5, 50_000_000)
         off, seg = struct.unpack('<HH', self.mu.mem_read(0x40, 4))
+        if Machine.noop:
+            self._noop_hook(seg * 16 + off)
         return seg, off
+
+    # mutation testing: INT 10h calls that match one of these register patterns (dicts of 'ah', 'al',
+    # 'ax', 'bh', 'bl', 'bx', 'dl' -> value) return at the ROM's entry as if the function did nothing (an
+    # IRET with every register unchanged). Set Machine.noop before the machines are made.
+    noop = None
+    noop_hits = 0
+
+    def _noop_hook(self, entry):
+        def hit(uc, addr, size, ud):
+            ax, bx = self._reg(UC_X86_REG_AX), self._reg(UC_X86_REG_BX)
+            dx = self._reg(UC_X86_REG_DX)
+            v = {'ax': ax, 'ah': ax >> 8, 'al': ax & 0xFF, 'bx': bx, 'bh': bx >> 8, 'bl': bx & 0xFF, 'dl': dx & 0xFF}
+            if not any(all(v[k] == x for k, x in pat.items()) for pat in Machine.noop):
+                return
+            Machine.noop_hits += 1
+            ss, sp = self._reg(UC_X86_REG_SS), self._reg(UC_X86_REG_SP)
+            ip, cs, fl = struct.unpack('<HHH', uc.mem_read(ss * 16 + sp, 6))
+            uc.reg_write(UC_X86_REG_SP, (sp + 6) & 0xFFFF)
+            uc.reg_write(UC_X86_REG_EFLAGS, (self._reg(UC_X86_REG_EFLAGS) & ~0xFFFF) | fl)
+            uc.reg_write(UC_X86_REG_CS, cs)
+            uc.reg_write(UC_X86_REG_IP, ip)
+        self.mu.hook_add(UC_HOOK_CODE, hit, None, entry, entry)
+        self.mu.ctl_remove_cache(entry, entry + 1)      # POST has run the entry: retranslate it with the hook
 
     def _start(self, cs, ip, until, count, ss=0, sp=0x7000):
         mu = self.mu

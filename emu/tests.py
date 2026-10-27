@@ -59,6 +59,16 @@ Tests
                    register, invalid mode numbers, undefined AH=10h/11h/12h/1Ah subfunctions keep AL,
                    AX=1C03h, DF set by the caller, refused 4F02h modes, 4F09h at the last entry,
                    4F14h refusals (CR41/CR52/CR6B unchanged), 4F06h widths that do not fit
+  windows          (emulator only) the ways Windows calls the BIOS, from Microsoft's documented
+                   interfaces (VideoPortInt10, the INT 10h interface of Windows 2000 and later) and the
+                   calls of S3's Windows 9x driver (4F00, 4F02, 4F08): 30 calls with DS = ES = a buffer
+                   segment and garbage in the upper register halves give the same results, buffers
+                   and video state as with clean registers and keep the upper halves; every call
+                   returns with IF=0 and no timer tick; the driver sequence 4F00, 4F01 for every mode,
+                   4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
+                   IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
+  --tests a,b      run these tests in this order; -x stops at the first failure
+  --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
   --coverage FILE  records the ROM bytes all tests execute and read, for emu/codemap.py (test coverage)
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
@@ -69,7 +79,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
 from unicorn import UC_HOOK_INSN  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
-                               UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
+                               UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
                                UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_EFLAGS,
                                UC_X86_REG_BX, UC_X86_REG_DX, UC_X86_REG_CS, UC_X86_REG_SS, UC_X86_REG_SP,
                                UC_X86_INS_IN, UC_X86_INS_OUT)
@@ -926,12 +936,160 @@ def t_errors(c):
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return 'undefined functions and subfunctions, invalid modes, DF, VBE refusals'
 
+R32 = (('eax', UC_X86_REG_EAX), ('ebx', UC_X86_REG_EBX), ('ecx', UC_X86_REG_ECX), ('edx', UC_X86_REG_EDX),
+       ('esi', UC_X86_REG_ESI), ('edi', UC_X86_REG_EDI), ('ebp', UC_X86_REG_EBP))
+
+
+def int10w(m, regs, ds=0, es=0, flags=0x202, count=50_000_000):
+    """INT 10h with 32-bit registers and DS/ES as the Windows INT 10h interfaces pass them
+    (VIDEO_X86_BIOS_ARGUMENTS / INT10_BIOS_ARGUMENTS). Returns the 32-bit registers, DS, ES; raises
+    when the call does not return within count instructions (a hang)."""
+    mu = m.mu
+    mu.mem_write(0x7D00, b'\xCD\x10\xF4')
+    for k, r in R32:
+        mu.reg_write(r, regs.get(k, 0))
+    for reg, v in ((UC_X86_REG_CS, 0), (UC_X86_REG_SS, 0), (UC_X86_REG_SP, 0x7000), (UC_X86_REG_DS, ds),
+                   (UC_X86_REG_ES, es), (UC_X86_REG_EFLAGS, flags)):
+        mu.reg_write(reg, v)
+    mu.emu_start(0x7D00, 0x7D02, count=count)
+    if mu.reg_read(UC_X86_REG_IP) != 0x7D02 or mu.reg_read(UC_X86_REG_CS) != 0:
+        raise AssertionError('INT 10h EAX=%08X did not return (hang at %04X:%04X)'
+                             % (regs.get('eax', 0), mu.reg_read(UC_X86_REG_CS), mu.reg_read(UC_X86_REG_IP)))
+    out = {k: mu.reg_read(r) for k, r in R32}
+    out['ds'], out['es'] = mu.reg_read(UC_X86_REG_DS), mu.reg_read(UC_X86_REG_ES)
+    return out
+
+
+def t_windows(c):
+    """The ways Windows calls the video BIOS (emulator only), from Microsoft's documented interfaces:
+    VideoPortInt10 and the INT 10h interface of Windows 2000 and later pass 32-bit registers and DS/ES
+    with a buffer below 1 MB; the calls may come with interrupts off (VDM, x86 BIOS emulator); the
+    Windows 9x display driver of S3 uses 4F00, 4F02 and 4F08 (README, Windows 9x driver test)."""
+    fails = []
+
+    def chk(cond, what):
+        if not cond:
+            fails.append(what)
+
+    BUF = 0x2000                                        # the buffer segment (Int10AllocateBuffer-like)
+    calls = [('4F00', dict(eax=0x4F00, edi=0)), ('4F01 101h', dict(eax=0x4F01, ecx=0x101, edi=0x200)),
+             ('4F01 111h', dict(eax=0x4F01, ecx=0x111, edi=0x200)), ('4F02 101h', dict(eax=0x4F02, ebx=0x101)),
+             ('4F03', dict(eax=0x4F03)), ('4F05 set', dict(eax=0x4F05, ebx=0, edx=1)),
+             ('4F05 get', dict(eax=0x4F05, ebx=0x100)), ('4F06 get', dict(eax=0x4F06, ebx=1)),
+             ('4F06 set', dict(eax=0x4F06, ebx=0, ecx=1024)), ('4F07 set', dict(eax=0x4F07, ebx=0, ecx=8, edx=4)),
+             ('4F07 get', dict(eax=0x4F07, ebx=1)), ('4F08 set 8', dict(eax=0x4F08, ebx=0x0800)),
+             ('4F08 get', dict(eax=0x4F08, ebx=1)), ('4F09 set', dict(eax=0x4F09, ebx=0, ecx=16, edx=0, edi=0x300)),
+             ('4F09 get', dict(eax=0x4F09, ebx=1, ecx=16, edx=0, edi=0x400)), ('4F0A', dict(eax=0x4F0A, ebx=0)),
+             ('4F10 query', dict(eax=0x4F10, ebx=0, edi=0)), ('4F10 get', dict(eax=0x4F10, ebx=2)),
+             ('4F14 query', dict(eax=0x4F14, ebx=0)), ('4F15 query', dict(eax=0x4F15, ebx=0, ecx=0)),
+             ('4F02 3', dict(eax=0x4F02, ebx=3)), ('AH=0F', dict(eax=0x0F00)), ('AH=12 BL=10', dict(eax=0x1200, ebx=0x10)),
+             ('AX=1A00', dict(eax=0x1A00)), ('AH=1B', dict(eax=0x1B00, ebx=0, edi=0x500)),
+             ('AX=1C01', dict(eax=0x1C01, ecx=7, ebx=0x600)), ('AX=1C02', dict(eax=0x1C02, ecx=7, ebx=0x600)),
+             ('AH=00 12h', dict(eax=0x0012)), ('AH=06', dict(eax=0x0600, ebx=0x0700, edx=0x1D4F)),
+             ('AH=00 03h', dict(eax=0x0003))]
+    # 32-bit callers: the same results with garbage in the upper halves, which stay as they were
+    # (a 16-bit BIOS function returns 16-bit results; 4F0A returns ES = C000; the S3 OEM query 4F14
+    # BL=00 returns ESI and EDI as 32-bit values, as BL=02 BH=03 does EDI)
+    HI = 0xA55A0000
+    runs = []
+    for dirty in (False, True):
+        m = c.machine()
+        m.mu.mem_write(BUF * 16 + 0x300, bytes(range(64)))
+        res = []
+        for name, regs in calls:
+            r = dict(regs)
+            if dirty:
+                r = {k: v | (HI ^ (i << 28)) for i, (k, v) in enumerate((k, r.get(k, 0)) for k, _ in R32)}
+            o = int10w(m, r, ds=BUF, es=BUF)
+            res.append((name, r, o, m.mem(BUF * 16, 0x800), vga_state(m)))
+        runs.append(res)
+    for (name, _, o0, b0, s0), (_, rin, o1, b1, s1) in zip(*runs):
+        lo = lambda o: {k: (v & 0xFFFF if k[0] == 'e' else v) for k, v in o.items()}
+        chk(lo(o0) == lo(o1), '%s: other 16-bit results with the upper halves set: %s / %s' % (name, lo(o0), lo(o1)))
+        chk(b0 == b1, '%s: other buffer contents with the upper halves set' % name)
+        chk(s0 == s1, '%s: other video state with the upper halves set' % name)
+        hi = [k for k, _ in R32 if (o1[k] ^ rin[k]) & 0xFFFF0000 and not (name == '4F14 query' and k in ('esi', 'edi'))]
+        chk(not hi, '%s: upper halves changed: %s' % (name, ', '.join('%s %08X->%08X' % (k, rin[k], o1[k]) for k in hi)))
+        chk(o1['ds'] == BUF and (o1['es'] == BUF or name == '4F0A'), '%s: DS/ES not kept (%04X/%04X)' % (name, o1['ds'], o1['es']))
+    # interrupts off and no timer tick (a VDM or the x86 BIOS emulator of 64-bit Windows may deliver
+    # no IRQ 0): every call returns; mode sets, scroll, palette, DPMS, refresh, DDC
+    m = c.machine()
+    m._ticks = lambda: 0x1234
+    for name, regs in calls + [('4F02 105h', dict(eax=0x4F02, ebx=0x105)), ('4F02 112h', dict(eax=0x4F02, ebx=0x112)),
+                               ('4F10 off', dict(eax=0x4F10, ebx=0x0401)), ('4F10 on', dict(eax=0x4F10, ebx=0x0001)),
+                               ('4F14 set', dict(eax=0x4F14, ebx=0x0001, ecx=0x101, edi=72)),
+                               ('4F15 read', dict(eax=0x4F15, ebx=1, ecx=0, edx=0, edi=0)),
+                               ('AH=00 13h', dict(eax=0x0013)), ('AH=00 03h', dict(eax=0x0003))]:
+        try:                                            # the DDC read bit-bangs 128 bytes: 60M instructions
+            int10w(m, regs, ds=BUF, es=BUF, flags=0x002, count=200_000_000 if name == '4F15 read' else 20_000_000)
+        except AssertionError as e:
+            chk(False, '%s with IF=0 and no tick: %s' % (name, e))
+    # the S3 Windows 9x driver: 4F00, 4F01 for the modes, 4F02, 4F08 to 8 bits, the palette, a mode
+    # change, back to text. VBE 2.0: 4F08 BH = the width set; mode 03h after it as IBM's (6-bit DAC,
+    # the EGA palette, the registers of vgaref.inc)
+    ents, _ = read_vgaref()
+    m = c.machine()
+    m.mu.mem_write(BUF * 16, b'VBE2')
+    o = int10w(m, dict(eax=0x4F00, edi=0), es=BUF)
+    chk(o['eax'] & 0xFFFF == 0x4F and m.mem(BUF * 16, 4) == b'VESA', '4F00: %04X' % (o['eax'] & 0xFFFF))
+    caps = m.mem(BUF * 16 + 10, 1)[0]
+    loff, lseg = struct.unpack('<HH', m.mem(BUF * 16 + 14, 4))
+    modes = []
+    while len(modes) < 120:
+        v = word(m, lseg * 16 + loff + 2 * len(modes))
+        if v == 0xFFFF:
+            break
+        modes.append(v)
+    for v in modes:
+        o = int10w(m, dict(eax=0x4F01, ecx=v, edi=0x1000), es=BUF)
+        chk(o['eax'] & 0xFFFF == 0x4F, '4F01 %03Xh: %04X' % (v, o['eax'] & 0xFFFF))
+    for v in (0x101, 0x103, 0x105):
+        o = int10w(m, dict(eax=0x4F02, ebx=v), es=BUF)
+        chk(o['eax'] & 0xFFFF == 0x4F, '4F02 %03Xh: %04X' % (v, o['eax'] & 0xFFFF))
+        o = int10w(m, dict(eax=0x4F08, ebx=0x0800))
+        if caps & 1:
+            chk(o['eax'] & 0xFFFF == 0x4F and (o['ebx'] >> 8) & 0xFF == 8, '%03Xh 4F08 to 8 bits: AX=%04X BH=%d'
+                % (v, o['eax'] & 0xFFFF, (o['ebx'] >> 8) & 0xFF))
+            o = int10w(m, dict(eax=0x4F08, ebx=1))
+            chk((o['ebx'] >> 8) & 0xFF == 8, '%03Xh 4F08 get after set 8: BH=%d' % (v, (o['ebx'] >> 8) & 0xFF))
+        pal = bytes((3 * i + k * 85) & 0xFF for i in range(256) for k in range(4))
+        m.mu.mem_write(BUF * 16 + 0x2000, pal)
+        int10w(m, dict(eax=0x4F09, ebx=0, ecx=256, edx=0, edi=0x2000), es=BUF)
+        o = int10w(m, dict(eax=0x4F09, ebx=1, ecx=256, edx=0, edi=0x3000), es=BUF)
+        rd = m.mem(BUF * 16 + 0x3000, 1024)
+        width = 8 if caps & 1 else 6
+        msk = 0xFF if width == 8 else 0x3F
+        exp = bytes((b & msk) if k % 4 != 3 else rd[k] for k, b in enumerate(pal))
+        chk(o['eax'] & 0xFFFF == 0x4F and rd == exp, '%03Xh 4F09 palette not read back as written (%d bits)' % (v, width))
+    o = int10w(m, dict(eax=0x0003))
+    o = int10w(m, dict(eax=0x4F08, ebx=1))
+    chk((o['ebx'] >> 8) & 0xFF == 6, 'mode 03h after the driver: DAC width %d bits, expected 6' % ((o['ebx'] >> 8) & 0xFF))
+    d = m.dac_bytes()
+    chk(all(tuple(d[3 * i:3 * i + 3]) == ega(i) for i in range(64)), 'mode 03h after the driver: not the EGA palette')
+    regs3 = [e for e in ents if e[0] == 3 and not e[1] & 0x80][0][2]
+    snap = m.snapshot()
+    sr4 = lambda j, v: v & 0xFE if REGNAMES[j] == 'SR4' else v     # SR4 bit 0 reserved (as vga_registers)
+    diff = [REGNAMES[j] for j, (a, e) in enumerate(zip(snap, regs3)) if REGNAMES[j] != 'SR0' and sr4(j, a) != sr4(j, e)]
+    chk(not diff, 'mode 03h after the driver: registers differ from IBM: %s' % ' '.join(diff))
+    # AH=00h with AL bit 7 (IBM: keep video memory; BDA 0487h bit 7 set while the mode runs)
+    m.int10(0x03)
+    m.mu.mem_write(0xB8000, b''.join(struct.pack('<H', text_pattern(r, k)) for r in range(25) for k in range(80)))
+    keep = m.mem(0xB8000, 4000)
+    m.int10(0x83)
+    chk(m.mem(0xB8000, 4000) == keep, 'AH=00h AL=83h cleared the text')
+    chk(m.mem(0x449, 1)[0] == 3 and m.mem(0x487, 1)[0] & 0x80, 'AH=00h AL=83h: BDA mode %02X, 0487h %02X'
+        % (m.mem(0x449, 1)[0], m.mem(0x487, 1)[0]))
+    m.int10(0x03)
+    chk(m.mem(0xB8000, 4) == b'\x20\x07\x20\x07' and not m.mem(0x487, 1)[0] & 0x80, 'AH=00h AL=03h after 83h: no clear')
+    check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
+    return '%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(calls), len(modes))
+
 
 TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors)]
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows)]
 
 
 def main():
@@ -945,7 +1103,15 @@ def main():
     ap.add_argument('--coverage', metavar='FILE',
                     help='record which ROM bytes the tests execute and read (all machines together) into FILE '
                          '(32 KB of code flags, then 32 KB of data flags, for emu/codemap.py)')
+    ap.add_argument('--tests', default='', help='comma list: run these tests in this order (default all)')
+    ap.add_argument('-x', action='store_true', help='stop at the first failure')
+    ap.add_argument('--noop', default='', metavar='SPEC',
+                    help='mutation test: INT 10h calls matching SPEC do nothing, e.g. "ah=06" or '
+                         '"ax=4F14,bl=02" (hex values; several patterns separated by ";"), see emu/mutants.py')
     a = ap.parse_args()
+    if a.noop:
+        Machine.noop = [{k.strip().lower(): int(v, 16) for k, v in (f.split('=') for f in pat.split(','))}
+                        for pat in a.noop.split(';')]
     covs = []
     if a.coverage:
         init = Machine.__init__
@@ -956,9 +1122,15 @@ def main():
         Machine.__init__ = init_cov
     c = Ctx(a.rom, a.build, a.v, a.logs)
     failed = 0
-    for name, fn in TESTS:
+    tests = TESTS
+    if a.tests:
+        byname = dict(TESTS)
+        tests = [(t, byname[t]) for t in a.tests.split(',')]
+    for name, fn in tests:
         if a.k not in name:
             continue
+        if a.x and failed:
+            break
         t0 = time.time()
         try:
             note = fn(c)
@@ -974,6 +1146,8 @@ def main():
         first, _, rest = res.partition('\n')
         print('%-14s %-60s %5.0fs' % (name, first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
     print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+    if a.noop:
+        print('noop: %d INT 10h calls matched %s' % (Machine.noop_hits, a.noop))
     if a.coverage:
         code, data = bytearray(0x8000), bytearray(0x8000)
         for cc, dd in covs:
