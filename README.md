@@ -41,7 +41,11 @@ NASM 2.x (tested with 2.16.01):
     make            # Linux, macOS, WSL
     build.bat       # DOS or Windows with nasm.exe on the PATH
 
-The .COM files land in `build/`. `common/` holds the /V debug log code the test tools share.
+The .COM files land in `build/`, with `RUNALL.BAT` (from `runall.bat`): it runs S3TEST, S3COMPAT and
+`VSHOW /R`, all with `/V /S`, writes S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG and their .DBG files next to
+them, and beeps (`echo` of Ctrl-G) when done. `/S` skips the monitor warnings, so only start it with a
+monitor that takes 91 kHz or refuses it (an LCD). `common/` holds the /V debug log code the test tools
+share.
 
 ## Emulator tests
 
