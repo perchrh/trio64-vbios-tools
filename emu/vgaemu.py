@@ -35,7 +35,7 @@ What is not emulated (results that depend on it are meaningless here)
   - Equipment-dependent BIOS state (AH=1Bh +26h alternate display, +2Dh flags).
 
 Usage (see tests.py for complete examples)
-  m = Machine(open('S3V2P14.BIN','rb').read())
+  m = Machine(open('S3V2P15.BIN','rb').read())
   m.post()
   m.int10(0x0003); print(m.snapshot())         # registers after a mode set
   r = m.run_com(open('build/S3TEST.COM','rb').read(), '/V')
@@ -178,7 +178,8 @@ class Machine:
             return 0xFF
         if port in (0x3D5, 0x3B5):
             i = r['ci']
-            fixed = {0x30: 0xE1, 0x2D: 0x89, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x92}  # Trio64V2 rev 06, EDO 2 MB
+            # Trio64V2 rev 06, EDO; CR36 bits 7-5 = the strapped memory size (100b 2 MB, 000b 4 MB)
+            fixed = {0x30: 0xE1, 0x2D: 0x89, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x12 if Machine.vram == 4 else 0x92}
             return fixed.get(i, r['crtc'].get(i, 0))
         if port == 0x3CF: return r['gc'].get(r['gi'], 0)
         if port == 0x3C1: return r['atc'].get(r['ai'] & 0x1F, 0)
@@ -198,7 +199,7 @@ class Machine:
                 r['dac_rc'] = 0
                 r['dac_r'] = (r['dac_r'] + 1) & 255
             return v
-        if port == 0x3C6: return 0xFF
+        if port == 0x3C6: return r.get('pel', 0xFF)        # DAC pixel mask (AX=1018h/1019h)
         if port == 0x3C7: return r.get('dac_st', 0)     # DAC state: 3 after a read index, 0 after a write index
         if port == 0x3C4: return r['si']
         if port in (0x3D4, 0x3B4): return r['ci']
@@ -252,6 +253,7 @@ class Machine:
                 else: r['atc'][r['ai'] & 0x1F] = v
                 r['aff'] ^= 1
             elif p == 0x3C2: r['misc'] = v
+            elif p == 0x3C6: r['pel'] = v
             elif p in (0x3DA, 0x3BA): r['feat'] = v
             elif p == 0x3C8:
                 r['dac_w'] = v
@@ -564,7 +566,7 @@ class Machine:
         self.mu.mem_write(STUB, b'\x9A\x03\x00\x00\xC0\xF4')          # call far C000:0003 ; hlt
         self._start(0, STUB, STUB + 5, 50_000_000)
         off, seg = struct.unpack('<HH', self.mu.mem_read(0x40, 4))
-        if Machine.noop:
+        if Machine.noop or Machine.calls is not None:
             self._noop_hook(seg * 16 + off)
         return seg, off
 
@@ -573,13 +575,18 @@ class Machine:
     # IRET with every register unchanged). Set Machine.noop before the machines are made.
     noop = None
     noop_hits = 0
+    calls = None                                        # a set: (AX, BX, DL) of every INT 10h call after POST
+    call_limit = 50_000_000                             # instructions an INT 10h call of a test may take
+    vram = 2                                            # MB the CR36 strapping reports: 2 (the card) or 4
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):
             ax, bx = self._reg(UC_X86_REG_AX), self._reg(UC_X86_REG_BX)
             dx = self._reg(UC_X86_REG_DX)
             v = {'ax': ax, 'ah': ax >> 8, 'al': ax & 0xFF, 'bx': bx, 'bh': bx >> 8, 'bl': bx & 0xFF, 'dl': dx & 0xFF}
-            if not any(all(v[k] == x for k, x in pat.items()) for pat in Machine.noop):
+            if Machine.calls is not None:
+                Machine.calls.add((ax, bx, dx & 0xFF))
+            if not Machine.noop or not any(all(v[k] == x for k, x in pat.items()) for pat in Machine.noop):
                 return
             Machine.noop_hits += 1
             ss, sp = self._reg(UC_X86_REG_SS), self._reg(UC_X86_REG_SP)
@@ -619,9 +626,12 @@ class Machine:
         mu.reg_write(UC_X86_REG_ES, es)
         mu.reg_write(UC_X86_REG_EFLAGS, 0x202)
         try:
-            mu.emu_start(0x7D00, 0x7D02, count=50_000_000)
+            mu.emu_start(0x7D00, 0x7D02, count=Machine.call_limit)
         except UcError as e:
             raise RuntimeError('INT 10h AX=%04X: %s' % (ax, e))
+        if self._reg(UC_X86_REG_IP) != 0x7D02 or self._reg(UC_X86_REG_CS) != 0:
+            raise RuntimeError('INT 10h AX=%04X did not return within %d instructions (hang at %04X:%04X)'
+                               % (ax, Machine.call_limit, self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP)))
         return {k: self._reg(v) for k, v in (('ax', UC_X86_REG_AX), ('bx', UC_X86_REG_BX), ('cx', UC_X86_REG_CX),
                                               ('dx', UC_X86_REG_DX), ('es', UC_X86_REG_ES), ('bp', UC_X86_REG_BP),
                                               ('flags', UC_X86_REG_EFLAGS))}

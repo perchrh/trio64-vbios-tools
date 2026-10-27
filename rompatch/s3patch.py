@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p14) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (2.04.07-p15) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN --upper STOCK.BIN -o S3V2P14.BIN [--no-vco-fix] [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN UPPER=STOCK.BIN OUT=S3V2P14.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P15.BIN [--no-vco-fix] [--nasm nasm] [-q]
+    make rom IN=REF2047.BIN OUT=S3V2P15.BIN
 
 Needs python3 (no packages) and nasm 2.x.
 
 Input
   REF2047.BIN  the S3 reference BIOS 2.04.07 (86C775/86C785), 32 KB, or a 64 KB image with it in the
-               lower half (its upper half is then used unless --upper is given)
-  --upper      source of the upper 32 KB, the Trio64V+ BIOS 1.03-08 of the card: a 64 KB image (its
-               upper half, e.g. the stock dump) or a 32 KB file. Copied unchanged; it must checksum to 00
+               lower half (the upper half of the input is not used)
+
+Output
+  64 KB: the patched BIOS in the lower 32 KB, zeros in the upper 32 KB (p15; p14 and earlier carried
+  the card's Trio64V+ BIOS 1.03-08 there)
 
 What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level changes")
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
@@ -25,20 +27,19 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
          p14: the VGA mode set clear in place as a jump to wfill
   VCO    (unless --no-vco-fix) the 22 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
          larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz
-  sign-on "2.04.07-p14", checksum byte 7FFF
+  sign-on "2.04.07-p15", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
-written and the exit code is 1. The result is checked before it is written: both 32 KB halves sum to 00,
-the upper half is unchanged, every DCLK VCO in 170-340 MHz (unless --no-vco-fix), and with the known
-reference image and stock upper half the SHA-256 of the build that passed the emulator tests.
+written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
+and declares 32 KB, the upper 32 KB is zeros, every DCLK VCO in 170-340 MHz (unless --no-vco-fix), and
+with the known reference image the SHA-256 of the build that passed the emulator tests.
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p14'
+LEVEL = 'p15'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-REF_UPPER_SHA = 'd79bb2a44c246c1292633147ccee4e7525544ed56167cb476ccfc7060a3b8930'  # + stock upper half
-RESULT_SHA = 'f7ed681c2ee330be0e7c2c333d0d6080a35bc6024ebc248f8a6e7bcb12b67c8f'  # 2.04.07-p14, emulator tests passed
+RESULT_SHA = '1caad895a473d087a258253474085eb45fea161afc074928f194df96fdd94b9d'  # 2.04.07-p15, emulator tests passed
 FREE_START, FREE_END = 0x7CFB, 0x7FE3   # free space the new code and tables use (end exclusive)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -395,18 +396,16 @@ def patch(lo, nasm='nasm', vcofix=True):
     return bytes(d), log
 
 
-def verify(img, upper, vcofix):
+def verify(img, vcofix):
     errs = []
     if len(img) != 0x10000:
         errs.append('image is %d bytes, not 65536' % len(img))
     if sum(img[:0x8000]) & 0xFF:
         errs.append('lower 32 KB checksum is not 00')
-    if sum(img[0x8000:]) & 0xFF:
-        errs.append('upper 32 KB checksum is not 00')
-    if img[0x8000:] != upper:
-        errs.append('upper 32 KB changed')
-    if img[0:2] != b'\x55\xAA' or img[0x8000:0x8002] != b'\x55\xAA':
-        errs.append('ROM header 55AAh missing')
+    if img[0x8000:] != bytes(0x8000):
+        errs.append('upper 32 KB is not all zeros')
+    if img[0:2] != b'\x55\xAA' or img[2] != 0x40:
+        errs.append('ROM header 55AAh with 32 KB size missing')
     if vcofix:
         for e in refresh_entries(img):
             vco, f = pll(img[e + 4], img[e + 5])
@@ -419,7 +418,6 @@ def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 reference BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
-    ap.add_argument('--upper', help='source of the upper 32 KB (64 KB image or 32 KB file)')
     ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
@@ -428,24 +426,11 @@ def main():
         src = open(a.input, 'rb').read()
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
-        lo = src[:0x8000]
-        if a.upper:
-            u = open(a.upper, 'rb').read()
-            if len(u) == 0x10000:
-                u = u[0x8000:]
-            if len(u) != 0x8000:
-                raise PatchError('--upper must be 64 KB or 32 KB')
-            upper = u
-        elif len(src) == 0x10000:
-            upper = src[0x8000:]
-        else:
-            raise PatchError('32 KB input: give the upper half with --upper (e.g. the stock 64 KB image)')
-        if upper[:2] != b'\x55\xAA' or sum(upper) & 0xFF:
-            raise PatchError('upper 32 KB: no 55AAh header or checksum not 00')
+        lo = src[:0x8000]                       # a 64 KB input: only its lower half is used
         new_lo, log = patch(lo, a.nasm, not a.no_vco_fix)
-        img = new_lo + upper
-        errs = verify(img, upper, not a.no_vco_fix)
-        known = hashlib.sha256(lo + upper).hexdigest() == REF_UPPER_SHA and not a.no_vco_fix and RESULT_SHA
+        img = new_lo + bytes(0x8000)            # the upper 32 KB: zeros
+        errs = verify(img, not a.no_vco_fix)
+        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA
         out_sha = hashlib.sha256(img).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 %s, expected %s)' % (out_sha, RESULT_SHA))
@@ -461,8 +446,8 @@ def main():
         print('base %s%s' % (VERSION, ' (the known reference image)' if ref else ''))
         for line in log:
             print('  ' + line)
-    print('%s: %s-%s, checksums %02X/%02X (both halves sum to 00), SHA-256 %s%s'
-          % (a.output, VERSION, LEVEL, img[0x7FFF], img[0xFFFF], out_sha,
+    print('%s: %s-%s, checksum %02X (the lower 32 KB sums to 00, the upper 32 KB is zeros), SHA-256 %s%s'
+          % (a.output, VERSION, LEVEL, img[0x7FFF], out_sha,
              ', identical to the tested build' if known else ''))
     return 0
 

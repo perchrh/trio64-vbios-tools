@@ -10,3 +10,4 @@ nasm -f bin -icommon\ -o build\S3ALIAS.COM s3alias\s3alias.asm
 nasm -f bin -icommon\ -o build\VGALOG.COM vgalog\vgalog.asm
 nasm -f bin -icommon\ -o build\S3REGS.COM s3regs\s3regs.asm
 nasm -f bin -icommon\ -o build\S3REGS32.EXE s3regs\s3regs32.asm
+copy runall.bat build\RUNALL.BAT

@@ -7,11 +7,11 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 - Hardware: Gainward S3 Trio64V2/DX (86C775), 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901.
 - The ROM is a 64 KB image. The lower 32 KB is the S3 reference BIOS 2.04.07 with our patches
-  (currently -p14); the upper 32 KB is the Trio64V+ BIOS 1.03-08 and must stay byte-identical to the
-  stock dump. p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
+  (currently -p15); the upper 32 KB is zeros (from p15; up to p14 it was the card's Trio64V+ BIOS
+  1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
 - The patched ROM images are kept outside this repository. `rompatch/` holds the ROM code (nasm) and
-  `s3patch.py`, which builds the current level from the S3 reference 2.04.07 (plus the stock upper
-  half) with byte assertions; only the latest level is built. A new level replaces the pinned SHA-256
+  `s3patch.py`, which builds the current level from the S3 reference 2.04.07 alone
+  with byte assertions; only the latest level is built. A new level replaces the pinned SHA-256
   (`RESULT_SHA`) once the emulator tests pass, and `make rom-test` checks it. The
   repository also holds the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
@@ -27,7 +27,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The RAM must stay treated as 1-cycle EDO (CR36 bits 3-2 = 00). MCLK is 59.96 MHz, the 1-cycle EDO
   maximum. Do not raise it.
 - Blank pedestal off (SR1A bit 5 = 0): the deepest black is wanted.
-- Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in both halves.
+- Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in the lower
+  32 KB; the upper 32 KB is zeros.
 - Base every change on the reference image plus explicit patches with byte assertions, so a build
   fails when the bytes under a patch are not what the patch expects. Addresses go into
   `rompatch/bios.inc` (the patcher reads it too), patch sites and their original bytes into
@@ -61,7 +62,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
-- All tools share one version number (0.8 now), `VERSION` in `common/version.inc`; never write the
+- All tools share one version number (1.0 now), `VERSION` in `common/version.inc`; never write the
   number into a tool's strings, use `VERSION` (and `ROMVER` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.
 
@@ -101,13 +102,18 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The tests are for the newest ROM: a new level changes `LEVEL` in rompatch/s3patch.py and `ROMVER` in
   common/version.inc together; the emulator test `version` fails when they differ or when the ROM
   under test is older.
+- Memory configurations: the ROM supports 2 MB (the test card) and 4 MB (the 86C775 maximum, CR36
+  bits 7-5 = 000b) of video memory. `make emu-test ROM=...` runs every test with 2 MB and the ones
+  tagged `vram` (their result depends on the memory size) again with 4 MB; a new test that reads the
+  memory size or the VESA mode list gets the tag. Expected values follow the memory size, never a
+  fixed 2 MB.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
   every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive
   descent and does not count data, padding or code nothing reaches). A new patch or a new BIOS
   function path comes with a test that runs it; `--list` shows the code no test reaches.
 - EGA/CGA goal: in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves exactly like the
   unpatched reference BIOS 2.04.07: same registers back, BIOS data, video memory, DAC and standard VGA
-  registers after every call (`make ref-compare REF=... UPPER=... ROM=...`, emu/refcompare.py). Our
+  registers after every call (`make ref-compare REF=... ROM=...`, emu/refcompare.py). Our
   changes there are speed only (32-bit stores) or VGA/S3 extended registers; a change that makes a
   difference in those modes needs a reason in README.md.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and

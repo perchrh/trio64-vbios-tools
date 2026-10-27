@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """refcompare.py - the EGA/CGA behaviour of the ROM against the unpatched S3 reference BIOS 2.04.07.
 
-    python3 emu/refcompare.py --ref REF2047.BIN --upper STOCK.BIN --rom S3V2P14.BIN
-    make ref-compare REF=REF2047.BIN UPPER=STOCK.BIN ROM=S3V2P14.BIN
+    python3 emu/refcompare.py --ref REF2047.BIN --rom S3V2P15.BIN
+    make ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
 
 Goal (AGENTS.md): in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves like the reference
 BIOS. Both run the same INT 10h calls in the emulator: mode sets at 200, 350 and 400 lines and without
@@ -20,10 +20,10 @@ from vgaemu import Machine
 from unicorn.x86_const import *
 ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
 ap.add_argument('--ref', required=True, help='S3 reference BIOS 2.04.07 (32 KB)')
-ap.add_argument('--upper', required=True, help='image with the upper half (the stock 64 KB dump)')
+ap.add_argument('--upper', help='image whose upper half goes with the reference (default: zeros, as in the ROM)')
 ap.add_argument('--rom', required=True, help='the ROM to compare (64 KB)')
 a = ap.parse_args()
-ref=open(a.ref,'rb').read(); up=open(a.upper,'rb').read()[0x8000:]
+ref=open(a.ref,'rb').read(); up=open(a.upper,'rb').read()[0x8000:] if a.upper else bytes(0x8000)
 A=Machine(ref[:0x8000]+up); A.post(); B=Machine(open(a.rom,'rb').read()); B.post()
 R32=(UC_X86_REG_EAX,UC_X86_REG_EBX,UC_X86_REG_ECX,UC_X86_REG_EDX,UC_X86_REG_ESI,UC_X86_REG_EDI)
 def std(m):

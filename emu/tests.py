@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """tests.py - emulator tests for the Trio64V2 VBIOS and the DOS tools (needs python3 and unicorn).
 
-    python3 emu/tests.py --rom S3V2P14.BIN [--build build] [-k name] [-v]
-    make emu-test ROM=S3V2P14.BIN
+    python3 emu/tests.py --rom S3V2P15.BIN [--build build] [-k name] [-v]
+    make emu-test ROM=S3V2P15.BIN
 
 The ROM image is not in the repository; pass the 64 KB image of the card. The tools run with /V;
 their output (NAME.LOG) and debug files (NAME.DBG, VGALOG.BIN) are kept in emu/logs (--logs).
@@ -14,11 +14,11 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p14), and the ROM under test carries
+                   the level rompatch/s3patch.py builds (2.04.07-p15), and the ROM under test carries
                    that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
-  rom_patches      what S3TEST cannot check: sign-on ROMVER and the checksums of both 32 KB halves in
-                   the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
+  rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
+                   half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port
                    accesses), the window function by far call, EAX/ECX kept across the 32-bit VGA
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
@@ -31,7 +31,10 @@ Tests
   s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
                    (banked memory, throughput); with /V the output is the same (except the Time spent
                    line) and S3TEST.DBG is well formed
-  vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed
+  vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
+                   monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT, shown once
+                   before the VSHOW /I list, and S3TEST, S3COMPAT and VSHOW (a mode, /A) print it on
+                   stderr with a key prompt, where Esc cancels (/S prints nothing)
   s3compat_vga     S3COMPAT's VGA, Mode X and VGA BIOS function parts (built with nasm from the source
                    with the rest cut out): every test passes (registers, BIOS data, refresh, planar
                    memory, palettes, AH=01h-1Ch, AH=13h, CGA scroll, graphics XOR, AX=1120h-1124h, the
@@ -70,8 +73,17 @@ Tests
                    returns with IF=0 and no timer tick; the driver sequence 4F00, 4F01 for every mode,
                    4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
                    IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
+  display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
+  -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
+                   patch call tools card emu vram; --list shows them; vram = depends on the memory size)
+  stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
+                   set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
+  --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
+  -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
+  --profile FILE   per test: the INT 10h calls and the ROM bytes it executes or reads (emu/mutants.py)
+  --call-limit N   instructions an INT 10h call of a test may take (default 50 million)
   --coverage FILE  records the ROM bytes all tests execute and read, for emu/codemap.py (test coverage)
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
@@ -80,7 +92,7 @@ import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
-from unicorn import UC_HOOK_INSN  # noqa: E402
+from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
                                UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_EFLAGS,
@@ -279,7 +291,7 @@ def romver():
 
 
 def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p14)."""
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p15)."""
     t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
@@ -300,9 +312,9 @@ def t_rom_patches(c):
     rom = c.rom
     chk(romver().encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
+    chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
     if len(rom) >= 0x10000:
-        chk(rom[0x8000:0x8002] == b'\x55\xAA', 'upper 32 KB has no 55AAh ROM header')
-        chk(sum(rom[0x8000:0x10000]) & 0xFF == 0, 'checksum of the upper 32 KB is not 00')
+        chk(rom[0x8000:0x10000] == bytes(0x8000), 'the upper 32 KB is not all zeros (p15)')
     cr = m.r['crtc']
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
     m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # p11 clears with 32-bit stores: EAX bits 31-16 kept
@@ -364,6 +376,48 @@ def t_rom_patches(c):
 
 # S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)
 S3TEST_MODEL_LIMITS = ('Banked data check', 'Banked write throughput')
+RESULT_RE = r'  (PASS|FAIL [0-9A-F]+|FAIL|WARN [0-9A-F]+|INFO)$'
+CATS = ('ROM', 'MDA', 'CGA', 'EGA', 'VGA', 'VBE', 'S3')
+
+
+def mode_cat(mode):
+    """The category of a BIOS mode: the IBM adapter that introduced it, VBE for VESA modes."""
+    if mode >= 0x100:
+        return 'VBE'
+    mode &= 0x7F
+    return 'MDA' if mode in (7, 0x0F) else 'CGA' if mode <= 6 else 'EGA' if 0x0D <= mode <= 0x10 else 'VGA'
+
+
+def tagged(text, tool):
+    """The result lines of S3TEST/S3COMPAT as (category, line without the category column); every
+    result line must start with a category in a 5-column field, and the summary by category at the
+    end must count the same lines."""
+    lines = text.split('\r\n')
+    out = []
+    last = None                                     # the test line a continuation line belongs to
+    for l in lines:
+        m = re.match(r'^(%s) +(?=\S)' % '|'.join(CATS), l)
+        if m and m.end() == 5:
+            last = m.group(1)
+        if re.search(RESULT_RE, l.rstrip()):
+            if l.startswith('      ') and last:     # the result after detail lines (S3COMPAT initial state)
+                out.append((last, l.strip()))
+                continue
+            check(m and m.end() == 5, '%s: result line without a category column: %r' % (tool, l))
+            out.append((m.group(1), l[5:].rstrip()))
+    sums = {}
+    for l in lines:
+        m = re.match(r'^(%s) +PASS (\d+)  FAIL (\d+)(?:  WARN (\d+))?  INFO (\d+)$' % '|'.join(CATS), l)
+        if m:
+            sums[m.group(1)] = (int(m.group(2)), int(m.group(3)), int(m.group(4) or 0), int(m.group(5)))
+    if sums:
+        got = {}
+        for cat, l in out:
+            k = 0 if l.endswith('PASS') else 1 if re.search(r'FAIL( [0-9A-F]+)?$', l) else 2 if 'WARN' in l[-8:] else 3
+            got.setdefault(cat, [0, 0, 0, 0])[k] += 1
+        check({k: tuple(v) for k, v in got.items()} == sums, '%s: summary by category %s, the lines give %s'
+              % (tool, sums, got))
+    return out
 
 
 def t_s3test(c):
@@ -374,14 +428,21 @@ def t_s3test(c):
     check(r1.exit and r1.exit[0] == 'exit', 'S3TEST did not end: %s' % (r1.exit,))
     out = r1.stdout.decode('latin1')
     check('Passed:' in out, 'no summary line')
-    results = [l for l in out.split('\r\n') if l.rstrip().endswith(('PASS', 'FAIL'))]
+    tl = tagged(out, 'S3TEST')
+    results = [l for cat, l in tl if l.endswith(('PASS', 'FAIL'))]
+    for cat, l in tl:
+        m = re.match(r'Mode ([0-9A-F]{4}) ', l)
+        check(not m or cat == mode_cat(int(m.group(1), 16) & 0xBFFF), 'S3TEST: %s line in category %s' % (l[:9], cat))
     check(len(results) >= 30, 'only %d result lines' % len(results))
     bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
-        r0 = c.machine().run_com(com, '')
+        r0 = c.machine().run_com(com, '/S')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
+        check(b'kHz' not in bytes(r0.stderr or b''), 'S3TEST /S: the monitor warning is still printed')
+    check(b'75 kHz' in bytes(r1.stderr or b'') and b'Press any key' in bytes(r1.stderr or b''),
+          'S3TEST: no monitor warning with a key prompt on stderr')
     return 'exit code %d' % r1.exit[1]
 
 
@@ -391,11 +452,36 @@ def t_vshow(c):
     r1 = c.machine().run_com(com, '101' + v)
     c.save('VSHOW', r1)
     check(r1.exit and r1.exit[0] == 'exit' and r1.exit[1] == 0, 'VSHOW 101 ended with %s' % (r1.exit,))
+    check(b'75 kHz' in bytes(r1.stderr or b'') and b'Press any key to continue' in bytes(r1.stderr or b''),
+          'VSHOW 101: no monitor warning with a key prompt on stderr')
     rh = c.machine().run_com(com, '/H')
     check(b'VSHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
+    # the monitor note: in the /H help of VSHOW, S3TEST and S3COMPAT, and once before the /I list
+    for tool, k in (('VSHOW.COM', 75), ('S3TEST.COM', 75), ('S3COMPAT.COM', 91)):
+        for sw in ('/H', '/?'):
+            r = rh if (tool, sw) == ('VSHOW.COM', '/H') else c.machine().run_com(c.tool(tool), sw)
+            out = r.stdout.replace(b'\r\n', b' ')
+            check(r.exit == ('exit', 0) and b'%d kHz' % k in out and b'CRT can be damaged' in out,
+                  '%s %s: no monitor note in the help' % (tool, sw))
+    for tool, k, arg in (('S3TEST.COM', 75, ''), ('S3COMPAT.COM', 91, ''), ('VSHOW.COM', 75, '101')):
+        r = c.machine(keys=[0x011B]).run_com(c.tool(tool), arg)
+        err = bytes(r.stderr or b'').replace(b'\r\n', b' ')
+        check(r.exit == ('exit', 0) and b'%d kHz' % k in err and b'Press any key to continue' in err
+              and b'PASS' not in bytes(r.stdout), '%s: the monitor warning, then Esc does not cancel' % tool)
+    rr = c.machine(keys=[]).run_com(com, '/R /S', max_insn=6_000_000_000)   # robot: no keys at all
+    out = rr.stdout.decode('latin1')
+    check(rr.exit == ('exit', 0) and 'stopped' not in out and '/R results:' in out and
+          len(re.findall(r'Mode 0[0-9A-F]{3}', out)) >= 20,
+          'VSHOW /R /S did not run through the modes without keys: %s' % (rr.exit,))
+    ri = c.machine(keys=[0x011B]).run_com(com, '/I')
+    check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to cancel' in ri.stdout,
+          'VSHOW /I: no monitor note before the list (Esc there quits)')
+    r2 = c.machine(keys=[0x1C0D, 0x011B]).run_com(com, '/I')
+    check(r2.stdout.count(b'75 kHz') == 1, 'VSHOW /I: the monitor note is not shown exactly once')
     if v:
-        r0 = c.machine().run_com(com, '101')
+        r0 = c.machine().run_com(com, '101 /S')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
+        check(b'kHz' not in bytes(r0.stderr or b''), 'VSHOW /S: the monitor warning is still printed')
         lines = check_dbg(r1.files.get('VSHOW.DBG'), 'VSHOW.DBG')
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
@@ -457,9 +543,9 @@ def t_s3compat_vbe(c):
     r = c.machine().run_com(com, '')
     c.save('S3CVBE', r)
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
-    lines = r.stdout.decode('latin1').split('\r\n')
+    lines = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
     names = ('4F00 capabilities', '4F04 state masks', 'VBE invalid', 'VBE undefined', '4F0A table',
-             '4F10 power', '4F15 DDC', '4F14 S3 OEM')
+             '4F10 power', '4F15 DDC', '4F14 S3 OEM', 'DCLK VCO')
     tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
     check(len(tests) == len(names), 'only %d of the %d VBE lines: %s' % (len(tests), len(names), tests))
     # the model has no DDC lines: 4F15 must say so (INFO), everything else PASS
@@ -477,19 +563,24 @@ def t_s3compat_vga(c):
     c.save('S3COMPAT', r0)
     check(r0.exit and r0.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r0.exit,))
     lines = r0.stdout.decode('latin1').split('\r\n')
-    tests = [l for l in lines if re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
-    vga = [l for l in tests if l.startswith(('VGA ', 'Mode ', 'Text 80x50'))]
+    tl = tagged(r0.stdout.decode('latin1'), 'S3COMPAT')
+    tests = [l for _, l in tl]
+    for cat, l in tl:
+        m = re.match(r'Mode ([0-9A-F]{2})h', l)
+        check(not m or cat == mode_cat(int(m.group(1), 16)), 'S3COMPAT: %s in category %s' % (l[:12], cat))
+    vga = [l for l in tests if l.startswith(('Mode ', 'Text 80x50'))]
     func = [l for l in tests if l.startswith(('AH=', 'AX=', 'DAC '))]
     check(len(vga) >= 17 + 6, 'only %d VGA/Mode X lines' % len(vga))
     check(len(func) >= 35, 'only %d VGA BIOS function lines' % len(func))
-    known = (('VGA 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
-             ('Chip ID', 'INFO'))
+    known = (('Mode 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
+             ('Chip ID', 'INFO'), ('AH=12 BL=20', 'WARN 01'))     # 2.04.07 has no alternate print screen
     bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
            not any(l.startswith(a) and l.rstrip().endswith(b) for a, b in known)]
     details = [l.strip() for l in lines if l.startswith('      ')]
     check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad + details[:6]))
     if v:
-        r1 = c.machine().run_com(com, '')
+        r1 = c.machine().run_com(com, '/S')
+        check(b'kHz' not in bytes(r1.stderr or b''), 'S3COMPAT /S: the notice is still printed')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
         dl = check_dbg(r0.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         check(sum(1 for l in dl if l.startswith('D:TEST')) >= len(tests), 'fewer D:TEST records than tests')
@@ -501,9 +592,13 @@ def t_s3compat_vga(c):
 S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] .*FAIL 0020$',
                          r'4F05 bank set/get \+ WinFuncPtr .*FAIL 0004$',
                          r'Banked window and LFB same memory .*WARN 01$']
-S3COMPAT_KNOWN = [r'VGA 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
-                  r'VESA 0106 .*WARN 02$',
+S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
+                  r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
                   r'.*INFO$']
+# with 4 MB the BIOS (2.04.07, unchanged by the patches) offers modes whose default DCLK is above the
+# datasheet maximum for their depth (50 MHz at 32 bpp, 95 MHz at 15/16 bpp): WARN 02, as 106h
+S3COMPAT_KNOWN_4MB = [r'VESA 0118 .*WARN 02$', r'VESA 0164 .*WARN 02$', r'VESA 0119 .*WARN 02$',
+                      r'VESA 011A .*WARN 02$']
 
 
 def t_s3compat_full(c):
@@ -512,11 +607,11 @@ def t_s3compat_full(c):
     r = c.machine().run_com(com, '/Q', max_insn=3_000_000_000)
     c.save('S3CFULL', r)
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
-    lines = r.stdout.decode('latin1').split('\r\n')
-    tests = [l.rstrip() for l in lines if re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
+    tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
     check(len(tests) >= 230, 'only %d result lines' % len(tests))
     bad = [l.strip() for l in tests if not l.endswith('PASS') and
-           not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + S3COMPAT_KNOWN)]
+           not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + S3COMPAT_KNOWN +
+                   (S3COMPAT_KNOWN_4MB if Machine.vram == 4 else []))]
     check(not bad, '%d lines not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     lim = sum(1 for l in tests if any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS))
     return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
@@ -760,7 +855,9 @@ def int10x(m, ax, bx=0, cx=0, dx=0, si=0, di=0, bp=0, es=0, std=False):
     for reg, v in ((UC_X86_REG_CS, 0), (UC_X86_REG_SS, 0), (UC_X86_REG_SP, 0x7000), (UC_X86_REG_DS, 0),
                    (UC_X86_REG_ES, es), (UC_X86_REG_EFLAGS, 0x202)):
         mu.reg_write(reg, v)
-    mu.emu_start(0x7D00, 0x7D03, count=50_000_000)
+    mu.emu_start(0x7D00, 0x7D03, count=Machine.call_limit)
+    if mu.reg_read(UC_X86_REG_IP) != 0x7D03:
+        raise AssertionError('INT 10h AX=%04X did not return within %d instructions' % (ax, Machine.call_limit))
     return {k: mu.reg_read(r) for k, r in (('ax', UC_X86_REG_AX), ('bx', UC_X86_REG_BX), ('cx', UC_X86_REG_CX),
                                             ('dx', UC_X86_REG_DX), ('si', UC_X86_REG_SI), ('di', UC_X86_REG_DI),
                                             ('bp', UC_X86_REG_BP), ('es', UC_X86_REG_ES))}
@@ -940,7 +1037,25 @@ def t_errors(c):
     # 5. VBE: unsupported mode, invalid ranges, OEM errors
     m.int10(0x4F02, bx=0x0101)
     s0 = vga_state(m)
-    for bx in (0x0118, 0x0164, 0x0119, 0x011A, 0x01FF, 0x017F, 0x0200):
+    # the modes of the 4F00h list that 4F01h marks unsupported (too large for the memory: 118h, 164h,
+    # 119h, 11Ah with 2 MB), and numbers that are no mode at all
+    m.mu.mem_write(0x30000, b'VBE2')
+    m.int10(0x4F00, es=0x3000, di=0)
+    loff, lseg = struct.unpack('<HH', m.mem(0x3000E, 4))
+    big = []
+    for k in range(120):
+        v = word(m, lseg * 16 + loff + 2 * k)
+        if v == 0xFFFF:
+            break
+        m.int10(0x4F01, cx=v, es=0x3000, di=0x400)
+        if not m.mem(0x30400, 1)[0] & 1:
+            big.append(v)
+    if Machine.vram == 2:
+        chk(set(big) >= {0x118, 0x164, 0x119, 0x11A}, '2 MB: 118h/164h/119h/11Ah not all marked unsupported: %s'
+            % ' '.join('%03X' % v for v in big))
+    m.int10(0x4F02, bx=0x0101)
+    s0 = vga_state(m)
+    for bx in big + [0x01FF, 0x017F, 0x0200]:
         r = m.int10(0x4F02, bx=bx)
         chk(r['ax'] != 0x004F, '4F02 BX=%04X accepted' % bx)
         chk(vga_state(m) == s0, '4F02 BX=%04X (refused) changed the video state' % bx)
@@ -956,7 +1071,8 @@ def t_errors(c):
     chk({k: m.r['crtc'].get(k, 0) for k in (0x41, 0x52, 0x6B)} == cr0, '4F14 refused calls changed CR41/CR52/CR6B')
     r = m.int10(0x4F06, bx=0, cx=0xFFF8)
     if r['ax'] == 0x004F:                            # VBE 2.0: accepted only if the memory holds it
-        chk(r['bx'] * r['dx'] <= 2 * 1024 * 1024, '4F06 CX=FFF8h: %d bytes x %d lines do not fit 2 MB' % (r['bx'], r['dx']))
+        chk(r['bx'] * r['dx'] <= Machine.vram * 1024 * 1024, '4F06 CX=FFF8h: %d bytes x %d lines do not fit %d MB'
+            % (r['bx'], r['dx'], Machine.vram))
     m.int10(0x03)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return 'undefined functions and subfunctions, invalid modes, DF, VBE refusals'
@@ -965,7 +1081,7 @@ R32 = (('eax', UC_X86_REG_EAX), ('ebx', UC_X86_REG_EBX), ('ecx', UC_X86_REG_ECX)
        ('esi', UC_X86_REG_ESI), ('edi', UC_X86_REG_EDI), ('ebp', UC_X86_REG_EBP))
 
 
-def int10w(m, regs, ds=0, es=0, flags=0x202, count=50_000_000):
+def int10w(m, regs, ds=0, es=0, flags=0x202, count=None):
     """INT 10h with 32-bit registers and DS/ES as the Windows INT 10h interfaces pass them
     (VIDEO_X86_BIOS_ARGUMENTS / INT10_BIOS_ARGUMENTS). Returns the 32-bit registers, DS, ES; raises
     when the call does not return within count instructions (a hang)."""
@@ -976,7 +1092,7 @@ def int10w(m, regs, ds=0, es=0, flags=0x202, count=50_000_000):
     for reg, v in ((UC_X86_REG_CS, 0), (UC_X86_REG_SS, 0), (UC_X86_REG_SP, 0x7000), (UC_X86_REG_DS, ds),
                    (UC_X86_REG_ES, es), (UC_X86_REG_EFLAGS, flags)):
         mu.reg_write(reg, v)
-    mu.emu_start(0x7D00, 0x7D02, count=count)
+    mu.emu_start(0x7D00, 0x7D02, count=count or Machine.call_limit)
     if mu.reg_read(UC_X86_REG_IP) != 0x7D02 or mu.reg_read(UC_X86_REG_CS) != 0:
         raise AssertionError('INT 10h EAX=%08X did not return (hang at %04X:%04X)'
                              % (regs.get('eax', 0), mu.reg_read(UC_X86_REG_CS), mu.reg_read(UC_X86_REG_IP)))
@@ -1046,7 +1162,7 @@ def t_windows(c):
                                ('4F15 read', dict(eax=0x4F15, ebx=1, ecx=0, edx=0, edi=0)),
                                ('AH=00 13h', dict(eax=0x0013)), ('AH=00 03h', dict(eax=0x0003))]:
         try:                                            # the DDC read bit-bangs 128 bytes: 60M instructions
-            int10w(m, regs, ds=BUF, es=BUF, flags=0x002, count=200_000_000 if name == '4F15 read' else 20_000_000)
+            int10w(m, regs, ds=BUF, es=BUF, flags=0x002, count=200_000_000 if name == '4F15 read' else None)
         except AssertionError as e:
             chk(False, '%s with IF=0 and no tick: %s' % (name, e))
     # the S3 Windows 9x driver: 4F00, 4F01 for the modes, 4F02, 4F08 to 8 bits, the palette, a mode
@@ -1110,11 +1226,132 @@ def t_windows(c):
     return '%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(calls), len(modes))
 
 
+def t_display_switch(c):
+    """AH=12h BL=35h display switch (emulator only: on the card AL=02h turns the video off). IBM: AL=02h
+    switches the active video off and saves its state in the 128-byte buffer at ES:DX, AL = 12h when
+    supported."""
+    m = c.machine()
+    m.int10(0x03)
+    m.mu.mem_write(0x30000, b'\x55' * 128)
+    r = m.int10(0x1202, bx=0x35, es=0x3000, dx=0)
+    check(r['ax'] & 0xFF == 0x12, 'AX=1202h BL=35h: AL=%02X, expected 12h (supported)' % (r['ax'] & 0xFF))
+    check(m.mem(0x30000, 128) != b'\x55' * 128, 'AX=1202h BL=35h: nothing saved in the switch state buffer')
+    m.int10(0x1203, bx=0x35, es=0x3000, dx=0)
+    m.int10(0x03)
+    return 'AL=02h: AL=12h, state saved'
+
+
+def t_stores(c):
+    """The p11-p14 speed patches do their video memory work with 32-bit stores (the reference BIOS uses
+    8- and 16-bit ones, the same result): the share of the bytes written to A0000-BFFFF by 4-byte stores,
+    per operation. Only this shows that one of those patch sites is in place (emu/mutants.py)."""
+    ops = [('mode set 03h (VGA clear, p14)', None, lambda m: m.int10(0x03), 90),
+           ('mode set 12h (VGA clear)', None, lambda m: m.int10(0x12), 90),
+           ('mode set 13h (VGA clear)', None, lambda m: m.int10(0x13), 90),
+           ('03h AH=06h full clear (p13)', 0x03, lambda m: m.int10(0x0600, bx=0x0700, cx=0, dx=0x184F), 90),
+           ('03h AH=06h window (p13 wmove/wfill)', 0x03, lambda m: m.int10(0x0602, bx=0x0700, cx=0x0205, dx=0x1440), 90),
+           ('03h AH=07h window', 0x03, lambda m: m.int10(0x0702, bx=0x0700, cx=0x0205, dx=0x1440), 90),
+           ('03h AH=09h page 0 (p13)', 0x03, lambda m: m.int10(0x0941, bx=0x0007, cx=200), 90),
+           ('03h AH=09h page 1 (p13)', 0x03, lambda m: (m.int10(0x0501), m.int10(0x0941, bx=0x0107, cx=200)), 90),
+           ('13h AH=06h full (p12)', 0x13, lambda m: m.int10(0x0608, bx=0x0100, cx=0, dx=0x1827), 90),
+           ('13h AH=06h window (p12)', 0x13, lambda m: m.int10(0x0602, bx=0x0100, cx=0x0204, dx=0x1420), 90),
+           ('12h AH=06h full (p13 bfill)', 0x12, lambda m: m.int10(0x0600, bx=0x0100, cx=0, dx=0x1D4F), 90),
+           ('12h AH=06h window (p13 bfilla)', 0x12, lambda m: m.int10(0x0602, bx=0x0100, cx=0x0205, dx=0x1440), 5),
+           ('03h AX=1114h font load (p12)', 0x03, lambda m: m.int10(0x1114, bx=0), 90)]
+    fails = []
+    for name, mode, fn, need in ops:
+        m = c.machine()
+        if mode is not None:
+            m.int10(mode)
+        sz = {}
+
+        def wr(uc, acc, a, size, v, ud):
+            sz[size] = sz.get(size, 0) + size
+        h = m.mu.hook_add(UC_HOOK_MEM_WRITE, wr, None, 0xA0000, 0xBFFFF)
+        fn(m)
+        m.mu.hook_del(h)
+        tot = sum(sz.values())
+        pct = 100.0 * sz.get(4, 0) / tot if tot else 0
+        if pct < need:
+            fails.append('%s: %.0f%% of %d bytes by 32-bit stores, expected at least %d%%' % (name, pct, tot, need))
+    check(not fails, '%d operations not 32-bit:\n    ' % len(fails) + '\n    '.join(fails))
+    return '%d operations' % len(ops)
+
+
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows)]
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores)]
+
+# Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
+# ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
+# itself), patch (our changes to the reference BIOS), call (how the BIOS is called: registers, flags,
+# invalid input), tools (our DOS tools, not the BIOS), and where it runs: card = a tool that also runs
+# on the card, whose hardware log decides; emu = only in the emulator. vram: the result depends on
+# the video memory size (the VESA mode list, 4F06 maximum, the mode set clear of the whole memory, the
+# LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
+# functions, the tools) give the same output with 2 and 4 MB.
+TAGS = {
+    'version': 'rom emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
+    'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
+    's3test': 'rom cga ega vga vbe s3 patch card vram', 'vshow': 'vbe tools card vram',
+    's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
+    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools card', 's3regs': 'tools s3 card',
+    'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
+    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
+}
+
+
+# rough run times (s, 2 MB) to start the long tests first when they run in parallel
+DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 'windows': 60,
+            'stores': 55, 's3compat_vga': 45}
+
+
+def run_test(c, name, fn, verbose):
+    """One test: returns (result text, failed, seconds)."""
+    t0 = time.time()
+    bad = False
+    try:
+        note = fn(c)
+        res = 'PASS' + ('  (%s)' % note if note else '')
+    except Skip as e:
+        res = 'SKIP  %s' % e
+    except Exception as e:  # noqa: BLE001 - report every kind of failure as a test result
+        bad = True
+        res = 'FAIL  %s' % e
+        if verbose:
+            import traceback
+            traceback.print_exc()
+    return res, bad, time.time() - t0
+
+
+def _worker(args):
+    c, name, verbose = args
+    print('%-14s started' % name, flush=True)
+    res, bad, dt = run_test(c, name, dict(TESTS)[name], verbose)
+    return name, res, bad, dt, Machine.noop_hits
+
+
+def run_parallel(c, tests, a):
+    """Run the tests in a.j processes (fork: the Machine settings are inherited), the long ones
+    first; prints each result when it is done. Returns the number of failed tests."""
+    import multiprocessing
+    order = sorted(tests, key=lambda t: -DURATION.get(t[0], 5))
+    failed = hits = 0
+    ctx = multiprocessing.get_context('fork')
+    with ctx.Pool(a.j) as pool:
+        for name, res, bad, dt, h in pool.imap_unordered(_worker, [(c, n, a.v) for n, _ in order]):
+            failed += bad
+            hits += h
+            first, _, rest = res.partition('\n')
+            print('%-14s %-60s %5.0fs' % (name, first, dt) + ('\n' + rest if rest else ''), flush=True)
+            if a.x and failed:
+                pool.terminate()
+                break
+    if a.noop:
+        print('noop: %d INT 10h calls matched %s' % (hits, a.noop))
+    return failed
 
 
 def main():
@@ -1122,6 +1359,9 @@ def main():
     ap.add_argument('--rom', required=True, help='64 KB VBIOS image')
     ap.add_argument('--build', default=os.path.join(SRC, 'build'), help='folder with the built .COM files')
     ap.add_argument('-k', default='', help='run only tests whose name contains this text')
+    ap.add_argument('-t', default='', help='run only tests with one of these categories (comma list: mda, cga, '
+                    'ega, vga, vbe, s3, rom, patch, call, tools, card, emu, vram)')
+    ap.add_argument('--list', action='store_true', help='list the tests with their categories')
     ap.add_argument('-v', action='store_true', help='print tracebacks')
     ap.add_argument('--logs', default=os.path.join(HERE, 'logs'),
                     help='folder for the tool output and /V debug files (default emu/logs)')
@@ -1133,7 +1373,38 @@ def main():
     ap.add_argument('--noop', default='', metavar='SPEC',
                     help='mutation test: INT 10h calls matching SPEC do nothing, e.g. "ah=06" or '
                          '"ax=4F14,bl=02" (hex values; several patterns separated by ";"), see emu/mutants.py')
+    ap.add_argument('--calls', metavar='FILE', help='write every distinct INT 10h call after POST (AX BX DL, '
+                    'hex, one per line) to FILE (emu/mutants.py: which functions the tests call)')
+    ap.add_argument('--profile', metavar='FILE', help='write per test the INT 10h calls and the ROM bytes of the '
+                    'lower 32 KB it executes or reads to FILE (JSON, for emu/mutants.py: which tests can see a change)')
+    ap.add_argument('--call-limit', type=int, default=Machine.call_limit,
+                    help='instructions an INT 10h call of a test may take before it counts as a hang (default %d; '
+                         'the 4F15h EDID read of the windows test has its own 200 million)' % Machine.call_limit)
+    ap.add_argument('-j', type=int, default=1, metavar='N',
+                    help='run N tests at a time, each in its own process (default 1; not with --coverage, '
+                         '--profile or --calls). Each test prints a line when it starts and its result when done')
+    ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
+                    help='video memory the CR36 strapping reports: 2 MB (the card, default) or 4 MB (the '
+                         '86C775 maximum; the model still has one 64 KB window, no banked or linear memory)')
     a = ap.parse_args()
+    Machine.vram = a.vram
+    assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
+    if a.list:
+        for n, _ in TESTS:
+            print('%-15s %s' % (n, TAGS[n]))
+        return
+    Machine.call_limit = a.call_limit
+    prof, cur = {}, ['']
+    if a.profile:
+        init0 = Machine.__init__
+
+        def init_prof(self, *args, **kw):
+            init0(self, *args, **kw)
+            prof.setdefault(cur[0], {'cov': [], 'calls': set()})['cov'].append(self.track_coverage())
+        Machine.__init__ = init_prof
+        Machine.calls = set()
+    if a.calls:
+        Machine.calls = set()
     if a.noop:
         Machine.noop = [{k.strip().lower(): int(v, 16) for k, v in (f.split('=') for f in pat.split(','))}
                         for pat in a.noop.split(';')]
@@ -1151,28 +1422,51 @@ def main():
     if a.tests:
         byname = dict(TESTS)
         tests = [(t, byname[t]) for t in a.tests.split(',')]
+    tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))]
+    if a.j > 1 and not (a.coverage or a.profile or a.calls):
+        failed = run_parallel(c, tests, a)
+        print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+        sys.exit(1 if failed else 0)
     for name, fn in tests:
-        if a.k not in name:
-            continue
         if a.x and failed:
             break
-        t0 = time.time()
-        try:
-            note = fn(c)
-            res = 'PASS' + ('  (%s)' % note if note else '')
-        except Skip as e:
-            res = 'SKIP  %s' % e
-        except Exception as e:  # noqa: BLE001 - report every kind of failure as a test result
-            failed += 1
-            res = 'FAIL  %s' % e
-            if a.v:
-                import traceback
-                traceback.print_exc()
+        cur[0] = name
+        if a.profile:
+            Machine.calls = prof.setdefault(name, {'cov': [], 'calls': set()})['calls']
+        print('%-14s ' % name, end='', flush=True)       # the test that is running now
+        res, bad, dt = run_test(c, name, fn, a.v)
+        failed += bad
         first, _, rest = res.partition('\n')
-        print('%-14s %-60s %5.0fs' % (name, first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
+        print('%-60s %5.0fs' % (first, dt) + ('\n' + rest if rest else ''), flush=True)
     print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+    if a.calls:
+        with open(a.calls, 'w') as f:
+            for ax, bx, dl in sorted(Machine.calls):
+                f.write('%04X %04X %02X\n' % (ax, bx, dl))
     if a.noop:
         print('noop: %d INT 10h calls matched %s' % (Machine.noop_hits, a.noop))
+    if a.profile:
+        import json
+        out = {}
+        for name, d in prof.items():
+            touched = bytearray(0x8000)
+            for cc, dd in d['cov']:
+                for i in range(0x8000):
+                    if cc[i] or dd[i]:
+                        touched[i] = 1
+            runs, i = [], 0
+            while i < 0x8000:
+                if touched[i]:
+                    j = i
+                    while j < 0x8000 and touched[j]:
+                        j += 1
+                    runs.append([i, j - 1])
+                    i = j
+                else:
+                    i += 1
+            out[name] = {'calls': sorted(d['calls']), 'rom': runs}
+        with open(a.profile, 'w') as f:
+            json.dump(out, f)
     if a.coverage:
         code, data = bytearray(0x8000), bytearray(0x8000)
         for cc, dd in covs:

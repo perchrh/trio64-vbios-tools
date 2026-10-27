@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """codemap.py - which bytes of the video BIOS are code, and how much of that code the tests execute.
 
-    python3 emu/tests.py --rom S3V2P14.BIN --coverage cov.bin      (records what the tests execute)
-    python3 emu/codemap.py --rom S3V2P14.BIN --cover cov.bin [--list] [--min 8]
-    make coverage ROM=S3V2P14.BIN
+    python3 emu/tests.py --rom S3V2P15.BIN --coverage cov.bin      (records what the tests execute)
+    python3 emu/codemap.py --rom S3V2P15.BIN --cover cov.bin [--list] [--min 8]
+    make coverage ROM=S3V2P15.BIN
 
 Needs python3 with the capstone package (pyproject.toml, extra "coverage").
 

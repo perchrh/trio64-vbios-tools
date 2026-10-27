@@ -2,7 +2,7 @@
 #
 #   python3 -m venv .venv
 #   .venv/bin/pip install .
-#   make emu-test ROM=path/to/S3V2P14.BIN      (uses .venv/bin/python3 when it exists)
+#   make emu-test ROM=path/to/S3V2P15.BIN      (uses .venv/bin/python3 when it exists)
 #
 #   .venv/bin/pip install .[coverage]         (also capstone, for make coverage)
 #
@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trio64-vbios-tools-emu"
-version = "0.8"
+version = "1.0"
 description = "Emulator tests for the Trio64V2/DX VBIOS DOS tools"
 readme = "README.md"
 requires-python = ">=3.8"

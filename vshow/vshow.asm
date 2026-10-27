@@ -11,10 +11,14 @@
 ;                        any key returns to the list, L toggles the line pattern, Esc quits
 ;   VSHOW /A [/L]        every graphics mode in turn: picture and info per mode, a beep when the mode
 ;                        is up, any key for the next mode, Esc stops; a summary is printed at the end
+;   VSHOW /R [/L]        robot: as /A, but each mode stays about 0.5 s (9 BIOS ticks) and no key is
+;                        needed (Esc still stops), no beep; for logs of every mode switch:
+;                        VSHOW /R /V /S > VSHOW.LOG
 ;   VSHOW /H, /?, /HELP  parameter list
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
 ;   /V                   debug log in VSHOW.DBG (see common/vdebug.inc): every INT 10h call, 4F00/4F01
 ;                        blocks, registers and per-frame timer counts of each mode shown
+;   /S                   silent: no monitor warning and no key press before the modes (batch runs)
 ;
 ; The test picture and what to expect
 ;   16 colour bars           every bar a solid, distinct colour (direct colour modes use the 4F01 masks)
@@ -28,7 +32,9 @@
 ;                            intended timing (for example 1280x1024 DMT: 60.0 Hz, 64.0 kHz, 1066 lines)
 ;   Monitor: the BIOS's default timings reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at
 ;   60 Hz is 64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be
-;   damaged by a line frequency above its range. VSHOW prints this on stderr before it sets a mode.
+;   damaged by a line frequency above its range. Before a mode or /A, VSHOW prints this on stderr and
+;   waits for a key (Esc cancels); /I shows it on the screen once, before the mode list. /S skips the
+;   warning and the key. The /H help says so too.
 ;   Errors are printed as "VSHOW <version>: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
 ;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw.
 ;
@@ -69,7 +75,8 @@ start:  cld
         or ah,0x20
         cmp ah,'h'                      ; trailing h
         jne .h1
-        jcxz .bad
+        or cx,cx
+        jz .bad
         jmp .p
 .h1:    sub al,'0'
         cmp al,9
@@ -109,13 +116,23 @@ start:  cld
         jne .sw3
         mov byte [allm],1
         jmp .p
-.sw3:   cmp al,'i'
+.sw3:   cmp al,'r'                      ; /R robot: /A without keys
+        jne .sw3i
+        mov byte [allm],1
+        mov byte [robot],1
+        jmp .p
+.sw3i:  cmp al,'i'
         jne .sw4
         mov byte [allm],2
         jmp .p
 .sw4:   cmp al,'v'
-        jne .sw5
+        jne .sw4s
         mov byte [vreq],1
+        jmp .p
+.sw4s:  cmp al,'s'
+        jne .sw5
+        mov byte [silent],1
+        mov byte [warned],1             ; /I: no notice either
         jmp .p
 .sw5:   cmp al,'?'
         je .help
@@ -147,23 +164,30 @@ start:  cld
         call dputs
 .vd:    pop cx
         pop bx
-.d1:    cmp byte [allm],0               ; a mode or /A, /I: the monitor note on stderr first
-        jne .w
-        jcxz .d2
-.w:     push bx
+.d1:    cmp byte [allm],2
+        je menu                         ; /I shows the notice on the screen before its list
+        cmp byte [allm],1
+        je .w
+        jcxz list
+.w:     cmp byte [silent],1             ; a mode or /A: the monitor warning on stderr and a key
+        je .d2
+        push bx
         push cx
-        mov dx,s_mon
-        mov cx,s_mon_len
+        mov dx,s_monw
+        mov cx,s_monw_len
         mov bx,2
         mov ah,0x40
         int 0x21
+        xor ah,ah
+        int 0x16
         pop cx
         pop bx
+        cmp al,27                       ; Esc cancels
+        jne .d2
+        mov ax,0x4C00
+        jmp vexit
 .d2:    cmp byte [allm],1
         je runall
-        cmp byte [allm],2
-        je menu
-        jcxz list
         mov [mode],bx
         jmp show
 
@@ -475,9 +499,13 @@ runall: mov dword [vib],'VBE2'
         mov [mode],ax
         call showone
         jc .skip
-        xor ah,ah                       ; any key: next, Esc: stop
+        cmp byte [robot],1
+        jne .k
+        call rwait                      ; /R: about 0.5 s, then the next mode (Esc still stops)
+        jmp .k1
+.k:     xor ah,ah                       ; any key: next, Esc: stop
         int 0x16
-        mov [lastkey],al
+.k1:    mov [lastkey],al
         call fmt1                       ; result line (fmt* write tbuf through DI)
         mov di,[rptr]
         mov si,tbuf
@@ -517,7 +545,10 @@ runall: mov dword [vib],'VBE2'
         mov di,[rptr]
         mov byte [di],0
         mov dx,s_res
-        call dputs
+        cmp byte [robot],1
+        jne .rh
+        mov dx,s_resr                   ; /R: say so in the header
+.rh:    call dputs
         mov dx,rbuf
         call dputz
         mov ax,0x4C00
@@ -595,7 +626,16 @@ menu:   mov dword [vib],'VBE2'
         jmp vexit
 .draw:  mov ax,3
         int 0x10
-        mov ah,1                        ; hide the cursor
+        cmp byte [warned],0             ; the first time: the monitor note, a key to go on
+        jne .dr1
+        mov byte [warned],1
+        mov dx,s_mon
+        call dputs
+        xor ah,ah
+        int 0x16
+        cmp al,27
+        je .quit
+.dr1:   mov ah,1                        ; hide the cursor
         mov cx,0x2000
         int 0x10
         call mdraw
@@ -866,8 +906,34 @@ rcpyd:  lodsb                           ; copy '$'-terminated SI to DI
 .r:     ret
 
 ; Audible confirmation that a mode is up (useful when the monitor shows nothing or 'out of range').
+; /R: wait 9 BIOS ticks (about 0.5 s) with the mode on the screen; AL = 27 when Esc was pressed in
+; the meantime (the key is taken), else 0
+rwait:  push es
+        push bx
+        xor ax,ax
+        mov es,ax
+        mov bx,[es:0x46C]
+.w:     mov ah,1                        ; a key waiting?
+        int 0x16
+        jz .n
+        xor ah,ah
+        int 0x16
+        cmp al,27
+        je .x
+.n:     mov ax,[es:0x46C]
+        sub ax,bx
+        cmp ax,9
+        jb .w
+        xor al,al
+.x:     pop bx
+        pop es
+        ret
+
 beep:   ; 1 kHz on the PC speaker for about 0.15 s (PIT channel 2)
-        push es
+        cmp byte [robot],1              ; /R: no beep
+        jne .b
+        ret
+.b:     push es
         mov al,0xB6
         out 0x43,al
         mov ax,1193
@@ -1587,17 +1653,31 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db '                      any key returns to the list, L toggles the pattern, Esc quits',13,10
         db '  VSHOW /A [/L]       every graphics mode in turn: beep when shown,',13,10
         db '                      any key = next mode, Esc = stop, summary at the end',13,10
+        db '  VSHOW /R [/L]       robot: as /A, each mode about 0.5 s, no keys (Esc stops); for',13,10
+        db '                      logs of every mode switch, e.g. VSHOW /R /V /S > VSHOW.LOG',13,10
         db '  /L                  1-pixel vertical line pattern (LCD clock/phase adjustment)',13,10
         db '                      instead of the colour bars',13,10
         db '  /V                  debug log: raw BIOS calls, registers and timing in VSHOW.DBG',13,10
+        db '  /S                  silent: no monitor warning, no key press before the modes',13,10
         db '  /H, /?, /HELP       this help',13,10
         db 'Each mode shows a white frame, the pattern, the mode, measured refresh,',13,10
         db 'line frequency and total lines; any key returns.',13,10
-        db 'Monitor: up to 75 kHz line frequency (1600x1200 at 60 Hz). LCDs are safe (they show',13,10
-        db 'out of range); an old fixed-frequency or low-end CRT can be damaged above its range.',13,10,'$'
-s_mon   db 'VSHOW ',VERSION,': the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). Do not use',13,10
-        db 'a fixed-frequency or low-end CRT monitor that cannot take it; LCDs are safe.',13,10
-s_mon_len equ $-s_mon
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10,'$'
+s_mon   db 'VSHOW ',VERSION,' interactive mode',13,10,13,10
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10
+        db 13,10,'Press any key to continue, Esc to cancel.',13,10,'$'
+s_monw  db 'VSHOW ',VERSION,13,10
+        db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
+        db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
+        db 'by a line frequency above its range: do not use one.',13,10
+        db 'Press any key to continue, Esc to cancel.',13,10
+s_monw_len equ $-s_monw
+warned  db 0
+silent  db 0                            ; /S given
 s_vname db 'VSHOW.DBG',0
 s_vnomem db 'VSHOW ',VERSION,': not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
 s_bad   db 'VSHOW ',VERSION,': bad argument.',13,10,13,10,'$'
@@ -1639,11 +1719,13 @@ s_colon0 db ': ',0
 s_skip  db ', skipped',13,10,0
 s_stopped db 'Stopped with Esc.',13,10,0
 s_res   db 'VSHOW ',VERSION,' /A results:',13,10,'$'
+s_resr  db 'VSHOW ',VERSION,' /R results:',13,10,'$'
 
 lines   db 0
 vreq    db 0                            ; /V given
 allm    db 0
 lastkey db 0
+robot   db 0                            ; /R given
 wnum    db 0
 ncol    db 0
 col     db 0
