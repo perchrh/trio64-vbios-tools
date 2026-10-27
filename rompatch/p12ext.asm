@@ -1,10 +1,11 @@
-; p12 code in the free block of the lower 32 KB (assembled at its ROM offset; addresses in bios.inc)
+; p12 code in the free block of the lower 32 KB (assembled at its ROM offset; addresses in bios.inc). The
+; p12 VGA mode set clear that was here is in place since p14 (a jump to wfill, see s3patch.py).
 bits 16
 cpu 386
 org 0x7CFB
 %include "bios.inc"
 
-; ---- INT 10h entry (jumped to from 211Ah in 2.04.11, after STI/CLD): fast VBE 4F05 BH=0 (set window) ----
+; ---- INT 10h entry (jumped to after STI/CLD): fast VBE 4F05 BH=0 (set window) ----
 int10x: cmp ax,0x4F05
         je .v5
         cmp ah,0x0E             ; the instruction the jump replaced
@@ -60,26 +61,7 @@ int10x: cmp ax,0x4F05
         mov ax,0x4F05
         jmp INT_NEXT
 
-; ---- VGA mode set clear (jumped to from 2C38h): ES = BX with BL = 0, CX words of AX from 0 ----
-vclr:   pushf
-        xor bl,bl
-        mov es,bx
-        xor di,di
-        push eax
-        push dx
-        mov dx,ax
-        shl eax,16
-        mov ax,dx
-        pop dx
-        shr cx,1
-        rep stosd
-        adc cx,cx
-        rep stosw
-        pop eax
-        popf
-        ret
-
-; ---- font load into plane 2 (jumped to from 1224h): CX characters of BH bytes from DS:SI to ES:DI,
+; ---- font load into plane 2 : CX characters of BH bytes from DS:SI to ES:DI,
 ;      DX bytes skipped after each (32 - BH) ----
 font:   push ax
 .l:     push cx
@@ -98,7 +80,7 @@ font:   push ax
         pop ax
         ret
 
-; ---- mode 13h scroll (jumped to from 3200h): 32-bit moves and fills for AH=06h; AH=07h (DF set) ----
+; ---- mode 13h scroll : 32-bit moves and fills for AH=06h; AH=07h (DF set) ----
 ;      runs the original word code
 scr13:  cmp byte [bp+0x1],0x07
         je .orig

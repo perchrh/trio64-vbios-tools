@@ -1,4 +1,4 @@
-; p11: video memory clear of the S3/VESA mode set with 32-bit stores (jumped to from C000:143D in 2.04.11).
+; p11: video memory clear of the S3/VESA mode set with 32-bit stores (jumped to from C000:143D).
 ; The original loop (143D-1453) wrote 32768 words per 64 KB bank with rep stosw; this one writes 16384
 ; dwords per bank. DX = CRTC port, AX = 006Ah (CR6A index, bank 0), CX = number of banks; EAX is kept for
 ; the caller (the routine saves only the 16-bit registers with PUSHA). Ends at 1457 (pop ds/es, popa, ret).

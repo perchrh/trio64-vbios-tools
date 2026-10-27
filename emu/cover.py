@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """cover.py - which bytes of the video BIOS (C000:0000-7FFF) are ever executed or read as data.
 
-    python3 emu/cover.py --rom S3V2P9.BIN [--min 32]
+    python3 emu/cover.py --rom S3V2P14.BIN [--min 32]
 
 Runs POST, every VGA mode (also at 200 and 350 lines), every S3 mode from the ROM's mode table, every
 VESA mode in the 4F00 list (banked, linear, no-clear) with 4F03-4F09, the other VBE functions
