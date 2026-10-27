@@ -75,6 +75,9 @@ Tests
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
   -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
                    patch call tools card emu; --list shows them)
+  stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
+                   set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
+  --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
   --profile FILE   per test: the INT 10h calls and the ROM bytes it executes or reads (emu/mutants.py)
@@ -87,7 +90,7 @@ import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
-from unicorn import UC_HOOK_INSN  # noqa: E402
+from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
                                UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_EFLAGS,
@@ -1195,11 +1198,48 @@ def t_display_switch(c):
     return 'AL=02h: AL=12h, state saved'
 
 
+def t_stores(c):
+    """The p11-p14 speed patches do their video memory work with 32-bit stores (the reference BIOS uses
+    8- and 16-bit ones, the same result): the share of the bytes written to A0000-BFFFF by 4-byte stores,
+    per operation. Only this shows that one of those patch sites is in place (emu/mutants.py)."""
+    ops = [('mode set 03h (VGA clear, p14)', None, lambda m: m.int10(0x03), 90),
+           ('mode set 12h (VGA clear)', None, lambda m: m.int10(0x12), 90),
+           ('mode set 13h (VGA clear)', None, lambda m: m.int10(0x13), 90),
+           ('03h AH=06h full clear (p13)', 0x03, lambda m: m.int10(0x0600, bx=0x0700, cx=0, dx=0x184F), 90),
+           ('03h AH=06h window (p13 wmove/wfill)', 0x03, lambda m: m.int10(0x0602, bx=0x0700, cx=0x0205, dx=0x1440), 90),
+           ('03h AH=07h window', 0x03, lambda m: m.int10(0x0702, bx=0x0700, cx=0x0205, dx=0x1440), 90),
+           ('03h AH=09h page 0 (p13)', 0x03, lambda m: m.int10(0x0941, bx=0x0007, cx=200), 90),
+           ('03h AH=09h page 1 (p13)', 0x03, lambda m: (m.int10(0x0501), m.int10(0x0941, bx=0x0107, cx=200)), 90),
+           ('13h AH=06h full (p12)', 0x13, lambda m: m.int10(0x0608, bx=0x0100, cx=0, dx=0x1827), 90),
+           ('13h AH=06h window (p12)', 0x13, lambda m: m.int10(0x0602, bx=0x0100, cx=0x0204, dx=0x1420), 90),
+           ('12h AH=06h full (p13 bfill)', 0x12, lambda m: m.int10(0x0600, bx=0x0100, cx=0, dx=0x1D4F), 90),
+           ('12h AH=06h window (p13 bfilla)', 0x12, lambda m: m.int10(0x0602, bx=0x0100, cx=0x0205, dx=0x1440), 5),
+           ('03h AX=1114h font load (p12)', 0x03, lambda m: m.int10(0x1114, bx=0), 90)]
+    fails = []
+    for name, mode, fn, need in ops:
+        m = c.machine()
+        if mode is not None:
+            m.int10(mode)
+        sz = {}
+
+        def wr(uc, acc, a, size, v, ud):
+            sz[size] = sz.get(size, 0) + size
+        h = m.mu.hook_add(UC_HOOK_MEM_WRITE, wr, None, 0xA0000, 0xBFFFF)
+        fn(m)
+        m.mu.hook_del(h)
+        tot = sum(sz.values())
+        pct = 100.0 * sz.get(4, 0) / tot if tot else 0
+        if pct < need:
+            fails.append('%s: %.0f%% of %d bytes by 32-bit stores, expected at least %d%%' % (name, pct, tot, need))
+    check(not fails, '%d operations not 32-bit:\n    ' % len(fails) + '\n    '.join(fails))
+    return '%d operations' % len(ops)
+
+
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch)]
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
@@ -1213,7 +1253,7 @@ TAGS = {
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card', 's3compat_full': 'cga ega vga vbe s3 card',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu',
-    'windows': 'call vga vbe emu', 'display_switch': 'vga emu',
+    'windows': 'call vga vbe emu', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
 }
 
 
@@ -1243,7 +1283,11 @@ def main():
     ap.add_argument('--call-limit', type=int, default=Machine.call_limit,
                     help='instructions an INT 10h call of a test may take before it counts as a hang (default %d; '
                          'the 4F15h EDID read of the windows test has its own 200 million)' % Machine.call_limit)
+    ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
+                    help='video memory the CR36 strapping reports: 2 MB (the card, default) or 4 MB (the '
+                         '86C775 maximum; the model still has one 64 KB window, no banked or linear memory)')
     a = ap.parse_args()
+    Machine.vram = a.vram
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
     if a.list:
         for n, _ in TESTS:

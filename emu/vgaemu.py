@@ -178,7 +178,8 @@ class Machine:
             return 0xFF
         if port in (0x3D5, 0x3B5):
             i = r['ci']
-            fixed = {0x30: 0xE1, 0x2D: 0x89, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x92}  # Trio64V2 rev 06, EDO 2 MB
+            # Trio64V2 rev 06, EDO; CR36 bits 7-5 = the strapped memory size (100b 2 MB, 000b 4 MB)
+            fixed = {0x30: 0xE1, 0x2D: 0x89, 0x2E: 0x01, 0x2F: 0x06, 0x36: 0x12 if Machine.vram == 4 else 0x92}
             return fixed.get(i, r['crtc'].get(i, 0))
         if port == 0x3CF: return r['gc'].get(r['gi'], 0)
         if port == 0x3C1: return r['atc'].get(r['ai'] & 0x1F, 0)
@@ -576,6 +577,7 @@ class Machine:
     noop_hits = 0
     calls = None                                        # a set: (AX, BX, DL) of every INT 10h call after POST
     call_limit = 50_000_000                             # instructions an INT 10h call of a test may take
+    vram = 2                                            # MB the CR36 strapping reports: 2 (the card) or 4
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):
