@@ -29,13 +29,19 @@ Tests
                    (banked memory, throughput); with /V the output is the same (except the Time spent
                    line) and S3TEST.DBG is well formed
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed
-  s3compat_vga     S3COMPAT's VGA and Mode X part (built with nasm from the source with the rest cut
-                   out): every test passes (registers, BIOS data, refresh, planar memory, palettes),
-                   only the known mode 10h warning; with /V the output is the same and S3COMPAT.DBG
-                   is well formed
+  s3compat_vga     S3COMPAT's VGA, Mode X and VGA BIOS function parts (built with nasm from the source
+                   with the rest cut out): every test passes (registers, BIOS data, refresh, planar
+                   memory, palettes, AH=01h-1Ch, AH=13h, CGA scroll, graphics XOR, AX=1120h-1124h, the
+                   video save pointer table), only the known 8x14 font warnings (mode 10h, AX=1130h
+                   BH=2, AX=1122h); with /V the output is the same and S3COMPAT.DBG is well formed
   s3compat_vbe     S3COMPAT's extra VBE function tests alone (4F00 capabilities vs 4F08, 4F04 per state mask,
                    invalid subfunctions and undefined functions refused, 4F0A table layout, 4F10 DPMS
-                   states and SR0D sync control): all PASS, 4F15 INFO (the model has no DDC lines)
+                   states and SR0D sync control, 4F14 S3 OEM functions with the refresh rates measured):
+                   all PASS, 4F15 INFO (the model has no DDC lines)
+  s3compat_full    the whole S3COMPAT /Q (every VESA mode banked and linear, the S3 modes, the VESA
+                   functions, pass 2): every line PASS except the known BIOS warnings (8x14 font, 106h
+                   above the single-clock limit) and the lines that judge video memory through banks,
+                   the LFB or planar windows above 64 KB, which the model does not have
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
                    caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
   vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
@@ -45,6 +51,7 @@ Tests
   s3regs           S3REGS.COM and S3REGS32.EXE (the Win32 one on a 32-bit CPU with the same register
                    model, vgaemu.run_pe32) write the same snapshot, keep indexes and locks, and
                    S3REGS32 /W logs register changes with their time (cursor registers ignored)
+  --coverage FILE  records the ROM bytes all tests execute and read, for emu/codemap.py (test coverage)
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
 """
@@ -356,14 +363,14 @@ def no_time(out):
 
 
 def build_s3compat_vga(tmp):
-    """S3COMPAT with POST/setup tests and everything after the VGA and Mode X part cut out."""
+    """S3COMPAT with POST/setup tests and everything after the VGA BIOS functions cut out."""
     nasm = shutil.which('nasm')
     if not nasm:
         raise Skip('nasm not found')
     t = open(os.path.join(SRC, 's3compat', 's3compat.asm')).read()
     cuts = [("        call setup\n        call post_tests\n", ""),
-            ("        call modex_all\n        PS 13,10,'--- VGA BIOS functions ---',13,10\n",
-             "        call modex_all\n        jmp emu_end\n        PS 13,10,'--- VGA BIOS functions ---',13,10\n"),
+            ("        PS 13,10,'--- VESA BIOS ---',13,10\n",
+             "        jmp emu_end\n        PS 13,10,'--- VESA BIOS ---',13,10\n"),
             ("        call cleanup\n", "        call cleanup\nemu_end:\n")]
     for a, b in cuts:
         check(t.count(a) == 1, 'cannot cut s3compat.asm at %r' % a[:40])
@@ -407,7 +414,7 @@ def t_s3compat_vbe(c):
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     lines = r.stdout.decode('latin1').split('\r\n')
     names = ('4F00 capabilities', '4F04 state masks', 'VBE invalid', 'VBE undefined', '4F0A table',
-             '4F10 power', '4F15 DDC')
+             '4F10 power', '4F15 DDC', '4F14 S3 OEM')
     tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
     check(len(tests) == len(names), 'only %d of the %d VBE lines: %s' % (len(tests), len(names), tests))
     # the model has no DDC lines: 4F15 must say so (INFO), everything else PASS
@@ -425,11 +432,15 @@ def t_s3compat_vga(c):
     c.save('S3COMPAT', r0)
     check(r0.exit and r0.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r0.exit,))
     lines = r0.stdout.decode('latin1').split('\r\n')
-    tests = [l for l in lines if l.startswith(('VGA ', 'Mode ', 'Text 80x50')) and
-             re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
-    check(len(tests) >= 17 + 6, 'only %d VGA/Mode X lines' % len(tests))
+    tests = [l for l in lines if re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
+    vga = [l for l in tests if l.startswith(('VGA ', 'Mode ', 'Text 80x50'))]
+    func = [l for l in tests if l.startswith(('AH=', 'AX=', 'DAC '))]
+    check(len(vga) >= 17 + 6, 'only %d VGA/Mode X lines' % len(vga))
+    check(len(func) >= 35, 'only %d VGA BIOS function lines' % len(func))
+    known = (('VGA 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
+             ('Chip ID', 'INFO'))
     bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
-           not (l.startswith('VGA 10h') and l.rstrip().endswith('WARN 01'))]     # known: no 8x14 font
+           not any(l.startswith(a) and l.rstrip().endswith(b) for a, b in known)]
     details = [l.strip() for l in lines if l.startswith('      ')]
     check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad + details[:6]))
     if v:
@@ -438,6 +449,32 @@ def t_s3compat_vga(c):
         dl = check_dbg(r0.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         check(sum(1 for l in dl if l.startswith('D:TEST')) >= len(tests), 'fewer D:TEST records than tests')
     return '%d tests' % len(tests)
+
+
+# S3COMPAT lines that judge video memory through the 64 KB banks, the LFB (INT 15h AH=87h) or a planar
+# window above 64 KB, which the model does not have; and the known warnings of the BIOS itself
+S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] .*FAIL 0020$',
+                         r'4F05 bank set/get \+ WinFuncPtr .*FAIL 0004$',
+                         r'Banked window and LFB same memory .*WARN 01$']
+S3COMPAT_KNOWN = [r'VGA 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
+                  r'VESA 0106 .*WARN 02$',
+                  r'.*INFO$']
+
+
+def t_s3compat_full(c):
+    """The whole S3COMPAT (/Q: without the 2 MB VRAM pattern test) on the model."""
+    com = c.tool('S3COMPAT.COM')
+    r = c.machine().run_com(com, '/Q', max_insn=3_000_000_000)
+    c.save('S3CFULL', r)
+    check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
+    lines = r.stdout.decode('latin1').split('\r\n')
+    tests = [l.rstrip() for l in lines if re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
+    check(len(tests) >= 230, 'only %d result lines' % len(tests))
+    bad = [l.strip() for l in tests if not l.endswith('PASS') and
+           not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + S3COMPAT_KNOWN)]
+    check(not bad, '%d lines not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    lim = sum(1 for l in tests if any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS))
+    return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
 
 
 def t_vgalog(c):
@@ -665,7 +702,7 @@ def t_s3regs(c):
 
 TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe),
+         ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe)]
 
@@ -678,7 +715,18 @@ def main():
     ap.add_argument('-v', action='store_true', help='print tracebacks')
     ap.add_argument('--logs', default=os.path.join(HERE, 'logs'),
                     help='folder for the tool output and /V debug files (default emu/logs)')
+    ap.add_argument('--coverage', metavar='FILE',
+                    help='record which ROM bytes the tests execute and read (all machines together) into FILE '
+                         '(32 KB of code flags, then 32 KB of data flags, for emu/codemap.py)')
     a = ap.parse_args()
+    covs = []
+    if a.coverage:
+        init = Machine.__init__
+
+        def init_cov(self, *args, **kw):
+            init(self, *args, **kw)
+            covs.append(self.track_coverage())
+        Machine.__init__ = init_cov
     c = Ctx(a.rom, a.build, a.v, a.logs)
     failed = 0
     for name, fn in TESTS:
@@ -699,6 +747,15 @@ def main():
         first, _, rest = res.partition('\n')
         print('%-14s %-60s %5.0fs' % (name, first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
     print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+    if a.coverage:
+        code, data = bytearray(0x8000), bytearray(0x8000)
+        for cc, dd in covs:
+            for i in range(0x8000):
+                code[i] |= cc[i]
+                data[i] |= dd[i]
+        open(a.coverage, 'wb').write(bytes(code) + bytes(data))
+        print('coverage of %d machines in %s: %d bytes executed, %d read as data'
+              % (len(covs), a.coverage, sum(code), sum(data)))
     sys.exit(1 if failed else 0)
 
 

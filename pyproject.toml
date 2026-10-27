@@ -4,7 +4,10 @@
 #   .venv/bin/pip install .
 #   make emu-test ROM=path/to/S3V2P9.BIN      (uses .venv/bin/python3 when it exists)
 #
-# This only installs the dependencies; emu/tests.py and emu/cover.py run from the source tree.
+#   .venv/bin/pip install .[coverage]         (also capstone, for make coverage)
+#
+# This only installs the dependencies; emu/tests.py, emu/codemap.py, emu/refcompare.py and emu/cover.py
+# run from the source tree.
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
@@ -17,6 +20,11 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "unicorn>=2.0",    # x86 CPU emulator (tested with 2.1.4)
+]
+
+[project.optional-dependencies]
+coverage = [
+    "capstone>=5.0",   # x86 disassembler for emu/codemap.py (make coverage; tested with 5.0.7)
 ]
 
 [tool.setuptools]

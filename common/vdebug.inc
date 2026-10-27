@@ -780,15 +780,27 @@ vtnow:  ; EAX = BIOS tick (low 16 bits) * 65536 + elapsed PIT counts in the tick
         mov es,ax
         pushf
         cli
+.rd:    mov bx,[es:0x46C]               ; tick, counter, tick again: retry when the tick moved in between
         xor al,al
         out 0x43,al                     ; latch channel 0
         in al,0x40
         mov ah,al
         in al,0x40
         xchg al,ah
-        mov bx,[es:0x46C]
-        popf
-        not ax
+        cmp bx,[es:0x46C]
+        jne .rd
+        not ax                          ; AX = counts elapsed in the tick
+        push ax
+        mov al,0x0A                     ; PIC IRR: IRQ0 pending while interrupts are off means the
+        out 0x20,al                     ; counter has already wrapped but the tick is not counted yet
+        in al,0x20
+        test al,1
+        pop ax
+        jz .ok
+        cmp ax,0x8000                   ; only early in the new period (a late count is the old one)
+        jae .ok
+        inc bx
+.ok:    popf
         shl ebx,16
         mov bx,ax
         mov eax,ebx

@@ -18,7 +18,7 @@ is for the Windows 9x desktop.
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them | `VGALOG` (or `VGALOG /M`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
 | S3REGS32.EXE | The same snapshot from the Windows 9x desktop (Win32 console program), and `/W n` logs every register change for n seconds | `S3REGS32 label`, `S3REGS32 /W 60 label` |
-| S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions, every VESA mode, datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
+| S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions (also AH=13h, CGA scroll, graphics XOR, fonts, the video save pointer table), every VESA mode, the VBE functions (also 4F04 masks, 4F0A, 4F10, 4F14, 4F15), datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
 each test routine has a comment block with its fail and warn bits. S3TEST and S3COMPAT end their log
@@ -66,6 +66,36 @@ timing (see `emu/vgaemu.py`), so refresh rates and planar memory tests mean some
 no banked or linear video memory and no real bus speed: those results, and the monitor, stay with
 the hardware logs, which decide. `emu/cover.py` lists the ROM bytes that a broad INT 10h workload
 never touches.
+
+`s3compat_full` runs the whole S3COMPAT on the model; only the lines that judge video memory through
+the banks, the LFB or planar windows above 64 KB are left to the card. In the model, read mode 1
+(colour compare), the GR03 rotate and logic functions, the DAC state register and the PIC are now
+modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
+
+### Test coverage
+
+    pip install .[coverage]          (capstone, for emu/codemap.py)
+    make coverage ROM=path/to/S3V2P14.BIN
+
+runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
+code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
+direct jump, call and word jump table, and reports the share the tests executed. Data (tables,
+fonts, strings, padding) and code nothing reaches (the routines our patches jump around) do not
+count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p14 is at
+82.6 % (14362 of 17394 bytes). The parts still not run include the display switch (AH=12h BL=35h),
+the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths.
+
+### EGA/CGA against the reference BIOS
+
+    make ref-compare REF=REF2047.BIN UPPER=STOCK.BIN ROM=S3V2P14.BIN
+
+runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
+BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
+output, palettes, pages, fonts, AH=12h, AH=1Ah, AH=1Ch) and compares the registers a program gets
+back, the BIOS data area, video memory, the DAC and the standard VGA registers after each call. For
+2.04.07-p14 there is no difference: the patches in those paths (32-bit text scroll, planar fills,
+AH=09h, VGA clear, font load) only change how fast it is done, and the mode set hook, the memory
+clock and the pedestal only touch S3 extended registers, which are not compared.
 
 ## ROM patcher
 

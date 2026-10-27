@@ -51,6 +51,19 @@ emu-test: all
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P9.BIN"; exit 2; }
 	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs
 
+# Test coverage of the ROM code (needs capstone too: pip install .[coverage]); fails under 80 %
+#   make coverage ROM=S3V2P14.BIN
+coverage: all
+	@test -n "$(ROM)" || { echo "coverage: set ROM to the 64 KB VBIOS image"; exit 2; }
+	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs --coverage emu/logs/COVER.BIN
+	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
+
+# EGA/CGA behaviour against the unpatched reference BIOS (AGENTS.md goal)
+#   make ref-compare REF=REF2047.BIN UPPER=STOCK.BIN ROM=S3V2P14.BIN
+ref-compare:
+	@test -n "$(REF)" -a -n "$(UPPER)" -a -n "$(ROM)" || { echo "ref-compare: set REF, UPPER and ROM"; exit 2; }
+	$(PYTHON) emu/refcompare.py --ref "$(REF)" --upper "$(UPPER)" --rom "$(ROM)"
+
 clean:
 	rm -rf build
 
@@ -65,4 +78,4 @@ rom-test:
 	@test -n "$(REF)" -a -n "$(UPPER)" || { echo "rom-test: set REF (2.04.07, 32 KB) and UPPER (the stock 64 KB image)"; exit 2; }
 	python3 rompatch/test_s3patch.py --nasm $(NASM) --ref "$(REF)" --upper "$(UPPER)" $(if $(ROM),--rom "$(ROM)")
 
-.PHONY: all clean emu-test rom rom-test
+.PHONY: all clean emu-test rom rom-test coverage ref-compare
