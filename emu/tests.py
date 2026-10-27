@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """tests.py - emulator tests for the Trio64V2 VBIOS and the DOS tools (needs python3 and unicorn).
 
-    python3 emu/tests.py --rom S3V2P14.BIN [--build build] [-k name] [-v]
-    make emu-test ROM=S3V2P14.BIN
+    python3 emu/tests.py --rom S3V2P15.BIN [--build build] [-k name] [-v]
+    make emu-test ROM=S3V2P15.BIN
 
 The ROM image is not in the repository; pass the 64 KB image of the card. The tools run with /V;
 their output (NAME.LOG) and debug files (NAME.DBG, VGALOG.BIN) are kept in emu/logs (--logs).
@@ -14,11 +14,11 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p14), and the ROM under test carries
+                   the level rompatch/s3patch.py builds (2.04.07-p15), and the ROM under test carries
                    that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
-  rom_patches      what S3TEST cannot check: sign-on ROMVER and the checksums of both 32 KB halves in
-                   the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
+  rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
+                   half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port
                    accesses), the window function by far call, EAX/ECX kept across the 32-bit VGA
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
@@ -289,7 +289,7 @@ def romver():
 
 
 def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p14)."""
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p15)."""
     t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
@@ -310,9 +310,9 @@ def t_rom_patches(c):
     rom = c.rom
     chk(romver().encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
+    chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
     if len(rom) >= 0x10000:
-        chk(rom[0x8000:0x8002] == b'\x55\xAA', 'upper 32 KB has no 55AAh ROM header')
-        chk(sum(rom[0x8000:0x10000]) & 0xFF == 0, 'checksum of the upper 32 KB is not 00')
+        chk(rom[0x8000:0x10000] == bytes(0x8000), 'the upper 32 KB is not all zeros (p15)')
     cr = m.r['crtc']
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
     m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # p11 clears with 32-bit stores: EAX bits 31-16 kept
@@ -1356,6 +1356,7 @@ def main():
         cur[0] = name
         if a.profile:
             Machine.calls = prof.setdefault(name, {'cov': [], 'calls': set()})['calls']
+        print('%-14s ' % name, end='', flush=True)       # the test that is running now
         t0 = time.time()
         try:
             note = fn(c)
@@ -1369,7 +1370,7 @@ def main():
                 import traceback
                 traceback.print_exc()
         first, _, rest = res.partition('\n')
-        print('%-14s %-60s %5.0fs' % (name, first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
+        print('%-60s %5.0fs' % (first, time.time() - t0) + ('\n' + rest if rest else ''), flush=True)
     print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
     if a.calls:
         with open(a.calls, 'w') as f:

@@ -1,8 +1,8 @@
 # Trio64V2/DX VBIOS test tools
 
 DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX card
-(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.07-p14: the S3
-reference BIOS 2.04.07 with our changes, and the card's own Trio64V+ BIOS in the upper half. The ROM
+(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.07-p15: the S3
+reference BIOS 2.04.07 with our changes in the lower 32 KB, zeros in the upper 32 KB. The ROM
 image itself is not in this repository; the changes it carries are described below, and `rompatch/`
 holds their source and the patcher that builds the image from the reference BIOS.
 
@@ -51,7 +51,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P14.BIN
+    make emu-test ROM=path/to/S3V2P15.BIN
 
 `make emu-test ROM=... VRAM=4` runs the model with 4 MB (the CR36 strapping of a 4 MB card; the
 86C775 supports 2 and 4 MB): the BIOS then lists the modes up to 4 MB (1280x1024x15/16, 1152x864x32,
@@ -111,7 +111,7 @@ category column: compare from the sixth column.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P14.BIN
+    make coverage ROM=path/to/S3V2P15.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -123,7 +123,7 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare REF=REF2047.BIN UPPER=STOCK.BIN ROM=S3V2P14.BIN
+    make ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -137,27 +137,28 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(p14) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(p15) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py REF2047.BIN --upper STOCK.BIN -o S3V2P14.BIN
-    make rom IN=REF2047.BIN UPPER=STOCK.BIN OUT=S3V2P14.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P15.BIN
+    make rom IN=REF2047.BIN OUT=S3V2P15.BIN
 
-REF2047.BIN is the 32 KB reference BIOS; `--upper` takes the upper 32 KB, the Trio64V+ BIOS 1.03-08,
-from the stock dump of the card (or a 32 KB file of it), unchanged. Only 2.04.07 is accepted. Every
+REF2047.BIN is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
+used). The result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every
 patch site is compared with the original code first (the replaced routines in full), and the result
-is checked before it is written: both halves sum to 00, the upper half is unchanged, every DCLK VCO
-is in 170-340 MHz, and with the known reference image and stock upper half the SHA-256 is the one of
-the build that passed every emulator test (f7ed681c...). The CR88 bit 1 tweak of the reference keeps
+is checked before it is written: the lower half sums to 00 and declares 32 KB, the upper half is
+zeros, every DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of
+the build that passed every emulator test (1caad895...). The CR88 bit 1 tweak of the reference keeps
 comparing SR10/SR11 with the old MCLK values, so it stays off at 59.96 MHz, as in the 2.04.11 builds
 before p14.
 
-    python3 rompatch/test_s3patch.py --ref REF2047.BIN --upper STOCK.BIN [--rom S3V2P14.BIN]
-    make rom-test REF=REF2047.BIN UPPER=STOCK.BIN [ROM=S3V2P14.BIN]
+    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN]
+    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 
-runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), both halves sum to 00
-with the right byte at 7FFFh, the VCO range, the free bytes still 00, a 64 KB input giving the same
-result, `--no-vco-fix`, and seven inputs that must be refused (already patched, a p12, a p13 and the
-p14 patch site changed, a wrong checksum, a 32 KB image without `--upper`, the stock 2.04.11).
+runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
+00 with the right byte at 7FFFh, the upper half zeros, the VCO range, the free bytes still 00, a 64 KB
+input giving the same result whatever its upper half holds, `--no-vco-fix`, and the inputs that must
+be refused (already patched, a p12, a p13 and the p14 patch site changed, a wrong checksum, and with
+`--stock` the card's stock 2.04.11).
 
 ## Debug log (/V)
 
@@ -240,11 +241,12 @@ stack (CR45, CR4A, CR4B). It is built by NASM alone: the PE header is written ou
 The EGA and CGA default palettes are not tables: S3COMPAT computes them from the IBM rules
 (EGA: 2Ah per primary bit, 15h per secondary bit; CGA: bit 4 adds 15h to all three, colour 6 is brown).
 
-## VBIOS changes in 2.04.07-p14
+## VBIOS changes in 2.04.07-p15
 
-p14 differs from the S3 reference BIOS 2.04.07 in the lower 32 KB; the upper 32 KB is the card's
-Trio64V+ BIOS 1.03-08 (for an older card), byte-identical to the stock dump. Both halves checksum to
-0, and every change keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO
+p15 differs from the S3 reference BIOS 2.04.07 in the lower 32 KB; the upper 32 KB is zeros. p15 is
+p14 with only that change (and the sign-on): up to p14 the upper half carried the card's Trio64V+ BIOS
+1.03-08 (for an older card), byte-identical to the stock dump; nothing in the lower BIOS uses it, and
+the ROM header declares 32 KB. The lower half checksums to 0, and every change keeps the standard VGA and VESA modes compatible. The RAM stays in 1-cycle EDO
 mode. p1-p13 were built on the card's stock 2.04.11 and carried over unchanged in function. In the
 emulator, 5980 scroll, text and teletype calls leave the same registers, memory and VGA state with
 the 2.04.07 builds of p12, p13 and p14 (and with 2.04.11 p12 and p13), and 855 mode set, font and
@@ -280,12 +282,12 @@ are free: 0x7C8A-7CFA (113 bytes, free in the reference only), 0x7E1E-7E3F, 0x7E
 
 ### Byte-level changes
 
-Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is the
-card's Trio64V+ BIOS, unchanged. Code blocks are listed with their labels; the sources are in `rompatch/`.
+Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
+zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
-| Offset | 2.04.07 | p14 | Purpose |
+| Offset | 2.04.07 | p15 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p14 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p15 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |

@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
 """test_s3patch.py - checksum tests for the ROM patcher s3patch.py (needs python3 and nasm).
 
-    python3 rompatch/test_s3patch.py --ref REF2047.BIN --upper STOCK.BIN [--rom S3V2P14.BIN] [--nasm nasm]
-    make rom-test REF=REF2047.BIN UPPER=STOCK.BIN [ROM=S3V2P14.BIN]
+    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN] [--nasm nasm]
+    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 
-REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN the 64 KB dump of the card (its upper
-half, the Trio64V+ BIOS, goes into the result unchanged), S3V2P14.BIN a build to compare with byte by
-byte. No ROM image is in the repository.
+REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN (optional) the 64 KB dump of the card
+(its 2.04.11 must be refused), S3V2P15.BIN a build to compare with byte by byte. No ROM image is in the
+repository.
 
 Tests
-  build          the reference plus the stock upper half gives the tested build: SHA-256 f7ed681c...,
-                 sign-on 2.04.07-p14, byte-identical to --rom when given
-  checksums      both 32 KB halves sum to 00, byte 7FFFh is the one that makes the lower half sum to 00,
-                 the upper half equals the input's, 55AAh headers in place
+  build          the reference gives the tested build: SHA-256 1caad895..., sign-on 2.04.07-p15,
+                 byte-identical to --rom when given
+  checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
+                 32 KB size, the upper 32 KB is zeros
   vco            every DCLK refresh entry runs its VCO in 170-340 MHz
   free_space     the bytes of the free block 7CFB-7FEF that no code uses are still 00, so a later level
                  can use them
-  input_64k      a 64 KB image with the reference in the lower half and the stock upper half gives the
-                 same result without --upper
+  input_64k      a 64 KB image with the reference in the lower half gives the same result, whatever
+                 its upper half holds
   novco          --no-vco-fix keeps the 22 refresh entries below 170 MHz and still checksums
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte
                  changed at a patch site (p12, p13 and p14 sites, with the checksum corrected), a wrong
-                 checksum, another BIOS version (the stock 2.04.11), a 32 KB input without --upper
+                 checksum, another BIOS version (the stock 2.04.11, with --stock)
 Exit code 0 when every test passed.
 """
 import argparse, hashlib, os, subprocess, sys, tempfile
@@ -40,33 +40,29 @@ def result(name, ok, info=''):
         failed.append(name)
 
 
-def run(tmp, data, args=(), upper=None):
+def run(tmp, data, args=()):
     """Run s3patch.py on data; returns (exit code, output bytes or None, stderr)."""
     inp, out = os.path.join(tmp, 'in.bin'), os.path.join(tmp, 'out.bin')
     if os.path.exists(out):
         os.remove(out)
     open(inp, 'wb').write(data)
     cmd = [sys.executable, os.path.join(HERE, 's3patch.py'), inp, '-o', out, '-q', '--nasm', NASM] + list(args)
-    if upper is not None:
-        up = os.path.join(tmp, 'upper.bin')
-        open(up, 'wb').write(upper)
-        cmd += ['--upper', up]
     r = subprocess.run(cmd, capture_output=True, text=True)
     return r.returncode, (open(out, 'rb').read() if os.path.exists(out) else None), r.stderr.strip()
 
 
-def image_checks(img, upper):
+def image_checks(img):
     errs = []
     if len(img) != 0x10000:
         return ['size %d' % len(img)]
-    if sum(img[:0x8000]) & 0xFF or sum(img[0x8000:]) & 0xFF:
-        errs.append('half checksums %02X/%02X' % (sum(img[:0x8000]) & 0xFF, sum(img[0x8000:]) & 0xFF))
+    if sum(img[:0x8000]) & 0xFF:
+        errs.append('lower checksum %02X' % (sum(img[:0x8000]) & 0xFF))
     if img[0x7FFF] != (-sum(img[:0x7FFF])) & 0xFF:
         errs.append('byte 7FFF')
-    if img[0x8000:] != upper:
-        errs.append('upper half changed')
-    if img[:2] != b'\x55\xAA' or img[0x8000:0x8002] != b'\x55\xAA':
-        errs.append('55AA header')
+    if img[0x8000:] != bytes(0x8000):
+        errs.append('upper half not zeros')
+    if img[:3] != b'\x55\xAA\x40':
+        errs.append('55AA header with 32 KB size')
     return errs
 
 
@@ -85,19 +81,18 @@ def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum tests for s3patch.py')
     ap.add_argument('--ref', required=True, help='32 KB S3 reference BIOS 2.04.07')
-    ap.add_argument('--upper', required=True, help='64 KB stock image (or its 32 KB upper half)')
+    ap.add_argument('--stock', help='64 KB stock dump of the card (its 2.04.11 must be refused)')
     ap.add_argument('--rom', help='a build to compare with')
     ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3patch.py')
     a = ap.parse_args()
     NASM = a.nasm
     ref = open(a.ref, 'rb').read()
-    stock = open(a.upper, 'rb').read()
-    upper = stock[0x8000:] if len(stock) == 0x10000 else stock
+    stock = open(a.stock, 'rb').read() if a.stock else None
     tmp = tempfile.mkdtemp(prefix='t_s3patch_')
 
-    rc, img, err = run(tmp, ref, upper=upper)
+    rc, img, err = run(tmp, ref)
     sha = hashlib.sha256(img).hexdigest() if img else ''
-    ok = rc == 0 and sha == s3patch.RESULT_SHA and b'Version 2.04.07-p14\r\n' in img[:0x100]
+    ok = rc == 0 and sha == s3patch.RESULT_SHA and b'Version 2.04.07-%s\r\n' % s3patch.LEVEL.encode() in img[:0x100]
     info = 'SHA-256 %s' % sha[:16] if ok else (err or 'SHA-256 %s' % sha)
     if ok and a.rom:
         same = open(a.rom, 'rb').read() == img
@@ -106,8 +101,8 @@ def main():
     if not img:
         print('%d failed' % len(failed))
         return 1
-    errs = image_checks(img, upper)
-    result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper %02X' % (img[0x7FFF], img[0xFFFF]))
+    errs = image_checks(img)
+    result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper 32 KB zeros' % img[0x7FFF])
     bad = vco_out(img)
     result('vco', not bad, ', '.join('%04X' % e for e in bad) or 'all entries in 170-340 MHz')
     used = set()
@@ -119,24 +114,23 @@ def main():
     unused = [i for i in range(0x7CFB, 0x7FF0) if not img[i]]
     result('free_space', not free, 'nonzero outside the blocks: %s' % ', '.join('%04X' % i for i in free[:8])
            if free else '%d bytes 00 in 7CFB-7FEF' % len(unused))
-    rc, img64, err = run(tmp, ref + upper)
+    rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
-    rc, nimg, err = run(tmp, ref, ['--no-vco-fix'], upper=upper)
+    rc, nimg, err = run(tmp, ref, ['--no-vco-fix'])
     low = len(vco_out(nimg)) if nimg else -1
-    result('novco', rc == 0 and low == 22 and not image_checks(nimg, upper), err or '%d entries below 170 MHz kept' % low)
+    result('novco', rc == 0 and low == 22 and not image_checks(nimg), err or '%d entries below 170 MHz kept' % low)
 
     s = s3patch.SITES
-    cases = [('already patched', img[:0x8000], upper),
-             ('p12 site (INT 10h entry)', corrupt(ref, s['int10'] + 2), upper),
-             ('p13 site (text scroll fill)', corrupt(ref, s['txfull'] + 7), upper),
-             ('p14 site (VGA clear)', corrupt(ref, s['vclr'] + 10), upper),
-             ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]), upper),
-             ('32 KB without --upper', ref, None)]
-    if len(stock) == 0x10000:
-        cases.append(('stock 2.04.11', stock[:0x8000], upper))
+    cases = [('already patched', img[:0x8000]),
+             ('p12 site (INT 10h entry)', corrupt(ref, s['int10'] + 2)),
+             ('p13 site (text scroll fill)', corrupt(ref, s['txfull'] + 7)),
+             ('p14 site (VGA clear)', corrupt(ref, s['vclr'] + 10)),
+             ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]))]
+    if stock and len(stock) == 0x10000:
+        cases.append(('stock 2.04.11', stock[:0x8000]))
     bad = []
-    for name, data, up in cases:
-        rc, out, err = run(tmp, data, upper=up)
+    for name, data in cases:
+        rc, out, err = run(tmp, data)
         if rc != 1 or out is not None or not err:
             bad.append(name)
     result('refusals', not bad, 'not refused: ' + ', '.join(bad) if bad else '%d inputs refused' % len(cases))

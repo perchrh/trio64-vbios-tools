@@ -35,7 +35,7 @@ What is not emulated (results that depend on it are meaningless here)
   - Equipment-dependent BIOS state (AH=1Bh +26h alternate display, +2Dh flags).
 
 Usage (see tests.py for complete examples)
-  m = Machine(open('S3V2P14.BIN','rb').read())
+  m = Machine(open('S3V2P15.BIN','rb').read())
   m.post()
   m.int10(0x0003); print(m.snapshot())         # registers after a mode set
   r = m.run_com(open('build/S3TEST.COM','rb').read(), '/V')

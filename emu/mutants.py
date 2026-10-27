@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """mutants.py - do the emulator tests notice when a BIOS feature does nothing? (mutation testing)
 
-    python3 emu/mutants.py --rom S3V2P14.BIN --ref REF2047.BIN [-j 2] [-k text] [--list]
-    make mutants ROM=S3V2P14.BIN REF=REF2047.BIN
+    python3 emu/mutants.py --rom S3V2P15.BIN --ref REF2047.BIN [-j 2] [-k text] [--list]
+    make mutants ROM=S3V2P15.BIN REF=REF2047.BIN
 
 Each mutant is the ROM with one feature turned into a no-op; emu/tests.py runs on it (fast tests first,
 stop at the first failure). A mutant is killed when a test fails, and survives when every test passes:
