@@ -389,9 +389,15 @@ def tagged(text, tool):
     end must count the same lines."""
     lines = text.split('\r\n')
     out = []
+    last = None                                     # the test line a continuation line belongs to
     for l in lines:
+        m = re.match(r'^(%s) +(?=\S)' % '|'.join(CATS), l)
+        if m and m.end() == 5:
+            last = m.group(1)
         if re.search(RESULT_RE, l.rstrip()):
-            m = re.match(r'^(%s) +(?=\S)' % '|'.join(CATS), l)
+            if l.startswith('      ') and last:     # the result after detail lines (S3COMPAT initial state)
+                out.append((last, l.strip()))
+                continue
             check(m and m.end() == 5, '%s: result line without a category column: %r' % (tool, l))
             out.append((m.group(1), l[5:].rstrip()))
     sums = {}
