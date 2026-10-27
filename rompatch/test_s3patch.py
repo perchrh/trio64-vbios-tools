@@ -1,29 +1,27 @@
 #!/usr/bin/env python3
 """test_s3patch.py - checksum tests for the ROM patcher s3patch.py (needs python3 and nasm).
 
-    python3 rompatch/test_s3patch.py --stock STOCK.BIN [--ref REF2047.BIN] [--p12 S3V2P12.BIN]
-                                     [--p13 S3V2P13.BIN] [--nasm nasm]
-    make rom-test STOCK=STOCK.BIN [REF=REF2047.BIN] [P12=S3V2P12.BIN] [P13=S3V2P13.BIN]
+    python3 rompatch/test_s3patch.py --ref REF2047.BIN --upper STOCK.BIN [--rom S3V2P14.BIN] [--nasm nasm]
+    make rom-test REF=REF2047.BIN UPPER=STOCK.BIN [ROM=S3V2P14.BIN]
 
-STOCK.BIN is the 64 KB dump of the card (BIOS 2.04.11), REF2047.BIN the 32 KB S3 reference BIOS
-2.04.07, S3V2P12.BIN / S3V2P13.BIN builds to compare with byte by byte. No ROM image is in the
-repository.
+REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN the 64 KB dump of the card (its upper
+half, the Trio64V+ BIOS, goes into the result unchanged), S3V2P14.BIN a build to compare with byte by
+byte. No ROM image is in the repository.
 
 Tests
-  stock_p12      the stock image patched to p12 (--target p12): SHA-256 165c2185..., byte-identical to
-                 --p12 when given, sign-on 2.04.11-p12
-  stock_p13      the stock image patched to p13 (the default target): SHA-256 5c3242cb..., byte-identical
-                 to --p13 when given, sign-on 2.04.11-p13
-  p13_vs_p12     p13 differs from p12 only in the p13 code and patch sites, the sign-on and the checksum
-  ref_p12/p13    (with --ref) the 2.04.07 reference plus the stock upper half: SHA-256 c13fcbe0... (p12)
-                 and b050b045... (p13), sign-ons 2.04.07-p12/-p13
-  ref_novco      --no-vco-fix keeps the 16 reference refresh entries below 170 MHz
-  checksums      in every result both 32 KB halves sum to 00, byte 7FFFh is the one that makes the
-                 lower half sum to 00, the upper half equals the input's, 55AAh headers in place
+  build          the reference plus the stock upper half gives the tested build: SHA-256 f7ed681c...,
+                 sign-on 2.04.07-p14, byte-identical to --rom when given
+  checksums      both 32 KB halves sum to 00, byte 7FFFh is the one that makes the lower half sum to 00,
+                 the upper half equals the input's, 55AAh headers in place
   vco            every DCLK refresh entry runs its VCO in 170-340 MHz
+  free_space     the bytes of the free block 7CFB-7FEF that no code uses are still 00, so a later level
+                 can use them
+  input_64k      a 64 KB image with the reference in the lower half and the stock upper half gives the
+                 same result without --upper
+  novco          --no-vco-fix keeps the 22 refresh entries below 170 MHz and still checksums
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte
-                 changed at a patch site (with the checksum corrected), a wrong checksum, an unknown
-                 version, a 32 KB input without --upper
+                 changed at a patch site (p12, p13 and p14 sites, with the checksum corrected), a wrong
+                 checksum, another BIOS version (the stock 2.04.11), a 32 KB input without --upper
 Exit code 0 when every test passed.
 """
 import argparse, hashlib, os, subprocess, sys, tempfile
@@ -32,14 +30,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import s3patch  # noqa: E402
 
-SHA = {('stock', 'p12'): '165c2185c98e4dbad25013b71dc0b26f0fe14aab0ab7fd1975961e4a3839e772',
-       ('stock', 'p13'): '5c3242cb5510754a76e0c0612790afcfb684948494a62d5f5ec033e189105d45',
-       ('ref', 'p12'): 'c13fcbe0daefa43871087c7b3c80b8b1312aa73934a28989f0972756f61badd6',
-       ('ref', 'p13'): 'b050b04536cd4a2d0faeacd05d9a044c457dff8e61b3eb8f2fae2353bb2ac024'}
-# p13 bytes that may differ from p12 in the stock image: sign-on, the p13 blocks, the p13 patch sites
-P13_RANGES = [(0x0070, 0x00AB), (0x1227, 0x1235), (0x1442, 0x1457), (0x2EE0, 0x2F12), (0x3131, 0x3135),
-              (0x317C, 0x3189), (0x351E, 0x3527), (0x59E1, 0x5A0A), (0x7F58, 0x7F71), (0x7FAF, 0x7FB7),
-              (0x7FFF, 0x8000)]
 failed = []
 NASM = 'nasm'
 
@@ -84,83 +74,69 @@ def vco_out(img):
     return [e for e in s3patch.refresh_entries(img) if not 170 <= s3patch.pll(img[e + 4], img[e + 5])[0] <= 340]
 
 
+def corrupt(img, off):
+    t = bytearray(img)
+    t[off] ^= 1
+    t[0x7FFF] = (-sum(t[:0x7FFF])) & 0xFF
+    return bytes(t)
+
+
 def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum tests for s3patch.py')
-    ap.add_argument('--stock', required=True, help='64 KB stock image (BIOS 2.04.11)')
-    ap.add_argument('--ref', help='32 KB S3 reference BIOS 2.04.07')
-    ap.add_argument('--p12', help='p12 build to compare with')
-    ap.add_argument('--p13', help='p13 build to compare with')
+    ap.add_argument('--ref', required=True, help='32 KB S3 reference BIOS 2.04.07')
+    ap.add_argument('--upper', required=True, help='64 KB stock image (or its 32 KB upper half)')
+    ap.add_argument('--rom', help='a build to compare with')
     ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3patch.py')
     a = ap.parse_args()
     NASM = a.nasm
-    stock = open(a.stock, 'rb').read()
+    ref = open(a.ref, 'rb').read()
+    stock = open(a.upper, 'rb').read()
+    upper = stock[0x8000:] if len(stock) == 0x10000 else stock
     tmp = tempfile.mkdtemp(prefix='t_s3patch_')
-    results, imgs = [], {}
 
-    for tgt, given in (('p12', a.p12), ('p13', a.p13)):
-        rc, img, err = run(tmp, stock, ['--target', tgt])
-        sha = hashlib.sha256(img).hexdigest() if img else ''
-        ok = rc == 0 and sha == SHA[('stock', tgt)] and b'Version 2.04.11-%s\r\n' % tgt.encode() in img[:0x100]
-        info = 'SHA-256 %s' % sha[:16] if ok else (err or 'SHA-256 %s' % sha)
-        if ok and given:
-            same = open(given, 'rb').read() == img
-            ok, info = same, info + (', identical to ' if same else ', differs from ') + os.path.basename(given)
-        result('stock_' + tgt, ok, info)
-        if img:
-            results.append(('stock ' + tgt, img, stock[0x8000:]))
-            imgs[tgt] = img
-    if 'p12' in imgs and 'p13' in imgs:
-        out = [i for i in range(0x10000) if imgs['p12'][i] != imgs['p13'][i]
-               and not any(lo <= i < hi for lo, hi in P13_RANGES)]
-        result('p13_vs_p12', not out, 'differences outside the p13 ranges: %s' % ', '.join('%04X' % i for i in out[:8])
-               if out else '%d bytes differ, all in the p13 ranges'
-               % sum(1 for i in range(0x10000) if imgs['p12'][i] != imgs['p13'][i]))
+    rc, img, err = run(tmp, ref, upper=upper)
+    sha = hashlib.sha256(img).hexdigest() if img else ''
+    ok = rc == 0 and sha == s3patch.RESULT_SHA and b'Version 2.04.07-p14\r\n' in img[:0x100]
+    info = 'SHA-256 %s' % sha[:16] if ok else (err or 'SHA-256 %s' % sha)
+    if ok and a.rom:
+        same = open(a.rom, 'rb').read() == img
+        ok, info = same, info + (', identical to ' if same else ', differs from ') + os.path.basename(a.rom)
+    result('build', ok, info)
+    if not img:
+        print('%d failed' % len(failed))
+        return 1
+    errs = image_checks(img, upper)
+    result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper %02X' % (img[0x7FFF], img[0xFFFF]))
+    bad = vco_out(img)
+    result('vco', not bad, ', '.join('%04X' % e for e in bad) or 'all entries in 170-340 MHz')
+    used = set()
+    sym = s3patch.bios_symbols()
+    for name, org, room, want in s3patch.BLOCKS:
+        org = sym[org] if isinstance(org, str) else org
+        used.update(range(org, org + room))
+    free = [i for i in range(0x7CFB, 0x7FF0) if img[i] and i not in used]
+    unused = [i for i in range(0x7CFB, 0x7FF0) if not img[i]]
+    result('free_space', not free, 'nonzero outside the blocks: %s' % ', '.join('%04X' % i for i in free[:8])
+           if free else '%d bytes 00 in 7CFB-7FEF' % len(unused))
+    rc, img64, err = run(tmp, ref + upper)
+    result('input_64k', rc == 0 and img64 == img, err or 'same result')
+    rc, nimg, err = run(tmp, ref, ['--no-vco-fix'], upper=upper)
+    low = len(vco_out(nimg)) if nimg else -1
+    result('novco', rc == 0 and low == 22 and not image_checks(nimg, upper), err or '%d entries below 170 MHz kept' % low)
 
-    if a.ref:
-        ref = open(a.ref, 'rb').read()
-        for tgt in ('p12', 'p13'):
-            rc, rimg, err = run(tmp, ref, ['--target', tgt], upper=stock)
-            sha = hashlib.sha256(rimg).hexdigest() if rimg else ''
-            ok = rc == 0 and sha == SHA[('ref', tgt)] and b'Version 2.04.07-%s\r\n' % tgt.encode() in rimg[:0x100]
-            result('ref_' + tgt, ok, 'SHA-256 %s' % sha[:16] if ok else (err or 'SHA-256 %s' % sha))
-            if rimg:
-                results.append(('ref ' + tgt, rimg, stock[0x8000:]))
-        rc, nimg, err = run(tmp, ref, ['--no-vco-fix'], upper=stock)
-        low = len(vco_out(nimg)) if nimg else -1
-        result('ref_novco', rc == 0 and low == 16 and not image_checks(nimg, stock[0x8000:]),
-               '%d entries below 170 MHz kept' % low)
-
-    errs = ['%s: %s' % (n, e) for n, im, up in results for e in image_checks(im, up)]
-    result('checksums', results and not errs, '; '.join(errs) or ', '.join(
-        '%s %02X/%02X' % (n, im[0x7FFF], im[0xFFFF]) for n, im, up in results))
-    bad = ['%s %04X' % (n, e) for n, im, up in results for e in vco_out(im)]
-    result('vco', results and not bad, ', '.join(bad) or 'all entries in 170-340 MHz')
-
-    cases = []
-    if 'p13' in imgs:
-        cases.append(('already patched', imgs['p13'], ()))
-    t = bytearray(stock)
-    t[0x211A] ^= 1                                  # cmp ah,0Eh changed, checksum made right again
-    t[0x7FFF] = (-sum(t[:0x7FFF])) & 0xFF
-    cases.append(('patch site changed', bytes(t), ()))
-    t = bytearray(stock)
-    t[0x2EE7] ^= 1                                  # a p13 site (text scroll fill)
-    t[0x7FFF] = (-sum(t[:0x7FFF])) & 0xFF
-    cases.append(('p13 site changed', bytes(t), ()))
-    t = bytearray(stock)
-    t[0x7FFF] ^= 0x55
-    cases.append(('bad checksum', bytes(t), ()))
-    t = bytearray(stock)
-    i = t.index(b'2.04.11')
-    t[i:i + 7] = b'2.04.99'
-    t[0x7FFF] = 0
-    t[0x7FFF] = (-sum(t[:0x8000])) & 0xFF
-    cases.append(('unknown version', bytes(t), ()))
-    cases.append(('32 KB without --upper', stock[:0x8000], ()))
+    s = s3patch.SITES
+    cases = [('already patched', img[:0x8000], upper),
+             ('p12 site (INT 10h entry)', corrupt(ref, s['int10'] + 2), upper),
+             ('p13 site (text scroll fill)', corrupt(ref, s['txfull'] + 7), upper),
+             ('p14 site (VGA clear)', corrupt(ref, s['vclr'] + 10), upper),
+             ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]), upper),
+             ('32 KB without --upper', ref, None)]
+    if len(stock) == 0x10000:
+        cases.append(('stock 2.04.11', stock[:0x8000], upper))
     bad = []
-    for name, data, args in cases:
-        rc, out, err = run(tmp, data, args)
+    for name, data, up in cases:
+        rc, out, err = run(tmp, data, upper=up)
         if rc != 1 or out is not None or not err:
             bad.append(name)
     result('refusals', not bad, 'not refused: ' + ', '.join(bad) if bad else '%d inputs refused' % len(cases))

@@ -2,7 +2,7 @@
 ; The tool version (VERSION) and the ROM version it expects (ROMVER) come from common/version.inc.
 ;
 ; Purpose
-;   Confirms that every change made to the stock 2.04.11 ROM is present and working. It is the
+;   Confirms that every change made to the BIOS (2.04.07, the S3 reference BIOS) is present and working. It is the
 ;   quick check to run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
 ;
 ; Usage
@@ -12,10 +12,12 @@
 ;       The normal output is the same with or without /V.
 ;   Output is buffered while the video modes switch and written to stdout at the end.
 ;   Exit code 0 = every test passed, 1 = at least one failed.
+;   The report ends with "Time spent: x.y s", the run time from the BIOS tick (with /V it includes
+;   writing the debug log, so it is the one line that differs from a run without /V).
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.11-p12"); the version found is printed, also for other BIOS versions
+;                    "2.04.07-p14"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30 and the PCI revision ID, so the log shows
 ;                    the stepping (89 01 06 E1, PCI 06 on the test card)
@@ -76,6 +78,8 @@ F_BOOST equ 2
 F_LFB   equ 4
 
 start:  cld
+        call tickrd
+        mov [runt0],eax
         mov word [bp_],obuf
         mov si,0x81                     ; /V: debug log in S3TEST.DBG
 .op:    lodsb
@@ -145,6 +149,11 @@ start:  cld
         call pdec
         mov dx,s_sum3
         call puts
+        mov dx,s_sum4                   ; run time (own line, so logs compare without it)
+        call puts
+        call runtime
+        mov dx,s_sum5
+        call puts
         mov cx,[bp_]
         sub cx,obuf
         mov dx,obuf
@@ -159,7 +168,7 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: 'Version ' and ROMVER (now "2.04.11-p12") within C000:0000-00FF, and an 8-bit checksum of 00 over the
+; Expect: 'Version ' and ROMVER (now "2.04.07-p14") within C000:0000-00FF, and an 8-bit checksum of 00 over the
 ; lower 32 KB (the half the VGA BIOS runs from).
 t_rom:  mov dx,s_sig
         call puts
@@ -2005,6 +2014,33 @@ pdec:   push ebx                ; EAX unsigned
         pop ecx
         pop ebx
         ret
+; Run time from the BIOS tick (0040:006C, 18.2 per second; a tick that falls inside a long CLI is lost).
+; tickrd: EAX = the tick count. runtime: prints the time since [runt0] as "x.y s" (midnight handled).
+tickrd: push es
+        xor ax,ax
+        mov es,ax
+        pushf
+        cli
+        mov eax,[es:0x46C]
+        popf
+        pop es
+        ret
+runtime:
+        push edx
+        push ecx
+        call tickrd
+        sub eax,[runt0]
+        jae .p
+        add eax,0x1800B0                ; past midnight: ticks per day
+.p:     mov ecx,655360                  ; tenths of a second: ticks * 10 * 65536 / 1193182
+        mul ecx
+        mov ecx,1193182
+        div ecx
+        call pdec10
+        pop ecx
+        pop edx
+        ret
+
 pdec10: push edx                ; EAX = value*10 -> "x.y"
         push ebx
         xor edx,edx
@@ -2103,6 +2139,8 @@ s_fail  db '  FAIL',13,10,'$'
 s_sum1  db 13,10,'Passed: $'
 s_sum2  db '  Failed: $'
 s_sum3  db 13,10,'$'
+s_sum4  db 'Time spent: $'
+s_sum5  db ' s',13,10,'$'
 
 npass   dw 0
 vls     dw 0                    ; /V: start of the current line in obuf
@@ -2120,6 +2158,7 @@ m_meas  dw 0
 tmp     dw 0
 tmp2    dw 0
 tmin    dd 0
+runt0   dd 0                            ; BIOS tick at the start
 plbpl   dw 0                            ; planar scroll test: bytes per line, character height, lines
 plchh   dw 0
 pllines dw 0

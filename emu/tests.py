@@ -26,13 +26,16 @@ Tests
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
                    EGA (all others)
   s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
-                   (banked memory, throughput); with /V the output is the same and S3TEST.DBG is well
-                   formed
+                   (banked memory, throughput); with /V the output is the same (except the Time spent
+                   line) and S3TEST.DBG is well formed
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed
   s3compat_vga     S3COMPAT's VGA and Mode X part (built with nasm from the source with the rest cut
                    out): every test passes (registers, BIOS data, refresh, planar memory, palettes),
                    only the known mode 10h warning; with /V the output is the same and S3COMPAT.DBG
                    is well formed
+  s3compat_vbe     S3COMPAT's extra VBE function tests alone (4F00 capabilities vs 4F08, 4F04 per state mask,
+                   invalid subfunctions and undefined functions refused, 4F0A table layout, 4F10 DPMS
+                   states and SR0D sync control): all PASS, 4F15 INFO (the model has no DDC lines)
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
                    caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
   vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
@@ -326,7 +329,7 @@ def t_s3test(c):
     if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
         r0 = c.machine().run_com(com, '')
-        check(r1.stdout == r0.stdout, 'output differs without /V')
+        check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
     return 'exit code %d' % r1.exit[1]
 
 
@@ -340,11 +343,16 @@ def t_vshow(c):
     check(b'VSHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
     if v:
         r0 = c.machine().run_com(com, '101')
-        check(r1.stdout == r0.stdout, 'output differs without /V')
+        check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
         lines = check_dbg(r1.files.get('VSHOW.DBG'), 'VSHOW.DBG')
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
         check(any(l.startswith('D:FRM n=31') for l in lines), 'no frame timing')
+
+
+def no_time(out):
+    """The output without the 'Time spent:' line of S3TEST and S3COMPAT (the run time differs with /V)."""
+    return re.sub(rb'Time spent: [0-9.]+ s\r\n', b'', bytes(out))
 
 
 def build_s3compat_vga(tmp):
@@ -369,6 +377,46 @@ def build_s3compat_vga(tmp):
     return open(out, 'rb').read()
 
 
+def build_s3compat_vbe(tmp):
+    """S3COMPAT with only the VBE function tests of vesa_more (4F00/4F08, 4F04 masks, invalid and
+    undefined functions, 4F0A table, 4F10, 4F15), which need no banked or linear video memory."""
+    nasm = shutil.which('nasm')
+    if not nasm:
+        raise Skip('nasm not found')
+    t = open(os.path.join(SRC, 's3compat', 's3compat.asm')).read()
+    cuts = [("        call setup\n        call post_tests\n", ""),
+            ("        mov byte [pass],1\n", "        mov byte [pass],1\n        call vesa_more\n        jmp emu_end\n"),
+            ("        call cleanup\n", "        call cleanup\nemu_end:\n")]
+    for a, b in cuts:
+        check(t.count(a) == 1, 'cannot cut s3compat.asm at %r' % a[:40])
+        t = t.replace(a, b)
+    shutil.copy(os.path.join(SRC, 's3compat', 'vgaref.inc'), tmp)
+    src = os.path.join(tmp, 's3cvbe.asm')
+    open(src, 'w').write(t)
+    out = os.path.join(tmp, 'S3CVBE.COM')
+    inc = os.path.join(SRC, 'common') + os.sep
+    subprocess.run([nasm, '-f', 'bin', '-i' + inc, '-i' + tmp + os.sep, '-o', out, src], check=True, cwd=tmp)
+    return open(out, 'rb').read()
+
+
+def t_s3compat_vbe(c):
+    with tempfile.TemporaryDirectory() as tmp:
+        com = build_s3compat_vbe(tmp)
+    r = c.machine().run_com(com, '')
+    c.save('S3CVBE', r)
+    check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
+    lines = r.stdout.decode('latin1').split('\r\n')
+    names = ('4F00 capabilities', '4F04 state masks', 'VBE invalid', 'VBE undefined', '4F0A table',
+             '4F10 power', '4F15 DDC')
+    tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
+    check(len(tests) == len(names), 'only %d of the %d VBE lines: %s' % (len(tests), len(names), tests))
+    # the model has no DDC lines: 4F15 must say so (INFO), everything else PASS
+    bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
+           not (l.startswith('4F15') and l.rstrip().endswith('INFO'))]
+    check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    return '%d tests' % len(tests)
+
+
 def t_s3compat_vga(c):
     with tempfile.TemporaryDirectory() as tmp:
         com = build_s3compat_vga(tmp)
@@ -386,7 +434,7 @@ def t_s3compat_vga(c):
     check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad + details[:6]))
     if v:
         r1 = c.machine().run_com(com, '')
-        check(r1.stdout == r0.stdout, 'output differs without /V')
+        check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
         dl = check_dbg(r0.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         check(sum(1 for l in dl if l.startswith('D:TEST')) >= len(tests), 'fewer D:TEST records than tests')
     return '%d tests' % len(tests)
@@ -617,7 +665,7 @@ def t_s3regs(c):
 
 TESTS = [('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga),
+         ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe)]
 

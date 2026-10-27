@@ -1,5 +1,5 @@
 ; p13: byte fill with the end pointer of rep stosb, for the planar scroll window loop. Assembled at P13C,
-; the dead bytes of the old font load loop after the p12 jump (1227h in 2.04.11, 14 bytes).
+; the dead bytes of the old font load loop after the p12 jump (1227h, 14 bytes).
 bits 16
 cpu 386
 %include "bios.inc"

@@ -109,7 +109,7 @@ boost:
         pop     ax
         ret
 
-; ---------------- LFB base read (called from 0x5CF4 instead of 'mov ax,bx') ----------------
+; ---------------- LFB base read (called instead of 'mov ax,bx' in the 4F01 base read) ----------------
 ; In: BX = CR59:CR5A, DX = CRTC. Out: AX = real base bits 31-16, flags from 'or ax,ax'
 basefix:
         mov     ax, bx
@@ -121,7 +121,7 @@ basefix:
 .r:     or      ax, ax
         ret
 
-; ---------------- linear mode test (called from 0x5D12 instead of 'and ax,1000h') ----------------
+; ---------------- linear mode test (called instead of 'and ax,1000h' in 4F05/4F03) ----------------
 ; In: AH = CR58. ZF=1 if not a linear frame buffer mode (LA off, or booster's 64 KB window)
 lfbchk:
         test    ah, 0x10
