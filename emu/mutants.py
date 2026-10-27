@@ -203,7 +203,7 @@ def main():
     # INT 10h calls and the ROM bytes it executes or reads; a mutant runs only the tests that call its
     # function or reach its bytes (in ORDER), and survives at once when no test does
     import hashlib, json
-    sha = hashlib.sha256(rom).hexdigest()
+    sha = hashlib.sha256(rom + open(os.path.join(HERE, 'tests.py'), 'rb').read()).hexdigest()   # ROM and tests
     prof = None
     if os.path.exists(a.profile):
         prof = json.load(open(a.profile))
