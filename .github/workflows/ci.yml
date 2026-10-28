@@ -5,9 +5,10 @@
 # and cancels a run when a newer commit of the same branch or pull request arrives.
 #
 # Every run: NASM 3.02 is built from its release source (cached), `make` builds every tool, the ROM is
-# built from the S3 reference BIOS 2.04.07 in reference/v2/2_04_07.bin and checked against the pinned
-# SHA-256 (make rom, make rom-test), then the emulator tests (2 and 4 MB), the coverage goal (80 %) and
-# the EGA/CGA comparison with the reference run on that ROM. The patched ROM image is not kept.
+# built from the S3 reference BIOS 2.04.07 in reference/v2/2_04_07.bin (the Makefile default of IN and
+# REF) and checked against the pinned SHA-256 (make rom, make rom-test), then the emulator tests (2 and
+# 4 MB), the coverage goal (80 %) and the EGA/CGA comparison with the reference run on that ROM. The
+# patched ROM image is not kept.
 name: CI
 
 on:
@@ -27,7 +28,6 @@ concurrency:
 
 env:
   NASM_VERSION: '3.02'
-  REF: reference/v2/2_04_07.bin
 
 jobs:
   build-and-test:
@@ -80,10 +80,10 @@ jobs:
         run: pip install '.[coverage]'
 
       - name: Build the ROM from the reference BIOS
-        run: make rom NASM=$HOME/nasm/nasm IN="$REF" OUT="$RUNNER_TEMP/ROM.BIN"
+        run: make rom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/ROM.BIN"
 
       - name: ROM patcher tests
-        run: make rom-test NASM=$HOME/nasm/nasm REF="$REF" ROM="$RUNNER_TEMP/ROM.BIN"
+        run: make rom-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
 
       - name: Emulator tests
         run: make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
@@ -92,7 +92,7 @@ jobs:
         run: make coverage NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
 
       - name: EGA/CGA against the reference BIOS
-        run: make ref-compare REF="$REF" ROM="$RUNNER_TEMP/ROM.BIN"
+        run: make ref-compare ROM="$RUNNER_TEMP/ROM.BIN"
 
       - name: Upload the emulator logs
         if: always()

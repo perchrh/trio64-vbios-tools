@@ -45,7 +45,7 @@ folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
     make emu-test ROM=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm
-    make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm
+    make rom OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -196,7 +196,7 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
+    make ref-compare ROM=S3V2P15.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -212,16 +212,17 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
 (p15) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P15.BIN
-    make rom IN=REF2047.BIN OUT=S3V2P15.BIN
+    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P15.BIN
+    make rom OUT=S3V2P15.BIN
 
-REF2047.BIN is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
-used); the repository carries it as `reference/v2/2_04_07.bin`. The result is 64 KB: the patched
-BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every patch site is compared with the original
-code first (the replaced routines in full), and the result is checked before it is written: the
-lower half sums to 00 and declares 32 KB, the upper half is zeros, every DCLK VCO is in 170-340 MHz,
-and with the known reference image the SHA-256 is the one of the build that passed every emulator
-test (b60cfe0d...).
+The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
+used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
+of `REF` for `make rom-test` and `make ref-compare`; `IN=...` or `REF=...` selects another copy. The
+result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every patch site is
+compared with the original code first (the replaced routines in full), and the result is checked
+before it is written: the lower half sums to 00 and declares 32 KB, the upper half is zeros, every
+DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of the build
+that passed every emulator test (b60cfe0d...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
@@ -229,10 +230,10 @@ MOVSD/STOSD, 3.01 and 3.02 after it; the p15 image of 2.16.01 had SHA-256 1caad8
 same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN]
-    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
+    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P15.BIN]
+    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,

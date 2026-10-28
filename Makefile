@@ -79,24 +79,29 @@ coverage: all
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --coverage emu/logs/COVER.BIN
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
+# The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF of ref-compare and rom-test
+# and the default IN of rom; give REF=... or IN=... for another copy
+REF ?= reference/v2/2_04_07.bin
+IN ?= $(REF)
+
 # EGA/CGA behaviour against the unpatched reference BIOS (AGENTS.md goal)
-#   make ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
+#   make ref-compare ROM=S3V2P15.BIN [REF=REF2047.BIN]
 ref-compare:
-	@test -n "$(REF)" -a -n "$(ROM)" || { echo "ref-compare: set REF and ROM"; exit 2; }
+	@test -n "$(REF)" -a -n "$(ROM)" || { echo "ref-compare: set ROM (and REF, default reference/v2/2_04_07.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --ref "$(REF)" --rom "$(ROM)"
 
 clean:
 	rm -rf build
 
 # ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
-#   make rom IN=REF2047.BIN OUT=S3V2P15.BIN               (upper 32 KB: zeros)
-#   make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
+#   make rom OUT=S3V2P15.BIN [IN=REF2047.BIN]              (upper 32 KB: zeros)
+#   make rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 rom:
-	@test -n "$(IN)" -a -n "$(OUT)" || { echo "rom: set IN and OUT, e.g. make rom IN=REF2047.BIN OUT=S3V2P15.BIN"; exit 2; }
+	@test -n "$(IN)" -a -n "$(OUT)" || { echo "rom: set OUT, e.g. make rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
 	python3 rompatch/s3patch.py --nasm "$(NASMBIN)" "$(IN)" -o "$(OUT)"
 
 rom-test:
-	@test -n "$(REF)" || { echo "rom-test: set REF (2.04.07, 32 KB); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
+	@test -n "$(REF)" || { echo "rom-test: set REF (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
 	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 .PHONY: all clean emu-test rom rom-test coverage ref-compare
