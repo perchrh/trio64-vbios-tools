@@ -525,3 +525,16 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 - The stock 2.04.11 dump, disassembled to locate the mode set, refresh tables and VBE handlers.
 - The S3 reference BIOS 2.04.07, the base of the current ROM, compared with 2.04.11 to find the same
   routines and tables at its addresses.
+- Reviewed on 28 October 2026, nothing new for the 86C775: riplin's annotated disassembly of the
+  Phoenix S3 Trio64 BIOS 1.5-07 EDO for the Trio32/Trio64 (86C764x, PCI 5333:8811),
+  [hag `research/s3/bios/86c764x.asm`](https://github.com/riplin/hag/blob/main/research/s3/bios/86c764x.asm),
+  and the VOGONS thread
+  [I disassembled an S3 Trio64 BIOS and am annotating it](https://www.vogons.org/viewtopic.php?t=96638).
+  It is another code base than the S3 reference 2.04.07, so no addresses or tables carry over, and it
+  has no patches yet (a slowdown fix and more VBE modes are only planned). Its settings (SR0A bit 7
+  2-MCLK writes at a 55 MHz MCLK, CR3B = horizontal total - 7, CR54/CR60 for 1 MB) belong to another
+  chip and BIOS and are no new evidence for the SR15/CR87 result above. The thread's dual-card
+  description (40:87 bit 1 selects MDA or CGA replacement) is standard VGA behaviour, which the ROM
+  keeps unchanged from the reference. Licence: hag is MIT (Copyright (c) 2023 riplin), which covers
+  riplin's own annotations and code but not the reproduced Phoenix/S3 ROM bytes and tables; VOGONS
+  posts carry no licence. Nothing from either was copied.
