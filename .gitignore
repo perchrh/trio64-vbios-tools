@@ -3,6 +3,8 @@ build/
 *.LOG
 *.lst
 __pycache__/
+!reference/**/*.bin
+!reference/**/*.BIN
 *.bin
 *.BIN
 .venv/
@@ -11,3 +13,4 @@ emu/logs/
 emu/logs4/
 *.untested
 nasm/
+poetry.lock
