@@ -203,10 +203,27 @@ def assemble(sym, nasm, srcdir=HERE):
 
 
 # ------------------------------------------------------------------ DCLK PLL
+# Trio64V2 DCLK PLL (docs/chip-rules.md): f = 14.31818 MHz * (M+2) / ((N+2) * 2^R) with M 1-127 and N
+# 1-31 (PLL-2), R in SR12 bits 6-5 plus bit 7 as the third bit, of which only 100b (divide by 16) is
+# defined among the codes with bit 7 set (V2-PLL-3).
+def rcode(nr):
+    return ((nr >> 5) & 3) | (4 if nr & 0x80 else 0)
+
+
 def pll(m, nr):
-    n, r = nr & 0x1F, (nr >> 5) & 3
-    vco = 14.31818 * (m + 2) / (n + 2)
-    return vco, vco / (1 << r)
+    vco = 14.31818 * (m + 2) / ((nr & 0x1F) + 2)
+    return vco, vco / (1 << rcode(nr))
+
+
+def pll_rule(m, nr):
+    """None when the M and N/R bytes follow the datasheet, else what is wrong."""
+    if not 1 <= m <= 0x7F:
+        return 'M = %d (1-127)' % m
+    if not nr & 0x1F:
+        return 'N = 0 (1-31)'
+    if nr & 0x80 and nr & 0x60:
+        return 'reserved R code %s' % format(nr >> 5, '03b')
+    return None
 
 
 def refresh_entries(img):
@@ -236,7 +253,7 @@ def vco_fix(d, log, lo=170.0):
         vco, f = pll(m, nr)
         if vco >= lo:
             continue
-        r, nn = (nr >> 5) & 3, nr & 0x1F
+        r, nn = rcode(nr), nr & 0x1F         # r = 4 (bit 7): no larger R left, refused below
         best = None                         # same pixel clock: (M'+2)/(N'+2)/2^R' = (M+2)/(N+2)/2^R
         for r2 in range(r + 1, 4):
             for n2 in range(1, 32):
@@ -248,7 +265,7 @@ def vco_fix(d, log, lo=170.0):
         if not best:
             raise PatchError('refresh entry %04X: no M/N/R with the same clock %.3f MHz and the VCO in range' % (e, f))
         m2, n2, r2 = best
-        nr2 = (nr & 0x80) | (r2 << 5) | n2
+        nr2 = (r2 << 5) | n2                 # r2 <= 3: bit 7 stays clear
         d[e + 4], d[e + 5] = m2, nr2
         v2, f2 = pll(m2, nr2)
         assert abs(f2 - f) < 1e-9
