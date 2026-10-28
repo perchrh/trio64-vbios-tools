@@ -39,6 +39,8 @@
 ;      Chip ID (CR2D-CR30, PCI revision)        INFO (89 01 06 E1, PCI 06 on the test card)
 ;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-270 MHz, 1-cycle EDO
 ;      limit 60 MHz)
+;      SR1A bit 4 set at POST (Trio64V2 only)   PASS
+;      PCI subsystem ID from the ROM (Trio64V2)  PASS (ROM 40h = CR81-84 = PCI 2Ch, CR37 bit 2 = 0)
 ;   3. Initial state, setup                     INFO, PASS (mode 03, baseline, VRAM zeroed)
 ;   4. VGA modes 00h-13h and the 350-line text modes against the IBM reference
 ;                                               PASS; mode 10h WARN 01 (8x16 font used, 8x14 missing)
@@ -216,12 +218,14 @@ start:  cld
         PS 'VESA fail bits: 1 4F01  2 window  4 layout  8 set/4F03  10 refresh  20 memory',13,10
         PS '  40 4F06  80 4F07/4F09  100 CRTC geometry vs 4F01  200 datasheet clock/colour',13,10
         PS '  400 refresh vs CRTC/PLL math  800 datasheet memory mapping (CR31/CR58-5A)',13,10
+        PS '  1000 datasheet register rule (Trio64V2: CR32 bit 3)',13,10
         PS 'Line info: measured kHz, H = total pixels per line (LCD clock setting), V = total lines.',13,10
         PS '16-colour VESA modes: memory bit 20 = separate pattern per plane at every bank.',13,10
         PS 'VESA warn bits: 1 refresh math factor 2  2 DCLK above datasheet max',13,10
         PS '  4 CR50 GE pixel length/width  10 interlace on  20 LFB on planar',13,10
         PS '  40 default refresh not the VESA DMT 60 Hz (70 Hz at 400 lines) rate',13,10
         PS '  8 DCLK VCO in the datasheet range, below the XFree86 minimum (Trio64V2 170 MHz)',13,10
+        PS '  80 datasheet register rule not yet confirmed on a card (Trio64V2: CR86, CR90/CR91 L1)',13,10
         call bios_id
         call chip_id
         call setup
@@ -360,6 +364,12 @@ chip_id:
 ; warn bits:
 ;   1 SR10 bit 7 set: reserved on every chip; the Trio64V2 adds a third R bit for the DCLK PLL only
 ;     (SR12 bit 7, V2-PLL-3), so it is not taken as an R bit here
+; SR1A line (Trio64V2 only), fail bit 1: SR1A bit 4 (FCTD) not set; the BIOS must set it upon reset
+;   (Trio64V2 datasheet section 4.2, V2-REG-1)
+; Subsystem ID line (Trio64V2 only, section 3.8, V2-PCI-1): the video BIOS copies the subsystem IDs
+;   from ROM C000:0040-0043 to CR81-CR84, which PCI configuration 2Ch-2Fh mirrors, and clears CR37
+;   bit 2 (until then the chip answers a PCI read of 2Ch by reading the ROM itself). Fail bits:
+;   1 CR37 bit 2 still 1, 2 CR81-CR84 differ from the ROM bytes, 4 PCI 2Ch differs from the ROM bytes
 post_tests:
         call unlock
         TB C_S3,'MCLK PLL (SR10/SR11) vs datasheet'
@@ -406,6 +416,79 @@ post_tests:
         jbe .ok
         FAILB 2
 .ok:    call tend
+        cmp byte [chip],CHIP_T64V2      ; SR1A exists on the Trio64V2 only
+        jne .x
+        call unlock
+        TB C_S3,'SR1A bit 4 (FCTD) set at POST'
+        call tdots
+        RS 0x1A
+        mov [tmpb],al
+        PS 'SR1A='
+        mov al,[tmpb]
+        call phex2
+        test byte [tmpb],0x10
+        jnz .s1
+        FAILB 1
+.s1:    call tend
+        call unlock
+        TB C_S3,'PCI subsystem ID: ROM 40h, CR81-84'
+        call tdots
+        push es
+        mov ax,0xC000
+        mov es,ax
+        mov eax,[es:0x40]
+        pop es
+        mov [subrom],eax
+        mov si,subcr                    ; CR81-CR84 -> subcr, low byte first
+        mov ah,0x81
+.sc:    mov al,3
+        push ax
+        call readreg
+        mov [si],al
+        pop ax
+        inc si
+        inc ah
+        cmp ah,0x85
+        jb .sc
+        mov ax,0xB10A                   ; PCI configuration dword 2Ch
+        mov bx,[chipbx]
+        mov di,0x2C
+        int 0x1A
+        mov [subpci],ecx
+        RC 0x37
+        mov [tmpb],al
+        PS 'ROM '
+        mov eax,[subrom]
+        call phex8
+        PS ' CR '
+        mov eax,[subcr]
+        call phex8
+        PS ' PCI '
+        mov eax,[subpci]
+        call phex8
+        PS ' CR37='
+        mov al,[tmpb]
+        call phex2
+        test byte [tmpb],0x04
+        jz .p1
+        FAILB 1
+.p1:    mov eax,[subrom]
+        cmp eax,[subcr]
+        je .p2
+        FAILB 2
+.p2:    cmp eax,[subpci]
+        je .p3
+        FAILB 4
+.p3:    call tend
+.x:     ret
+
+phex8:  push eax                        ; print EAX as 8 hex digits
+        shr eax,16
+        call phex4
+        pop eax
+        push eax
+        call phex4
+        pop eax
         ret
 
 ; AL = SR12 (DCLK N and R) -> CF=1 when it holds a reserved R code: on the Trio64V2 ([r3bit]) bit 7 is
@@ -3975,8 +4058,10 @@ presmode:                               ; print WxHxBPP
 ;   40 4F06 BL=1 pitch differs from 4F01            80 4F07 start get/set or 4F09 8-bit palette wrong
 ;   100 CRTC geometry (pitch, YRes, XRes) vs 4F01   200 datasheet colour mode / clock rules (dschk)
 ;   400 refresh vs CRTC/PLL prediction              800 memory mapping rules (mapchk)
+;   1000 datasheet register rules (regchk)
 ; Warn bits: 1 refresh prediction off by a factor 2, 2 DCLK above datasheet maximum, 4 CR50 pixel
-; length, 8 DCLK VCO below [vcomin] but inside the datasheet range (dschk), 10 interlace on, 20 LFB on a planar mode, 40 default rate of a knownhz mode more than 1.5 Hz
+; length, 8 DCLK VCO below [vcomin] but inside the datasheet range (dschk), 80 register rule not yet
+; confirmed on a card (regchk), 10 interlace on, 20 LFB on a planar mode, 40 default rate of a knownhz mode more than 1.5 Hz
 ; off the VESA DMT rate (another default is a choice of the BIOS, not an error; S3TEST checks the
 ; rates of our patched BIOS). INFO for modes the BIOS marks unsupported.
 ; Expect PASS (106h WARN 02).
@@ -4477,7 +4562,8 @@ pos24   db 8,16,8,8,8,0
 
 ; DCLK above the chip's maximum is WARN 02 (Trio64V2: 95 MHz, 170 doubled, 75 packed 24, 50 at 32 bpp,
 ; 80 single clocked with the Streams Processor on (CR67 bits 3-2 = 11b, V2-CLK-2); Trio32/64/V+: 80,
-; 135 doubled, 75 packed 24, 50 at 32 bpp); CR50 pixel length WARN 04; interlace WARN 10.
+; 135 doubled, 75 packed 24, 50 at 32 bpp); CR50 pixel length WARN 04; interlace WARN 10; then the
+; register rules of regchk (FAIL 1000, WARN 80).
 dschk:  call rdall
         ; CRTC pitch (CR13 + CR51 5-4, or CR43 bit 2) in the addressing unit (CR31.3 -> dwords)
         movzx ax,byte [q_r13]
@@ -4681,7 +4767,79 @@ dschk:  call rdall
 .g3:    test byte [q_r42],0x20
         jz .g6
         WARNB 0x10
-.g6:    ret
+.g6:    call regchk
+        ret
+
+; Trio64V2 register rules after a VESA mode set (docs/chip-rules.md), on [q_*] from rdall:
+;   FAIL 1000 CR32 bit 3 set ("Reserved = 0. This bit should never be set to 1", V2-REG-2)
+;   WARN 80   CR86 bit 7 = 0 (DAC power saving on) and CR86 bits 6-0 not at least 1 less than the End
+;             Horizontal Blank value of CR5D bit 3, CR05 bit 7 and CR03 bits 4-0 (V2-REG-3; the
+;             datasheet compares the two register values, so the test does too)
+;   WARN 80   CR90 bit 7 = 1 (L1 fetch length on) and the 11-bit L1 value (CR90 bits 2-0, CR91) not
+;             [(bytes of displayed pixels per line) / 8] - 1, from 4F01 XRes and BitsPerPixel; text
+;             and planar modes are not judged (V2-REG-4)
+; WARN rather than FAIL for the two CR86/CR90 rules: they are new and not yet confirmed on the card.
+regchk: cmp byte [chip],CHIP_T64V2
+        jne .x
+        test byte [q_r32],0x08
+        jz .c86
+        FAILB 0x1000
+        mov ax,0x3203
+        mov bl,[q_r32]
+        and bl,0x08
+        mov bh,0
+        call mm_add
+.c86:   test byte [q_r86],0x80
+        jnz .c90
+        mov al,[q_r03]                  ; End Horizontal Blank, 7 bits
+        and al,0x1F
+        test byte [q_r05],0x80
+        jz .e1
+        or al,0x20
+.e1:    test byte [q_r5d],0x08
+        jz .e2
+        or al,0x40
+.e2:    mov bl,[q_r86]
+        and bl,0x7F
+        cmp bl,al
+        jb .c90
+        WARNB 0x80
+        mov bh,al                       ; shown as expected: the End Horizontal Blank value
+        mov ax,0x8603
+        call mm_add
+.c90:   test byte [q_r90],0x80
+        jz .x
+        cmp byte [istext],1
+        je .x
+        cmp byte [mibuf+0x1B],3         ; planar
+        je .x
+        movzx eax,word [mibuf+0x12]     ; XRes * bytes per pixel / 8 - 1 (15 bpp counts 16)
+        movzx edx,byte [mibuf+0x19]
+        add edx,7
+        and edx,0xF8
+        imul eax,edx
+        shr eax,6
+        dec eax
+        and eax,0x7FF
+        movzx edx,byte [q_r90]
+        and dl,7
+        shl edx,8
+        mov dl,[q_r91]
+        cmp eax,edx
+        je .x
+        WARNB 0x80
+        push ax
+        mov bh,al
+        mov bl,[q_r91]
+        mov ax,0x9103
+        call mm_add
+        pop ax
+        mov bh,ah
+        mov bl,[q_r90]
+        and bl,7
+        mov ax,0x9003
+        call mm_add
+.x:     ret
 cm_pl   db 0,0xFF
 cm_8    db 0,1,0xFF
 cm_15   db 3,0xFF
@@ -4806,6 +4964,18 @@ rdlist: db 3,0x00
         dw q_r5d
         db 3,0x67
         dw q_r67
+        db 3,0x03
+        dw q_r03
+        db 3,0x05
+        dw q_r05
+        db 3,0x32
+        dw q_r32
+        db 3,0x86
+        dw q_r86
+        db 3,0x90
+        dw q_r90
+        db 3,0x91
+        dw q_r91
         db 2,0x12
         dw q_rs12
         db 2,0x15
@@ -7624,6 +7794,15 @@ q_r59     db 0
 q_r5a     db 0
 q_r5d     db 0
 q_r67     db 0
+subrom    dd 0
+subcr     dd 0
+subpci    dd 0
+q_r03     db 0
+q_r05     db 0
+q_r32     db 0
+q_r86     db 0
+q_r90     db 0
+q_r91     db 0
 q_rs12    db 0
 q_rs15    db 0
 q_rs18    db 0
