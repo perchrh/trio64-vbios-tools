@@ -216,11 +216,12 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
     make rom IN=REF2047.BIN OUT=S3V2P15.BIN
 
 REF2047.BIN is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
-used). The result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every
-patch site is compared with the original code first (the replaced routines in full), and the result
-is checked before it is written: the lower half sums to 00 and declares 32 KB, the upper half is
-zeros, every DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of
-the build that passed every emulator test (b60cfe0d...).
+used); the repository carries it as `reference/v2/2_04_07.bin`. The result is 64 KB: the patched
+BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every patch site is compared with the original
+code first (the replaced routines in full), and the result is checked before it is written: the
+lower half sums to 00 and declares 32 KB, the upper half is zeros, every DCLK VCO is in 170-340 MHz,
+and with the known reference image the SHA-256 is the one of the build that passed every emulator
+test (b60cfe0d...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
@@ -248,18 +249,11 @@ changes that touch only `*.md`, `docs/` or `datasheets/` do not start a run, and
 same branch cancels the running one.
 
 Every run builds NASM 3.02 from its release source (cached between runs) and the tools with `make`;
-the .COM files are kept as the artifact `tools` for 14 days. The ROM tests need the S3 reference BIOS
-2.04.07, which is not in the repository. Stored as the repository secret `REF2047_B64` (32 KB, base64;
-the secret limit is 48 KB), it lets the run build the ROM (`make rom`, `make rom-test` with the pinned
-SHA-256), then run `make emu-test`, `make coverage` and `make ref-compare` on it; the emulator logs are
-kept as the artifact `emu-logs` (without .BIN files). To set the secret with the GitHub CLI:
-
-    head -c 32768 REF2047.BIN | base64 -w0 | gh secret set REF2047_B64
-
-or paste the output of `head -c 32768 REF2047.BIN | base64 -w0` under Settings, Secrets and variables,
-Actions, New repository secret. Without the secret (and for pull requests from forks, which GitHub
-gives no secrets) the run only builds the tools and says so in a notice. The hardware logs remain the
-final word, as for the emulator tests run by hand.
+the .COM files are kept as the artifact `tools` for 14 days. It then builds the ROM from the S3
+reference BIOS 2.04.07 in `reference/v2/2_04_07.bin` (`make rom`, `make rom-test` with the pinned
+SHA-256) and runs `make emu-test`, `make coverage` and `make ref-compare` on it; the emulator logs are
+kept as the artifact `emu-logs` (without .BIN files), the patched ROM image is not kept. The hardware
+logs remain the final word, as for the emulator tests run by hand.
 
 ## Debug log (/V)
 
