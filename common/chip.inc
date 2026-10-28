@@ -15,7 +15,7 @@
 ;   [vcomin]   DCLK PLL VCO minimum used for a FAIL-free result: 135 MHz (Trio32/64/V+ datasheet
 ;              section 9.1, PLL-1); 170 MHz on the Trio64V2, from XFree86 s3_Trio64DAC.c (V2-PLL-2)
 ;   [vcodsmin] DCLK PLL VCO minimum the datasheet gives: 135 MHz on every chip (the Trio64V2 datasheet
-;              changes only the maximum, section 3.6); the MCLK check uses it
+;              changes only the maximum, section 3.6). A VCO from [vcodsmin] up to [vcomin] is a WARN
 ;   [vcomax]   DCLK PLL VCO maximum: 270 MHz, 340 MHz on the Trio64V2 (section 3.6, V2-PLL-1)
 ;   [mvcomax]  MCLK PLL VCO maximum: 270 MHz on every chip (the Trio64V2 raises the DCLK PLL only)
 ;   [r3bit]    1 when SR12 bit 7 is the third bit of the DCLK post divider R (Trio64V2 only; SR10 bit 7

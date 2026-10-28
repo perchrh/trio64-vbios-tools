@@ -221,6 +221,7 @@ start:  cld
         PS 'VESA warn bits: 1 refresh math factor 2  2 DCLK above datasheet max',13,10
         PS '  4 CR50 GE pixel length/width  10 interlace on  20 LFB on planar',13,10
         PS '  40 default refresh not the VESA DMT 60 Hz (70 Hz at 400 lines) rate',13,10
+        PS '  8 DCLK VCO in the datasheet range, below the XFree86 minimum (Trio64V2 170 MHz)',13,10
         call bios_id
         call chip_id
         call setup
@@ -3975,7 +3976,7 @@ presmode:                               ; print WxHxBPP
 ;   100 CRTC geometry (pitch, YRes, XRes) vs 4F01   200 datasheet colour mode / clock rules (dschk)
 ;   400 refresh vs CRTC/PLL prediction              800 memory mapping rules (mapchk)
 ; Warn bits: 1 refresh prediction off by a factor 2, 2 DCLK above datasheet maximum, 4 CR50 pixel
-; length, 10 interlace on, 20 LFB on a planar mode, 40 default rate of a knownhz mode more than 1.5 Hz
+; length, 8 DCLK VCO below [vcomin] but inside the datasheet range (dschk), 10 interlace on, 20 LFB on a planar mode, 40 default rate of a knownhz mode more than 1.5 Hz
 ; off the VESA DMT rate (another default is a choice of the BIOS, not an error; S3TEST checks the
 ; rates of our patched BIOS). INFO for modes the BIOS marks unsupported.
 ; Expect PASS (106h WARN 02).
@@ -4466,12 +4467,13 @@ pos24   db 8,16,8,8,8,0
 ; pitch (CR13 + CR51 bits 5-4 / CR43 bit 2, unit from CR31/CR14/CR17) = 4F01 BytesPerScanLine,
 ; vertical display end = YRes * character height, horizontal display end a multiple of XRes (fail 100);
 ; CR67 colour mode fits the bpp, packed 24 bpp needs SR0B 7xh, clock doubling (CR67 mode 1) needs
-; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO in the chip's range
-; [vcomin]-[vcomax] (fail 200): 170-340 MHz on the Trio64V2 (maximum: datasheet section 3.6, V2-PLL-1;
-; minimum: XFree86 s3_Trio64DAC.c, V2-PLL-2), 135-270 MHz on the Trio32/64/V+ (section 9.1, PLL-1), the
+; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO in the datasheet range
+; [vcodsmin]-[vcomax] (fail 200): 135-340 MHz on the Trio64V2 (section 3.6 raises the maximum, the
+; minimum stays the Trio64V+ one; PLL-1, V2-PLL-1), 135-270 MHz on the Trio32/64/V+ (section 9.1), the
 ; PLL N value at least 1 (section 9.1, printed as 'PLL N=0') and, on the Trio64V2, no reserved R code
-; in SR12 bits 7-5 (V2-PLL-3, printed as 'PLL R code'). The MCLK check in post_tests uses 135 MHz to
-; [mvcomax].
+; in SR12 bits 7-5 (V2-PLL-3, printed as 'PLL R code'). A VCO inside the datasheet range but below
+; [vcomin] (170 MHz on the Trio64V2, XFree86 s3_Trio64DAC.c, V2-PLL-2) is WARN 08. The MCLK check
+; in post_tests uses 135 MHz to [mvcomax].
 
 ; DCLK above the chip's maximum is WARN 02 (Trio64V2: 95 MHz, 170 doubled, 75 packed 24, 50 at 32 bpp,
 ; 80 single clocked with the Streams Processor on (CR67 bits 3-2 = 11b, V2-CLK-2); Trio32/64/V+: 80,
@@ -4618,13 +4620,17 @@ dschk:  call rdall
         jnz .n1
         FAILB 0x200
         PS 'PLL N=0 '
-.n1:    mov eax,[vco]                   ; the chip's VCO range (common/chip.inc)
-        cmp eax,[vcomin]
+.n1:    mov eax,[vco]                   ; the datasheet VCO range (common/chip.inc, PLL-1, V2-PLL-1)
+        cmp eax,[vcodsmin]
         jb .vb
         cmp eax,[vcomax]
-        jbe .lim
+        ja .vb
+        cmp eax,[vcomin]                ; below the XFree86 minimum (Trio64V2 only): WARN 08
+        jae .lim
+        WARNB 8
+        jmp .vp
 .vb:    FAILB 0x200
-        PS 'VCO '
+.vp:    PS 'VCO '
         mov eax,[vco]
         call pkhz
         call sp1
@@ -5533,11 +5539,13 @@ vesa_more:
 ; DCLK VCO at every refresh rate (the mode tests check it at the default rates only). For every mode
 ; of 4F00h (text too) and every rate its 4F14h BH=02h list gives: the rate set with 4F14h BH=00h, the
 ; mode with 4F02h, then SR12/SR13 read back. Fail bits:
-;   1 VCO outside the chip's range [vcomin]-[vcomax] (135-270 MHz, 170-340 MHz on the Trio64V2;
-;     PLL-1, V2-PLL-1, V2-PLL-2), 2 the refresh registers CR41, CR52, CR6B not as before afterwards (they are
+;   1 VCO outside the datasheet range [vcodsmin]-[vcomax] (135-270 MHz, 135-340 MHz on the Trio64V2;
+;     PLL-1, V2-PLL-1), 2 the refresh registers CR41, CR52, CR6B not as before afterwards (they are
 ;     written back directly), 4 Trio64V2: SR12 bits 7-5 a reserved R code (only 100b of the codes with
 ;     bit 7 set is defined, V2-PLL-3)
-; The first bad rates are listed as mode@Hz.
+; warn bits: 8 VCO inside the datasheet range but below [vcomin] (Trio64V2: 170 MHz, the minimum of
+;   XFree86 s3_Trio64DAC.c, V2-PLL-2; on the other chips [vcomin] = [vcodsmin], so never)
+; The first bad or warned rates are listed as mode@Hz.
 ;   INFO when the BIOS has no 4F14h (BL=00h returns AL other than 4Fh)
 ; The monitor sees every rate of every mode (up to 85 Hz at 1280x1024); an LCD may show out of range.
 tvco:   TB C_S3,'DCLK VCO at every refresh rate'
@@ -5631,10 +5639,14 @@ tvco:   TB C_S3,'DCLK VCO at every refresh rate'
         jmp .lst
 .r0:    call pllcalc
         mov eax,[vco]
-        cmp eax,[vcomin]
+        cmp eax,[vcodsmin]              ; outside the datasheet range: FAIL
         jb .bad
         cmp eax,[vcomax]
-        jbe .rn
+        ja .bad
+        cmp eax,[vcomin]                ; inside it, below the XFree86 minimum: WARN (V2-PLL-2)
+        jae .rn
+        WARNB 8
+        jmp .lst
 .bad:   FAILB 1
 .lst:   cmp byte [tmpb],6
         jae .rn
