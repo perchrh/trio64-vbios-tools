@@ -109,8 +109,11 @@ modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
 
 ### Other Trio64-family BIOSes
 
-`--chip` (`v2`, `vplus`, `trio64`, `trio32`) makes the model that chip: its PCI device ID and
-revision, CR2D-CR2F and the width of the PLL post divider R (3 bits on the Trio64V2 only). The tools
+`--chip` (`v2`, `vplus`, `uvplus`, `trio64`, `trio32`) makes the model that chip: its PCI device ID and
+revision, CR2D-CR2F, the PCI subsystem ID (Trio64V2 only) and the width of the PLL post divider R (3
+bits on the Trio64V2 only). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
+system memory (UMA), which neither the tools nor the model know about, so only its register rules are
+judged. The tools
 find the chip themselves (`common/chip.inc`) and judge the clocks by that chip's datasheet limits.
 With a ROM that is not our patched BIOS (no `2.04.07-pN` sign-on) the tests tagged `patch` (version,
 rom_patches, stores, s3test, s3alias) are skipped, and the others take their expected values from the
@@ -134,6 +137,13 @@ cleared), and its VESA lines CR32 bit 3 (FAIL 1000) and the CR86 and CR90/CR91 r
 card run confirms them). The emulator test `v2_writes` (tag `s3 emu`, Trio64V2 model only) checks the
 rules that concern writes: CR26 = 00h after CR39 = A5h on every mode set, and CR40 bit 0 and CR66 bit 0
 changed only with the screen off or in vertical retrace.
+
+On every chip S3COMPAT also checks the MCLK against the chip's maximum (60 MHz on the Trio32/64 and
+Trio64V+, 66.67 MHz on the Trio64UV+), PLL M and N of at least 1, packed 24 bpp by either encoding
+(SRB 78h or CR67 0111b, 75 MHz, not on a Trio64), no clock doubling with the Streams Processor on, SR15
+bit 5 not left set, and on the Trio64V+ family the CR66 combination the Trio64UV+ update calls a system
+hang (FAIL 1000). The emulator test `engine_init` checks that a BIOS that uses the graphics engine
+writes BEE8h index D and E first.
 
 What the emulator finds in the stock BIOSes at hand (2 MB; the card logs decide):
 
