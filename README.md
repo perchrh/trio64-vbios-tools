@@ -109,8 +109,11 @@ modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
 
 ### Other Trio64-family BIOSes
 
-`--chip` (`v2`, `vplus`, `trio64`, `trio32`) makes the model that chip: its PCI device ID and
-revision, CR2D-CR2F and the width of the PLL post divider R (3 bits on the Trio64V2 only). The tools
+`--chip` (`v2`, `vplus`, `uvplus`, `trio64`, `trio32`) makes the model that chip: its PCI device ID and
+revision, CR2D-CR2F, the PCI subsystem ID (Trio64V2 only) and the width of the PLL post divider R (3
+bits on the Trio64V2 only). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
+system memory (UMA), which neither the tools nor the model know about, so only its register rules are
+judged. The tools
 find the chip themselves (`common/chip.inc`) and judge the clocks by that chip's datasheet limits.
 With a ROM that is not our patched BIOS (no `2.04.07-pN` sign-on) the tests tagged `patch` (version,
 rom_patches, stores, s3test, s3alias) are skipped, and the others take their expected values from the
@@ -124,6 +127,23 @@ chip other than the Trio64V2 a missing standard VESA mode and the S3 mode number
 BIOS are INFO. A default refresh other than the VESA 60 Hz rate is WARN 40 (a choice of the BIOS, not
 an error), an interlaced mode is judged by its frame (twice the lines of a field) and not held to the
 56-90 Hz range.
+
+Chip rules: S3COMPAT judges the registers the BIOS programs by the datasheet rules of the chip it
+found; `docs/chip-rules.md` lists every rule with its ID, chips, source and the result bit that checks
+it. On the Trio64V2 a DCLK VCO outside 135-340 MHz (the datasheet range) is FAIL 200; inside it but
+below 170 MHz (the minimum of XFree86, not of the datasheet) it is WARN 08. The Trio64V2 POST part also
+checks SR1A bit 4 and the PCI subsystem ID handover (ROM C000:0040-0043 to CR81-CR84, CR37 bit 2
+cleared), and its VESA lines CR32 bit 3 (FAIL 1000) and the CR86 and CR90/CR91 rules (WARN 80, until a
+card run confirms them). The emulator test `v2_writes` (tag `s3 emu`, Trio64V2 model only) checks the
+rules that concern writes: CR26 = 00h after CR39 = A5h on every mode set, and CR40 bit 0 and CR66 bit 0
+changed only with the screen off or in vertical retrace.
+
+On every chip S3COMPAT also checks the MCLK against the chip's maximum (60 MHz on the Trio32/64 and
+Trio64V+, 66.67 MHz on the Trio64UV+), PLL M and N of at least 1, packed 24 bpp by either encoding
+(SRB 78h or CR67 0111b, 75 MHz, not on a Trio64), no clock doubling with the Streams Processor on, SR15
+bit 5 not left set, and on the Trio64V+ family the CR66 combination the Trio64UV+ update calls a system
+hang (FAIL 1000). The emulator test `engine_init` checks that a BIOS that uses the graphics engine
+writes BEE8h index D and E first.
 
 What the emulator finds in the stock BIOSes at hand (2 MB; the card logs decide):
 
@@ -214,7 +234,8 @@ for a comparison; do not flash it. Build with 3.02 instead, for example
     make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
-00 with the right byte at 7FFFh, the upper half zeros, the VCO range, the free bytes still 00, a 64 KB
+00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
+N 1-31 and a defined R code (pllcodes), the free bytes still 00, a 64 KB
 input giving the same result whatever its upper half holds, `--no-vco-fix`, and the inputs that must
 be refused (already patched, three patch sites changed, a wrong checksum, and with
 `--stock` the card's stock 2.04.11).
@@ -324,8 +345,9 @@ Picture and monitor
   clocks per pixel.
 - **1600x1200 (120h):** vertical display end 1200 lines (CR12 AFh), as 4F01 reports; the reference
   shows 1201.
-- **DCLK PLL in its specified range:** 22 refresh entries of the reference ran the VCO at 145-162 MHz;
-  new M/N/R give exactly the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N).
+- **DCLK PLL in the XFree86 range:** 22 refresh entries of the reference ran the VCO at 145-162 MHz,
+  inside the datasheet range (135-340 MHz) but below the 170 MHz minimum XFree86 uses; new M/N/R give
+  exactly the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N).
   Each mode's refresh list starts at the entry its mode table pointer gives and runs downwards to the
   entry with bit 7 of byte 2 set.
 - 1280x1024x16 colours (106h) keeps the VESA DMT timing (108 MHz, 64 kHz, 60 Hz): 14% above the 95 MHz
@@ -471,7 +493,9 @@ of the booster in 640x480x8 (101h) with a write benchmark and a 320 KB pattern c
 | any | 1 | hang | - |
 
 There is no speed gain with this card's memory, SR15 bit 7 corrupts data and CR87 bit 1 hangs the
-machine, so neither bit is set by the ROM.
+machine, so neither bit is set by the ROM. The Trio64V+ datasheet (SR15 bit 7, "2 CYC MWR") says the
+2-MCLK write "can allow 2 MCLK operation for MCLK frequencies between 55 and 57 MHz"; the ROM's MCLK of
+59.96 MHz is above that window, which fits the data errors.
 
 ### Known remaining items
 
@@ -484,9 +508,13 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 
 ## Sources
 
-- S3 Trio64V2/DX and GX datasheet (preliminary): MCLK and DCLK limits, the 3-bit DCLK R divider
-  (SR12 bit 7), CR36 EDO modes, CR87 1-cycle linear addressing, CR90/CR91 FIFO.
-- XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c`: the DCLK PLL range 170-340 MHz for the Trio64V2/DX/GX, which S3COMPAT uses for every VESA mode
+- `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
+- S3 Trio64V2/DX and GX datasheet (preliminary): MCLK limits per memory type and DCLK limits, the
+  DCLK VCO maximum of 340 MHz, the 3-bit DCLK R divider (SR12 bit 7), CR36 memory types, CR87 1-cycle
+  linear addressing, CR90/CR91 FIFO, the PCI subsystem ID (section 3.8), SR1A, CR26, CR32, CR40, CR66
+  and CR86 rules.
+- XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c`: the DCLK PLL range 170-340 MHz for the
+  Trio64V2/DX/GX, which S3COMPAT uses as its WARN limit and the ROM patcher for every refresh entry
 - S3 Trio64V+ (86C765) datasheet, from the S3VBEFIX repository: PLL formula and VCO range, CR67 colour
   modes, SR15/SR18 clock doubling, CR31/CR58/CR59-5A linear addressing, CR50, CR51, CR43, CR5D/CR5E.
 - [S3VBEFIX](https://github.com/wbcbz7/S3VBEFIX) source and README, plus SVGATRIX.TXT and vbe20.txt.

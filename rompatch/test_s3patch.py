@@ -14,6 +14,8 @@ Tests
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
                  32 KB size, the upper 32 KB is zeros
   vco            every DCLK refresh entry runs its VCO in 170-340 MHz
+  pllcodes       every DCLK refresh entry has M 1-127, N 1-31 and an R code the datasheet defines (SR12
+                 bits 7-5: with bit 7 set only 100b), docs/chip-rules.md PLL-2 and V2-PLL-3
   free_space     the bytes of the free block 7CFB-7FEF that no code uses are still 00, so a later level
                  can use them
   input_64k      a 64 KB image with the reference in the lower half gives the same result, whatever
@@ -66,6 +68,10 @@ def image_checks(img):
     return errs
 
 
+def pll_bad(img):
+    return [e for e in s3patch.refresh_entries(img) if s3patch.pll_rule(img[e + 4], img[e + 5])]
+
+
 def vco_out(img):
     return [e for e in s3patch.refresh_entries(img) if not 170 <= s3patch.pll(img[e + 4], img[e + 5])[0] <= 340]
 
@@ -105,6 +111,8 @@ def main():
     result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper 32 KB zeros' % img[0x7FFF])
     bad = vco_out(img)
     result('vco', not bad, ', '.join('%04X' % e for e in bad) or 'all entries in 170-340 MHz')
+    bad = pll_bad(img)
+    result('pllcodes', not bad, ', '.join('%04X' % e for e in bad) or 'all entries M 1-127, N 1-31, defined R')
     used = set()
     sym = s3patch.bios_symbols()
     for name, org, room, want in s3patch.BLOCKS:

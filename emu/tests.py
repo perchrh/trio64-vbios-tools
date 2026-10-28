@@ -74,11 +74,17 @@ Tests
                    4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
                    IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
+  v2_writes        (emulator only, Trio64V2 model) the datasheet rules about writes (docs/chip-rules.md):
+                   CR26 = 00h after CR39 = A5h on every mode set (V2-REG-5), CR40 bit 0 and CR66 bit 0
+                   changed only with the screen off or in vertical retrace (V2-REG-6); modes 03h, 12h,
+                   13h, 101h, 111h, 112h
+  engine_init      (emulator only, Trio64V+/UV+/V2 models) a BIOS that uses the graphics engine writes
+                   BEE8h index D and E before its first command (ENG-1); skipped when it uses none
   -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
                    patch call tools card emu vram; --list shows them; vram = depends on the memory size)
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
-  --chip v2|vplus|trio64|trio32   the chip of the model (default v2, the card)
+  --chip v2|vplus|uvplus|trio64|trio32   the chip of the model (default v2, the card)
   --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
   -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
@@ -1298,6 +1304,56 @@ def t_display_switch(c):
     return 'AL=02h: AL=12h, state saved'
 
 
+def t_v2_writes(c):
+    """Trio64V2 datasheet rules about writes, which only the model can see (docs/chip-rules.md):
+    V2-REG-5: the BIOS writes 00h to CR26 on each mode set, with A5h in CR39 first ('Synchronization 2',
+    section 4.2); V2-REG-6: CR40 bit 0 and CR66 bit 0 change only with the screen off (SR01 bit 5) or in
+    vertical retrace (section 4.1). Checked for VGA modes 03h, 12h, 13h and the VESA modes 101h, 111h
+    and 112h. Only on the Trio64V2 model (--chip v2)."""
+    if Machine.chip != 'v2':
+        raise Skip('Trio64V2 rules (--chip v2)')
+    m = c.machine()
+    errs = []
+    sets = [('03h', lambda: m.int10(0x03)), ('12h', lambda: m.int10(0x12)), ('13h', lambda: m.int10(0x13)),
+            ('101h', lambda: m.int10(0x4F02, bx=0x101)), ('111h', lambda: m.int10(0x4F02, bx=0x111)),
+            ('112h', lambda: m.int10(0x4F02, bx=0x112))]
+    for name, fn in sets:
+        m.wlog = []
+        fn()
+        log, m.wlog = m.wlog, None
+        if not any(reg == 'CR' and i == 0x26 and v == 0 and cr39 == 0xA5
+                   for reg, i, v, old, sr01, vr, cr39 in log):
+            errs.append('%s: no CR26 = 00h with CR39 = A5h (V2-REG-5)' % name)
+        for reg, i, v, old, sr01, vr, cr39 in log:
+            if reg == 'CR' and i in (0x40, 0x66) and (v ^ old) & 1 and not sr01 & 0x20 and not vr:
+                errs.append('%s: CR%02X bit 0 %d->%d with the screen on outside retrace (V2-REG-6)'
+                            % (name, i, old & 1, v & 1))
+    m.int10(0x03)
+    check(not errs, '%d: %s' % (len(errs), '; '.join(errs[:8])))
+    return '%d mode sets' % len(sets)
+
+
+def t_engine_init(c):
+    """ENG-1 (docs/chip-rules.md): the power-on values of BEE8h index D and E are undefined, so software
+    writes both before the first graphics engine command (Trio64UV+ update ER010-B item 4, about the
+    Trio64V+ data book; Trio64V2 section 4.1). Through POST, mode 03h and the VESA modes 101h, 103h,
+    105h, 111h, 112h: when the BIOS issues an engine command (9AE8h), BEE8h index D and E were written
+    before the first one. Trio64V+, Trio64UV+ and Trio64V2 models; skipped when the BIOS uses no engine."""
+    if Machine.chip not in ('vplus', 'uvplus', 'v2'):
+        raise Skip('Trio64V+ family rule (--chip vplus, uvplus or v2)')
+    m = c.machine()
+    m.int10(0x03)
+    for mode in (0x101, 0x103, 0x105, 0x111, 0x112):
+        m.int10(0x4F02, bx=mode)
+    m.int10(0x03)
+    if not m.ge_cmds:
+        raise Skip('the BIOS issues no graphics engine command')
+    missing = {0xD, 0xE} - m.ge_first
+    check(not missing, 'first engine command without BEE8h index %s written before (ENG-1)'
+          % ' and '.join('%X' % i for i in sorted(missing)))
+    return '%d engine commands, BEE8h D and E written first' % m.ge_cmds
+
+
 def t_stores(c):
     """The p11-p14 speed patches do their video memory work with 32-bit stores (the reference BIOS uses
     8- and 16-bit ones, the same result): the share of the bytes written to A0000-BFFFF by 4-byte stores,
@@ -1339,7 +1395,8 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores)]
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
+         ('v2_writes', t_v2_writes), ('engine_init', t_engine_init)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
@@ -1357,6 +1414,7 @@ TAGS = {
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
+    'v2_writes': 's3 emu', 'engine_init': 's3 emu',
 }
 
 
@@ -1445,9 +1503,9 @@ def main():
     ap.add_argument('-j', type=int, default=1, metavar='N',
                     help='run N tests at a time, each in its own process (default 1; not with --coverage, '
                          '--profile or --calls). Each test prints a line when it starts and its result when done')
-    ap.add_argument('--chip', choices=('v2', 'vplus', 'trio64', 'trio32'), default='v2',
+    ap.add_argument('--chip', choices=('v2', 'vplus', 'uvplus', 'trio64', 'trio32'), default='v2',
                     help='the chip the model is (vgaemu.CHIPS): v2 = Trio64V2/DX (the card, default), vplus = '
-                         'Trio64V+, trio64 = Trio64, trio32 = Trio32; ID registers, PCI device and the PLL post divider follow it')
+                         'Trio64V+, uvplus = Trio64UV+, trio64 = Trio64, trio32 = Trio32; ID registers, PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
                     help='video memory the CR36 strapping reports: 2 MB (the card, default) or 4 MB (the '
                          '86C775 maximum; the model still has one 64 KB window, no banked or linear memory)')

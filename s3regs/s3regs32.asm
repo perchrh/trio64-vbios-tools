@@ -17,7 +17,7 @@
 ;
 ; What is read and what is left alone
 ;   MISC, FEAT, PEL mask; SR00-SR1F (SR08 = 06h while reading, restored); CR00-CRFF (CR38 = 48h and
-;   CR39 = A5h while reading, restored); GR00-GR08; PCI configuration 00h-3Fh of 5333:8901 or 8811 through
+;   CR39 = A5h while reading, restored); GR00-GR08; PCI configuration 00h-3Fh of 5333:8901, 8811 or 8814 through
 ;   ports CF8h/CFCh (CF8h restored). CR45, CR4A and CR4B are not read (a read moves the hardware cursor
 ;   colour stack) and the attribute controller is not touched. The 3C4h, 3CEh and 3D4h index registers
 ;   are put back. Watch mode ignores CR46-CR4F (hardware cursor position and pattern address, they
@@ -472,7 +472,7 @@ snapshot:
         cmp ebx,9
         jb .gr
         call crlf
-        mov esi,s_pci                   ; PCI 5333:8901 or 8811 (the Trio64 family), mechanism 1
+        mov esi,s_pci                   ; PCI 5333:8901, 8811 or 8814 (the Trio64 family), mechanism 1
         call str
         mov dx,0xCF8
         in eax,dx
@@ -486,6 +486,8 @@ snapshot:
         cmp eax,0x89015333              ; Trio64V2/DX/GX
         je .fo
         cmp eax,0x88115333              ; Trio32, Trio64, Trio64V+
+        je .fo
+        cmp eax,0x88145333              ; Trio64UV+
         je .fo
         add ecx,0x800
         cmp ecx,0x80010000

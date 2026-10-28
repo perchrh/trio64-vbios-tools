@@ -282,7 +282,7 @@ snapshot:
         mov dx,0x3CE
         mov al,[gri]
         out dx,al
-        ; PCI configuration of the card (5333:8901 or 8811, common/chip.inc)
+        ; PCI configuration of the card (5333:8901, 8811 or 8814, common/chip.inc)
         mov si,s_pci
         call str
         call chipfind

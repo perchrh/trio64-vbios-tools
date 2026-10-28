@@ -66,12 +66,14 @@ PCI_CONFIG = {0x00: 0x89015333, 0x04: 0x02000003, 0x08: 0x03000006,
 # The chips of the Trio64 family the model can be: PCI device ID, the ID registers CR2D/CR2E/CR2F
 # (CR2F = PCI revision) and CR30, and the DCLK PLL post divider: 2 bits (SR12 bits 6-5) on the
 # Trio32/64/V+, 3 bits with SR12 bit 7 on the Trio64V2. Datasheets: device 8811 for the Trio32 and
-# Trio64 (CR2E 10h / 11h) and the Trio64V+ (CR2E 11h, CR2F 4xh); 8901 is the Trio64V2/DX/GX.
+# Trio64 (CR2E 10h / 11h) and the Trio64V+ (CR2E 11h, CR2F 4xh); 8901 is the Trio64V2/DX/GX; 8814 the
+# Trio64UV+ (CR2E 14h, revision "xxH": 00h here; CR30 unchanged from the Trio64V+, E1h).
 CHIPS = {
     'v2':     dict(name='Trio64V2/DX', dev=0x8901, ids=(0x89, 0x01, 0x06, 0xE1), r3=True),
     'vplus':  dict(name='Trio64V+', dev=0x8811, ids=(0x88, 0x11, 0x40, 0xE1), r3=False),
     'trio64': dict(name='Trio64', dev=0x8811, ids=(0x88, 0x11, 0x00, 0xE1), r3=False),
     'trio32': dict(name='Trio32', dev=0x8811, ids=(0x88, 0x10, 0x00, 0xE1), r3=False),
+    'uvplus': dict(name='Trio64UV+', dev=0x8814, ids=(0x88, 0x14, 0x00, 0xE1), r3=False),
 }
 
 IRET_SEG = 0x0060          # every unused vector points to 0060:0000 = IRET
@@ -127,6 +129,11 @@ class Machine:
         mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
         self.planes = [bytearray(0x10000) for _ in range(4)]
         self.ge_cmds = 0                                # graphics engine commands written to 9AE8h
+        self.bee8 = set()                               # BEE8h indexes written (bits 15-12 of the word)
+        self.ge_first = None                            # the BEE8h indexes written before the first command
+        # write log for the datasheet rules that concern writes (docs/chip-rules.md): None = off, else a
+        # list of (reg, index, value, old value, SR01, in vertical retrace, CR39), reg 'SR' or 'CR'
+        self.wlog = None
         self.latch = [0, 0, 0, 0]
 
     # ------------------------------------------------------------------ ports
@@ -251,7 +258,13 @@ class Machine:
     def _out(self, uc, port, size, val, ud):
         r = self.r
         if port == 0x9AE8:                              # a graphics engine command: not modelled (a BIOS
-            self.ge_cmds += 1                           # that clears memory with it leaves it as it was)
+            if self.ge_cmds == 0:                       # that clears memory with it leaves it as it was)
+                self.ge_first = set(self.bee8)
+            self.ge_cmds += 1
+        if port == 0xBEE8 and size >= 2:
+            self.bee8.add((val >> 12) & 0xF)
+        elif port == 0xBEE9 and size == 1:
+            self.bee8.add((val >> 4) & 0xF)
 
         def w8(p, v):
             if p in (0x3B4, 0x3B5, 0x3BA) and r['misc'] & 1:
@@ -262,6 +275,10 @@ class Machine:
                 if r['ci'] == 7:                        # CR11 bit 7 protects CR00-07 except CR07 bit 4
                     r['crtc'][7] = (r['crtc'].get(7, 0) & ~0x10) | (v & 0x10)
                 return
+            if self.wlog is not None and p in (0x3C5, 0x3D5, 0x3B5):
+                reg, i, regs = ('SR', r['si'], r['seq']) if p == 0x3C5 else ('CR', r['ci'], r['crtc'])
+                self.wlog.append((reg, i, v, regs.get(i, 0), r['seq'].get(1, 0), self._retrace(),
+                                  r['crtc'].get(0x39, 0)))
             if p == 0x3C4: r['si'] = v
             elif p == 0x3C5: r['seq'][r['si']] = v
             elif p in (0x3D4, 0x3B4): r['ci'] = v
@@ -438,8 +455,18 @@ class Machine:
     def _pci_cfg(self, reg):
         """The PCI configuration dword at reg for the chip of the model (device ID and revision)."""
         c = CHIPS[Machine.chip]
-        if reg in (0x00, 0x2C):
+        if reg == 0x00:
             return (c['dev'] << 16) | 0x5333
+        if reg == 0x2C and Machine.chip == 'v2':
+            # Trio64V2 subsystem IDs (datasheet section 3.8, docs/chip-rules.md V2-PCI-1): CR81-CR84, or
+            # the ROM bytes C000:0040-0043 while CR37 bit 2 is 1 (the chip powers up with 1; the model
+            # starts with CR37 = 00h, so only the copy to CR81-CR84 is seen here)
+            cr = self.r['crtc']
+            if cr.get(0x37, 0) & 0x04:
+                return struct.unpack('<I', bytes(self.rom[0x40:0x44]))[0]
+            return cr.get(0x81, 0) | cr.get(0x82, 0) << 8 | cr.get(0x83, 0) << 16 | cr.get(0x84, 0) << 24
+        if reg == 0x2C:                                 # no subsystem ID register before the Trio64V2
+            return 0
         if reg == 0x08:
             return 0x03000000 | c['ids'][2]
         return PCI_CONFIG.get(reg, 0)
@@ -607,7 +634,7 @@ class Machine:
     calls = None                                        # a set: (AX, BX, DL) of every INT 10h call after POST
     call_limit = 50_000_000                             # instructions an INT 10h call of a test may take
     vram = 2                                            # MB the CR36 strapping reports: 2 (the card) or 4
-    chip = 'v2'                                         # CHIPS key: v2 (the card), vplus, trio64
+    chip = 'v2'                                         # CHIPS key: v2 (the card), vplus, uvplus, trio64, trio32
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):
