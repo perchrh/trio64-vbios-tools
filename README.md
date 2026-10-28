@@ -318,6 +318,13 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
   timings (107h about 87 Hz fields at 46.7 kHz, 120h about 98 Hz fields at 63.7 kHz, emulator with the
   reference). Windows then went back to the previous mode (4F02 207h right after 107h or 120h). The ROM sets
   60 Hz for both.
+- With p15 without the booster (`S3V2P15NB.BIN`, the same code as p16 minus the lazy booster) the
+  desktop works, and the driver keeps our memory clock: SR10/SR11 stay 42h/41h (59.96 MHz) on the
+  desktop and through a 120 s watch with video playback (Streams Processor on, CR67 DCh) and full-screen
+  video (640x480x16). It uses the BIOS pixel clocks, also the VCO-fixed ones (800x600: SR12/SR13
+  63h/6Eh, 40.09 MHz, VCO 320.7 MHz). In a full-screen DOS box the FIFO fix has cleared CR90 bit 7
+  (CR90 01h, the stock BIOS left 81h). Snapshots of desktop modes taken with S3REGS in a windowed DOS
+  box mix trapped values (SR 00h, A8h fill, the text CRTC) with some real ones; take them with S3REGS32.
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
   DOS box reads the real registers.
