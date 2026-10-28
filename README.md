@@ -36,7 +36,7 @@ All tools share one version number and S3TEST checks for one ROM version; both a
 
 ## Building
 
-NASM 2.x (tested with 2.16.01):
+NASM 2.x (tested with 2.16.01; the ROM build needs exactly 2.16.01, see ROM patcher):
 
     make            # Linux, macOS, WSL
     build.bat       # DOS or Windows with nasm.exe on the PATH
@@ -189,6 +189,12 @@ patch site is compared with the original code first (the replaced routines in fu
 is checked before it is written: the lower half sums to 00 and declares 32 KB, the upper half is
 zeros, every DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of
 the build that passed every emulator test (1caad895...).
+
+That SHA-256 holds for NASM 2.16.01. Another NASM version may encode some instructions differently
+(NASM 3.01 does), and then the result check fails: s3patch names the assembler and the blocks whose
+code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
+for a comparison; do not flash it. Build with 2.16.01 instead, for example
+`make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=/path/to/nasm-2.16.01/nasm`.
 
     python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN]
     make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]

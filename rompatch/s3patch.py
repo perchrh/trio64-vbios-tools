@@ -40,6 +40,15 @@ LEVEL = 'p15'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
 RESULT_SHA = '1caad895a473d087a258253474085eb45fea161afc074928f194df96fdd94b9d'  # 2.04.07-p15, emulator tests passed
+# SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 2.16.01: when
+# the result differs, these name the blocks another assembler encoded differently
+BLOCK_SHA = {
+    'p12ext.asm': '8aba378744a4e929', 'crtc240.asm': 'c82f2ec50dacb61d', 'hooks.asm': '2c9252f27e92c6d5',
+    'vbe4f06.asm': 'bdd213f1622291bb', 'clear32.asm': '3cd3fe1b1050222a', 'p13df.asm': '7e785b4ba99b8749',
+    'p13fill.asm': '693afd98cad4f228', 'p13move.asm': '1b9c1419922e5be4', 'p13bfill.asm': '973ba6c5bf3d0cff',
+    'p13bfa.asm': 'a4192aa0cbf344d3',
+}
+TESTED_NASM = '2.16.01'
 FREE_START, FREE_END = 0x7CFB, 0x7FE3   # free space the new code and tables use (end exclusive)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -309,6 +318,7 @@ def patch(lo, nasm='nasm', vcofix=True):
 
     # 3. code
     blocks, lab = assemble(sym, nasm)
+    patch.blocks = blocks                   # for the diagnosis in main when the result differs
     for off, code, name in blocks:
         d[off:off + len(code)] = code
         log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
@@ -414,6 +424,30 @@ def verify(img, vcofix):
     return errs
 
 
+def diagnose(nasm, output, img):
+    """Why the result differs: the assembler version, the blocks whose code differs from the tested
+    build; the image goes to OUTPUT.untested for a comparison (never to OUTPUT)."""
+    out = []
+    try:
+        v = subprocess.run([nasm, '-v'], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        v = '(nasm -v failed)'
+    out.append('assembler: %s (the tested build used NASM %s)' % (v or '?', TESTED_NASM))
+    diff = [n for _, c, n in getattr(patch, 'blocks', [])
+            if hashlib.sha256(c).hexdigest()[:16] != BLOCK_SHA.get(n)]
+    if diff:
+        out.append('blocks assembled differently: %s' % ', '.join(diff))
+        if TESTED_NASM not in v:
+            out.append('another NASM version encodes some instructions differently: build with NASM %s '
+                       '(make rom ... NASM=/path/to/nasm)' % TESTED_NASM)
+    else:
+        out.append('every block is as in the tested build: the difference is in the data patches')
+    with open(output + '.untested', 'wb') as f:
+        f.write(img)
+    out.append('the untested image is in %s.untested; do not flash it' % output)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 reference BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
@@ -434,6 +468,7 @@ def main():
         out_sha = hashlib.sha256(img).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 %s, expected %s)' % (out_sha, RESULT_SHA))
+            errs += diagnose(a.nasm, a.output, img)
         if errs:
             raise PatchError('result check failed:\n  ' + '\n  '.join(errs))
     except (PatchError, OSError) as e:
