@@ -1,12 +1,11 @@
 # Trio64V2/DX VBIOS test tools
 
 DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX card
-(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). The current ROM is 2.04.07-p15: the S3
-reference BIOS 2.04.07 with our changes in the lower 32 KB, zeros in the upper 32 KB. The ROM
-image itself is not in this repository; the changes it carries are described below, and `rompatch/`
-holds their source and the patcher that builds the image from the reference BIOS.
+(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). 
 
-All tools share one version number, currently 1.0 (set in `common/version.inc`), and print it on their first line of output.
+The new ROM image itself is not in this repository. The modifications done to the reference bios are in `rompatch/`
+as well as the patcher that builds the new ROM image from the reference BIOS.
+
 All tools need a 386 or later and run in plain DOS (no EMM386 needed), except S3REGS32.EXE, which
 is for the Windows 9x desktop.
 
@@ -463,7 +462,7 @@ No code was copied from another project; all ROM code was written for this BIOS.
 The Trio64V2 datasheet (section 3.5) describes a faster linear addressing path: CR87 bit 1 = 1
 enables 1-cycle linear addressing of video memory, "the memory must be capable of supporting this
 mode", and the default with SR0A bit 7 and SR15 bit 7 set is 2-cycle operation. It was tried on top
-of the booster in 640x480x8 (101h) with a write benchmark and a 320 KB pattern check (VLIN2):
+of the booster in 640x480x8 (101h) with a write benchmark and a 320 KB pattern check:
 
 | SR15 bit 7 | CR87 bit 1 | Write speed | Data errors |
 | --- | --- | --- | --- |
@@ -477,8 +476,9 @@ machine, so neither bit is set by the ROM.
 ### Known remaining items
 
 - The 8x14 font is missing in the BIOS (S3COMPAT WARN 01 for AX=1130h BH=2 and mode 10h).
+Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/). It uses the same font as the S3 Trio64. 
 - An LFB is offered on the planar mode 104h (S3COMPAT WARN 20), as in stock and the reference.
-- 106h runs at 108 MHz, above the datasheet single-clock limit (S3COMPAT WARN 02).
+- Mode 106h runs at 108 MHz, above the datasheet single-clock limit (S3COMPAT WARN 02).
 - The BIOS writes SR04 = 03h in text modes where IBM writes 02h; bit 0 is reserved on the VGA and
   reads back as 0 on the card, so programs see the IBM value.
 
