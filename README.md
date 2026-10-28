@@ -240,6 +240,27 @@ input giving the same result whatever its upper half holds, `--no-vco-fix`, and 
 be refused (already patched, three patch sites changed, a wrong checksum, and with
 `--stock` the card's stock 2.04.11).
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
+Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted runners it uses are free;
+changes that touch only `*.md`, `docs/` or `datasheets/` do not start a run, and a newer commit on the
+same branch cancels the running one.
+
+Every run builds NASM 3.02 from its release source (cached between runs) and the tools with `make`;
+the .COM files are kept as the artifact `tools` for 14 days. The ROM tests need the S3 reference BIOS
+2.04.07, which is not in the repository. Stored as the repository secret `REF2047_B64` (32 KB, base64;
+the secret limit is 48 KB), it lets the run build the ROM (`make rom`, `make rom-test` with the pinned
+SHA-256), then run `make emu-test`, `make coverage` and `make ref-compare` on it; the emulator logs are
+kept as the artifact `emu-logs` (without .BIN files). To set the secret with the GitHub CLI:
+
+    head -c 32768 REF2047.BIN | base64 -w0 | gh secret set REF2047_B64
+
+or paste the output of `head -c 32768 REF2047.BIN | base64 -w0` under Settings, Secrets and variables,
+Actions, New repository secret. Without the secret (and for pull requests from forks, which GitHub
+gives no secrets) the run only builds the tools and says so in a notice. The hardware logs remain the
+final word, as for the emulator tests run by hand.
+
 ## Debug log (/V)
 
 VSHOW, S3TEST and S3COMPAT take `/V`. It writes a second file, `VSHOW.DBG`, `S3TEST.DBG` or

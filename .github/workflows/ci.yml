@@ -1,0 +1,122 @@
+# Build and test on GitHub Actions (README "Continuous integration").
+#
+# The repository is public, so the GitHub-hosted runners used here cost nothing. The workflow only
+# runs on pushes to main, on pull requests and by hand, skips changes that touch documentation alone,
+# and cancels a run when a newer commit of the same branch or pull request arrives.
+#
+# Always: NASM 3.02 is built from its release source (cached), then `make` builds every tool.
+# With the secret REF2047_B64 (the 32 KB S3 reference BIOS 2.04.07, base64): the ROM is built from it
+# and checked against the pinned SHA-256 (make rom, make rom-test), then the emulator tests (2 and 4 MB),
+# the coverage goal (80 %) and the EGA/CGA comparison with the reference run on that ROM. No ROM image
+# is in the repository; the secret is not passed to pull requests from forks, which only get the build.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'datasheets/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'datasheets/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NASM_VERSION: '3.02'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REF_B64: ${{ secrets.REF2047_B64 }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache NASM
+        id: nasm-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/nasm
+          key: nasm-${{ env.NASM_VERSION }}-${{ runner.os }}
+
+      - name: Build NASM ${{ env.NASM_VERSION }}
+        if: steps.nasm-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
+            "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
+          tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
+          ./configure --quiet
+          make -j"$(nproc)" nasm
+          mkdir -p ~/nasm
+          cp nasm ~/nasm/
+
+      - name: Check NASM
+        run: |
+          ~/nasm/nasm -v
+          ~/nasm/nasm -v | grep -q "version $NASM_VERSION"
+
+      - name: Build the tools
+        run: make NASM=$HOME/nasm/nasm
+
+      - name: Upload the tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: tools
+          path: build/
+          retention-days: 14
+
+      - name: Note when the ROM tests are skipped
+        if: env.REF_B64 == ''
+        run: echo "::notice::Secret REF2047_B64 not available; ROM build and emulator tests skipped"
+
+      - uses: actions/setup-python@v6
+        if: env.REF_B64 != ''
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the emulator test dependencies
+        if: env.REF_B64 != ''
+        run: pip install '.[coverage]'
+
+      - name: Build the ROM from the reference BIOS
+        if: env.REF_B64 != ''
+        run: |
+          printf '%s' "$REF_B64" | base64 -d > "$RUNNER_TEMP/REF2047.BIN"
+          make rom NASM=$HOME/nasm/nasm IN="$RUNNER_TEMP/REF2047.BIN" OUT="$RUNNER_TEMP/ROM.BIN"
+
+      - name: ROM patcher tests
+        if: env.REF_B64 != ''
+        run: make rom-test NASM=$HOME/nasm/nasm REF="$RUNNER_TEMP/REF2047.BIN" ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: Emulator tests
+        if: env.REF_B64 != ''
+        run: make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: Coverage
+        if: env.REF_B64 != ''
+        run: make coverage NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: EGA/CGA against the reference BIOS
+        if: env.REF_B64 != ''
+        run: make ref-compare REF="$RUNNER_TEMP/REF2047.BIN" ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: Upload the emulator logs
+        if: always() && env.REF_B64 != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-logs
+          path: |
+            emu/logs/
+            emu/logs4/
+            !emu/**/*.BIN
+          retention-days: 14
+          if-no-files-found: ignore
