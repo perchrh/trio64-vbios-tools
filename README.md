@@ -44,8 +44,8 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P16.BIN NASM=nasm/nasm-3.02/nasm
-    make rom IN=REF2047.BIN OUT=S3V2P16.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P17.BIN NASM=nasm/nasm-3.02/nasm
+    make rom IN=REF2047.BIN OUT=S3V2P17.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -67,7 +67,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P16.BIN
+    make emu-test ROM=path/to/S3V2P17.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -184,7 +184,7 @@ category column: compare from the sixth column.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P16.BIN
+    make coverage ROM=path/to/S3V2P17.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -196,7 +196,7 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare REF=REF2047.BIN ROM=S3V2P16.BIN
+    make ref-compare REF=REF2047.BIN ROM=S3V2P17.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -210,10 +210,10 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(p16) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(p17) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P16.BIN
-    make rom IN=REF2047.BIN OUT=S3V2P16.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P17.BIN
+    make rom IN=REF2047.BIN OUT=S3V2P17.BIN
 
 REF2047.BIN is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every
@@ -228,10 +228,10 @@ MOVSD/STOSD, 3.01 and 3.02 after it; the p15 image of 2.16.01 had SHA-256 1caad8
 same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom IN=REF2047.BIN OUT=S3V2P16.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom IN=REF2047.BIN OUT=S3V2P17.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P16.BIN]
-    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P16.BIN]
+    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P17.BIN]
+    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P17.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
@@ -384,8 +384,8 @@ upper 32 KB is zeros (the ROM header declares 32 KB). The lower half checksums t
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
-200 bytes of the lower 32 KB are free: 0x7C8A-7CFA (113 bytes, free in the reference only),
-0x7E2D-7E3F, 0x7E59-7E5F, 0x7E79-7E7F, 0x7F52-7F57, 0x7FB7-7FBF, 0x7FE3-7FFE.
+130 bytes of the lower 32 KB are free: 0x7CC7-7CFA, 0x7E2D-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
+0x7F51-7F57, 0x7FB7-7FBF, 0x7FE3-7FFE.
 
 Picture and monitor
 
@@ -421,7 +421,11 @@ Speed
   switched on by the first bank switch (4F05 set window, fast or slow path, or the window function by
   far call), not by 4F02: a banked mode set leaves CR58-CR5A as the reference does, which the S3
   Windows 9x driver needs (it turns its own linear window on at CR59/CR5A, "Windows 9x driver test").
-  Writes before the first bank switch go through the normal banked path.
+  Writes before the first bank switch go through the normal banked path. Since p17 it stays off while
+  Windows runs in enhanced mode (INT 2Fh AX=1600h, asked once per mode set and remembered as CR6D =
+  01h): with the booster on in a full-screen DOS box, Windows 98's S3 driver restored the box after
+  Alt+Tab with MISC = 63h (the fixed 25 MHz clock, 400-line sync), which the monitor could not show,
+  every time (VSHOW 101h and 103h; p15 without the booster and the stock BIOS: once in many tries).
 - **Fast 4F05 set window:** AX=4F05h BH=0 is handled at the INT 10h entry (unlock, CR58 test, SR04 for
   planar banks, CR6A; the 3C4h index is kept): 6 port writes and 3 reads instead of 13 writes and
   about 6 reads, 4.3 us per call on the card. Get and errors are unchanged; since p16 the first call
@@ -456,9 +460,9 @@ Fixes
 Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
 zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
-| Offset | 2.04.07 | p16 | Purpose |
+| Offset | 2.04.07 | p17 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p16 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p17 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |
@@ -510,16 +514,17 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x584B-584E | 52 53 8B DA | E9 19 25 90 | VBE window set (4F05 BH=0 slow path, window function): booster on, then the replaced code in `wsetx` (p16; until p15 the booster was called at 0x56F7, the end of 4F02) |
 | 0x59BB-59BF | B8 FF 03 33 D2 | E8 B3 25 EB F8 | VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret |
 | 0x59C0-59E2 | old 4F06 BL=3 code (dead after the call) | code | `p13fill.asm`: wfillt 59C0, wfill 59C5 |
-| 0x5CCF-5CD2 | 8B C3 0B C0 | E8 66 22 90 | LFB base read: real base while the booster is on |
-| 0x5CED-5CEF | 25 00 10 | E8 59 22 | 4F05/4F03 linear test ignores the booster window |
+| 0x5CCF-5CD2 | 8B C3 0B C0 | E8 6E 22 90 | LFB base read: real base while the booster is on |
+| 0x5CED-5CEF | 25 00 10 | E8 CE 1F | 4F05/4F03 linear test ignores the booster window |
+| 0x7C8A-7CC6 | 00 | code | `wincheck.asm`: wcheck 7C8A (no booster under Windows enhanced mode, p17), wclear 7CAE, lfbchk 7CBE |
 | 0x7CFB-7E2C | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, font 7D71, scr13 7D8D |
 | 0x7E40-7E78 | 00 | tables | `crtc240.asm`: crtc8 7E40, crtc16 7E60 |
-| 0x7E80-7F51 | 00 | code | `hooks.asm`: hook 7E80, bon 7EF0, basefix 7F38, lfbchk 7F49 |
+| 0x7E80-7F50 | 00 | code | `hooks.asm`: hook 7E80, bon 7EF3, basefix 7F40 |
 | 0x7F58-7F70 | 00 | code | `p13bfill.asm`: bfill0 7F58, bfill 7F5A |
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | 12 | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | C1 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 

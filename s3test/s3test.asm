@@ -23,7 +23,7 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.07-p16"); the version found is printed, also for other BIOS versions
+;                    "2.04.07-p17"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
 ;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
@@ -39,7 +39,9 @@
 ;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and
 ;                                      CR59/CR5A back to the real base (CR59 at POST) and 00 after
 ;                                      the booster
-;                    banked (F_BOOST)  right after 4F02 the booster is still off (CR58 linear
+;                    banked (F_BOOST)  (plain DOS: under Windows enhanced mode the ROM keeps the
+;                                      booster off since p17, and these checks fail there)
+;                                      right after 4F02 the booster is still off (CR58 linear
 ;                                      addressing off, CR59 = the real base, as the reference
 ;                                      leaves it for the S3 Windows 9x driver, p16); after 4F05
 ;                                      set window 0 it is on: CR58 linear addressing on with a

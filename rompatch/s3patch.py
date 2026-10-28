@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p16) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (2.04.07-p17) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P16.BIN [--no-vco-fix] [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN OUT=S3V2P16.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P17.BIN [--no-vco-fix] [--nasm nasm] [-q]
+    make rom IN=REF2047.BIN OUT=S3V2P17.BIN
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -30,7 +30,10 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
   p16    the booster no longer at the end of VBE 4F02 (the reference instruction stays at 56F7h): the
          window set at 584Bh (4F05 BH=0 slow path and the window function) and the fast 4F05 path call
          it, so a banked 4F02 leaves CR58-CR5A as the reference does (S3 Windows 9x driver)
-  sign-on "2.04.07-p16", checksum byte 7FFF
+  p17    no booster while Windows runs in enhanced mode (INT 2Fh AX=1600h, asked once per mode
+         set, wincheck.asm in the free bytes 7C8A-7CFA): Windows 98's S3 driver restores a full-screen
+         DOS box with the booster on with a MISC the monitor cannot show
+  sign-on "2.04.07-p17", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -39,10 +42,10 @@ with the known reference image the SHA-256 of the build that passed the emulator
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p16'
+LEVEL = 'p17'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = '56fbf14b9bca6fbe0934a9db50d163de6d0ca46206e0eaf7651189cb09ef0a39'  # 2.04.07-p16 (NASM 3.02), emulator tests passed
+RESULT_SHA = ''  # 2.04.07-p17: set once the emulator tests pass
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
@@ -53,7 +56,7 @@ BLOCK_SHA = {
     'p13bfa.asm': 'a4192aa0cbf344d3',
 }
 TESTED_NASM = '3.02'
-FREE_START, FREE_END = 0x7CFB, 0x7FE3   # free space the new code and tables use (end exclusive)
+FREE_START, FREE_END = 0x7C8A, 0x7FE3   # free space the new code and tables use (end exclusive)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -128,7 +131,8 @@ DATA = [
 # The new code: (file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels the
 # patch sites use). Each file is assembled with -DL_<label> for the labels of the files before it.
 BLOCKS = [
-    ('hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'bon', 'basefix', 'lfbchk')),
+    ('wincheck.asm', 0x7C8A, 0x7CFB - 0x7C8A, ('wcheck', 'wclear', 'lfbchk')),   # p17
+    ('hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'bon', 'basefix')),          # calls wincheck.asm
     ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13', 'wsetx')),  # calls bon (hooks.asm)
     ('crtc240.asm', 0x7E40, 0x40, ('crtc8', 'crtc16')),
     ('vbe4f06.asm', 0x7F71, 0x7FAF - 0x7F71, ('bl3',)),
@@ -293,7 +297,7 @@ def patch(lo, nasm='nasm', vcofix=True):
         raise PatchError('the lower 32 KB do not checksum to 00: not a clean %s image' % VERSION)
     if d[0:2] != b'\x55\xAA':
         raise PatchError('no 55AAh ROM header at offset 0')
-    if bytes(d[FREE_START:FREE_END]) != bytes(FREE_END - FREE_START) or d[FREE_START - 1] != 0:
+    if bytes(d[FREE_START:FREE_END]) != bytes(FREE_END - FREE_START):
         raise PatchError('%04X-%04X is not free (already patched?)' % (FREE_START, FREE_END - 1))
     sym, site = bios_symbols(), SITES
 

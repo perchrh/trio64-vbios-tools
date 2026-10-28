@@ -4,7 +4,7 @@
 ;   p16 it is switched on by the first bank switch (4F05 set window, fast path or window function), not
 ;   by 4F02, so a banked mode set leaves CR58-CR5A as the reference does (the S3 Windows 9x driver turns
 ;   its linear window on at CR59/CR5A after a banked 4F02, README "Windows 9x driver test")
-; - LFB base read fix and 4F05/4F03 linear-mode test fix
+; - LFB base read fix (the 4F05/4F03 linear-mode test fix is in wincheck.asm since p17)
 bits 16
 org 0x7E80
 %include "bios.inc"
@@ -56,6 +56,7 @@ hook:
 
 ; restore real LFB base (CR59/CR5A) if the booster left 000A there. In: DX=CRTC, unlocked
 restore_base:
+        call    L_wclear                ; a new mode: wcheck asks Windows again (p17)
         mov     al, 0x5A
         call    RDREG
         cmp     ah, 0x0A
@@ -75,8 +76,9 @@ restore_base:
 .r:     ret
 
 ; ---------------- booster on (called by the 4F05 set window paths) ----------------
-; In: nothing. Turns the booster on if the mode is a banked packed mode with a known LFB base and
-; linear addressing is off; does nothing otherwise (also when it is already on). Keeps every register.
+; In: nothing. Turns the booster on if the mode is a banked packed mode with a known LFB base,
+; linear addressing is off and Windows does not run in enhanced mode (wcheck, p17); does nothing
+; otherwise (also when it is already on). Keeps every register.
 bon:
         push    ax
         push    dx
@@ -95,6 +97,8 @@ bon:
         call    RDREG
         or      ah, ah                  ; unknown LFB base: no booster
         jz      .done
+        call    L_wcheck                ; Windows enhanced mode: no booster (p17)
+        jc      .done
         mov     al, 0x6D                ; save real base (bits 31-24) in BIOS flag CR6D
         out     dx, ax
         mov     al, 0x58
@@ -124,11 +128,3 @@ basefix:
         xor     al, al
 .r:     or      ax, ax
         ret
-
-; ---------------- linear mode test (called instead of 'and ax,1000h' in 4F05/4F03) ----------------
-; In: AH = CR58. ZF=1 if not a linear frame buffer mode (LA off, or booster's 64 KB window)
-lfbchk:
-        test    ah, 0x10
-        jz      .r
-        test    ah, 0x03
-.r:     ret

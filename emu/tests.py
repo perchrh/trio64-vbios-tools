@@ -14,13 +14,14 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p16), and the ROM under test carries
+                   the level rompatch/s3patch.py builds (2.04.07-p17), and the ROM under test carries
                    that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
                    half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the booster (p16: off after a banked 4F02, CR59/CR5A at the PCI base;
-                   on after the first 4F05 set window, and after the window function by far call), the
+                   on after the first 4F05 set window, and after the window function by far call; p17:
+                   off under Windows enhanced mode, INT 2Fh AX=1600h asked once per mode set), the
                    fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port accesses once the
                    booster is on), the window function by far call, EAX/ECX kept across the 32-bit VGA
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
@@ -308,7 +309,7 @@ def romver():
 
 
 def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p16)."""
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p17)."""
     t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
@@ -349,6 +350,26 @@ def t_rom_patches(c):
     chk(cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A) and cr.get(0x6D) == base[0],
         'booster not on after 4F05 in 101h: CR58 %02X, CR59/5A %02X%02X, CR6D %02X'
         % (cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0)))
+    # p17: under Windows enhanced mode (INT 2Fh AX=1600h returns AL=04h) the booster stays off and
+    # CR6D = 01h remembers it, so INT 2Fh is asked once per mode set; the next mode set clears the
+    # mark and without Windows the booster goes on again
+    m.mu.mem_write(0x7E00, bytes.fromhex('b0042efe060800cf00'))  # mov al,4 / inc byte [cs:8] / iret
+    ivt2f = m.mem(0x2F * 4, 4)
+    m.mu.mem_write(0x2F * 4, struct.pack('<HH', 0, 0x07E0))
+    m.int10(0x4F02, bx=0x0101)
+    m.int10(0x4F05, bx=0, dx=1)
+    m.int10(0x4F05, bx=0, dx=2)
+    asked = m.mem(0x7E08, 1)[0]
+    chk(cr.get(0x58, 0) & 0x10 == 0 and cr.get(0x59, 0) == base[0] and cr.get(0x6D) == 1 and cr.get(0x6A) == 2,
+        'Windows: booster on or bank wrong (CR58 %02X, CR59/5A %02X%02X, CR6D %02X, CR6A %02X)'
+        % (cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0), cr.get(0x6A, 0)))
+    chk(asked == 1, 'Windows: INT 2Fh asked %d times in one mode, expected once' % asked)
+    m.mu.mem_write(0x2F * 4, ivt2f)
+    m.int10(0x4F02, bx=0x0101)
+    chk(cr.get(0x6D) == 0, 'the mode set did not clear the CR6D mark: %02X' % cr.get(0x6D, 0))
+    m.int10(0x4F05, bx=0, dx=0)
+    chk(cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x6D) == base[0],
+        'no booster after Windows ended: CR58 %02X, CR6D %02X' % (cr.get(0x58, 0), cr.get(0x6D, 0)))
     # p12: the fast 4F05 path from the INT 10h entry runs without the dispatcher, which saves the 32-bit
     # registers; it must keep them itself and use few port accesses
     io = [0]
