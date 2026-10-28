@@ -106,6 +106,22 @@ snapshot:
         mov dx,0x3CC
         in al,dx
         mov [misc],al
+        ; CRTC port from MISC bit 0; the indexes are saved before the INT 10h AX=4F03h below, which
+        ; may move them (the Trio64V+ BIOS 1.03 leaves the CRTC index at 39h)
+        mov word [crtc],0x3B4
+        test byte [misc],1
+        jz .c
+        mov word [crtc],0x3D4
+.c:     mov dx,0x3C4
+        in al,dx
+        mov [sri],al
+        mov dx,0x3CE
+        in al,dx
+        mov [gri],al
+        mov dx,[crtc]
+        in al,dx
+        mov [cri],al
+        mov al,[misc]
         call hex2
         mov si,s_feat
         call str
@@ -147,21 +163,7 @@ snapshot:
         mov eax,ebx
         call hex8
         call crlf
-        ; CRTC port from MISC bit 0
-        mov word [crtc],0x3B4
-        test byte [misc],1
-        jz .c
-        mov word [crtc],0x3D4
-.c:     ; save indexes and locks
-        mov dx,0x3C4
-        in al,dx
-        mov [sri],al
-        mov dx,0x3CE
-        in al,dx
-        mov [gri],al
-        mov dx,[crtc]
-        in al,dx
-        mov [cri],al
+        ; save the locks
         mov al,0x38
         call rdcr
         mov [cr38],ah

@@ -31,6 +31,8 @@ What is not emulated (results that depend on it are meaningless here)
     (map mask, read map, bit mask, set/reset, latches, write modes 0-2, read mode 0) for the 16-colour
     and unchained modes. There is no banking or LFB memory, so memory tests through banks or the LFB
     fail.
+  - The graphics engine (ports 82E8h-BEE8h): commands written to 9AE8h are counted (ge_cmds), not
+    executed. The Trio64 BIOS 1.4 clears video memory with it, so its mode sets clear nothing here.
   - Real timing: CPU speed, bus waits and monitor behaviour. Durations come from the virtual clock.
   - Equipment-dependent BIOS state (AH=1Bh +26h alternate display, +2Dh flags).
 
@@ -124,6 +126,7 @@ class Machine:
         mu.hook_add(UC_HOOK_MEM_WRITE, self._vwrite, None, 0xA0000, 0xBFFFF)
         mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
         self.planes = [bytearray(0x10000) for _ in range(4)]
+        self.ge_cmds = 0                                # graphics engine commands written to 9AE8h
         self.latch = [0, 0, 0, 0]
 
     # ------------------------------------------------------------------ ports
@@ -247,6 +250,8 @@ class Machine:
 
     def _out(self, uc, port, size, val, ud):
         r = self.r
+        if port == 0x9AE8:                              # a graphics engine command: not modelled (a BIOS
+            self.ge_cmds += 1                           # that clears memory with it leaves it as it was)
 
         def w8(p, v):
             if p in (0x3B4, 0x3B5, 0x3BA) and r['misc'] & 1:

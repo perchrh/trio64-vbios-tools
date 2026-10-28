@@ -51,6 +51,12 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   as the VGA parameter table is against VGATEST.
 - The ROM under test is built from the S3 2.04.07 reference BIOS; its data is not used as expected
   values in the tests.
+- The tools run on the whole Trio64 family (Trio32, Trio64, Trio64V+, Trio64V2) and on its stock
+  BIOSes. Chip limits (VCO range, DCLK maxima, R bits) come from `common/chip.inc`, after the chip is
+  found; never write the Trio64V2 values into a test. A check whose expectation is a choice of our
+  BIOS rather than a standard (default refresh rates, the mode list, the S3 mode numbers, VBE 2.0
+  functions on a VBE 1.x BIOS) is WARN or INFO on another BIOS. The emulator tests tagged `patch`
+  are skipped for a ROM without the `2.04.07-pN` sign-on; `--chip` selects the chip model.
 - Runs are non-interactive (to look at a mode, use VSHOW). Output must be redirectable to a
   file; anything meant for the person at the screen goes to stderr.
 - Write and commit the log (INT 21h AH=40h, then AH=68h) before each test starts, so that after a
