@@ -45,7 +45,7 @@ import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 LEVEL = 'p17'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = ''  # 2.04.07-p17: set once the emulator tests pass
+RESULT_SHA = '9f276f6c2ab8af2bc1b65c0628f1c3170c7477e3638c9444cf2df53973286d04'  # 2.04.07-p17 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)

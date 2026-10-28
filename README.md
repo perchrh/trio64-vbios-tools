@@ -190,8 +190,8 @@ runs every emulator test while recording which ROM bytes execute, then `emu/code
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
 direct jump, call and word jump table, and reports the share the tests executed. Data (tables,
 fonts, strings, padding) and code nothing reaches (the routines our patches jump around) do not
-count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p16 is at
-86.5 % (15050 of 17402 bytes). The parts still not run include the display switch (AH=12h BL=35h),
+count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p17 is at
+86.5 % (15110 of 17462 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths.
 
 ### EGA/CGA against the reference BIOS
@@ -202,7 +202,7 @@ runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the 
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
 output, palettes, pages, fonts, AH=12h, AH=1Ah, AH=1Ch) and compares the registers a program gets
 back, the BIOS data area, video memory, the DAC and the standard VGA registers after each call. For
-2.04.07-p16 there is no difference: the patches in those paths (32-bit text scroll, planar fills,
+2.04.07-p17 there is no difference: the patches in those paths (32-bit text scroll, planar fills,
 AH=09h, VGA clear, font load) only change how fast it is done, and the mode set hook, the memory
 clock and the pedestal only touch S3 extended registers, which are not compared.
 
@@ -220,7 +220,7 @@ used). The result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 
 patch site is compared with the original code first (the replaced routines in full), and the result
 is checked before it is written: the lower half sums to 00 and declares 32 KB, the upper half is
 zeros, every DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of
-the build that passed every emulator test (56fbf14b...).
+the build that passed every emulator test (9f276f6c...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
