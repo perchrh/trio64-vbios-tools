@@ -330,8 +330,9 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
   a DOS box), CR59/CR5A = E000h and CR6D = 00h after every call, so the booster never turned on; SR10/
   SR11 42h/41h throughout. Full-screen MPEG video in Media Player 6 set 4F02 8111h with CX = 240 (the
   driver's 320x240 mode, made from 111h) and back to 115h; the stock run had CX = 480. The first such
-  video after boot showed wrong colours (YUV-like green), later ones were right; not yet compared with
-  the stock BIOS.
+  video after boot showed wrong colours (YUV-like green), later ones were right. The stock BIOS does
+  the same (same calls, 4F02 8111h with CX = 240, and the same wrong colours the first time): the
+  driver or DirectShow, not the ROM.
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
   DOS box reads the real registers.
