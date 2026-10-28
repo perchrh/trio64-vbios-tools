@@ -1,6 +1,9 @@
 ; S3 Trio64V2/DX VBIOS patch p7 code block at C000:7E80
 ; - mode set hook: restore real LFB base if booster was active, mode set, FIFO fix, ATC flip-flop reset
-; - booster: banked VESA packed modes use the linear path through a 64 KB window at A0000
+; - booster (bon): banked VESA packed modes use the linear path through a 64 KB window at A0000; since
+;   p16 it is switched on by the first bank switch (4F05 set window, fast path or window function), not
+;   by 4F02, so a banked mode set leaves CR58-CR5A as the reference does (the S3 Windows 9x driver turns
+;   its linear window on at CR59/CR5A after a banked 4F02, README "Windows 9x driver test")
 ; - LFB base read fix and 4F05/4F03 linear-mode test fix
 bits 16
 org 0x7E80
@@ -71,9 +74,10 @@ restore_base:
         out     dx, ax
 .r:     ret
 
-; ---------------- end of VBE 4F02 (replaces 'mov word [0x4fe],0') ----------------
-boost:
-        mov     word [0x4FE], 0         ; original instruction (DS=0)
+; ---------------- booster on (called by the 4F05 set window paths) ----------------
+; In: nothing. Turns the booster on if the mode is a banked packed mode with a known LFB base and
+; linear addressing is off; does nothing otherwise (also when it is already on). Keeps every register.
+bon:
         push    ax
         push    dx
         call    UNLOCK

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p15) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (2.04.07-p16) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P15.BIN [--no-vco-fix] [--no-booster] [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN OUT=S3V2P15.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P16.BIN [--no-vco-fix] [--nasm nasm] [-q]
+    make rom IN=REF2047.BIN OUT=S3V2P16.BIN
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -11,7 +11,7 @@ Input
                lower half (the upper half of the input is not used)
 
 Output
-  64 KB: the patched BIOS in the lower 32 KB, zeros in the upper 32 KB (p15; p14 and earlier carried
+  64 KB: the patched BIOS in the lower 32 KB, zeros in the upper 32 KB (since p15; p14 and earlier carried
   the card's Trio64V+ BIOS 1.03-08 there)
 
 What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level changes")
@@ -22,18 +22,15 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
   code   assembled with nasm from the .asm files next to this script, at the addresses in bios.inc:
          p12ext.asm (fast 4F05, 32-bit font load, 32-bit mode 13h scroll), crtc240.asm (320x240 CRTC
          tables), hooks.asm (mode set hook with LFB base restore, FIFO fix and ATC flip-flop reset;
-         booster; LFB base and linear test fixes), vbe4f06.asm (4F06 BL=3), clear32.asm (32-bit S3/VESA
+         booster, switched on by the first bank switch since p16; LFB base and linear test fixes), vbe4f06.asm (4F06 BL=3), clear32.asm (32-bit S3/VESA
          mode set clear), p13*.asm (32-bit text and planar scroll fills, text window moves, AH=09h);
          p14: the VGA mode set clear in place as a jump to wfill
   VCO    (unless --no-vco-fix) the 22 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
          larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz
-  sign-on "2.04.07-p15", checksum byte 7FFF
-  --no-booster  a test build: the end of VBE 4F02 keeps the reference instruction, so a banked mode
-         set leaves CR58-CR5A as the reference does (the S3 Windows 9x driver turns its linear window on
-         after a banked 4F02 and expects CR59/CR5A to hold the PCI base; with the booster it lands on the
-         64 KB window at A0000h and the desktop is garbage, README "Windows 9x driver test"). The
-         booster code stays in the ROM, unreached; the LFB base read and linear test fixes only act on
-         the booster's CR59/CR5A = 000Ah, so they change nothing. Not the tested build: no SHA-256 check
+  p16    the booster no longer at the end of VBE 4F02 (the reference instruction stays at 56F7h): the
+         window set at 584Bh (4F05 BH=0 slow path and the window function) and the fast 4F05 path call
+         it, so a banked 4F02 leaves CR58-CR5A as the reference does (S3 Windows 9x driver)
+  sign-on "2.04.07-p16", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -42,10 +39,10 @@ with the known reference image the SHA-256 of the build that passed the emulator
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p15'
+LEVEL = 'p16'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = 'b60cfe0d7fe7e5cf837d314dc456457dd8f2eaa081013c1f06ca1c393db47f9d'  # 2.04.07-p15 (NASM 3.02), emulator tests passed
+RESULT_SHA = ''  # 2.04.07-p16: set once the emulator tests pass
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
@@ -82,7 +79,7 @@ SITES = dict(modetab=0x20D3, m4f02=0x56D9, boost=0x56F7, bl3=0x59B7, base=0x5CCD
              plwin=0x3171, ah09a=0x3512, ah09b=0x3516)
 SIG = dict(
     m4f02='8e 1e ?? ?? e8 ?? ?? 61 8a d8 24',            # mov ds,[cs:SEG_BDA] / call MODESET
-    boost='c7 06 fe 04 00 00 c3 c6 46 1b 01',            # mov word [4FEh],0 / ret
+    boost='c7 06 fe 04 00 00 c3 c6 46 1b 01',            # mov word [4FEh],0 / ret (unpatched since p16)
     bl3='0e b4 00 c3 b8 ff 03 33 d2 8b da 8a 5c',        # 4F06 BL=3: mov ax,3FFh / xor dx,dx
     base='8a dc 8b c3 0b c0 74 06 5e 5f 5a 59',          # mov ax,bx / or ax,ax
     lfb='58 e8 ?? ?? 25 00 10 5a 58 c3 c6 46 1b 00',     # and ax,1000h
@@ -111,7 +108,8 @@ SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
           ('RDREG', 'ee 42 8a e0 ec 4a 86 c4 c3'),
           ('INT_AH0E', 'e9 ?? ?? e9 ?? ?? e9 ?? ?? 8b c6 80 fc 4f'),
           ('SEG_SCR', '00 00 00 00 00 a0'),
-          ('DFDN', '00 00 00 00 00 00 00 00')]
+          ('DFDN', '00 00 00 00 00 00 00 00'),
+          ('WSET', '52 53 8b da ba c4 03 b0 04 e8')]
 
 # Data patches: (offset, old, new, purpose)
 DATA = [
@@ -130,9 +128,9 @@ DATA = [
 # The new code: (file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels the
 # patch sites use). Each file is assembled with -DL_<label> for the labels of the files before it.
 BLOCKS = [
-    ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13')),
+    ('hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'bon', 'basefix', 'lfbchk')),
+    ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13', 'wsetx')),  # calls bon (hooks.asm)
     ('crtc240.asm', 0x7E40, 0x40, ('crtc8', 'crtc16')),
-    ('hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'boost', 'basefix', 'lfbchk')),
     ('vbe4f06.asm', 0x7F71, 0x7FAF - 0x7F71, ('bl3',)),
     ('clear32.asm', 0x7FC0, 0x7FE3 - 0x7FC0, ('clear',)),
     ('p13df.asm', 'DFDN', 0x7FC0 - 0x7FAF, ('dfdn',)),
@@ -282,7 +280,7 @@ def vco_fix(d, log, lo=170.0):
 
 
 # ------------------------------------------------------------------ the patcher
-def patch(lo, nasm='nasm', vcofix=True, booster=True):
+def patch(lo, nasm='nasm', vcofix=True):
     """lo: the lower 32 KB (2.04.07). Returns (new lower 32 KB, log lines)."""
     d = bytearray(lo)
     log = []
@@ -363,11 +361,8 @@ def patch(lo, nasm='nasm', vcofix=True, booster=True):
     put(a, struct.pack('<H', sym['MODESET']), struct.pack('<H', lab['hook']), 'INT 10h AH=00 table: mode set via the hook')
     a = site['m4f02'] + 4
     put(a, d[a:a + 3], call(a, lab['hook']), 'VBE 4F02: mode set via the hook')
-    a = site['boost']
-    if booster:
-        put(a, 'c7 06 fe 04 00 00', call(a, lab['boost']) + b'\x90' * 3, 'VBE 4F02 end: booster')
-    else:
-        put(a, 'c7 06 fe 04 00 00', 'c7 06 fe 04 00 00', 'VBE 4F02 end: no booster (--no-booster)')
+    a = sym['WSET']
+    put(a, '52 53 8b da', jmp(a, lab['wsetx']) + b'\x90', 'VBE window set (4F05, window function): booster on (p16)')
     a = site['bl3'] + 4
     put(a, 'b8 ff 03 33 d2', call(a, lab['bl3']) + b'\xEB\xF8', 'VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret')
     a = site['base'] + 2
@@ -480,8 +475,6 @@ def main():
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
     ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
-    ap.add_argument('--no-booster', action='store_true',
-                    help='test build: leave the booster call out of VBE 4F02 (no SHA-256 check)')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
     a = ap.parse_args()
@@ -490,10 +483,10 @@ def main():
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]                       # a 64 KB input: only its lower half is used
-        new_lo, log = patch(lo, a.nasm, not a.no_vco_fix, not a.no_booster)
+        new_lo, log = patch(lo, a.nasm, not a.no_vco_fix)
         img = new_lo + bytes(0x8000)            # the upper 32 KB: zeros
         errs = verify(img, not a.no_vco_fix)
-        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and not a.no_booster and RESULT_SHA
+        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA
         out_sha = hashlib.sha256(img).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 %s, expected %s)' % (out_sha, RESULT_SHA))

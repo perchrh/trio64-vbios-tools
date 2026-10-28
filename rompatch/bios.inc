@@ -20,3 +20,4 @@
 %define P13B     0x1442     ; p13 code: the old 16-bit clear loop after the p11 jump (dead, 21 bytes)
 %define P13C     0x1227     ; p13 code: the old 8-bit font load loop after the p12 jump (dead, 14 bytes)
 %define DFDN     0x7FAF     ; p13: dfdn (p13df.asm), in free space
+%define WSET     0x584B     ; VBE window set (BX = window, DX = bank): 4F05 BH=0 and the window function

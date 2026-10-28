@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """test_s3patch.py - checksum tests for the ROM patcher s3patch.py (needs python3 and nasm).
 
-    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN] [--nasm nasm]
-    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
+    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P16.BIN] [--nasm nasm]
+    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P16.BIN]
 
 REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN (optional) the 64 KB dump of the card
-(its 2.04.11 must be refused), S3V2P15.BIN a build to compare with byte by byte. No ROM image is in the
+(its 2.04.11 must be refused), S3V2P16.BIN a build to compare with byte by byte. No ROM image is in the
 repository.
 
 Tests
-  build          the reference gives the tested build: SHA-256 b60cfe0d... (NASM 3.02), sign-on 2.04.07-p15,
+  build          the reference gives the tested build: SHA-256 b60cfe0d... (NASM 3.02), sign-on 2.04.07-p16,
                  byte-identical to --rom when given
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
                  32 KB size, the upper 32 KB is zeros
@@ -21,8 +21,6 @@ Tests
   input_64k      a 64 KB image with the reference in the lower half gives the same result, whatever
                  its upper half holds
   novco          --no-vco-fix keeps the 22 refresh entries below 170 MHz and still checksums
-  nobooster      --no-booster differs from the tested build only in the 6 bytes of the booster call at
-                 the end of VBE 4F02 (the reference instruction stays) and the checksum byte
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte
                  changed at a patch site (p12, p13 and p14 sites, with the checksum corrected), a wrong
                  checksum, another BIOS version (the stock 2.04.11, with --stock)
@@ -129,12 +127,6 @@ def main():
     rc, nimg, err = run(tmp, ref, ['--no-vco-fix'])
     low = len(vco_out(nimg)) if nimg else -1
     result('novco', rc == 0 and low == 22 and not image_checks(nimg), err or '%d entries below 170 MHz kept' % low)
-    rc, bimg, err = run(tmp, ref, ['--no-booster'])
-    a = s3patch.SITES['boost']
-    diff = [i for i in range(0x10000) if bimg and bimg[i] != img[i]] if bimg else None
-    ok = (rc == 0 and not image_checks(bimg) and bimg[a:a + 6] == ref[a:a + 6]
-          and set(diff) <= set(range(a, a + 6)) | {0x7FFF})
-    result('nobooster', ok, err or 'differs in %s' % ', '.join('%04X' % i for i in diff))
 
     s = s3patch.SITES
     cases = [('already patched', img[:0x8000]),

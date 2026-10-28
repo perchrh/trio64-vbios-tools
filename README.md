@@ -44,8 +44,8 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm
-    make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P16.BIN NASM=nasm/nasm-3.02/nasm
+    make rom IN=REF2047.BIN OUT=S3V2P16.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -67,7 +67,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P15.BIN
+    make emu-test ROM=path/to/S3V2P16.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -184,7 +184,7 @@ category column: compare from the sixth column.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P15.BIN
+    make coverage ROM=path/to/S3V2P16.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -196,7 +196,7 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
+    make ref-compare REF=REF2047.BIN ROM=S3V2P16.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -210,10 +210,10 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(p15) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(p16) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P15.BIN
-    make rom IN=REF2047.BIN OUT=S3V2P15.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P16.BIN
+    make rom IN=REF2047.BIN OUT=S3V2P16.BIN
 
 REF2047.BIN is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every
@@ -228,24 +228,17 @@ MOVSD/STOSD, 3.01 and 3.02 after it; the p15 image of 2.16.01 had SHA-256 1caad8
 same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom IN=REF2047.BIN OUT=S3V2P16.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN]
-    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
+    python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P16.BIN]
+    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P16.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
 N 1-31 and a defined R code (pllcodes), the free bytes still 00, a 64 KB
-input giving the same result whatever its upper half holds, `--no-vco-fix`, `--no-booster`, and the
-inputs that must be refused (already patched, three patch sites changed, a wrong checksum, and with
+input giving the same result whatever its upper half holds, `--no-vco-fix`, and the inputs that must
+be refused (already patched, three patch sites changed, a wrong checksum, and with
 `--stock` the card's stock 2.04.11).
-
-`--no-booster` builds a test image without the banked VESA booster: the end of VBE 4F02 keeps the
-reference instruction (6 bytes at 0x56F7 and the checksum differ from the tested build, which the
-`nobooster` test checks), so a banked mode set leaves CR58-CR5A as the reference does. The booster code
-stays in the ROM, unreached; the LFB base read and linear test fixes only act on the booster's
-CR59/CR5A = 000Ah, so they change nothing. It is for the Windows 9x test below; the sign-on stays
-2.04.07-p15, the SHA-256 is not the pinned one, and S3TEST fails its booster check in every VESA mode.
 
 ## Debug log (/V)
 
@@ -303,16 +296,18 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
   (linear on, 2 MB window) and takes the linear address from CR59/CR5A, which the stock BIOS leaves at
   the PCI base (E000h). It never uses CR6D. At start it calls 4F15 and 4F10 and sets mode 10h, at exit
   mode 03h twice and 4F03.
-- So the booster breaks the desktop: after a banked 4F02 it leaves CR59/CR5A = 000Ah (the 64 KB window
-  at A0000h), and the driver turns its 2 MB window on there. p15 on the card showed the boot logo, then
-  garbage when the desktop loaded. The emulator shows the same registers: after 4F02 8103h, p15 leaves
-  CR58 90h, CR59/CR5A 000Ah, CR6D E0h; `--no-booster` leaves CR58 83h, CR59/CR5A E000h, as the stock
-  BIOS does.
+- So the p15 booster broke the desktop: after a banked 4F02 it left CR59/CR5A = 000Ah (the 64 KB
+  window at A0000h), and the driver turned its 2 MB window on there. p15 on the card showed the boot
+  logo, then garbage when the desktop loaded; a p15 build without the booster gave a working desktop.
+  The emulator shows the same registers: after 4F02 8103h, p15 left CR58 90h, CR59/CR5A 000Ah, CR6D
+  E0h, the stock BIOS and p16 leave CR58 83h, CR59/CR5A E000h. Since p16 the booster is switched on by
+  the first bank switch (4F05 set window or the window function), which the driver never calls; the
+  emulator test `windows` replays the driver's 4F02 calls and checks CR59/CR5A.
 - SR10/SR11 stayed at the stock MCLK (41h/28h, 50.11 MHz) the whole time: the driver did not change it.
 - CR90/CR91 (L1) is set by the driver to (bytes per line / 8) - 1 in every mode (V2-REG-4); CR86 stays
   00h with an End Horizontal Blank above 1 (V2-REG-3).
 - After Windows, mode 03h set through the stock BIOS still has CR90 = 81h, CR91 = 8Fh (the L1 of
-  800x600x32): the leftover state the FIFO fix of p15 clears. Before Windows (DOS, safe mode) CR90 is
+  800x600x32): the leftover state the FIFO fix of the ROM clears. Before Windows (DOS, safe mode) CR90 is
   00h; a full-screen DOS box under Windows has the real registers and also CR90 = 81h, CR91 = 8Fh in
   mode 03h, so DOS programs in a full-screen box start from that state.
 - Before Windows the memory clock is already the stock 50.11 MHz (SR10/SR11 41h/28h). A snapshot taken
@@ -321,7 +316,7 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
 - 1280x1024 and 1600x1200 gave "out of range" on the LCD with no error in Windows: the driver chooses no
   refresh rate, and the stock defaults (CR41 = 08h, CR52 = 80h, as in the reference) are interlaced
   timings (107h about 87 Hz fields at 46.7 kHz, 120h about 98 Hz fields at 63.7 kHz, emulator with the
-  reference). Windows then went back to the previous mode (4F02 207h right after 107h or 120h). p15 sets
+  reference). Windows then went back to the previous mode (4F02 207h right after 107h or 120h). The ROM sets
   60 Hz for both.
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
@@ -368,7 +363,7 @@ the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stay
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
 200 bytes of the lower 32 KB are free: 0x7C8A-7CFA (113 bytes, free in the reference only),
-0x7E1E-7E3F, 0x7E59-7E5F, 0x7E79-7E7F, 0x7FB7-7FBF, 0x7FE3-7FFE.
+0x7E2D-7E3F, 0x7E59-7E5F, 0x7E79-7E7F, 0x7F52-7F57, 0x7FB7-7FBF, 0x7FE3-7FFE.
 
 Picture and monitor
 
@@ -400,10 +395,15 @@ Speed
   bit 1 tweak of the reference compares SR10/SR11 with the old MCLK values and so stays off.
 - **Banked VESA booster:** the banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB
   window at A0000h; the real LFB base is kept in CR6D and restored on the next mode set, and 4F01 and
-  4F05/4F03 report it correctly. Banked writes at 83.7 MB/s, as fast as the LFB.
+  4F05/4F03 report it correctly. Banked writes at 83.7 MB/s, as fast as the LFB. Since p16 it is
+  switched on by the first bank switch (4F05 set window, fast or slow path, or the window function by
+  far call), not by 4F02: a banked mode set leaves CR58-CR5A as the reference does, which the S3
+  Windows 9x driver needs (it turns its own linear window on at CR59/CR5A, "Windows 9x driver test").
+  Writes before the first bank switch go through the normal banked path.
 - **Fast 4F05 set window:** AX=4F05h BH=0 is handled at the INT 10h entry (unlock, CR58 test, SR04 for
   planar banks, CR6A; the 3C4h index is kept): 6 port writes and 3 reads instead of 13 writes and
-  about 6 reads, 4.3 us per call on the card. Get, errors and the window function are unchanged.
+  about 6 reads, 4.3 us per call on the card. Get and errors are unchanged; since p16 the first call
+  in a banked mode also turns the booster on, as the window function does.
 - **32-bit video memory stores** where the reference uses 8- or 16-bit ones, with the same result:
   - the 2 MB clear of every S3/VESA mode set (rep stosd through the same 64 KB banks; the clear is
     most of a VESA mode set's time)
@@ -434,9 +434,9 @@ Fixes
 Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
 zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
-| Offset | 2.04.07 | p15 | Purpose |
+| Offset | 2.04.07 | p16 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p15 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p16 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |
@@ -485,19 +485,19 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x3513-3515 | F3 AB C3 | E9 AF 24 | AH=09h text: char/attribute with wfill |
 | 0x3519-351B | F3 AB C3 | E9 A9 24 | AH=09h text, page > 0: with wfill |
 | 0x56DD-56DF | E8 9B CF | E8 A0 27 | VBE 4F02: mode set via the hook |
-| 0x56F7-56FC | C7 06 FE 04 00 00 | E8 F6 27 90 90 90 | VBE 4F02 end: booster |
+| 0x584B-584E | 52 53 8B DA | E9 19 25 90 | VBE window set (4F05 BH=0 slow path, window function): booster on, then the replaced code in `wsetx` (p16; until p15 the booster was called at 0x56F7, the end of 4F02) |
 | 0x59BB-59BF | B8 FF 03 33 D2 | E8 B3 25 EB F8 | VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret |
 | 0x59C0-59E2 | old 4F06 BL=3 code (dead after the call) | code | `p13fill.asm`: wfillt 59C0, wfill 59C5 |
-| 0x5CCF-5CD2 | 8B C3 0B C0 | E8 6C 22 90 | LFB base read: real base while the booster is on |
-| 0x5CED-5CEF | 25 00 10 | E8 5F 22 | 4F05/4F03 linear test ignores the booster window |
-| 0x7CFB-7E1D | 00 | code | `p12ext.asm`: int10x 7CFB, font 7D62, scr13 7D7E |
+| 0x5CCF-5CD2 | 8B C3 0B C0 | E8 66 22 90 | LFB base read: real base while the booster is on |
+| 0x5CED-5CEF | 25 00 10 | E8 59 22 | 4F05/4F03 linear test ignores the booster window |
+| 0x7CFB-7E2C | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, font 7D71, scr13 7D8D |
 | 0x7E40-7E78 | 00 | tables | `crtc240.asm`: crtc8 7E40, crtc16 7E60 |
-| 0x7E80-7F57 | 00 | code | `hooks.asm`: hook 7E80, boost 7EF0, basefix 7F3E, lfbchk 7F4F |
+| 0x7E80-7F51 | 00 | code | `hooks.asm`: hook 7E80, bon 7EF0, basefix 7F38, lfbchk 7F49 |
 | 0x7F58-7F70 | 00 | code | `p13bfill.asm`: bfill0 7F58, bfill 7F5A |
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | D7 | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | 12 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
