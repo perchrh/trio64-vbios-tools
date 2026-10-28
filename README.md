@@ -384,7 +384,7 @@ upper 32 KB is zeros (the ROM header declares 32 KB). The lower half checksums t
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
-130 bytes of the lower 32 KB are free: 0x7CC7-7CFA, 0x7E2D-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
+130 bytes of the lower 32 KB are free: 0x7CC8-7CFA, 0x7E2D-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
 0x7F51-7F57, 0x7FB7-7FBF, 0x7FE3-7FFE.
 
 Picture and monitor
@@ -515,8 +515,8 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x59BB-59BF | B8 FF 03 33 D2 | E8 B3 25 EB F8 | VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret |
 | 0x59C0-59E2 | old 4F06 BL=3 code (dead after the call) | code | `p13fill.asm`: wfillt 59C0, wfill 59C5 |
 | 0x5CCF-5CD2 | 8B C3 0B C0 | E8 6E 22 90 | LFB base read: real base while the booster is on |
-| 0x5CED-5CEF | 25 00 10 | E8 CE 1F | 4F05/4F03 linear test ignores the booster window |
-| 0x7C8A-7CC6 | 00 | code | `wincheck.asm`: wcheck 7C8A (no booster under Windows enhanced mode, p17), wclear 7CAE, lfbchk 7CBE |
+| 0x5CED-5CEF | 25 00 10 | E8 CF 1F | 4F05/4F03 linear test ignores the booster window |
+| 0x7C8B-7CC7 | 00 | code | `wincheck.asm`: wcheck 7C8B (no booster under Windows enhanced mode, p17), wclear 7CAF, lfbchk 7CBF. 0x7C8A is not free: it is the high byte of the word count at 0x7C89 that the descender glyph load at 0x3FC7 reads |
 | 0x7CFB-7E2C | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, font 7D71, scr13 7D8D |
 | 0x7E40-7E78 | 00 | tables | `crtc240.asm`: crtc8 7E40, crtc16 7E60 |
 | 0x7E80-7F50 | 00 | code | `hooks.asm`: hook 7E80, bon 7EF3, basefix 7F40 |
@@ -524,7 +524,7 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | C1 | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | C0 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 

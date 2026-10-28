@@ -16,7 +16,7 @@ Tests
   vco            every DCLK refresh entry runs its VCO in 170-340 MHz
   pllcodes       every DCLK refresh entry has M 1-127, N 1-31 and an R code the datasheet defines (SR12
                  bits 7-5: with bit 7 set only 100b), docs/chip-rules.md PLL-2 and V2-PLL-3
-  free_space     the bytes of the free blocks 7C8A-7FEF that no code uses are still 00, so a later level
+  free_space     the bytes of the free blocks 7C8B-7FEF that no code uses are still 00, so a later level
                  can use them
   input_64k      a 64 KB image with the reference in the lower half gives the same result, whatever
                  its upper half holds
@@ -118,10 +118,10 @@ def main():
     for name, org, room, want in s3patch.BLOCKS:
         org = sym[org] if isinstance(org, str) else org
         used.update(range(org, org + room))
-    free = [i for i in range(0x7C8A, 0x7FF0) if img[i] and i not in used]
-    unused = [i for i in range(0x7C8A, 0x7FF0) if not img[i]]
+    free = [i for i in range(0x7C8B, 0x7FF0) if img[i] and i not in used]
+    unused = [i for i in range(0x7C8B, 0x7FF0) if not img[i]]
     result('free_space', not free, 'nonzero outside the blocks: %s' % ', '.join('%04X' % i for i in free[:8])
-           if free else '%d bytes 00 in 7C8A-7FEF' % len(unused))
+           if free else '%d bytes 00 in 7C8B-7FEF' % len(unused))
     rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
     rc, nimg, err = run(tmp, ref, ['--no-vco-fix'])

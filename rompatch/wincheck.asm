@@ -1,4 +1,5 @@
-; S3 Trio64V2/DX VBIOS patch p17 code block at C000:7C8A (free in the reference): no booster under
+; S3 Trio64V2/DX VBIOS patch p17 code block at C000:7C8B (free in the reference;
+; 7C8A is not: it is the high byte of the word count at 7C89 that the descender glyph load at 3FC7 reads): no booster under
 ; Windows enhanced mode, and the linear mode test moved here from hooks.asm
 ; - wcheck: called by bon before it turns the booster on
 ; - wclear: called by the mode set hook (restore_base) before every mode set
@@ -8,7 +9,7 @@
 ; (VSHOW 101h/103h every time on the card; without the booster as rarely as with the stock BIOS).
 ; README "Windows 9x driver test".
 bits 16
-org 0x7C8A
+org 0x7C8B
 %include "bios.inc"
 
 ; ---------------- booster allowed? ----------------

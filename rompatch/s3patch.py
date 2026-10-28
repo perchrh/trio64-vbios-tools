@@ -31,7 +31,7 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
          window set at 584Bh (4F05 BH=0 slow path and the window function) and the fast 4F05 path call
          it, so a banked 4F02 leaves CR58-CR5A as the reference does (S3 Windows 9x driver)
   p17    no booster while Windows runs in enhanced mode (INT 2Fh AX=1600h, asked once per mode
-         set, wincheck.asm in the free bytes 7C8A-7CFA): Windows 98's S3 driver restores a full-screen
+         set, wincheck.asm in the free bytes 7C8B-7CFA): Windows 98's S3 driver restores a full-screen
          DOS box with the booster on with a MISC the monitor cannot show
   sign-on "2.04.07-p17", checksum byte 7FFF
 
@@ -56,7 +56,7 @@ BLOCK_SHA = {
     'p13bfa.asm': 'a4192aa0cbf344d3',
 }
 TESTED_NASM = '3.02'
-FREE_START, FREE_END = 0x7C8A, 0x7FE3   # free space the new code and tables use (end exclusive)
+FREE_START, FREE_END = 0x7C8B, 0x7FE3   # 7C89-7C8A: the word count of the descender glyph load at 3FC7   # free space the new code and tables use (end exclusive)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -131,7 +131,7 @@ DATA = [
 # The new code: (file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels the
 # patch sites use). Each file is assembled with -DL_<label> for the labels of the files before it.
 BLOCKS = [
-    ('wincheck.asm', 0x7C8A, 0x7CFB - 0x7C8A, ('wcheck', 'wclear', 'lfbchk')),   # p17
+    ('wincheck.asm', 0x7C8B, 0x7CFB - 0x7C8B, ('wcheck', 'wclear', 'lfbchk')),   # p17
     ('hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'bon', 'basefix')),          # calls wincheck.asm
     ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13', 'wsetx')),  # calls bon (hooks.asm)
     ('crtc240.asm', 0x7E40, 0x40, ('crtc8', 'crtc16')),
@@ -297,7 +297,7 @@ def patch(lo, nasm='nasm', vcofix=True):
         raise PatchError('the lower 32 KB do not checksum to 00: not a clean %s image' % VERSION)
     if d[0:2] != b'\x55\xAA':
         raise PatchError('no 55AAh ROM header at offset 0')
-    if bytes(d[FREE_START:FREE_END]) != bytes(FREE_END - FREE_START):
+    if bytes(d[FREE_START:FREE_END]) != bytes(FREE_END - FREE_START) or d[FREE_START - 1] != 0:
         raise PatchError('%04X-%04X is not free (already patched?)' % (FREE_START, FREE_END - 1))
     sym, site = bios_symbols(), SITES
 
