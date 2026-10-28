@@ -37,7 +37,8 @@
 ; and palette additions; the four warnings are known stock items)
 ;   1. ROM version string                      INFO
 ;      Chip ID (CR2D-CR30, PCI revision)        INFO (89 01 06 E1, PCI 06 on the test card)
-;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-340 MHz, 1-cycle EDO)
+;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-270 MHz, 1-cycle EDO
+;      limit 60 MHz)
 ;   3. Initial state, setup                     INFO, PASS (mode 03, baseline, VRAM zeroed)
 ;   4. VGA modes 00h-13h and the 350-line text modes against the IBM reference
 ;                                               PASS; mode 10h WARN 01 (8x16 font used, 8x14 missing)
@@ -348,11 +349,16 @@ chip_id:
 
 ; POST state checked against the datasheet
 
-; POST state against the datasheet. Fail bits:
-;   1 MCLK PLL VCO outside 135 MHz to the chip's VCO maximum (340 MHz Trio64V2, 270 MHz Trio64/V+)
-;     or N = 0
-;   2 Trio64V2 only: CR36 bits 3-2 not 00 (not 1-cycle EDO) or MCLK above 60 MHz (1-cycle EDO needs
-;     >= 16.67 ns)
+; POST state against the datasheet (rule IDs from docs/chip-rules.md).
+; MCLK line, fail bits:
+;   1 MCLK PLL VCO outside the datasheet range, 135 MHz to [mvcomax] (270 MHz on every chip: the
+;     Trio64V2 raises only the DCLK PLL maximum), or N = 0 (PLL-1, PLL-2)
+;   2 Trio64V2 only: MCLK above the maximum for the memory type in CR36 bits 3-2 (V2-MEM-1): 00 1-cycle
+;     EDO 60 MHz (16.67 ns), 01 SGRAM, 10 2-cycle EDO and 11 fast page 66.67 MHz (15 ns). Which
+;     memory type a card should use is not a datasheet rule (S3TEST checks the 1-cycle EDO of our card)
+; warn bits:
+;   1 SR10 bit 7 set: reserved on every chip; the Trio64V2 adds a third R bit for the DCLK PLL only
+;     (SR12 bit 7, V2-PLL-3), so it is not taken as an R bit here
 post_tests:
         call unlock
         TB C_S3,'MCLK PLL (SR10/SR11) vs datasheet'
@@ -362,6 +368,7 @@ post_tests:
         RS 0x11
         mov [pm],al
         mov al,[pn]
+        and al,0x7F                     ; SR10 bit 7 is reserved, not an R bit (V2-PLL-3)
         mov ah,[pm]
         call pllcalc                    ; -> [vco],[fout] kHz
         PS 'MCLK '
@@ -370,28 +377,48 @@ post_tests:
         PS ' VCO '
         mov eax,[vco]
         call pkhz
-        cmp dword [vco],135000
+        mov eax,[vcodsmin]
+        cmp [vco],eax
         jb .f1
-        mov eax,[vcomax]
+        mov eax,[mvcomax]
         cmp [vco],eax
         ja .f1
         test byte [pn],0x1F
         jz .f1
-        jmp .c2
+        jmp .c1
 .f1:    FAILB 1
+.c1:    test byte [pn],0x80             ; reserved bit set
+        jz .c2
+        WARNB 1
 .c2:    RC 0x36
         mov [tmpb],al
         PS ' CR36='
         mov al,[tmpb]
         call phex2
-        cmp byte [chip],CHIP_T64V2      ; the EDO rule is the Trio64V2's (CR36 bits 3-2)
+        cmp byte [chip],CHIP_T64V2      ; the memory type limits are the Trio64V2's (V2-MEM-1)
         jne .ok
-        test byte [tmpb],0x0C           ; 00 = 1-cycle EDO
-        jnz .f2
-        cmp dword [fout],60000          ; 1-cycle EDO: MCLK cycle >= 16.67 ns
+        mov eax,60000                   ; 00 = 1-cycle EDO: MCLK cycle >= 16.67 ns
+        test byte [tmpb],0x0C
+        jz .c3
+        mov eax,66667                   ; SGRAM, 2-cycle EDO, fast page: MCLK cycle >= 15 ns
+.c3:    cmp [fout],eax
         jbe .ok
-.f2:    FAILB 2
+        FAILB 2
 .ok:    call tend
+        ret
+
+; AL = SR12 (DCLK N and R) -> CF=1 when it holds a reserved R code: on the Trio64V2 ([r3bit]) bit 7 is
+; the third R bit and only 100b (divide by 16) of the codes with bit 7 set is defined (Trio64V2
+; datasheet section 3.6, V2-PLL-3). Keeps every register.
+rcheck: cmp byte [r3bit],1
+        jne .ok
+        test al,0x80
+        jz .ok
+        test al,0x60
+        jz .ok
+        stc
+        ret
+.ok:    clc
         ret
 
 ; AL = N byte (SR10/SR12 style), AH = M byte -> [vco], [fout] in kHz
@@ -4440,14 +4467,15 @@ pos24   db 8,16,8,8,8,0
 ; vertical display end = YRes * character height, horizontal display end a multiple of XRes (fail 100);
 ; CR67 colour mode fits the bpp, packed 24 bpp needs SR0B 7xh, clock doubling (CR67 mode 1) needs
 ; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO in the chip's range
-; (fail 200): 170-340 MHz on the Trio64V2 (datasheet section 3.6 and XFree86 s3_Trio64DAC.c), 135-270
-; MHz on the Trio32/64/V+ (their datasheets, section 9.1), and the PLL N value at least 1 (section
-; 9.1, printed as 'PLL N=0'). The MCLK check in post_tests keeps the Trio64V+ datasheet minimum of
-; 135 MHz.
+; [vcomin]-[vcomax] (fail 200): 170-340 MHz on the Trio64V2 (maximum: datasheet section 3.6, V2-PLL-1;
+; minimum: XFree86 s3_Trio64DAC.c, V2-PLL-2), 135-270 MHz on the Trio32/64/V+ (section 9.1, PLL-1), the
+; PLL N value at least 1 (section 9.1, printed as 'PLL N=0') and, on the Trio64V2, no reserved R code
+; in SR12 bits 7-5 (V2-PLL-3, printed as 'PLL R code'). The MCLK check in post_tests uses 135 MHz to
+; [mvcomax].
 
-; DCLK above the chip's maximum is WARN 02 (Trio64V2: 95 MHz, 170 doubled, 75 packed 24, 50 at 32 bpp;
-; Trio32/64/V+: 80, 135 doubled, 75 packed 24, 50 at 32 bpp); CR50 pixel length
-; WARN 04; interlace WARN 10.
+; DCLK above the chip's maximum is WARN 02 (Trio64V2: 95 MHz, 170 doubled, 75 packed 24, 50 at 32 bpp,
+; 80 single clocked with the Streams Processor on (CR67 bits 3-2 = 11b, V2-CLK-2); Trio32/64/V+: 80,
+; 135 doubled, 75 packed 24, 50 at 32 bpp); CR50 pixel length WARN 04; interlace WARN 10.
 dschk:  call rdall
         ; CRTC pitch (CR13 + CR51 5-4, or CR43 bit 2) in the addressing unit (CR31.3 -> dwords)
         movzx ax,byte [q_r13]
@@ -4581,16 +4609,20 @@ dschk:  call rdall
 .d2:    ; PLL limits
         cmp byte [csel],3
         jne .mm
-        mov eax,[vco]                   ; the chip's VCO range (common/chip.inc)
+        mov al,[q_rs12]                 ; Trio64V2: reserved R code (V2-PLL-3)
+        call rcheck
+        jnc .rc
+        FAILB 0x200
+        PS 'PLL R code '
+.rc:    test byte [q_rs12],0x1F         ; datasheet: N at least 1
+        jnz .n1
+        FAILB 0x200
+        PS 'PLL N=0 '
+.n1:    mov eax,[vco]                   ; the chip's VCO range (common/chip.inc)
         cmp eax,[vcomin]
         jb .vb
         cmp eax,[vcomax]
-        ja .vb
-        test byte [q_rs12],0x1F         ; datasheet: N at least 1
-        jnz .lim
-        FAILB 0x200
-        PS 'PLL N=0 '
-        jmp .lim
+        jbe .lim
 .vb:    FAILB 0x200
         PS 'VCO '
         mov eax,[vco]
@@ -4606,7 +4638,16 @@ dschk:  call rdall
 .l2:    cmp byte [cmode],13
         jne .l3
         mov eax,[d32]
-.l3:    cmp [dclk],eax
+.l3:    mov bl,[q_r67]                  ; Streams Processor on (CR67 bits 3-2 = 11b) and single
+        and bl,0x0C                     ; clocked: at most [dstream] (V2-CLK-2)
+        cmp bl,0x0C
+        jne .l4
+        cmp byte [cmode],1
+        je .l4
+        cmp eax,[dstream]
+        jbe .l4
+        mov eax,[dstream]
+.l4:    cmp [dclk],eax
         jbe .mm
         WARNB 2
 .mm:    call mapchk
@@ -5489,11 +5530,14 @@ vesa_more:
         call tvco
         ret
 
-; DCLK VCO at every refresh rate (the chip's VCO range, 170-340 MHz on the Trio64V2; the mode
-; tests check it at the default rates only). For every mode of 4F00h (text too) and every rate its 4F14h
-; BH=02h list gives: the rate set with 4F14h BH=00h, the mode with 4F02h, then SR12/SR13 read back:
-;   1 VCO outside the chip's range (the first ones are listed as mode@Hz), 2 the refresh registers CR41,
-;     CR52, CR6B not as before afterwards (they are written back directly)
+; DCLK VCO at every refresh rate (the mode tests check it at the default rates only). For every mode
+; of 4F00h (text too) and every rate its 4F14h BH=02h list gives: the rate set with 4F14h BH=00h, the
+; mode with 4F02h, then SR12/SR13 read back. Fail bits:
+;   1 VCO outside the chip's range [vcomin]-[vcomax] (135-270 MHz, 170-340 MHz on the Trio64V2;
+;     PLL-1, V2-PLL-1, V2-PLL-2), 2 the refresh registers CR41, CR52, CR6B not as before afterwards (they are
+;     written back directly), 4 Trio64V2: SR12 bits 7-5 a reserved R code (only 100b of the codes with
+;     bit 7 set is defined, V2-PLL-3)
+; The first bad rates are listed as mode@Hz.
 ;   INFO when the BIOS has no 4F14h (BL=00h returns AL other than 4Fh)
 ; The monitor sees every rate of every mode (up to 85 Hz at 1280x1024); an LCD may show out of range.
 tvco:   TB C_S3,'DCLK VCO at every refresh rate'
@@ -5581,14 +5625,18 @@ tvco:   TB C_S3,'DCLK VCO at every refresh rate'
         call rdsrx
         pop bx
         mov al,bh                       ; AL = SR12 (N, R), AH = SR13 (M)
-        call pllcalc
+        call rcheck                     ; reserved R code (V2-PLL-3)
+        jnc .r0
+        FAILB 4
+        jmp .lst
+.r0:    call pllcalc
         mov eax,[vco]
         cmp eax,[vcomin]
         jb .bad
         cmp eax,[vcomax]
         jbe .rn
 .bad:   FAILB 1
-        cmp byte [tmpb],6
+.lst:   cmp byte [tmpb],6
         jae .rn
         inc byte [tmpb]
         PS ' '

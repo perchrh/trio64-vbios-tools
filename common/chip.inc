@@ -11,14 +11,20 @@
 ;            limits below. Keeps every register except flags.
 ; chipname   DX -> the '$' string with the chip's name ([chip])
 ;
-; Limits per chip (kHz): [vcomin], [vcomax] the DCLK/MCLK PLL VCO range, [r3bit] = 1 when SR12/SR10
-; bit 7 is the third bit of the post divider R (Trio64V2 only), [dsingle] the highest pixel clock
-; without clock doubling (8 and 15/16 bpp), [ddouble] the pixel rate of clock-doubled 8 bpp, [dpack24]
-; packed 24 bpp, [d32] 32 bpp. Sources: Trio64V2/DX/GX datasheet (VCO 170-340 MHz, 3-bit R; 95, 170,
-; 75 and 50 MHz) and XFree86 s3_Trio64DAC.c (170000-340000 kHz); Trio32/Trio64 datasheet (March 1995,
-; section 9.1: 135 MHz <= 2^R x fOUT <= 270 MHz, R 2 bits in bits 6-5 of SR10/SR12; table 8-1: 80 MHz
-; at 8 and 15/16 bpp, 135 MHz clock doubled, 75 MHz packed 24, 50 MHz at 24 bpp true colour); the
-; Trio64V+ datasheet gives the same PLL range and table 8-1.
+; Limits per chip (kHz), rule IDs from docs/chip-rules.md:
+;   [vcomin]   DCLK PLL VCO minimum used for a FAIL-free result: 135 MHz (Trio32/64/V+ datasheet
+;              section 9.1, PLL-1); 170 MHz on the Trio64V2, from XFree86 s3_Trio64DAC.c (V2-PLL-2)
+;   [vcodsmin] DCLK PLL VCO minimum the datasheet gives: 135 MHz on every chip (the Trio64V2 datasheet
+;              changes only the maximum, section 3.6); the MCLK check uses it
+;   [vcomax]   DCLK PLL VCO maximum: 270 MHz, 340 MHz on the Trio64V2 (section 3.6, V2-PLL-1)
+;   [mvcomax]  MCLK PLL VCO maximum: 270 MHz on every chip (the Trio64V2 raises the DCLK PLL only)
+;   [r3bit]    1 when SR12 bit 7 is the third bit of the DCLK post divider R (Trio64V2 only; SR10 bit 7
+;              stays reserved, V2-PLL-3)
+;   [dsingle]  highest DCLK without clock doubling (8 and 15/16 bpp), [ddouble] the pixel rate of
+;              clock-doubled 8 bpp, [dpack24] packed 24 bpp, [d32] 32 bpp: Trio32/Trio64 and Trio64V+
+;              table 8-1 (80, 135, 75, 50 MHz); Trio64V2 table 5-7 note 2 (95, 170 MHz)
+;   [dstream]  highest single-clocked DCLK with the Streams Processor on (CR67 bits 3-2 = 11b): 80 MHz
+;              (Trio64V2 table 5-7 note 2, V2-CLK-2; the same as [dsingle] on the other chips)
 
 CHIP_NONE   equ 0
 CHIP_T32    equ 1
@@ -125,17 +131,22 @@ s_chipt64   db 'Trio64$'
 s_chipt64vp db 'Trio64V+$'
 s_chipt64v2 db 'Trio64V2/DX/GX$'
 
-; vcomin, vcomax, dsingle, ddouble, dpack24, d32 (dd, kHz), r3bit (db): one row per chip, CHIP_T32 first
+; vcomin, vcomax, dsingle, ddouble, dpack24, d32 (dd, kHz), r3bit (db), vcodsmin, mvcomax, dstream
+; (dd, kHz): one row per chip, CHIP_T32 first
 chiplims:
         dd 135000, 270000, 80000, 135000, 75000, 50000      ; Trio32
         db 0
+        dd 135000, 270000, 80000
 CHIPLIM equ $-chiplims
         dd 135000, 270000, 80000, 135000, 75000, 50000      ; Trio64
         db 0
+        dd 135000, 270000, 80000
         dd 135000, 270000, 80000, 135000, 75000, 50000      ; Trio64V+
         db 0
+        dd 135000, 270000, 80000
         dd 170000, 340000, 95000, 170000, 75000, 50000      ; Trio64V2/DX/GX
         db 1
+        dd 135000, 270000, 80000
 
 chip    db CHIP_NONE
 chiprev db 0
@@ -148,3 +159,6 @@ ddouble dd 170000
 dpack24 dd 75000
 d32     dd 50000
 r3bit   db 1
+vcodsmin dd 135000
+mvcomax dd 270000
+dstream dd 80000
