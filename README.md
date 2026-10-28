@@ -312,14 +312,20 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
 - CR90/CR91 (L1) is set by the driver to (bytes per line / 8) - 1 in every mode (V2-REG-4); CR86 stays
   00h with an End Horizontal Blank above 1 (V2-REG-3).
 - After Windows, mode 03h set through the stock BIOS still has CR90 = 81h, CR91 = 8Fh (the L1 of
-  800x600x32): the leftover state the FIFO fix of p15 clears.
+  800x600x32): the leftover state the FIFO fix of p15 clears. Before Windows (DOS, safe mode) CR90 is
+  00h; a full-screen DOS box under Windows has the real registers and also CR90 = 81h, CR91 = 8Fh in
+  mode 03h, so DOS programs in a full-screen box start from that state.
+- Before Windows the memory clock is already the stock 50.11 MHz (SR10/SR11 41h/28h). A snapshot taken
+  in AUTOEXEC.BAT shows the Windows boot logo's registers (MISC 63h, GR05 50h), not mode 03h, although
+  the BIOS data area says 03h; take the text mode baseline from DOS safe mode instead.
 - 1280x1024 and 1600x1200 gave "out of range" on the LCD with no error in Windows: the driver chooses no
   refresh rate, and the stock defaults (CR41 = 08h, CR52 = 80h, as in the reference) are interlaced
   timings (107h about 87 Hz fields at 46.7 kHz, 120h about 98 Hz fields at 63.7 kHz, emulator with the
   reference). Windows then went back to the previous mode (4F02 207h right after 107h or 120h). p15 sets
   60 Hz for both.
-- In a full-screen DOS box the snapshot shows the values the driver's port trapping returns (SR all
-  00h, A8h and 3Fh fill), not the chip.
+- S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
+  driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
+  DOS box reads the real registers.
 
 S3REGS.TXT format (S3REGS and S3REGS32 write the same):
 
