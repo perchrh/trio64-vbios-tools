@@ -1,4 +1,4 @@
-# Builds the DOS tools for the Trio64V2/DX VBIOS project. Needs NASM 2.x.
+# Builds the DOS tools for the Trio64V2/DX VBIOS project. Needs NASM 3.02 (the ROM build checks the result against a NASM 3.02 build).
 NASM ?= nasm
 
 # Versions come from common/version.inc; override for one build with
