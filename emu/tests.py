@@ -104,6 +104,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.dirname(HERE)
 
 
+NASM = os.environ.get('NASM', 'nasm')   # the assembler for the tests that build code (--nasm, make NASM=...)
+
+
 class Skip(Exception):
     pass
 
@@ -500,9 +503,9 @@ def no_time(out):
 
 def build_s3compat_vga(tmp):
     """S3COMPAT with POST/setup tests and everything after the VGA BIOS functions cut out."""
-    nasm = shutil.which('nasm')
+    nasm = shutil.which(NASM)
     if not nasm:
-        raise Skip('nasm not found')
+        raise Skip('%s not found (--nasm)' % NASM)
     t = open(os.path.join(SRC, 's3compat', 's3compat.asm')).read()
     cuts = [("        call setup\n        call post_tests\n", ""),
             ("        PS 13,10,'--- VESA BIOS ---',13,10\n",
@@ -523,9 +526,9 @@ def build_s3compat_vga(tmp):
 def build_s3compat_vbe(tmp):
     """S3COMPAT with only the VBE function tests of vesa_more (4F00/4F08, 4F04 masks, invalid and
     undefined functions, 4F0A table, 4F10, 4F15), which need no banked or linear video memory."""
-    nasm = shutil.which('nasm')
+    nasm = shutil.which(NASM)
     if not nasm:
-        raise Skip('nasm not found')
+        raise Skip('%s not found (--nasm)' % NASM)
     t = open(os.path.join(SRC, 's3compat', 's3compat.asm')).read()
     cuts = [("        call setup\n        call post_tests\n", ""),
             ("        mov byte [pass],1\n", "        mov byte [pass],1\n        call vesa_more\n        jmp emu_end\n"),
@@ -744,9 +747,9 @@ msg     db 'MZ OK',13,10,'$'
 
 def build_exe(tmp):
     """A small MZ program (one relocation, stack after the image) built from EXE_SRC with nasm."""
-    nasm = shutil.which('nasm')
+    nasm = shutil.which(NASM)
     if not nasm:
-        raise Skip('nasm not found')
+        raise Skip('%s not found (--nasm)' % NASM)
     src = os.path.join(tmp, 'mz.asm')
     open(src, 'w').write(EXE_SRC)
     subprocess.run([nasm, '-f', 'bin', '-o', os.path.join(tmp, 'mz.bin'), src], check=True)
@@ -1411,9 +1414,12 @@ def run_parallel(c, tests, a):
 
 
 def main():
+    global NASM
     ap = argparse.ArgumentParser(description='emulator tests for the Trio64V2 VBIOS tools')
     ap.add_argument('--rom', required=True, help='64 KB VBIOS image')
     ap.add_argument('--build', default=os.path.join(SRC, 'build'), help='folder with the built .COM files')
+    ap.add_argument('--nasm', default=NASM, help='nasm executable or path for the tests that assemble code (default: '
+                    '$NASM or nasm on the PATH; the project uses NASM 3.02)')
     ap.add_argument('-k', default='', help='run only tests whose name contains this text')
     ap.add_argument('-t', default='', help='run only tests with one of these categories (comma list: mda, cga, '
                     'ega, vga, vbe, s3, rom, patch, call, tools, card, emu, vram)')
@@ -1476,6 +1482,7 @@ def main():
             init(self, *args, **kw)
             covs.append(self.track_coverage())
         Machine.__init__ = init_cov
+    NASM = os.path.abspath(a.nasm) if os.sep in a.nasm or '/' in a.nasm else a.nasm
     c = Ctx(a.rom, a.build, a.v, a.logs)
     failed = 0
     tests = TESTS

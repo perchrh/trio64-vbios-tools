@@ -36,10 +36,23 @@ All tools share one version number and S3TEST checks for one ROM version; both a
 
 ## Building
 
-NASM 2.x (tested with 2.16.01; the ROM build needs exactly 2.16.01, see ROM patcher):
+NASM 3.02 (the ROM build needs exactly 3.02, see ROM patcher):
 
     make            # Linux, macOS, WSL
     build.bat       # DOS or Windows with nasm.exe on the PATH
+
+A NASM that is not on the PATH is given with `NASM`, for example a copy in the working tree (the
+folder `nasm/` is ignored by git):
+
+    make NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm
+    make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm
+    set NASM=nasm\nasm-3.02\nasm.exe & build.bat
+
+Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
+assemble code themselves too (`emu/tests.py --nasm`, `emu/mutants.py --nasm`; both also read the
+environment variable `NASM`). A relative path is made absolute. `make` warns when the assembler is
+not NASM 3.02.
 
 The .COM files land in `build/`, with `RUNALL.BAT` (from `runall.bat`): it runs S3TEST, S3COMPAT and
 `VSHOW /R`, all with `/V /S`, writes S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG and their .DBG files next to
@@ -188,13 +201,15 @@ used). The result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 
 patch site is compared with the original code first (the replaced routines in full), and the result
 is checked before it is written: the lower half sums to 00 and declares 32 KB, the upper half is
 zeros, every DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of
-the build that passed every emulator test (1caad895...).
+the build that passed every emulator test (b60cfe0d...).
 
-That SHA-256 holds for NASM 2.16.01. Another NASM version may encode some instructions differently
-(NASM 3.01 does), and then the result check fails: s3patch names the assembler and the blocks whose
+That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
+instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
+MOVSD/STOSD, 3.01 and 3.02 after it; the p15 image of 2.16.01 had SHA-256 1caad895... and works the
+same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
-for a comparison; do not flash it. Build with 2.16.01 instead, for example
-`make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=/path/to/nasm-2.16.01/nasm`.
+for a comparison; do not flash it. Build with 3.02 instead, for example
+`make rom IN=REF2047.BIN OUT=S3V2P15.BIN NASM=nasm/nasm-3.02/nasm`.
 
     python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P15.BIN]
     make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]

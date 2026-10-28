@@ -31,6 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(SRC, 'rompatch'))
 
+NASM = os.environ.get('NASM', 'nasm')       # --nasm: the assembler, also passed to tests.py
 ORDER = ('post,rom_patches,vga_registers,vga_palettes,mono,errors,display_switch,stores,s3compat_vga,s3compat_vbe,windows,vgalog,'
          'vgalog_mem,s3alias,s3regs,dos_exe,vshow,s3test,s3compat_full')
 
@@ -82,7 +83,7 @@ def fix(d):
 
 def ret_mutants(rom):
     import s3patch
-    _, lab = s3patch.assemble(s3patch.bios_symbols(), 'nasm')
+    _, lab = s3patch.assemble(s3patch.bios_symbols(), NASM)
     out = []
     for k in ('wfillt', 'wfill', 'wmove', 'bfill0', 'bfill', 'bfilla', 'dfdn', 'hook', 'boost', 'bl3',
               'basefix', 'lfbchk', 'crtc8'):
@@ -135,7 +136,7 @@ EXPECTED = {
 
 def run(m, rom_path, tmp, timeout, tests, limit, vram):
     name, what = m
-    args = [sys.executable, os.path.join(HERE, 'tests.py'), '-x', '--tests', ','.join(tests), '--vram', str(vram),
+    args = [sys.executable, os.path.join(HERE, 'tests.py'), '-x', '--nasm', NASM, '--tests', ','.join(tests), '--vram', str(vram),
             '--call-limit', str(limit), '--logs', tempfile.mkdtemp(dir=tmp)]
     if isinstance(what, str):
         args += ['--rom', rom_path, '--noop', what]
@@ -168,6 +169,7 @@ def matches(spec, calls):
 
 
 def main():
+    global NASM
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
     ap.add_argument('--rom', required=True)
     ap.add_argument('--ref', help='the reference BIOS 2.04.07 (32 or 64 KB) for the revert mutants')
@@ -184,7 +186,9 @@ def main():
                          'when missing or for another ROM')
     ap.add_argument('--resume', metavar='FILE', help='take the results of the mutants already in FILE (an earlier '
                     'mutants.txt) and run only the others')
+    ap.add_argument('--nasm', default=NASM, help='nasm executable or path (default $NASM or nasm; NASM 3.02)')
     a = ap.parse_args()
+    NASM = os.path.abspath(a.nasm) if '/' in a.nasm or os.sep in a.nasm else a.nasm
     rom = open(a.rom, 'rb').read()
     ms = int10_mutants() + ret_mutants(rom)
     if a.ref:
@@ -213,7 +217,7 @@ def main():
             prof = None
     if prof is None:
         pf = os.path.join(tmp, 'profile.json')
-        r = subprocess.run([sys.executable, os.path.join(HERE, 'tests.py'), '--rom', a.rom, '--profile', pf,
+        r = subprocess.run([sys.executable, os.path.join(HERE, 'tests.py'), '--nasm', NASM, '--rom', a.rom, '--profile', pf,
                             '--call-limit', str(a.call_limit), '--vram', str(a.vram), '--logs', tempfile.mkdtemp(dir=tmp)],
                            capture_output=True, text=True)
         if r.returncode:

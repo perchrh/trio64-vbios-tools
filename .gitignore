@@ -10,3 +10,4 @@ __pycache__/
 emu/logs/
 emu/logs4/
 *.untested
+nasm/

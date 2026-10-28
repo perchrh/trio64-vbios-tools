@@ -74,7 +74,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 ## Assembly conventions
 
-- NASM 2.x, `-f bin`, 16-bit .COM files (`bits 16`, `org 0x100`), `cpu 386` where 32-bit registers are
+- NASM 3.02 (the project's assembler; the pinned ROM SHA-256 is of a 3.02 build), `-f bin`, 16-bit .COM files (`bits 16`, `org 0x100`), `cpu 386` where 32-bit registers are
   used. No other build dependencies: tables are `db` data in the source or in an `.inc` file.
 - Use local labels (`.name`) inside routines; NASM reports clashes as "inconsistently redefined".
   Avoid names that NASM treats as reserved or instructions (`r13`, `wait`, `bpl` and similar).

@@ -1,5 +1,13 @@
-# Builds the DOS tools for the Trio64V2/DX VBIOS project. Needs NASM 2.x.
+# Builds the DOS tools for the Trio64V2/DX VBIOS project. Needs NASM 3.02 (the ROM build checks the result against a NASM 3.02 build).
+# NASM: the assembler, nasm on the PATH or a path, for example make NASM=nasm/nasm-3.02/nasm (a relative
+# path is made absolute, since the S3COMPAT rule runs in s3compat/). Every target uses it: the tools, the
+# ROM build and the emulator tests.
 NASM ?= nasm
+NASMBIN := $(if $(findstring /,$(NASM)),$(abspath $(NASM)),$(NASM))
+NASMVER := $(shell "$(NASMBIN)" -v 2>/dev/null)
+ifeq ($(findstring version 3.02,$(NASMVER)),)
+$(warning $(NASMBIN): $(if $(NASMVER),$(NASMVER),not found); the project uses NASM 3.02 (make NASM=path/to/nasm))
+endif
 
 # Versions come from common/version.inc; override for one build with
 #   make clean && make VERSION=0.9 ROMVER=2.04.07-p13
@@ -25,27 +33,27 @@ build:
 VDEBUG = common/vdebug.inc common/vdebug.mac common/version.inc common/chip.inc
 
 build/VSHOW.COM: vshow/vshow.asm $(VDEBUG) | build
-	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 build/S3TEST.COM: s3test/s3test.asm $(VDEBUG) | build
-	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 # s3compat.asm includes vgaref.inc (reference tables) from its own folder
 build/S3COMPAT.COM: s3compat/s3compat.asm s3compat/vgaref.inc $(VDEBUG) | build
-	cd s3compat && $(NASM) -f bin -i../common/ $(DEFS) -o ../$@ s3compat.asm
+	cd s3compat && "$(NASMBIN)" -f bin -i../common/ $(DEFS) -o ../$@ s3compat.asm
 
 build/S3ALIAS.COM: s3alias/s3alias.asm common/version.inc | build
-	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 build/VGALOG.COM: vgalog/vgalog.asm common/version.inc | build
-	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 build/S3REGS.COM: s3regs/s3regs.asm common/version.inc common/chip.inc | build
-	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 # Win32 console program for Windows 9x; the PE header is written in the source (no linker)
 build/S3REGS32.EXE: s3regs/s3regs32.asm common/version.inc | build
-	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
+	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 # Emulator tests (python3 with the unicorn package, see pyproject.toml):
 #   make emu-test ROM=path/to/S3V2P15.BIN          every test with 2 MB, then the memory-size dependent
@@ -58,17 +66,17 @@ JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 emu-test: all
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P15.BIN"; exit 2; }
 ifdef VRAM
-	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs -j $(JOBS) --vram $(VRAM)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs -j $(JOBS) --vram $(VRAM)
 else
-	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs -j $(JOBS)
-	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs4 -j $(JOBS) --vram 4 -t vram
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs -j $(JOBS)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs4 -j $(JOBS) --vram 4 -t vram
 endif
 
 # Test coverage of the ROM code (needs capstone too: pip install .[coverage]); fails under 80 %
 #   make coverage ROM=S3V2P15.BIN
 coverage: all
 	@test -n "$(ROM)" || { echo "coverage: set ROM to the 64 KB VBIOS image"; exit 2; }
-	$(PYTHON) emu/tests.py --rom "$(ROM)" --build build --logs emu/logs --coverage emu/logs/COVER.BIN
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --coverage emu/logs/COVER.BIN
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
 # EGA/CGA behaviour against the unpatched reference BIOS (AGENTS.md goal)
@@ -85,10 +93,10 @@ clean:
 #   make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 rom:
 	@test -n "$(IN)" -a -n "$(OUT)" || { echo "rom: set IN and OUT, e.g. make rom IN=REF2047.BIN OUT=S3V2P15.BIN"; exit 2; }
-	python3 rompatch/s3patch.py --nasm $(NASM) "$(IN)" -o "$(OUT)"
+	python3 rompatch/s3patch.py --nasm "$(NASMBIN)" "$(IN)" -o "$(OUT)"
 
 rom-test:
 	@test -n "$(REF)" || { echo "rom-test: set REF (2.04.07, 32 KB); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
-	python3 rompatch/test_s3patch.py --nasm $(NASM) --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
+	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 .PHONY: all clean emu-test rom rom-test coverage ref-compare
