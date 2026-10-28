@@ -78,6 +78,7 @@ Tests
                    patch call tools card emu vram; --list shows them; vram = depends on the memory size)
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
+  --chip v2|vplus|trio64|trio32   the chip of the model (default v2, the card)
   --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
   -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
@@ -159,6 +160,9 @@ class Ctx:
         self.build = build
         self.verbose = verbose
         self.logs = logs
+        # our patched BIOS (2.04.07-pN sign-on) or another one (the stock BIOS of a Trio64-family card):
+        # the tests tagged 'patch' check our patches and are skipped on another BIOS
+        self.ours = bool(re.search(rb'Version 2\.04\.07-p\d+', self.rom[:0x100]))
         os.makedirs(logs, exist_ok=True)
 
     def save(self, name, res):
@@ -470,9 +474,10 @@ def t_vshow(c):
               and b'PASS' not in bytes(r.stdout), '%s: the monitor warning, then Esc does not cancel' % tool)
     rr = c.machine(keys=[]).run_com(com, '/R /S', max_insn=6_000_000_000)   # robot: no keys at all
     out = rr.stdout.decode('latin1')
-    check(rr.exit == ('exit', 0) and 'stopped' not in out and '/R results:' in out and
-          len(re.findall(r'Mode 0[0-9A-F]{3}', out)) >= 20,
-          'VSHOW /R /S did not run through the modes without keys: %s' % (rr.exit,))
+    want = vesa_supported(c.machine())
+    miss = [v for v in want if 'Mode %04X' % v not in out]
+    check(rr.exit == ('exit', 0) and 'stopped' not in out and '/R results:' in out and want and not miss,
+          'VSHOW /R /S did not run through the modes without keys: %s, missing %s' % (rr.exit, miss))
     ri = c.machine(keys=[0x011B]).run_com(com, '/I')
     check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to cancel' in ri.stdout,
           'VSHOW /I: no monitor note before the list (Esc there quits)')
@@ -548,9 +553,10 @@ def t_s3compat_vbe(c):
              '4F10 power', '4F15 DDC', '4F14 S3 OEM', 'DCLK VCO')
     tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
     check(len(tests) == len(names), 'only %d of the %d VBE lines: %s' % (len(tests), len(names), tests))
-    # the model has no DDC lines: 4F15 must say so (INFO), everything else PASS
+    # the model has no DDC lines: 4F15 must say so (INFO), everything else PASS; another BIOS may lack
+    # the VBE 2.0 functions or the S3 OEM 4F14h: INFO there
     bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
-           not (l.startswith('4F15') and l.rstrip().endswith('INFO'))]
+           not ((l.startswith('4F15') or not c.ours) and l.rstrip().endswith('INFO'))]
     check(not bad, '%d tests not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     return '%d tests' % len(tests)
 
@@ -604,16 +610,20 @@ S3COMPAT_KNOWN_4MB = [r'VESA 0118 .*WARN 02$', r'VESA 0164 .*WARN 02$', r'VESA 0
 def t_s3compat_full(c):
     """The whole S3COMPAT (/Q: without the 2 MB VRAM pattern test) on the model."""
     com = c.tool('S3COMPAT.COM')
-    r = c.machine().run_com(com, '/Q', max_insn=3_000_000_000)
+    m = c.machine()
+    r = m.run_com(com, '/Q', max_insn=3_000_000_000)
     c.save('S3CFULL', r)
+    # a BIOS that clears video memory with the graphics engine, which the model does not run
+    ge = [r'4F02 clear / D15 keep memory .*FAIL 0002$'] if m.ge_cmds else []
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
-    check(len(tests) >= 230, 'only %d result lines' % len(tests))
+    want = 230 if c.ours else 120       # another BIOS: fewer modes (17 in the Trio64 BIOS 1.4), no 4F14h
+    check(len(tests) >= want and b'Time spent' in bytes(r.stdout), 'only %d result lines' % len(tests))
     bad = [l.strip() for l in tests if not l.endswith('PASS') and
-           not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + S3COMPAT_KNOWN +
+           not any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + ge + S3COMPAT_KNOWN +
                    (S3COMPAT_KNOWN_4MB if Machine.vram == 4 else []))]
     check(not bad, '%d lines not PASS:\n    ' % len(bad) + '\n    '.join(bad))
-    lim = sum(1 for l in tests if any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS))
+    lim = sum(1 for l in tests if any(re.match(p, l) for p in S3COMPAT_MODEL_LIMITS + ge))
     return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
 
 
@@ -776,6 +786,9 @@ def t_vgalog_mem(c):
         res = m.int10(ax, **kw)
         ret[ax] = res
         check(res['flags'] & 0x200, 'AX=%04X returned with interrupts disabled' % ax)
+        if ax == 0x4F02:                # what the record of this call must hold: the registers after it
+            sr, cr = m.r['seq'], m.r['crtc']
+            after = bytes([sr.get(0x10, 0), sr.get(0x11, 0), cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0)])
     check(ret[0x1130]['es'] == 0xC000 and ret[0x1130]['cx'] == 16, 'AX=1130h result changed by VGALOG: %s' % ret[0x1130])
     rd = m.run_com(com, '/D', seg=0x4000)
     check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
@@ -788,11 +801,12 @@ def t_vgalog_mem(c):
     check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
           % ['%04X' % a for a in top])
     nested = [x for x in recs if x[23] > 0]
-    check(nested and all(struct.unpack_from('<H', x, 2)[0] == 0x1130 for x in nested),
+    # the 2.04.07 BIOS calls AX=1130h itself in the mode set; another BIOS need not nest a call at all
+    check((nested or not c.ours) and all(struct.unpack_from('<H', x, 2)[0] == 0x1130 for x in nested),
           'no nested AX=1130h from the BIOS during the mode set')
     r101 = [x for x in recs if struct.unpack_from('<HH', x, 2) == (0x4F02, 0x0101)][0]
-    check(struct.unpack_from('<H', r101, 14)[0] == 0x004F and r101[26:28] == b'\x42\x41' and r101[28] == 0x90
-          and r101[29:31] == b'\x00\x0A', '4F02 101h record: AX out, SR10/11 or CR58/59/5A wrong: %s' % r101.hex())
+    check(struct.unpack_from('<H', r101, 14)[0] == 0x004F and r101[26:31] == after,
+          '4F02 101h record: AX out, SR10/11 or CR58/59/5A wrong: %s (registers %s)' % (r101.hex(), after.hex()))
     check(m.r['crtc'].get(0x38) != 0x48 or m.r['seq'].get(8) != 0x06, 'S3 registers left unlocked')
     ru = m.run_com(com, '/U', seg=0x4000)
     check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
@@ -819,11 +833,16 @@ def t_s3regs(c):
     check(before == after, 'indexes or locks changed: %s -> %s' % (before, after))
     check(dos[0].startswith('S3REGS ') and dos[0].endswith('[test label] DOS') and win[0].endswith('[test label] Win32'),
           'header lines: %r %r' % (dos[0], win[0]))
-    rows = lambda ls: [l for l in ls if l[:2] in ('SR', 'CR', 'GR') or l.startswith('PCI00:')]
+    def rows(ls):                       # SR17 (the clock synthesizer test counter) runs: not compared
+        out = [l for l in ls if l[:2] in ('SR', 'CR', 'GR') or l.startswith('PCI00:')]
+        return [l[:6 + 3 * 7] + 'xx' + l[6 + 3 * 7 + 2:] if l.startswith('SR10:') else l for l in out]
     check(rows(dos) == rows(win) and len(rows(dos)) == 2 + 16 + 1 + 1, 'DOS and Win32 snapshots differ:\n%s\n%s'
           % ('\n'.join(rows(dos)), '\n'.join(rows(win))))
-    check('SR10: 42 41' in '\n'.join(dos) and 'CR50: 40 00 81 00 F8 00 00 00 90 00 0A' in '\n'.join(dos),
-          'snapshot values (SR10/11, CR58-5A in 101h) not as the BIOS set them')
+    sr, cr = dict(m.r['seq']), dict(m.r['crtc'])   # the values the model holds (the BIOS set them)
+    want = ['SR10: %02X %02X' % (sr.get(0x10, 0), sr.get(0x11, 0)),
+            'CR50: ' + ' '.join('%02X' % cr.get(0x50 + i, 0) for i in range(11))]
+    check(all(w in '\n'.join(dos) for w in want), 'snapshot values (SR10/11, CR50-5A in 101h) not as the '
+          'registers hold them: %s' % want)
 
     def hook(ms):
         if ms == 300:
@@ -833,7 +852,10 @@ def t_s3regs(c):
     rw = m.run_pe32(exe, '"C:\\TOOLS\\S3REGS32.EXE" /W 1 watch', sleep_hook=hook)
     text = rw.files['S3REGS.TXT'].decode('latin1')
     ch = text[text.index('WATCH'):text.index('END OF WATCH')].split('\r\n')[1:-1]
-    check(ch == ['+300 SR10 42->41', '+300 SR11 41->28', '+500 CR54 F8->10'], 'watch lines: %s' % ch)
+    exp = ['+300 SR10 %02X->41' % sr.get(0x10, 0), '+300 SR11 %02X->28' % sr.get(0x11, 0),
+           '+500 CR54 %02X->10' % cr.get(0x54, 0)]
+    exp = [e for e in exp if e[10:12] != e[14:16]]  # a register that already held the value: no line
+    check(ch == exp, 'watch lines: %s, expected %s' % (ch, exp))
     rh = m.run_pe32(exe, 'S3REGS32 /?')
     check(b'/W n' in rh.stdout, 'S3REGS32 /? shows no parameter list')
     open(os.path.join(c.logs, 'S3REGS.TXT'), 'wb').write(r.files['S3REGS.TXT'] + r32.files['S3REGS.TXT'] + rw.files['S3REGS.TXT'])
@@ -844,6 +866,29 @@ def t_s3regs(c):
 # These change the equipment word, switch between the monochrome and the colour adapter addressing
 # and feed the BIOS invalid input: harmless on the model, not something to do to the test machine.
 # Expected values from the IBM PC AT and PS/2 BIOS interface (INT 10h) and the VBE 2.0 specification.
+
+def vesa_supported(m):
+    """The modes of the 4F00h list that 4F01h marks as supported; uses 3000:0000-05FF."""
+    m.mu.mem_write(0x30000, b'VBE2' + bytes(508))
+    m.int10(0x4F00, es=0x3000, di=0)
+    loff, lseg = struct.unpack('<HH', m.mem(0x3000E, 4))
+    out = []
+    for k in range(120):
+        v = word(m, lseg * 16 + loff + 2 * k)
+        if v == 0xFFFF:
+            break
+        r = m.int10(0x4F01, cx=v, es=0x3000, di=0x400)
+        if r['ax'] == 0x004F and m.mem(0x30400, 1)[0] & 1:
+            out.append(v)
+    return out
+
+
+def vbe_version(m):
+    """The VBE version 4F00h reports (0 when it fails); uses 3000:0000-01FF."""
+    m.mu.mem_write(0x30000, b'VBE2' + bytes(508))
+    r = m.int10(0x4F00, es=0x3000, di=0)
+    return word(m, 0x30004) if r['ax'] == 0x004F else 0
+
 
 def int10x(m, ax, bx=0, cx=0, dx=0, si=0, di=0, bp=0, es=0, std=False):
     """INT 10h like Machine.int10, optionally with DF set by the caller; returns all 16-bit registers."""
@@ -1037,31 +1082,37 @@ def t_errors(c):
     # 5. VBE: unsupported mode, invalid ranges, OEM errors
     m.int10(0x4F02, bx=0x0101)
     s0 = vga_state(m)
-    # the modes of the 4F00h list that 4F01h marks unsupported (too large for the memory: 118h, 164h,
-    # 119h, 11Ah with 2 MB), and numbers that are no mode at all
+    # the modes of the 4F00h list that 4F01h marks unsupported, and numbers that are no mode at all; every
+    # mode whose picture (bytes per line x lines, x 4 planes in the 16-colour modes) does not fit into the
+    # memory 4F00h reports must be among them (2 MB: 118h, 164h, 119h, 11Ah of the 2.04.07 list)
     m.mu.mem_write(0x30000, b'VBE2')
     m.int10(0x4F00, es=0x3000, di=0)
     loff, lseg = struct.unpack('<HH', m.mem(0x3000E, 4))
-    big = []
+    mem = word(m, 0x30012) * 0x10000
+    big, toobig = [], []
     for k in range(120):
         v = word(m, lseg * 16 + loff + 2 * k)
         if v == 0xFFFF:
             break
         m.int10(0x4F01, cx=v, es=0x3000, di=0x400)
-        if not m.mem(0x30400, 1)[0] & 1:
+        mi = m.mem(0x30400, 0x20)
+        if not mi[0] & 1:
             big.append(v)
-    if Machine.vram == 2:
-        chk(set(big) >= {0x118, 0x164, 0x119, 0x11A}, '2 MB: 118h/164h/119h/11Ah not all marked unsupported: %s'
-            % ' '.join('%03X' % v for v in big))
+        if mi[0] & 0x10 and word(m, 0x30410) * word(m, 0x30414) * (4 if mi[0x1B] == 3 else 1) > mem:
+            toobig.append(v)
+    chk(set(big) >= set(toobig), '%d KB: modes too large for the memory not marked unsupported: %s'
+        % (mem // 1024, ' '.join('%03X' % v for v in toobig if v not in big)))
     m.int10(0x4F02, bx=0x0101)
     s0 = vga_state(m)
     for bx in big + [0x01FF, 0x017F, 0x0200]:
         r = m.int10(0x4F02, bx=bx)
         chk(r['ax'] != 0x004F, '4F02 BX=%04X accepted' % bx)
         chk(vga_state(m) == s0, '4F02 BX=%04X (refused) changed the video state' % bx)
-    m.mu.mem_write(0x30000, bytes([0x15, 0x2A, 0x3F, 0]))    # 4F09h at the last entry: blue, green, red
-    r = m.int10(0x4F09, bx=0, cx=1, dx=255, es=0x3000, di=0)
-    chk(r['ax'] == 0x004F and tuple(m.dac[255]) == (0x3F, 0x2A, 0x15), '4F09 entry 255: %04X %s' % (r['ax'], m.dac[255]))
+    if vbe_version(m) >= 0x0200:                            # 4F09h is VBE 2.0
+        m.mu.mem_write(0x30000, bytes([0x15, 0x2A, 0x3F, 0]))    # 4F09h at the last entry: blue, green, red
+        r = m.int10(0x4F09, bx=0, cx=1, dx=255, es=0x3000, di=0)
+        chk(r['ax'] == 0x004F and tuple(m.dac[255]) == (0x3F, 0x2A, 0x15), '4F09 entry 255: %04X %s'
+            % (r['ax'], m.dac[255]))
     s0 = vga_state(m)
     cr0 = {k: m.r['crtc'].get(k, 0) for k in (0x41, 0x52, 0x6B)}
     for bx, cx, di in ((0x0001, 0x0101, 59), (0x0001, 0x0101, 0), (0x0001, 0x0103, 100), (0x0301, 0x0101, 60),
@@ -1174,6 +1225,7 @@ def t_windows(c):
     o = int10w(m, dict(eax=0x4F00, edi=0), es=BUF)
     chk(o['eax'] & 0xFFFF == 0x4F and m.mem(BUF * 16, 4) == b'VESA', '4F00: %04X' % (o['eax'] & 0xFFFF))
     caps = m.mem(BUF * 16 + 10, 1)[0]
+    vbe = word(m, BUF * 16 + 4)
     loff, lseg = struct.unpack('<HH', m.mem(BUF * 16 + 14, 4))
     modes = []
     while len(modes) < 120:
@@ -1193,6 +1245,8 @@ def t_windows(c):
                 % (v, o['eax'] & 0xFFFF, (o['ebx'] >> 8) & 0xFF))
             o = int10w(m, dict(eax=0x4F08, ebx=1))
             chk((o['ebx'] >> 8) & 0xFF == 8, '%03Xh 4F08 get after set 8: BH=%d' % (v, (o['ebx'] >> 8) & 0xFF))
+        if vbe < 0x0200:                # 4F09h is VBE 2.0
+            continue
         pal = bytes((3 * i + k * 85) & 0xFF for i in range(256) for k in range(4))
         m.mu.mem_write(BUF * 16 + 0x2000, pal)
         int10w(m, dict(eax=0x4F09, ebx=0, ecx=256, edx=0, edi=0x2000), es=BUF)
@@ -1293,11 +1347,11 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
 # functions, the tools) give the same output with 2 and 4 MB.
 TAGS = {
-    'version': 'rom emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
+    'version': 'rom patch emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools card', 's3regs': 'tools s3 card',
+    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
 }
@@ -1313,6 +1367,8 @@ def run_test(c, name, fn, verbose):
     t0 = time.time()
     bad = False
     try:
+        if not c.ours and 'patch' in TAGS[name].split():
+            raise Skip('not our patched BIOS')
         note = fn(c)
         res = 'PASS' + ('  (%s)' % note if note else '')
     except Skip as e:
@@ -1383,11 +1439,15 @@ def main():
     ap.add_argument('-j', type=int, default=1, metavar='N',
                     help='run N tests at a time, each in its own process (default 1; not with --coverage, '
                          '--profile or --calls). Each test prints a line when it starts and its result when done')
+    ap.add_argument('--chip', choices=('v2', 'vplus', 'trio64', 'trio32'), default='v2',
+                    help='the chip the model is (vgaemu.CHIPS): v2 = Trio64V2/DX (the card, default), vplus = '
+                         'Trio64V+, trio64 = Trio64, trio32 = Trio32; ID registers, PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
                     help='video memory the CR36 strapping reports: 2 MB (the card, default) or 4 MB (the '
                          '86C775 maximum; the model still has one 64 KB window, no banked or linear memory)')
     a = ap.parse_args()
     Machine.vram = a.vram
+    Machine.chip = a.chip
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
     if a.list:
         for n, _ in TESTS:
@@ -1423,6 +1483,9 @@ def main():
         byname = dict(TESTS)
         tests = [(t, byname[t]) for t in a.tests.split(',')]
     tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))]
+    if not c.ours:
+        print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped')
+
     if a.j > 1 and not (a.coverage or a.profile or a.calls):
         failed = run_parallel(c, tests, a)
         print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))

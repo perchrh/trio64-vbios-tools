@@ -22,7 +22,7 @@ build:
 	mkdir -p build
 
 # common/ holds the /V debug log code shared by VSHOW, S3TEST and S3COMPAT
-VDEBUG = common/vdebug.inc common/vdebug.mac common/version.inc
+VDEBUG = common/vdebug.inc common/vdebug.mac common/version.inc common/chip.inc
 
 build/VSHOW.COM: vshow/vshow.asm $(VDEBUG) | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
@@ -40,7 +40,7 @@ build/S3ALIAS.COM: s3alias/s3alias.asm common/version.inc | build
 build/VGALOG.COM: vgalog/vgalog.asm common/version.inc | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
 
-build/S3REGS.COM: s3regs/s3regs.asm common/version.inc | build
+build/S3REGS.COM: s3regs/s3regs.asm common/version.inc common/chip.inc | build
 	$(NASM) -f bin -icommon/ $(DEFS) -o $@ $<
 
 # Win32 console program for Windows 9x; the PE header is written in the source (no linker)

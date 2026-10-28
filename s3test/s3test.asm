@@ -23,10 +23,11 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.07-p14"); the version found is printed, also for other BIOS versions
+;                    "2.04.07-p15"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
-;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30 and the PCI revision ID, so the log shows
-;                    the stepping (89 01 06 E1, PCI 06 on the test card)
+;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
+;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
+;                    PCI 8901 rev 06 Trio64V2/DX/GX on the test card)
 ;   MCLK             SR10 = 42h, SR11 = 41h after POST: 59.96 MHz memory clock
 ;   Memory type      CR36 bits 3-2 = 00: the RAM is still run as 1-cycle EDO
 ;   Pedestal         SR1A bit 5 = 0 (no blank pedestal, deepest black) and bit 4 = 1
@@ -296,22 +297,17 @@ t_chip: call unlock
         jmp .c
 .p:     mov dx,s_pci
         call puts
-        mov ax,0xB102                   ; find 5333:8901, index 0
-        mov cx,0x8901
-        mov dx,0x5333
-        xor si,si
-        int 0x1A
+        call chipfind                   ; 5333:8901 or 8811 (common/chip.inc)
         jc .np
-        or ah,ah
-        jnz .np
-        mov ax,0xB108                   ; configuration byte 08h (revision ID) -> CL
-        mov di,8
-        int 0x1A
-        jc .np
-        or ah,ah
-        jnz .np
-        mov al,cl
+        mov ax,[chipdev]
+        call phex4
+        mov dx,s_rev
+        call puts
+        mov al,[chiprev]
         call phex2
+        call sp1
+        call chipname
+        call puts
         jmp .e
 .np:    mov dx,s_na
         call puts
@@ -2271,6 +2267,7 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
 
 ; /V debug log (shared with VSHOW and S3COMPAT)
 %include "vdebug.inc"
+%include "chip.inc"
 
 ; Modes tested by t_mode: mode, expected refresh in tenths of Hz, check flags, horizontal
 ; resolution, expected total line length in pixels (0 = not checked).
@@ -2310,6 +2307,7 @@ s_nover db '(no version string)$'
 s_cks   db 'ROM  ROM checksum (C000:0000-7FFF) = $'
 s_chip  db 'S3   Chip ID CR2D 2E 2F 30, PCI rev ...... $'
 s_pci   db ', PCI $'
+s_rev   db ' rev $'
 s_na    db 'n/a$'
 s_info  db '  INFO',13,10,'$'
 s_mclk  db 'S3   MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'

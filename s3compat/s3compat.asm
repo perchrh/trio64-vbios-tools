@@ -1,10 +1,11 @@
-; S3COMPAT.COM - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS (386+)
+; S3COMPAT.COM - VGA / SVGA / VESA compatibility test for Trio64-family video BIOSes (386+)
 ;
 ; Purpose
 ;   Tests the video BIOS, not the chip: does every standard VGA mode and BIOS function behave like the
 ;   IBM VGA BIOS, does every VESA mode the BIOS lists work banked and linear, and are the registers the
-;   BIOS programs inside the limits of the Trio64V2 datasheet. Test ideas follow VGATEST (PC Tech
-;   Journal 1988), SVGATEST, VBETest and X-VESA.
+;   BIOS programs inside the limits of the chip (Trio32, Trio64, Trio64V+ or Trio64V2/DX/GX, found
+;   through PCI by common/chip.inc, which holds each chip's VCO range and DCLK maxima and their
+;   sources). Test ideas follow VGATEST (PC Tech Journal 1988), SVGATEST, VBETest and X-VESA.
 ;
 ; Usage
 ;   S3COMPAT [/Q] [/V] > S3COMPAT.LOG
@@ -200,7 +201,12 @@ start:  cld
         mov ah,9
         int 0x21
 .gs:    call save_screen
-        PS 'S3COMPAT ',VERSION,' - VGA/SVGA/VESA compatibility test for the Trio64V2 VBIOS',13,10
+        call chipfind                   ; the chip and its datasheet limits (common/chip.inc)
+        PS 'S3COMPAT ',VERSION,' - VGA/SVGA/VESA compatibility test for Trio64-family video BIOSes',13,10
+        PS 'Chip: '
+        call chipname
+        call psd
+        PS 13,10
         PS 'Category column: MDA CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
@@ -213,6 +219,7 @@ start:  cld
         PS '16-colour VESA modes: memory bit 20 = separate pattern per plane at every bank.',13,10
         PS 'VESA warn bits: 1 refresh math factor 2  2 DCLK above datasheet max',13,10
         PS '  4 CR50 GE pixel length/width  10 interlace on  20 LFB on planar',13,10
+        PS '  40 default refresh not the VESA DMT 60 Hz (70 Hz at 400 lines) rate',13,10
         call bios_id
         call chip_id
         call setup
@@ -323,22 +330,16 @@ chip_id:
         RC 0x30
         call phex2
         PS ', PCI '
-        mov ax,0xB102                   ; find 5333:8901, index 0
-        mov cx,0x8901
-        mov dx,0x5333
-        xor si,si
-        int 0x1A
-        jc .np
-        or ah,ah
-        jnz .np
-        mov ax,0xB108                   ; read configuration byte 08h (revision ID) -> CL
-        mov di,8
-        int 0x1A
-        jc .np
-        or ah,ah
-        jnz .np
-        mov al,cl
+        cmp byte [chip],CHIP_NONE       ; chipfind: 5333:8901 or 8811
+        je .np
+        mov ax,[chipdev]
+        call phex4
+        PS ' rev '
+        mov al,[chiprev]
         call phex2
+        call sp1
+        call chipname
+        call psd
         jmp .e
 .np:    PS 'n/a'
 .e:     mov byte [infoflag],1
@@ -348,8 +349,10 @@ chip_id:
 ; POST state checked against the datasheet
 
 ; POST state against the datasheet. Fail bits:
-;   1 MCLK PLL VCO outside 135-340 MHz or N = 0
-;   2 CR36 bits 3-2 not 00 (not 1-cycle EDO) or MCLK above 60 MHz (1-cycle EDO needs >= 16.67 ns)
+;   1 MCLK PLL VCO outside 135 MHz to the chip's VCO maximum (340 MHz Trio64V2, 270 MHz Trio64/V+)
+;     or N = 0
+;   2 Trio64V2 only: CR36 bits 3-2 not 00 (not 1-cycle EDO) or MCLK above 60 MHz (1-cycle EDO needs
+;     >= 16.67 ns)
 post_tests:
         call unlock
         TB C_S3,'MCLK PLL (SR10/SR11) vs datasheet'
@@ -369,7 +372,8 @@ post_tests:
         call pkhz
         cmp dword [vco],135000
         jb .f1
-        cmp dword [vco],340000
+        mov eax,[vcomax]
+        cmp [vco],eax
         ja .f1
         test byte [pn],0x1F
         jz .f1
@@ -380,6 +384,8 @@ post_tests:
         PS ' CR36='
         mov al,[tmpb]
         call phex2
+        cmp byte [chip],CHIP_T64V2      ; the EDO rule is the Trio64V2's (CR36 bits 3-2)
+        jne .ok
         test byte [tmpb],0x0C           ; 00 = 1-cycle EDO
         jnz .f2
         cmp dword [fout],60000          ; 1-cycle EDO: MCLK cycle >= 16.67 ns
@@ -390,7 +396,7 @@ post_tests:
 
 ; AL = N byte (SR10/SR12 style), AH = M byte -> [vco], [fout] in kHz
 
-; PLL: f = 14.31818 MHz * (M+2) / ((N+2) * 2^R); R is 2 bits plus bit 7 of the N byte (Trio64V2).
+; PLL: f = 14.31818 MHz * (M+2) / ((N+2) * 2^R); R is 2 bits, plus bit 7 of the N byte on the Trio64V2.
 pllcalc:
         push ebx
         push ecx
@@ -406,6 +412,8 @@ pllcalc:
         and dl,3
         test al,0x80
         jz .r
+        cmp byte [r3bit],1              ; bit 7 is R bit 2 on the Trio64V2 only
+        jne .r
         or dl,4
 .r:     mov [prr],dl
         mov eax,14318
@@ -419,6 +427,18 @@ pllcalc:
         pop edx
         pop ecx
         pop ebx
+        ret
+
+psd:    push si                         ; print the '$' string at DX to the log
+        push ax
+        mov si,dx
+.l:     lodsb
+        cmp al,'$'
+        je .e
+        call putc
+        jmp .l
+.e:     pop ax
+        pop si
         ret
 
 pkhz:   push eax                        ; print EAX kHz as MHz with 2 decimals
@@ -580,6 +600,8 @@ setup:  ; log what the card looked like, then put it into a known state
         jne .nv
         mov ax,[vbeinfo+0x12]
         mov [banks],ax
+        mov ax,[vbeinfo+4]              ; VBE version: the VBE 2.0 functions are tested from 2.0 on
+        mov [vbever],ax
 .nv:    call zero_vram
         jnc .z
         FAILB 1
@@ -1553,14 +1575,16 @@ bios_gaps:
         int 0x10
         mov bh,6                        ; no 8x14 font (known): AX=1130h BH=2 gives the 8x16 table
         call fptr
-        mov [tmpd],ax
-        mov [tmpd+2],dx
+        push dx                         ; (not in [tmpd]: fptr uses it)
+        push ax
         mov bh,2
         call fptr
+        pop bx
+        pop si
         mov cx,14
-        cmp ax,[tmpd]
+        cmp ax,bx
         jne .f1b
-        cmp dx,[tmpd+2]
+        cmp dx,si
         jne .f1b
         mov cx,16
 .f1b:   mov bh,2
@@ -3189,7 +3213,8 @@ saverest:
 
 ; Font information and loading. Fail bits per test:
 ;   1130 BH=3   1 CX/DL wrong (16 / 24 rows), 2 glyph 1 not the IBM 8x8 smiley
-;   1130 BH=4   1 upper-half 8x8 glyph wrong
+;   1130 BH=4   1 upper-half 8x8 table blank at glyph 80h; WARN 02 glyph 80h not the IBM design (a
+;               BIOS with another font, the Phoenix font of the Trio64 BIOS 1.4)
 ;   1130 BH=6   2 glyph 1 not the IBM 8x16 smiley
 ;   1130 BH=2   WARN 01 when the 8x14 pointer equals the 8x16 one (known: no 8x14 font in this ROM)
 ;   1130 BH=1   1 INT 43h in mode 13h not the 8x8 font
@@ -3223,7 +3248,17 @@ fonts:  mov ax,3
         mov cx,8
         call fcmp
         jz .u2
+        push ds                         ; not IBM's glyph 80h: blank is a wrong table (FAIL), another
+        mov ds,dx                       ; design (the Phoenix font of the Trio64 BIOS 1.4) WARN 02
+        mov si,ax
+        lodsd
+        or eax,[si]
+        pop ds
+        jnz .u1
         FAILB 1
+        jmp .u2
+.u1:    PS 'glyph 80h not the IBM design'
+        WARNB 2
 .u2:    call tend
         TB C_EGA,'AX=1130 BH=6 8x16 font'
         call tdots
@@ -3583,7 +3618,8 @@ getvde: RC 0x12                         ; -> AX = vertical display end + 1 (incl
 ;               list inside the caller's buffer
 ;   OEM string  INFO
 ;   4F00 VBE2   fail 1 status/signature or wrote past 512 bytes; vendor/product/revision printed
-;   modes       fail 1 a standard mode 100h-107h or 110h-11Ah missing from the list
+;   modes       fail 1 a standard mode 100h-107h or 110h-11Ah missing from the list (Trio64V2; INFO
+;               on the other chips: VBE requires no mode, their BIOS may list fewer)
 ;   4F08        fail 1 claims an 8-bit DAC or reports other than 6 bits (the DAC is 6 bit)
 ;   4F04        fail 1 state buffer size call failed
 ;   4F0A        fail 1 no protected mode interface
@@ -3656,6 +3692,8 @@ vesa_global:
 .cd:    pop ds
         mov ax,[vbeinfo+0x12]
         mov [banks],ax
+        mov ax,[vbeinfo+4]              ; VBE version: the VBE 2.0 functions are tested from 2.0 on
+        mov [vbever],ax
         ; OEM string
         TB C_VBE,'OEM string: '
         push ds
@@ -3742,7 +3780,11 @@ vesa_global:
 .miss:  mov ax,bx
         call phex4
         call sp1
-        FAILB 1
+        cmp byte [chip],CHIP_T64V2      ; VBE requires no mode: only the Trio64V2 BIOS 2.04 is known
+        je .mf                          ; to list them all; INFO on the other chips
+        mov byte [infoflag],1
+        jmp .fnd
+.mf:    FAILB 1
 .fnd:   pop si
         jmp .rq
 .rqd:   call tend
@@ -3792,6 +3834,8 @@ vesa_global:
         ; 4F0A
         TB C_VBE,'4F0A protected mode interface'
         call tdots
+        call vbe1x
+        jc .ra
         push es
         mov ax,0x4F0A
         xor bl,bl
@@ -3835,7 +3879,9 @@ reqmodes dw 0x100,0x101,0x102,0x103,0x104,0x105,0x106,0x107
         dw 0x110,0x111,0x112,0x113,0x114,0x115,0x116,0x117,0x118,0x119,0x11A,0xFFFF
 
 ; ======================================================================
-; known refresh rates (Hz*10) from the p7 tables
+; VESA DMT rates (Hz*10) of the 60 Hz modes (59.94 at 640x480, 60.32 at 800x600, 60.00 at 1024x768,
+; 1280x1024 and 1600x1200; 70 Hz at 640x400) and S3 mode 141h at 72 Hz: the defaults of our patched
+; BIOS since p7; WARN 40 of vesa_one when another BIOS chose another default
 knownhz dw 0x12E,700,0x131,597,0x133,597,0x101,597,0x111,597,0x141,722
         dw 0x103,603,0x105,601,0x107,600,0x120,600,0
 
@@ -3896,13 +3942,15 @@ presmode:                               ; print WxHxBPP
 ; One VESA mode, banked. Fail bits:
 ;   1  4F01 failed            2  window A not 64 KB granularity/size at A000h, readable+writable
 ;   4  4F01 layout implausible (pitch < width, size > memory, colour masks not 5:5:5, 5:6:5 or 8:8:8)
-;   8  4F02 failed or 4F03 reports another mode     10 refresh outside 56-90 Hz or off the known rate
+;   8  4F02 failed or 4F03 reports another mode     10 refresh outside 56-90 Hz (progressive modes)
 ;   20 first/last byte through the window wrong (planar: per plane at every bank, see planchk)
 ;   40 4F06 BL=1 pitch differs from 4F01            80 4F07 start get/set or 4F09 8-bit palette wrong
 ;   100 CRTC geometry (pitch, YRes, XRes) vs 4F01   200 datasheet colour mode / clock rules (dschk)
 ;   400 refresh vs CRTC/PLL prediction              800 memory mapping rules (mapchk)
 ; Warn bits: 1 refresh prediction off by a factor 2, 2 DCLK above datasheet maximum, 4 CR50 pixel
-; length, 10 interlace on, 20 LFB on a planar mode. INFO for modes the BIOS marks unsupported.
+; length, 10 interlace on, 20 LFB on a planar mode, 40 default rate of a knownhz mode more than 1.5 Hz
+; off the VESA DMT rate (another default is a choice of the BIOS, not an error; S3TEST checks the
+; rates of our patched BIOS). INFO for modes the BIOS marks unsupported.
 ; Expect PASS (106h WARN 02).
 vesa_one:
         mov byte [lfbav],0
@@ -3919,7 +3967,7 @@ vesa_one:
         call tdots
         test byte [mibuf],1
         jnz .sup
-        PS 'not supported in 2 MB'
+        PS 'not supported'
         mov byte [infoflag],1
         jmp .end
 .sup:   test byte [mibuf],0x80
@@ -3959,6 +4007,10 @@ vesa_one:
 .s2:    call unlock
         call measure
         mov [hz],ax
+        RC 0x42                         ; interlaced (CR42 bit 5, WARN 10 in dschk): the measured rate is
+        test al,0x20                    ; the field rate, outside the 56-90 Hz of progressive modes
+        jnz .h2
+        mov ax,[hz]
         cmp ax,560
         jb .hf
         cmp ax,900
@@ -3977,7 +4029,7 @@ vesa_one:
         neg ax
 .k2:    cmp ax,15
         jbe .k3
-        FAILB 0x10
+        WARNB 0x40
 .k3:    call predict
         mov [phz],ax
         call cmphz
@@ -4027,6 +4079,8 @@ vesa_one:
         jne .f7
         cmp word [tmpw3],0
         jne .f7
+        call vbeq                       ; 4F09 is VBE 2.0
+        jc .ds
         cmp byte [mibuf+0x19],8
         jne .ds
         cmp byte [mibuf+0x1B],4
@@ -4385,12 +4439,14 @@ pos24   db 8,16,8,8,8,0
 ; pitch (CR13 + CR51 bits 5-4 / CR43 bit 2, unit from CR31/CR14/CR17) = 4F01 BytesPerScanLine,
 ; vertical display end = YRes * character height, horizontal display end a multiple of XRes (fail 100);
 ; CR67 colour mode fits the bpp, packed 24 bpp needs SR0B 7xh, clock doubling (CR67 mode 1) needs
-; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO 170-340 MHz (fail 200);
-; the maximum is the Trio64V2 datasheet's (section 3.6), the minimum the range XFree86 uses for the
-; Trio64V2/DX/GX DCLK PLL (s3_Trio64DAC.c, 170000-340000 kHz); every mode of p9 is at 200-325 MHz.
-; The MCLK check in post_tests keeps the Trio64V+ datasheet minimum of 135 MHz.
+; SR18 bit 7 and SR15 bit 4 or 6 and nothing else may use SR18 bit 7, DCLK VCO in the chip's range
+; (fail 200): 170-340 MHz on the Trio64V2 (datasheet section 3.6 and XFree86 s3_Trio64DAC.c), 135-270
+; MHz on the Trio32/64/V+ (their datasheets, section 9.1), and the PLL N value at least 1 (section
+; 9.1, printed as 'PLL N=0'). The MCLK check in post_tests keeps the Trio64V+ datasheet minimum of
+; 135 MHz.
 
-; DCLK above 95 MHz (170 doubled, 75 packed 24, 50 at 32 bpp) is WARN 02; CR50 pixel length
+; DCLK above the chip's maximum is WARN 02 (Trio64V2: 95 MHz, 170 doubled, 75 packed 24, 50 at 32 bpp;
+; Trio32/64/V+: 80, 135 doubled, 75 packed 24, 50 at 32 bpp); CR50 pixel length
 ; WARN 04; interlace WARN 10.
 dschk:  call rdall
         ; CRTC pitch (CR13 + CR51 5-4, or CR43 bit 2) in the addressing unit (CR31.3 -> dwords)
@@ -4422,9 +4478,12 @@ dschk:  call rdall
         movzx eax,word [tmpw]
         call pdec
         call sp1
-.v:     ; vertical display end vs YRes
+.v:     ; vertical display end vs YRes (interlaced: one field shows half the lines)
         call getvde
-        mov [tmpw],ax
+        test byte [q_r42],0x20
+        jz .v0
+        shl ax,1
+.v0:    mov [tmpw],ax
         mov al,[q_r09]
         and ax,0x1F
         inc ax
@@ -4522,27 +4581,31 @@ dschk:  call rdall
 .d2:    ; PLL limits
         cmp byte [csel],3
         jne .mm
-        cmp dword [vco],170000
+        mov eax,[vco]                   ; the chip's VCO range (common/chip.inc)
+        cmp eax,[vcomin]
         jb .vb
-        cmp dword [vco],340000
+        cmp eax,[vcomax]
         ja .vb
-        test byte [q_rs12],0x1F
+        test byte [q_rs12],0x1F         ; datasheet: N at least 1
         jnz .lim
+        FAILB 0x200
+        PS 'PLL N=0 '
+        jmp .lim
 .vb:    FAILB 0x200
         PS 'VCO '
         mov eax,[vco]
         call pkhz
         call sp1
-.lim:   mov eax,95000
+.lim:   mov eax,[dsingle]
         cmp byte [cmode],1
         jne .l1
-        mov eax,170000
+        mov eax,[ddouble]
 .l1:    cmp byte [cmode],7
         jne .l2
-        mov eax,75000
+        mov eax,[dpack24]
 .l2:    cmp byte [cmode],13
         jne .l3
-        mov eax,50000
+        mov eax,[d32]
 .l3:    cmp [dclk],eax
         jbe .mm
         WARNB 2
@@ -4848,7 +4911,8 @@ near_:  ; |ebx-eax| <= max(eax/50,10) -> CF=0
 ; S3 internal modes via AH=00 compared with the same mode set via 4F02
 
 ; S3 internal modes via INT 10h AH=00 (the BIOS's own numbers, used by S3 drivers in games) against
-; the same mode set through 4F02. First the VESA list must match the ROM's VESA->S3 table (WARN 01).
+; the same mode set through 4F02. First the VESA list must match the ROM's VESA->S3 table (WARN 01;
+; INFO on a chip other than the Trio64V2, whose BIOS has its own S3 mode numbers).
 svga_modes:
         mov si,mlist                    ; ROM table must match the BIOS mode list
         mov di,s3map
@@ -4873,8 +4937,12 @@ svga_modes:
         jmp .l
 .d:     ret
 .bad:   TB C_VBE,'VESA list differs from ROM table, skipped'
-        WARNB 1
-        call tend
+        cmp byte [chip],CHIP_T64V2      ; the table is the one of the Trio64V2 BIOS 2.04: WARN there,
+        je .bw                          ; INFO on the other chips (their BIOS has other S3 numbers)
+        mov byte [infoflag],1
+        jmp .be
+.bw:    WARNB 1
+.be:    call tend
         ret
 
 ; Fail bits: 1 AH=0Fh or 40:49 mode number wrong, 2 registers (extlist) differ from the 4F02 set,
@@ -4892,7 +4960,7 @@ svga_one:
         test byte [mibuf],1
         jnz .ok
 .na:    call tdots
-        PS 'not supported in 2 MB'
+        PS 'not supported'
         mov byte [infoflag],1
         jmp .end
 .ok:    call presmode
@@ -5225,6 +5293,8 @@ vesa_more:
         ; ---- 4F0A table
         TB C_VBE,'4F0A table layout'
         call tdots
+        call vbe1x
+        jc .tx1
         push es
         mov ax,0x4F0A
         xor bl,bl
@@ -5269,7 +5339,7 @@ vesa_more:
         jmp .tx
 .tf2:   FAILB 2
 .tx:    pop es
-        call tend
+.tx1:   call tend
         ; ---- 4F10
         TB C_VBE,'4F10 power management (DPMS)'
         call tdots
@@ -5419,14 +5489,24 @@ vesa_more:
         call tvco
         ret
 
-; DCLK VCO at every refresh rate (Trio64V2 datasheet: the DCLK PLL VCO runs at 170-340 MHz; the mode
+; DCLK VCO at every refresh rate (the chip's VCO range, 170-340 MHz on the Trio64V2; the mode
 ; tests check it at the default rates only). For every mode of 4F00h (text too) and every rate its 4F14h
 ; BH=02h list gives: the rate set with 4F14h BH=00h, the mode with 4F02h, then SR12/SR13 read back:
-;   1 VCO outside 170-340 MHz (the first ones are listed as mode@Hz), 2 the refresh registers CR41,
+;   1 VCO outside the chip's range (the first ones are listed as mode@Hz), 2 the refresh registers CR41,
 ;     CR52, CR6B not as before afterwards (they are written back directly)
+;   INFO when the BIOS has no 4F14h (BL=00h returns AL other than 4Fh)
 ; The monitor sees every rate of every mode (up to 85 Hz at 1280x1024); an LCD may show out of range.
 tvco:   TB C_S3,'DCLK VCO at every refresh rate'
         call tdots
+        mov ax,0x4F14                   ; the rates come from 4F14h BH=2: INFO without 4F14h (the
+        xor bx,bx                       ; default rates are checked with every VESA mode)
+        int 0x10
+        cmp al,0x4F
+        je .go
+        PS 'no 4F14 rate list'
+        mov byte [infoflag],1
+        jmp tend
+.go:
         call unlock
         RC 0x41
         mov [r41],al
@@ -5502,9 +5582,10 @@ tvco:   TB C_S3,'DCLK VCO at every refresh rate'
         pop bx
         mov al,bh                       ; AL = SR12 (N, R), AH = SR13 (M)
         call pllcalc
-        cmp dword [vco],170000
+        mov eax,[vco]
+        cmp eax,[vcomin]
         jb .bad
-        cmp dword [vco],340000
+        cmp eax,[vcomax]
         jbe .rn
 .bad:   FAILB 1
         cmp byte [tmpb],6
@@ -5554,6 +5635,7 @@ tvco:   TB C_S3,'DCLK VCO at every refresh rate'
 
 ; S3 OEM functions AX=4F14h (no S3 document at hand: each result is checked against an independent
 ; source, the PCI configuration, 4F00h, 4F01h and the refresh measured from the retrace).
+;   INFO when BL=00h returns AL other than 4Fh (the BIOS has no 4F14h)
 ;   1 BL=00h query: AX=004Fh, DI = the PCI device ID, SI = video memory in 64 KB units as 4F00h says
 ;   2 BL=02h BH=02h mode list (DX = index, returns CX = mode, DX = next index, 0 after the last): the
 ;     modes of the 4F00h list that 4F01h marks as supported, in its order
@@ -5571,12 +5653,17 @@ t4f14:  TB C_S3,'4F14 S3 OEM functions'
         mov ax,0x4F14
         xor bx,bx
         int 0x10
-        cmp ax,0x004F
+        cmp al,0x4F                     ; an extension: a BIOS without it (the Trio64V+ BIOS 1.03)
+        je .q0                          ; is INFO
+        PS 'not offered'
+        mov byte [infoflag],1
+        jmp tend
+.q0:    cmp ax,0x004F
         jne .q1
         mov [tmpw],di
         mov [tmpw2],si
         push di
-        mov ax,0xB102                   ; PCI BIOS: find 5333:8901 = the device ID we expect
+        mov ax,0xB102                   ; PCI BIOS: find 5333:DI, the device ID 4F14h reports
         mov cx,[tmpw]
         mov dx,0x5333
         xor si,si
@@ -6019,7 +6106,11 @@ vesa_func:
         cmp ax,1024
         je .f2
 .f1:    FAILB 1
-.f2:    mov ax,0x4F06
+.f2:    call vbeq                       ; BL=2 and BL=3 are VBE 2.0
+        jnc .f2a
+        PS 'BL=2/3 not in VBE 1.x '
+        jmp .f6
+.f2a:   mov ax,0x4F06
         mov bl,2
         mov cx,2048
         int 0x10
@@ -6075,6 +6166,8 @@ vesa_func:
         xor cx,cx
         mov dx,3000
         call startchk
+        call vbeq                       ; BL=80h (set during retrace) is VBE 2.0
+        jc .g1
         mov ax,0x4F07
         mov bx,0x0080
         xor cx,cx
@@ -6087,6 +6180,8 @@ vesa_func:
         ; palette
         TB C_VBE,'4F09 256 entries, DAC readback'
         call tdots
+        call vbe1x
+        jc .p7
         mov bx,0x101
         call setm
         mov di,palbuf
@@ -6726,6 +6821,35 @@ unlock: push ax
         pop ax
         ret
 
+; CF=1 when the BIOS is VBE 1.x (the version from 4F00h, read into vbe2buf the first time when the
+; setup has not stored it yet), CF=0 from VBE 2.0 on. Keeps every register except flags.
+vbeq:   cmp word [vbever],0
+        jne .k
+        pusha
+        mov di,vbe2buf
+        mov dword [di],'VBE2'
+        mov ax,0x4F00
+        int 0x10
+        mov dx,[vbe2buf+4]
+        cmp ax,0x004F
+        je .s
+        mov dx,0x0100                   ; no VBE: treat as 1.x
+.s:     mov [vbever],dx
+        popa
+.k:     cmp word [vbever],0x0200        ; CF = below 2.0
+        ret
+
+; A VBE 2.0 function on a VBE 1.x BIOS: prints 'not in VBE 1.x', makes the result INFO and returns
+; CF=1; CF=0 from VBE 2.0 on. Keeps every register except flags.
+vbe1x:  call vbeq
+        jnc .r
+        PS 'not in VBE 1.x'
+        mov byte [infoflag],1
+        stc
+        ret
+.r:     clc
+        ret
+
 setbank:                                ; SI = bank
         push ax
         push bx
@@ -7257,6 +7381,7 @@ pdec10: push eax
 ; ======================================================================
 ; /V debug log (shared with VSHOW and S3TEST)
 %include "vdebug.inc"
+%include "chip.inc"
 
 ; ======================================================================
 ; data
@@ -7323,7 +7448,7 @@ s_start db 'S3COMPAT ',VERSION,': the test takes about 3 minutes. The screen wil
         db 'Press any key to continue, Esc to cancel.',13,10
 s_start_len equ $-s_start
 catnames db 'MDA  CGA  EGA  VGA  VBE  S3   '
-s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for the Trio64V2/DX VBIOS',13,10
+s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for Trio64-family video BIOSes',13,10
         db '  S3COMPAT [/Q] [/V] [/S] > S3COMPAT.LOG',13,10
         db '  /Q                  skip the 2 MB VRAM test',13,10
         db '  /S                  silent: no start notice and monitor warning, no key press',13,10
@@ -7388,6 +7513,7 @@ pn      db 0
 pm      db 0
 prr     db 0
 banks   dw 32
+vbever  dw 0                            ; VBE version from 4F00 (0 = not read yet, see vbeq)
 sbsize  dw 0
 align 4
 tmpd    dd 0

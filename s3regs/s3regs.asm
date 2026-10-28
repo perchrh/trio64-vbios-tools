@@ -1,4 +1,4 @@
-; S3REGS.COM - register snapshot of the Trio64V2/DX for comparing states (DOS)
+; S3REGS.COM - register snapshot of a Trio64-family card (Trio32, Trio64, Trio64V+, Trio64V2) for comparing states (DOS)
 ;
 ; Purpose
 ;   Writes the registers the BIOS and drivers program to S3REGS.TXT, in the same text format as
@@ -106,6 +106,22 @@ snapshot:
         mov dx,0x3CC
         in al,dx
         mov [misc],al
+        ; CRTC port from MISC bit 0; the indexes are saved before the INT 10h AX=4F03h below, which
+        ; may move them (the Trio64V+ BIOS 1.03 leaves the CRTC index at 39h)
+        mov word [crtc],0x3B4
+        test byte [misc],1
+        jz .c
+        mov word [crtc],0x3D4
+.c:     mov dx,0x3C4
+        in al,dx
+        mov [sri],al
+        mov dx,0x3CE
+        in al,dx
+        mov [gri],al
+        mov dx,[crtc]
+        in al,dx
+        mov [cri],al
+        mov al,[misc]
         call hex2
         mov si,s_feat
         call str
@@ -147,21 +163,7 @@ snapshot:
         mov eax,ebx
         call hex8
         call crlf
-        ; CRTC port from MISC bit 0
-        mov word [crtc],0x3B4
-        test byte [misc],1
-        jz .c
-        mov word [crtc],0x3D4
-.c:     ; save indexes and locks
-        mov dx,0x3C4
-        in al,dx
-        mov [sri],al
-        mov dx,0x3CE
-        in al,dx
-        mov [gri],al
-        mov dx,[crtc]
-        in al,dx
-        mov [cri],al
+        ; save the locks
         mov al,0x38
         call rdcr
         mov [cr38],ah
@@ -280,19 +282,12 @@ snapshot:
         mov dx,0x3CE
         mov al,[gri]
         out dx,al
-        ; PCI configuration of 5333:8901
+        ; PCI configuration of the card (5333:8901 or 8811, common/chip.inc)
         mov si,s_pci
         call str
-        push di
-        mov ax,0xB102
-        mov cx,0x8901
-        mov dx,0x5333
-        xor si,si
-        int 0x1A
-        pop di
+        call chipfind
         jc .np
-        or ah,ah
-        jnz .np
+        mov bx,[chipbx]
         xor si,si
 .pc:    mov al,' '
         stosb
@@ -366,11 +361,12 @@ s_dash4 db '----',0
 s_sr    db 'SR',0
 s_cr    db 'CR',0
 s_gr    db 'GR00:',0
+%include "chip.inc"
 s_pci   db 'PCI00:',0
 s_na    db ' n/a',0
 s_ok    db 'S3REGS ',VERSION,': snapshot appended to S3REGS.TXT',13,10,'$'
 s_ferr  db 'S3REGS ',VERSION,': cannot write S3REGS.TXT',13,10,'$'
-s_use   db 'S3REGS ',VERSION,' - Trio64V2 register snapshot, appended to S3REGS.TXT',13,10
+s_use   db 'S3REGS ',VERSION,' - Trio64-family register snapshot, appended to S3REGS.TXT',13,10
         db '  S3REGS [label]      one snapshot with an optional label (up to 60 characters)',13,10
         db '  S3REGS /H, /?, /HELP  this help',13,10
         db 'For the Windows 9x desktop use S3REGS32.EXE (same format).',13,10,'$'

@@ -95,6 +95,36 @@ the banks, the LFB or planar windows above 64 KB are left to the card. In the mo
 (colour compare), the GR03 rotate and logic functions, the DAC state register and the PIC are now
 modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
 
+### Other Trio64-family BIOSes
+
+`--chip` (`v2`, `vplus`, `trio64`, `trio32`) makes the model that chip: its PCI device ID and
+revision, CR2D-CR2F and the width of the PLL post divider R (3 bits on the Trio64V2 only). The tools
+find the chip themselves (`common/chip.inc`) and judge the clocks by that chip's datasheet limits.
+With a ROM that is not our patched BIOS (no `2.04.07-pN` sign-on) the tests tagged `patch` (version,
+rom_patches, stores, s3test, s3alias) are skipped, and the others take their expected values from the
+standards or from the registers the BIOS set, not from our BIOS:
+
+    python3 emu/tests.py --rom TRIO64VP.BIN --chip vplus
+
+S3COMPAT follows the BIOS too: on a VBE 1.x BIOS the VBE 2.0 functions (4F06 BL=2/3, 4F07 BL=80h,
+4F09, 4F0A) are INFO "not in VBE 1.x", a BIOS without the S3 OEM functions 4F14h gets INFO, and on a
+chip other than the Trio64V2 a missing standard VESA mode and the S3 mode number table of the 2.04
+BIOS are INFO. A default refresh other than the VESA 60 Hz rate is WARN 40 (a choice of the BIOS, not
+an error), an interlaced mode is judged by its frame (twice the lines of a field) and not held to the
+56-90 Hz range.
+
+What the emulator finds in the stock BIOSes at hand (2 MB; the card logs decide):
+
+- Trio64V+ BIOS 1.03-08 (VBE 1.2): 320x200 at 15/16/32 bpp with the DCLK VCO at 101 MHz, below the
+  135 MHz datasheet minimum (FAIL 200); 1600x1200x8 interlaced at a 98 Hz field rate (WARN 50);
+  4F02 sets 118h, 119h and 11Ah, which 4F01 marks unsupported, and a refused 4F02 changes the video
+  state; 4F06 clears the upper halves of EAX, ECX and EDX (windows test).
+- Trio64 BIOS 1.4-04 (Phoenix, VBE 1.2): 1280x1024 with PLL N = 0 (the datasheet minimum is 1, FAIL
+  200), 1024x768 and 1280x1024 interlaced (WARN 10/50), 800x600 at 56 Hz (WARN 40), no 115h, 118h,
+  119h, 11Ah (INFO), the 8x8 upper half font of another design (WARN 02), and 4F06 as above. It
+  clears video memory with the graphics engine, which the model does not run (4F02 clear: model
+  limit).
+
 ### Test categories
 
 Every test has categories: the standard its expected values come from (`mda`, `cga`, `ega`, `vga`:

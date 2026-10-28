@@ -1,4 +1,4 @@
-; S3REGS32.EXE - register snapshot of the Trio64V2/DX from the Windows 9x desktop (Win32 console)
+; S3REGS32.EXE - register snapshot of a Trio64-family card from the Windows 9x desktop (Win32 console)
 ;
 ; Purpose
 ;   The same snapshot as S3REGS.COM (format in the README, section "Windows 9x driver test"), taken
@@ -17,11 +17,11 @@
 ;
 ; What is read and what is left alone
 ;   MISC, FEAT, PEL mask; SR00-SR1F (SR08 = 06h while reading, restored); CR00-CRFF (CR38 = 48h and
-;   CR39 = A5h while reading, restored); GR00-GR08; PCI configuration 00h-3Fh of 5333:8901 through
+;   CR39 = A5h while reading, restored); GR00-GR08; PCI configuration 00h-3Fh of 5333:8901 or 8811 through
 ;   ports CF8h/CFCh (CF8h restored). CR45, CR4A and CR4B are not read (a read moves the hardware cursor
 ;   colour stack) and the attribute controller is not touched. The 3C4h, 3CEh and 3D4h index registers
 ;   are put back. Watch mode ignores CR46-CR4F (hardware cursor position and pattern address, they
-;   follow the mouse).
+;   follow the mouse) and SR17 (the clock synthesizer test counter, which runs).
 ;   Windows 9x lets a Win32 program use the I/O ports unless a virtual device traps them; the S3
 ;   driver traps the VGA ports for DOS boxes, not for the desktop, so the desktop values are real.
 ;
@@ -472,7 +472,7 @@ snapshot:
         cmp ebx,9
         jb .gr
         call crlf
-        mov esi,s_pci                   ; PCI 5333:8901, mechanism 1
+        mov esi,s_pci                   ; PCI 5333:8901 or 8811 (the Trio64 family), mechanism 1
         call str
         mov dx,0xCF8
         in eax,dx
@@ -483,7 +483,9 @@ snapshot:
         out dx,eax
         mov dx,0xCFC
         in eax,dx
-        cmp eax,0x89015333
+        cmp eax,0x89015333              ; Trio64V2/DX/GX
+        je .fo
+        cmp eax,0x88115333              ; Trio32, Trio64, Trio64V+
         je .fo
         add ecx,0x800
         cmp ecx,0x80010000
@@ -515,6 +517,8 @@ snapshot:
 diff:   xor ebx,ebx
 .l:     mov al,[stateA+ebx]
         cmp al,[stateB+ebx]
+        je .n
+        cmp ebx,0x17                    ; SR17, the clock synthesizer test counter, runs
         je .n
         cmp ebx,32+0x45                 ; cursor position, pattern address and colour stack
         jb .y
@@ -636,7 +640,7 @@ s_watch2 db ' s, changes as +<ms> REG old->new (CR46-4F not compared):',13,10,0
 s_end   db 'END OF WATCH',13,10,0
 s_ok    db 'S3REGS32 ',VERSION,': written to S3REGS.TXT',13,10,0
 s_ferr  db 'S3REGS32 ',VERSION,': cannot write S3REGS.TXT',13,10,0
-s_use   db 'S3REGS32 ',VERSION,' - Trio64V2 register snapshot from the Windows 9x desktop, appended to S3REGS.TXT',13,10
+s_use   db 'S3REGS32 ',VERSION,' - Trio64-family register snapshot from the Windows 9x desktop, appended to S3REGS.TXT',13,10
         db '  S3REGS32 [label]       one snapshot with an optional label',13,10
         db '  S3REGS32 /W n [label]  snapshot, then log every register change for n seconds (every 100 ms)',13,10
         db '  S3REGS32 /H, /?        this help',13,10,0
