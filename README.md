@@ -333,6 +333,13 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
   video after boot showed wrong colours (YUV-like green), later ones were right. The stock BIOS does
   the same (same calls, 4F02 8111h with CX = 240, and the same wrong colours the first time): the
   driver or DirectShow, not the ROM.
+- p16 with the booster on under Windows (VSHOW in a full-screen DOS box, 101h and 103h, Alt+Tab several
+  times, the box closed from the taskbar with VSHOW still running, 28 October 2026): VSHOW's 4F05 calls
+  turn the booster on (CR58 90h, CR59/CR5A 000Ah, CR6D E0h). Every return to the desktop is a 4F02
+  8115h call from the driver, after which our mode set hook has put CR59/CR5A back to E000h; the desktop
+  was clean every time. Windows brings the box back with 4F02 8101h or 8103h (CX = 0, DX = 03E0h), which
+  leaves the booster off until the program's next bank switch. CR6D keeps E0h afterwards; only the mode
+  set hook reads it, and only when CR59/CR5A hold 000Ah.
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
   DOS box reads the real registers.
