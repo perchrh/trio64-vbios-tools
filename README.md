@@ -236,9 +236,16 @@ for a comparison; do not flash it. Build with 3.02 instead, for example
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
 N 1-31 and a defined R code (pllcodes), the free bytes still 00, a 64 KB
-input giving the same result whatever its upper half holds, `--no-vco-fix`, and the inputs that must
-be refused (already patched, three patch sites changed, a wrong checksum, and with
+input giving the same result whatever its upper half holds, `--no-vco-fix`, `--no-booster`, and the
+inputs that must be refused (already patched, three patch sites changed, a wrong checksum, and with
 `--stock` the card's stock 2.04.11).
+
+`--no-booster` builds a test image without the banked VESA booster: the end of VBE 4F02 keeps the
+reference instruction (6 bytes at 0x56F7 and the checksum differ from the tested build, which the
+`nobooster` test checks), so a banked mode set leaves CR58-CR5A as the reference does. The booster code
+stays in the ROM, unreached; the LFB base read and linear test fixes only act on the booster's
+CR59/CR5A = 000Ah, so they change nothing. It is for the Windows 9x test below; the sign-on stays
+2.04.07-p15, the SHA-256 is not the pinned one, and S3TEST fails its booster check in every VESA mode.
 
 ## Debug log (/V)
 
@@ -287,6 +294,32 @@ run the memory at 50 MHz?); CR54, CR60, CR90-CR93, CR66, CR67, CR85, CR86, CR87 
 arbitration, FIFO, 1-cycle linear addressing) per mode, against what our BIOS sets for the same mode;
 CR58-CR5A and CR6D (does the driver use CR6D, which our booster uses, or rely on CR59/5A being the PCI
 base); and in VGALOG.BIN which INT 10h calls Windows makes to our BIOS and with which registers.
+
+Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 28 October 2026):
+
+- The driver (S3_2.DRV / S3VDD.VXD 4.10.01.2108-2.41.07) sets every desktop mode through VBE 4F02 with
+  bit 15 set and bit 14 clear (banked, memory not cleared), CX = lines, DX = 3D4h: 101h, 103h, 107h,
+  111h, 112h, 114h, 115h, 117h, 120h and 207h (1152x864x8). Afterwards it writes CR58 = 92h itself
+  (linear on, 2 MB window) and takes the linear address from CR59/CR5A, which the stock BIOS leaves at
+  the PCI base (E000h). It never uses CR6D. At start it calls 4F15 and 4F10 and sets mode 10h, at exit
+  mode 03h twice and 4F03.
+- So the booster breaks the desktop: after a banked 4F02 it leaves CR59/CR5A = 000Ah (the 64 KB window
+  at A0000h), and the driver turns its 2 MB window on there. p15 on the card showed the boot logo, then
+  garbage when the desktop loaded. The emulator shows the same registers: after 4F02 8103h, p15 leaves
+  CR58 90h, CR59/CR5A 000Ah, CR6D E0h; `--no-booster` leaves CR58 83h, CR59/CR5A E000h, as the stock
+  BIOS does.
+- SR10/SR11 stayed at the stock MCLK (41h/28h, 50.11 MHz) the whole time: the driver did not change it.
+- CR90/CR91 (L1) is set by the driver to (bytes per line / 8) - 1 in every mode (V2-REG-4); CR86 stays
+  00h with an End Horizontal Blank above 1 (V2-REG-3).
+- After Windows, mode 03h set through the stock BIOS still has CR90 = 81h, CR91 = 8Fh (the L1 of
+  800x600x32): the leftover state the FIFO fix of p15 clears.
+- 1280x1024 and 1600x1200 gave "out of range" on the LCD with no error in Windows: the driver chooses no
+  refresh rate, and the stock defaults (CR41 = 08h, CR52 = 80h, as in the reference) are interlaced
+  timings (107h about 87 Hz fields at 46.7 kHz, 120h about 98 Hz fields at 63.7 kHz, emulator with the
+  reference). Windows then went back to the previous mode (4F02 207h right after 107h or 120h). p15 sets
+  60 Hz for both.
+- In a full-screen DOS box the snapshot shows the values the driver's port trapping returns (SR all
+  00h, A8h and 3Fh fill), not the chip.
 
 S3REGS.TXT format (S3REGS and S3REGS32 write the same):
 

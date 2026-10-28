@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """s3patch.py - build the current ROM (2.04.07-p15) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P15.BIN [--no-vco-fix] [--nasm nasm] [-q]
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P15.BIN [--no-vco-fix] [--no-booster] [--nasm nasm] [-q]
     make rom IN=REF2047.BIN OUT=S3V2P15.BIN
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
@@ -28,6 +28,12 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
   VCO    (unless --no-vco-fix) the 22 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
          larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz
   sign-on "2.04.07-p15", checksum byte 7FFF
+  --no-booster  a test build: the end of VBE 4F02 keeps the reference instruction, so a banked mode
+         set leaves CR58-CR5A as the reference does (the S3 Windows 9x driver turns its linear window on
+         after a banked 4F02 and expects CR59/CR5A to hold the PCI base; with the booster it lands on the
+         64 KB window at A0000h and the desktop is garbage, README "Windows 9x driver test"). The
+         booster code stays in the ROM, unreached; the LFB base read and linear test fixes only act on
+         the booster's CR59/CR5A = 000Ah, so they change nothing. Not the tested build: no SHA-256 check
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -276,7 +282,7 @@ def vco_fix(d, log, lo=170.0):
 
 
 # ------------------------------------------------------------------ the patcher
-def patch(lo, nasm='nasm', vcofix=True):
+def patch(lo, nasm='nasm', vcofix=True, booster=True):
     """lo: the lower 32 KB (2.04.07). Returns (new lower 32 KB, log lines)."""
     d = bytearray(lo)
     log = []
@@ -358,7 +364,10 @@ def patch(lo, nasm='nasm', vcofix=True):
     a = site['m4f02'] + 4
     put(a, d[a:a + 3], call(a, lab['hook']), 'VBE 4F02: mode set via the hook')
     a = site['boost']
-    put(a, 'c7 06 fe 04 00 00', call(a, lab['boost']) + b'\x90' * 3, 'VBE 4F02 end: booster')
+    if booster:
+        put(a, 'c7 06 fe 04 00 00', call(a, lab['boost']) + b'\x90' * 3, 'VBE 4F02 end: booster')
+    else:
+        put(a, 'c7 06 fe 04 00 00', 'c7 06 fe 04 00 00', 'VBE 4F02 end: no booster (--no-booster)')
     a = site['bl3'] + 4
     put(a, 'b8 ff 03 33 d2', call(a, lab['bl3']) + b'\xEB\xF8', 'VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret')
     a = site['base'] + 2
@@ -471,6 +480,8 @@ def main():
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
     ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
+    ap.add_argument('--no-booster', action='store_true',
+                    help='test build: leave the booster call out of VBE 4F02 (no SHA-256 check)')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
     a = ap.parse_args()
@@ -479,10 +490,10 @@ def main():
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]                       # a 64 KB input: only its lower half is used
-        new_lo, log = patch(lo, a.nasm, not a.no_vco_fix)
+        new_lo, log = patch(lo, a.nasm, not a.no_vco_fix, not a.no_booster)
         img = new_lo + bytes(0x8000)            # the upper 32 KB: zeros
         errs = verify(img, not a.no_vco_fix)
-        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA
+        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and not a.no_booster and RESULT_SHA
         out_sha = hashlib.sha256(img).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 %s, expected %s)' % (out_sha, RESULT_SHA))
