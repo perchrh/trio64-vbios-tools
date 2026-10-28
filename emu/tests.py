@@ -74,6 +74,10 @@ Tests
                    4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
                    IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
+  v2_writes        (emulator only, Trio64V2 model) the datasheet rules about writes (docs/chip-rules.md):
+                   CR26 = 00h after CR39 = A5h on every mode set (V2-REG-5), CR40 bit 0 and CR66 bit 0
+                   changed only with the screen off or in vertical retrace (V2-REG-6); modes 03h, 12h,
+                   13h, 101h, 111h, 112h
   -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
                    patch call tools card emu vram; --list shows them; vram = depends on the memory size)
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
@@ -1298,6 +1302,35 @@ def t_display_switch(c):
     return 'AL=02h: AL=12h, state saved'
 
 
+def t_v2_writes(c):
+    """Trio64V2 datasheet rules about writes, which only the model can see (docs/chip-rules.md):
+    V2-REG-5: the BIOS writes 00h to CR26 on each mode set, with A5h in CR39 first ('Synchronization 2',
+    section 4.2); V2-REG-6: CR40 bit 0 and CR66 bit 0 change only with the screen off (SR01 bit 5) or in
+    vertical retrace (section 4.1). Checked for VGA modes 03h, 12h, 13h and the VESA modes 101h, 111h
+    and 112h. Only on the Trio64V2 model (--chip v2)."""
+    if Machine.chip != 'v2':
+        raise Skip('Trio64V2 rules (--chip v2)')
+    m = c.machine()
+    errs = []
+    sets = [('03h', lambda: m.int10(0x03)), ('12h', lambda: m.int10(0x12)), ('13h', lambda: m.int10(0x13)),
+            ('101h', lambda: m.int10(0x4F02, bx=0x101)), ('111h', lambda: m.int10(0x4F02, bx=0x111)),
+            ('112h', lambda: m.int10(0x4F02, bx=0x112))]
+    for name, fn in sets:
+        m.wlog = []
+        fn()
+        log, m.wlog = m.wlog, None
+        if not any(reg == 'CR' and i == 0x26 and v == 0 and cr39 == 0xA5
+                   for reg, i, v, old, sr01, vr, cr39 in log):
+            errs.append('%s: no CR26 = 00h with CR39 = A5h (V2-REG-5)' % name)
+        for reg, i, v, old, sr01, vr, cr39 in log:
+            if reg == 'CR' and i in (0x40, 0x66) and (v ^ old) & 1 and not sr01 & 0x20 and not vr:
+                errs.append('%s: CR%02X bit 0 %d->%d with the screen on outside retrace (V2-REG-6)'
+                            % (name, i, old & 1, v & 1))
+    m.int10(0x03)
+    check(not errs, '%d: %s' % (len(errs), '; '.join(errs[:8])))
+    return '%d mode sets' % len(sets)
+
+
 def t_stores(c):
     """The p11-p14 speed patches do their video memory work with 32-bit stores (the reference BIOS uses
     8- and 16-bit ones, the same result): the share of the bytes written to A0000-BFFFF by 4-byte stores,
@@ -1339,7 +1372,8 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores)]
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
+         ('v2_writes', t_v2_writes)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
@@ -1357,6 +1391,7 @@ TAGS = {
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
+    'v2_writes': 's3 emu',
 }
 
 

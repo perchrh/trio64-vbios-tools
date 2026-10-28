@@ -127,6 +127,9 @@ class Machine:
         mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
         self.planes = [bytearray(0x10000) for _ in range(4)]
         self.ge_cmds = 0                                # graphics engine commands written to 9AE8h
+        # write log for the datasheet rules that concern writes (docs/chip-rules.md): None = off, else a
+        # list of (reg, index, value, old value, SR01, in vertical retrace, CR39), reg 'SR' or 'CR'
+        self.wlog = None
         self.latch = [0, 0, 0, 0]
 
     # ------------------------------------------------------------------ ports
@@ -262,6 +265,10 @@ class Machine:
                 if r['ci'] == 7:                        # CR11 bit 7 protects CR00-07 except CR07 bit 4
                     r['crtc'][7] = (r['crtc'].get(7, 0) & ~0x10) | (v & 0x10)
                 return
+            if self.wlog is not None and p in (0x3C5, 0x3D5, 0x3B5):
+                reg, i, regs = ('SR', r['si'], r['seq']) if p == 0x3C5 else ('CR', r['ci'], r['crtc'])
+                self.wlog.append((reg, i, v, regs.get(i, 0), r['seq'].get(1, 0), self._retrace(),
+                                  r['crtc'].get(0x39, 0)))
             if p == 0x3C4: r['si'] = v
             elif p == 0x3C5: r['seq'][r['si']] = v
             elif p in (0x3D4, 0x3B4): r['ci'] = v
@@ -438,7 +445,17 @@ class Machine:
     def _pci_cfg(self, reg):
         """The PCI configuration dword at reg for the chip of the model (device ID and revision)."""
         c = CHIPS[Machine.chip]
-        if reg in (0x00, 0x2C):
+        if reg == 0x00:
+            return (c['dev'] << 16) | 0x5333
+        if reg == 0x2C and Machine.chip == 'v2':
+            # Trio64V2 subsystem IDs (datasheet section 3.8, docs/chip-rules.md V2-PCI-1): CR81-CR84, or
+            # the ROM bytes C000:0040-0043 while CR37 bit 2 is 1 (the chip powers up with 1; the model
+            # starts with CR37 = 00h, so only the copy to CR81-CR84 is seen here)
+            cr = self.r['crtc']
+            if cr.get(0x37, 0) & 0x04:
+                return struct.unpack('<I', bytes(self.rom[0x40:0x44]))[0]
+            return cr.get(0x81, 0) | cr.get(0x82, 0) << 8 | cr.get(0x83, 0) << 16 | cr.get(0x84, 0) << 24
+        if reg == 0x2C:
             return (c['dev'] << 16) | 0x5333
         if reg == 0x08:
             return 0x03000000 | c['ids'][2]
