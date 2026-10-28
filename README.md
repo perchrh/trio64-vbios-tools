@@ -252,10 +252,13 @@ same branch cancels the running one.
 Every run builds NASM 3.02 from its release source (cached between runs) and the tools with `make`;
 the .COM files are kept as the artifact `tools` for 14 days. It then builds the ROM from the S3
 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin` (`make rom`, `make rom-test` with the pinned
-SHA-256) and runs `make emu-test`, `make coverage` and `make ref-compare` on it, each even when an
-earlier one failed; the emulator logs are kept as the artifact `emu-logs` (without .BIN files), the
-patched ROM image is not kept. The hardware logs remain the final word, as for the emulator tests run
-by hand.
+SHA-256) and runs `make emu-test` and `make ref-compare` on it, each even when an earlier one failed;
+the emulator logs are kept as the artifact `emu-logs` (without .BIN files), the patched ROM image is
+not kept. The hardware logs remain the final word, as for the emulator tests run by hand.
+
+`.github/workflows/coverage.yml` runs `make coverage` (the 80 % goal, with the list of code no test
+reaches) on the same ROM, for pushes to main and by hand only: pull requests do not start it, as it runs
+every emulator test once more. Its logs are kept as the artifact `coverage-logs`.
 
 ## Debug log (/V)
 
