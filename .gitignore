@@ -9,3 +9,4 @@ __pycache__/
 *.egg-info/
 emu/logs/
 emu/logs4/
+*.untested
