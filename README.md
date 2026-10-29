@@ -31,7 +31,7 @@ above its range, so do not run these tools with one. The `/H` help of each tool 
 
 All tools share one version number and S3TEST checks for one ROM version; both are set in
 `common/version.inc` (`VERSION`, `ROMVER`) and can be overridden for a build, for example
-`make clean && make VERSION=0.9 ROMVER=2.04.07-p15`.
+`make clean && make VERSION=0.9 ROMVER=2.04.07-p18`.
 
 ## Building
 
@@ -44,8 +44,8 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P17.BIN NASM=nasm/nasm-3.02/nasm
-    make rom OUT=S3V2P17.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P18.BIN NASM=nasm/nasm-3.02/nasm
+    make rom OUT=S3V2P18.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -67,7 +67,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P17.BIN
+    make emu-test ROM=path/to/S3V2P18.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -184,7 +184,7 @@ category column: compare from the sixth column.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P17.BIN
+    make coverage ROM=path/to/S3V2P18.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -196,13 +196,13 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare ROM=S3V2P17.BIN
+    make ref-compare ROM=S3V2P18.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
 output, palettes, pages, fonts, AH=12h, AH=1Ah, AH=1Ch) and compares the registers a program gets
 back, the BIOS data area, video memory, the DAC and the standard VGA registers after each call. For
-2.04.07-p17 there is no difference: the patches in those paths (32-bit text scroll, planar fills,
+the current ROM there is no difference: the patches in those paths (32-bit text scroll, planar fills,
 AH=09h, VGA clear, font load) only change how fast it is done, and the mode set hook, the memory
 clock and the pedestal only touch S3 extended registers, which are not compared.
 
@@ -210,10 +210,10 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(p17) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(level p18) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P17.BIN
-    make rom OUT=S3V2P17.BIN
+    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P18.BIN
+    make rom OUT=S3V2P18.BIN
 
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
@@ -226,14 +226,13 @@ that passed every emulator test (9f276f6c...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
-MOVSD/STOSD, 3.01 and 3.02 after it; the p15 image of 2.16.01 had SHA-256 1caad895... and works the
-same), and then the result check fails: s3patch names the assembler and the blocks whose
+MOVSD/STOSD, 3.01 and 3.02 after it; such an image works the same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom OUT=S3V2P17.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom OUT=S3V2P18.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P17.BIN]
-    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P17.BIN]
+    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P18.BIN]
+    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P18.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
@@ -308,72 +307,48 @@ arbitration, FIFO, 1-cycle linear addressing) per mode, against what our BIOS se
 CR58-CR5A and CR6D (does the driver use CR6D, which our booster uses, or rely on CR59/5A being the PCI
 base); and in VGALOG.BIN which INT 10h calls Windows makes to our BIOS and with which registers.
 
-Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 28 October 2026):
+Findings (S3REGS.TXT and VGALOG.BIN from the card, Windows 98 SE, October 2026):
 
 - The driver (S3_2.DRV / S3VDD.VXD 4.10.01.2108-2.41.07) sets every desktop mode through VBE 4F02 with
   bit 15 set and bit 14 clear (banked, memory not cleared), CX = lines, DX = 3D4h: 101h, 103h, 107h,
   111h, 112h, 114h, 115h, 117h, 120h and 207h (1152x864x8). Afterwards it writes CR58 = 92h itself
-  (linear on, 2 MB window) and takes the linear address from CR59/CR5A, which the stock BIOS leaves at
-  the PCI base (E000h). It never uses CR6D. At start it calls 4F15 and 4F10 and sets mode 10h, at exit
+  (linear on, 2 MB window) and takes the linear address from CR59/CR5A, which it expects at the PCI
+  base (E000h). It never uses CR6D. At start it calls 4F15 and 4F10 and sets mode 10h, at exit
   mode 03h twice and 4F03.
-- So the p15 booster broke the desktop: after a banked 4F02 it left CR59/CR5A = 000Ah (the 64 KB
-  window at A0000h), and the driver turned its 2 MB window on there. p15 on the card showed the boot
-  logo, then garbage when the desktop loaded; a p15 build without the booster gave a working desktop.
-  The emulator shows the same registers: after 4F02 8103h, p15 left CR58 90h, CR59/CR5A 000Ah, CR6D
-  E0h, the stock BIOS and p16 leave CR58 83h, CR59/CR5A E000h. Since p16 the booster is switched on by
-  the first bank switch (4F05 set window or the window function), which the driver never calls; the
-  emulator test `windows` replays the driver's 4F02 calls and checks CR59/CR5A.
-- SR10/SR11 stayed at the stock MCLK (41h/28h, 50.11 MHz) the whole time: the driver did not change it.
+- That is why the booster is refused while Windows runs in enhanced mode: a booster switched on by
+  the driver's banked 4F02 leaves CR59/CR5A = 000Ah, and the driver turns its 2 MB window on at
+  A0000h (garbage on the desktop). And with the booster on in a full-screen DOS box (VSHOW 101h, 103h),
+  Windows restored the box after Alt+Tab with MISC = 63h (the fixed 25 MHz clock, 400-line sync), which
+  the monitor could not show, every time; without the booster this happens only once in many tries, as
+  with the stock BIOS. With the ROM the desktop snapshots show CR6D = 01h (the refusal), CR58 92h and
+  CR59/CR5A E000h, and VSHOW in a full-screen box comes back after Alt+Tab as with the stock BIOS. The
+  emulator test `windows` replays the driver's 4F02 calls with an INT 2Fh that answers Windows.
+- Windows brings a full-screen DOS box back with its own 4F02 call (8101h, 8103h, C101h; CX = 0,
+  DX = 03E0h), and the desktop with 4F02 8115h; the mode set hook restores CR59/CR5A from CR6D when a
+  booster was on in plain DOS before.
+- The driver keeps the memory clock the BIOS sets (59.96 MHz with the ROM, 50.11 MHz with the stock
+  BIOS) on the desktop, in DOS boxes and through video playback, and uses the BIOS pixel clocks,
+  also the VCO-moved ones (800x600: SR12/SR13 63h/6Eh, 40.09 MHz, VCO 320.7 MHz).
 - CR90/CR91 (L1) is set by the driver to (bytes per line / 8) - 1 in every mode (V2-REG-4); CR86 stays
   00h with an End Horizontal Blank above 1 (V2-REG-3).
-- After Windows, mode 03h set through the stock BIOS still has CR90 = 81h, CR91 = 8Fh (the L1 of
-  800x600x32): the leftover state the FIFO fix of the ROM clears. Before Windows (DOS, safe mode) CR90 is
-  00h; a full-screen DOS box under Windows has the real registers and also CR90 = 81h, CR91 = 8Fh in
-  mode 03h, so DOS programs in a full-screen box start from that state.
-- Before Windows the memory clock is already the stock 50.11 MHz (SR10/SR11 41h/28h). A snapshot taken
-  in AUTOEXEC.BAT shows the Windows boot logo's registers (MISC 63h, GR05 50h), not mode 03h, although
-  the BIOS data area says 03h; take the text mode baseline from DOS safe mode instead.
-- 1280x1024 and 1600x1200 gave "out of range" on the LCD with no error in Windows: the driver chooses no
-  refresh rate, and the stock defaults (CR41 = 08h, CR52 = 80h, as in the reference) are interlaced
-  timings (107h about 87 Hz fields at 46.7 kHz, 120h about 98 Hz fields at 63.7 kHz, emulator with the
-  reference). Windows then went back to the previous mode (4F02 207h right after 107h or 120h). The ROM sets
-  60 Hz for both.
-- With p15 without the booster (`S3V2P15NB.BIN`, the same code as p16 minus the lazy booster) the
-  desktop works, and the driver keeps our memory clock: SR10/SR11 stay 42h/41h (59.96 MHz) on the
-  desktop and through a 120 s watch with video playback (Streams Processor on, CR67 DCh) and full-screen
-  video (640x480x16). It uses the BIOS pixel clocks, also the VCO-fixed ones (800x600: SR12/SR13
-  63h/6Eh, 40.09 MHz, VCO 320.7 MHz). In a full-screen DOS box the FIFO fix has cleared CR90 bit 7
-  (CR90 01h, the stock BIOS left 81h). Snapshots of desktop modes taken with S3REGS in a windowed DOS
-  box mix trapped values (SR 00h, A8h fill, the text CRTC) with some real ones; take them with S3REGS32.
-- p16 on the card under Windows 98 SE (VGALOG and S3REGS32, 28 October 2026): the desktop works; no
-  4F05 call in the whole session (desktop, mode changes, full-screen video, Duke Nukem 3D in mode 13h in
-  a DOS box), CR59/CR5A = E000h and CR6D = 00h after every call, so the booster never turned on; SR10/
-  SR11 42h/41h throughout. Full-screen MPEG video in Media Player 6 set 4F02 8111h with CX = 240 (the
-  driver's 320x240 mode, made from 111h) and back to 115h; the stock run had CX = 480. The first such
-  video after boot showed wrong colours (YUV-like green), later ones were right. The stock BIOS does
-  the same (same calls, 4F02 8111h with CX = 240, and the same wrong colours the first time): the
-  driver or DirectShow, not the ROM.
-- p16 with the booster on under Windows (VSHOW in a full-screen DOS box, 101h and 103h, Alt+Tab several
-  times, the box closed from the taskbar with VSHOW still running, 28 October 2026): VSHOW's 4F05 calls
-  turn the booster on (CR58 90h, CR59/CR5A 000Ah, CR6D E0h). Every return to the desktop is a 4F02
-  8115h call from the driver, after which our mode set hook has put CR59/CR5A back to E000h; the desktop
-  was clean every time. Windows brings the box back with 4F02 8101h or 8103h (CX = 0, DX = 03E0h), which
-  leaves the booster off until the program's next bank switch. CR6D keeps E0h afterwards; only the mode
-  set hook reads it, and only when CR59/CR5A hold 000Ah.
-- p17 on the card (29 October 2026): under Windows, VSHOW's 4F05 calls leave the booster off (CR6D =
-  01h, CR58 83h, CR59/CR5A E000h). VSHOW 101h and 103h in a full-screen DOS box with Alt+Tab out and
-  back behave the same as with the stock BIOS, no worse (p16 lost the picture on every return). In
-  plain DOS the booster goes on as before. Warcraft II (DOS/4GW) switches banks through the 4F0A protected-mode code,
-  which it copies out of the ROM (5B5E-5CB5, unchanged from the reference): it never calls 4F05 or the
-  window function, so the booster stays off with it. After Windows' "Restart in MS-DOS mode" it hangs
-  before the first picture, with the stock BIOS as with p17; booted straight to DOS it runs: not the
-  ROM.
-- p18 on the card in plain DOS (29 October 2026): Warcraft II and VIDSPEED set their banked modes with
-  4F02 (0101h, 0113h) and get the booster from the mode set (CR58 90h, CR59/CR5A 000Ah after the call,
-  CR6D E0h afterwards), where p17 left it off. Warcraft II tested fully, no problems (a map scrolling
-  fault on the way was the mouse driver). Under Windows 98 SE p18 passes the same checks as p17: the
-  desktop works, and VSHOW 101h/103h in a full-screen DOS box with Alt+Tab out and back behave as with
-  the stock BIOS.
+- The stock BIOS leaves CR90 = 81h, CR91 = 8Fh (the L1 of 800x600x32) in mode 03h after Windows and in
+  a full-screen DOS box; the FIFO fix of the ROM clears bit 7 there (CR90 01h).
+- 1280x1024 and 1600x1200 give "out of range" on an LCD with the stock BIOS and no error in Windows:
+  the driver chooses no refresh rate, and the stock defaults (CR41 = 08h, CR52 = 80h, as in the
+  reference) are interlaced timings (107h about 87 Hz fields at 46.7 kHz, 120h about 98 Hz fields at
+  63.7 kHz). Windows then goes back to the previous mode (4F02 207h right after 107h or 120h). The ROM
+  sets 60 Hz for both.
+- Full-screen MPEG video in Media Player 6 sets 4F02 8111h with CX = 240 (the driver's 320x240 mode,
+  made from 111h). The first such video after boot shows wrong colours (YUV-like green), later ones
+  are right, with the stock BIOS as with the ROM: the driver or DirectShow.
+- Programs in plain DOS: Warcraft II (DOS/4GW) and VIDSPEED set their banked modes with 4F02 (0101h,
+  0113h) and get the booster from the mode set (CR58 90h, CR59/CR5A 000Ah after the call, CR6D E0h
+  afterwards); Warcraft II switches banks through the 4F0A protected-mode code (5B5E-5CB5, unchanged
+  from the reference), which never calls 4F05. Warcraft II tested fully. After Windows' "Restart in
+  MS-DOS mode" it hangs before the first picture, with the stock BIOS as with the ROM; booted straight
+  to DOS it runs.
+- A snapshot taken in AUTOEXEC.BAT shows the Windows boot logo's registers (MISC 63h, GR05 50h), not mode
+  03h, although the BIOS data area says 03h; take the text mode baseline from DOS safe mode instead.
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
   DOS box reads the real registers.
@@ -418,7 +393,7 @@ upper 32 KB is zeros (the ROM header declares 32 KB). The lower half checksums t
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
-130 bytes of the lower 32 KB are free: 0x7CC8-7CFA, 0x7E2D-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
+120 bytes of the lower 32 KB are free: 0x7CC8-7CFA, 0x7E36-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
 0x7F51-7F57, 0x7FB7-7FBF, 0x7FE3-7FFE.
 
 Picture and monitor
@@ -451,19 +426,18 @@ Speed
   bit 1 tweak of the reference compares SR10/SR11 with the old MCLK values and so stays off.
 - **Banked VESA booster:** the banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB
   window at A0000h; the real LFB base is kept in CR6D and restored on the next mode set, and 4F01 and
-  4F05/4F03 report it correctly. Banked writes at 83.7 MB/s, as fast as the LFB. Since p16 it is
-  switched on by the first bank switch (4F05 set window, fast or slow path, or the window function by
-  far call), not by 4F02: a banked mode set leaves CR58-CR5A as the reference does, which the S3
-  Windows 9x driver needs (it turns its own linear window on at CR59/CR5A, "Windows 9x driver test").
-  Writes before the first bank switch go through the normal banked path. Since p17 it stays off while
-  Windows runs in enhanced mode (INT 2Fh AX=1600h, asked once per mode set and remembered as CR6D =
-  01h): with the booster on in a full-screen DOS box, Windows 98's S3 driver restored the box after
-  Alt+Tab with MISC = 63h (the fixed 25 MHz clock, 400-line sync), which the monitor could not show,
-  every time (VSHOW 101h and 103h; p15 without the booster and the stock BIOS: once in many tries).
+  4F05/4F03 report it correctly. Banked writes at 83.7 MB/s, as fast as the LFB. It is switched on at
+  the end of a banked 4F02, so every way of switching banks gets it (INT 10h 4F05, the window
+  function, the 4F0A protected-mode code, programs that write CR6A themselves), and by the first bank
+  switch (4F05 set window or the window function) in the S3 modes set with INT 10h AH=00, which do
+  not pass the end of 4F02. It stays off while Windows runs in enhanced mode (INT 2Fh AX=1600h,
+  asked once per mode set and remembered as CR6D = 01h): Windows 98's S3 driver needs CR58-CR5A as
+  the reference leaves them after a banked 4F02, and restores a full-screen DOS box wrongly when the
+  booster was on in it ("Windows 9x driver test").
 - **Fast 4F05 set window:** AX=4F05h BH=0 is handled at the INT 10h entry (unlock, CR58 test, SR04 for
   planar banks, CR6A; the 3C4h index is kept): 6 port writes and 3 reads instead of 13 writes and
-  about 6 reads, 4.3 us per call on the card. Get and errors are unchanged; since p16 the first call
-  in a banked mode also turns the booster on, as the window function does.
+  about 6 reads, 4.3 us per call on the card. Get and errors are unchanged; in a banked mode with the
+  booster still off (an AH=00 S3 mode) the first call turns it on, as the window function does.
 - **32-bit video memory stores** where the reference uses 8- or 16-bit ones, with the same result:
   - the 2 MB clear of every S3/VESA mode set (rep stosd through the same 64 KB banks; the clear is
     most of a VESA mode set's time)
@@ -494,9 +468,9 @@ Fixes
 Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
 zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
-| Offset | 2.04.07 | p17 | Purpose |
+| Offset | 2.04.07 | p18 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p17 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p18 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |
@@ -545,20 +519,21 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x3513-3515 | F3 AB C3 | E9 AF 24 | AH=09h text: char/attribute with wfill |
 | 0x3519-351B | F3 AB C3 | E9 A9 24 | AH=09h text, page > 0: with wfill |
 | 0x56DD-56DF | E8 9B CF | E8 A0 27 | VBE 4F02: mode set via the hook |
-| 0x584B-584E | 52 53 8B DA | E9 19 25 90 | VBE window set (4F05 BH=0 slow path, window function): booster on, then the replaced code in `wsetx` (p16; until p15 the booster was called at 0x56F7, the end of 4F02) |
+| 0x56F7-56FC | C7 06 FE 04 00 00 | E8 77 26 90 90 90 | VBE 4F02 end: `b4f02`, the replaced instruction, then the booster unless Windows runs |
+| 0x584B-584E | 52 53 8B DA | E9 19 25 90 | VBE window set (4F05 BH=0 slow path, window function): booster on, then the replaced code in `wsetx` |
 | 0x59BB-59BF | B8 FF 03 33 D2 | E8 B3 25 EB F8 | VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret |
 | 0x59C0-59E2 | old 4F06 BL=3 code (dead after the call) | code | `p13fill.asm`: wfillt 59C0, wfill 59C5 |
 | 0x5CCF-5CD2 | 8B C3 0B C0 | E8 6E 22 90 | LFB base read: real base while the booster is on |
 | 0x5CED-5CEF | 25 00 10 | E8 CF 1F | 4F05/4F03 linear test ignores the booster window |
-| 0x7C8B-7CC7 | 00 | code | `wincheck.asm`: wcheck 7C8B (no booster under Windows enhanced mode, p17), wclear 7CAF, lfbchk 7CBF. 0x7C8A is not free: it is the high byte of the word count at 0x7C89 that the descender glyph load at 0x3FC7 reads |
-| 0x7CFB-7E2C | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, font 7D71, scr13 7D8D |
+| 0x7C8B-7CC7 | 00 | code | `wincheck.asm`: wcheck 7C8B (no booster under Windows enhanced mode), wclear 7CAF, lfbchk 7CBF. 0x7C8A is not free: it is the high byte of the word count at 0x7C89 that the descender glyph load at 0x3FC7 reads |
+| 0x7CFB-7E35 | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, b4f02 7D71, font 7D7A, scr13 7D96 |
 | 0x7E40-7E78 | 00 | tables | `crtc240.asm`: crtc8 7E40, crtc16 7E60 |
 | 0x7E80-7F50 | 00 | code | `hooks.asm`: hook 7E80, bon 7EF3, basefix 7F40 |
 | 0x7F58-7F70 | 00 | code | `p13bfill.asm`: bfill0 7F58, bfill 7F5A |
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | C0 | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | 27 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
@@ -609,8 +584,8 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 ### To do
 
 - Measure the booster with VIDSPEED in plain DOS: first with the stock BIOS, then with the latest ROM,
-  and write both banked results here. Since p18 VIDSPEED's banked mode (4F02 0113h) gets the booster
-  (VGALOG: CR58 90h, CR59/CR5A 000Ah after the call); with p17 it did not.
+  and write both banked results here. VIDSPEED's banked mode (4F02 0113h) gets the booster (VGALOG:
+  CR58 90h, CR59/CR5A 000Ah after the call).
 
 ## Sources
 
