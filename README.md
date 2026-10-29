@@ -371,7 +371,9 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
 - p18 on the card in plain DOS (29 October 2026): Warcraft II and VIDSPEED set their banked modes with
   4F02 (0101h, 0113h) and get the booster from the mode set (CR58 90h, CR59/CR5A 000Ah after the call,
   CR6D E0h afterwards), where p17 left it off. Warcraft II tested fully, no problems (a map scrolling
-  fault on the way was the mouse driver).
+  fault on the way was the mouse driver). Under Windows 98 SE p18 passes the same checks as p17: the
+  desktop works, and VSHOW 101h/103h in a full-screen DOS box with Alt+Tab out and back behave as with
+  the stock BIOS.
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
   DOS box reads the real registers.
