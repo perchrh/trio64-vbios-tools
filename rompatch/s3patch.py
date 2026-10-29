@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p17) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (2.04.07-p18) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P17.BIN [--no-vco-fix] [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN OUT=S3V2P17.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P18.BIN [--no-vco-fix] [--nasm nasm] [-q]
+    make rom IN=REF2047.BIN OUT=S3V2P18.BIN
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -22,7 +22,7 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
   code   assembled with nasm from the .asm files next to this script, at the addresses in bios.inc:
          p12ext.asm (fast 4F05, 32-bit font load, 32-bit mode 13h scroll), crtc240.asm (320x240 CRTC
          tables), hooks.asm (mode set hook with LFB base restore, FIFO fix and ATC flip-flop reset;
-         booster, switched on by the first bank switch since p16; LFB base and linear test fixes), vbe4f06.asm (4F06 BL=3), clear32.asm (32-bit S3/VESA
+         booster, on at the end of a banked 4F02 (p18) and at the first bank switch (p16); LFB base and linear test fixes), vbe4f06.asm (4F06 BL=3), clear32.asm (32-bit S3/VESA
          mode set clear), p13*.asm (32-bit text and planar scroll fills, text window moves, AH=09h);
          p14: the VGA mode set clear in place as a jump to wfill
   VCO    (unless --no-vco-fix) the 22 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
@@ -33,7 +33,10 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
   p17    no booster while Windows runs in enhanced mode (INT 2Fh AX=1600h, asked once per mode
          set, wincheck.asm in the free bytes 7C8B-7CFA): Windows 98's S3 driver restores a full-screen
          DOS box with the booster on with a MISC the monitor cannot show
-  sign-on "2.04.07-p17", checksum byte 7FFF
+  p18    the booster on again at the end of a banked VBE 4F02 (as up to p15), still refused under
+         Windows enhanced mode: in plain DOS every bank switch path gets it (INT 10h 4F05, the window
+         function, the 4F0A protected-mode code, direct CR6A writes), not only the first two
+  sign-on "2.04.07-p18", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -42,10 +45,10 @@ with the known reference image the SHA-256 of the build that passed the emulator
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p17'
+LEVEL = 'p18'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = '9f276f6c2ab8af2bc1b65c0628f1c3170c7477e3638c9444cf2df53973286d04'  # 2.04.07-p17 (NASM 3.02), emulator tests passed
+RESULT_SHA = ''  # 2.04.07-p18: set once the emulator tests pass
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
@@ -56,7 +59,7 @@ BLOCK_SHA = {
     'p13bfa.asm': 'a4192aa0cbf344d3',
 }
 TESTED_NASM = '3.02'
-FREE_START, FREE_END = 0x7C8B, 0x7FE3   # 7C89-7C8A: the word count of the descender glyph load at 3FC7   # free space the new code and tables use (end exclusive)
+FREE_START, FREE_END = 0x7C8B, 0x7FE3   # free space the new code uses (end exclusive); 7C89-7C8A: the word count of the descender glyph load at 3FC7
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -82,7 +85,7 @@ SITES = dict(modetab=0x20D3, m4f02=0x56D9, boost=0x56F7, bl3=0x59B7, base=0x5CCD
              plwin=0x3171, ah09a=0x3512, ah09b=0x3516)
 SIG = dict(
     m4f02='8e 1e ?? ?? e8 ?? ?? 61 8a d8 24',            # mov ds,[cs:SEG_BDA] / call MODESET
-    boost='c7 06 fe 04 00 00 c3 c6 46 1b 01',            # mov word [4FEh],0 / ret (unpatched since p16)
+    boost='c7 06 fe 04 00 00 c3 c6 46 1b 01',            # mov word [4FEh],0 / ret
     bl3='0e b4 00 c3 b8 ff 03 33 d2 8b da 8a 5c',        # 4F06 BL=3: mov ax,3FFh / xor dx,dx
     base='8a dc 8b c3 0b c0 74 06 5e 5f 5a 59',          # mov ax,bx / or ax,ax
     lfb='58 e8 ?? ?? 25 00 10 5a 58 c3 c6 46 1b 00',     # and ax,1000h
@@ -133,7 +136,7 @@ DATA = [
 BLOCKS = [
     ('wincheck.asm', 0x7C8B, 0x7CFB - 0x7C8B, ('wcheck', 'wclear', 'lfbchk')),   # p17
     ('hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'bon', 'basefix')),          # calls wincheck.asm
-    ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13', 'wsetx')),  # calls bon (hooks.asm)
+    ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13', 'wsetx', 'b4f02')),  # calls bon (hooks.asm)
     ('crtc240.asm', 0x7E40, 0x40, ('crtc8', 'crtc16')),
     ('vbe4f06.asm', 0x7F71, 0x7FAF - 0x7F71, ('bl3',)),
     ('clear32.asm', 0x7FC0, 0x7FE3 - 0x7FC0, ('clear',)),
@@ -365,6 +368,8 @@ def patch(lo, nasm='nasm', vcofix=True):
     put(a, struct.pack('<H', sym['MODESET']), struct.pack('<H', lab['hook']), 'INT 10h AH=00 table: mode set via the hook')
     a = site['m4f02'] + 4
     put(a, d[a:a + 3], call(a, lab['hook']), 'VBE 4F02: mode set via the hook')
+    a = site['boost']
+    put(a, 'c7 06 fe 04 00 00', call(a, lab['b4f02']) + b'\x90' * 3, 'VBE 4F02 end: booster on unless Windows runs (p18)')
     a = sym['WSET']
     put(a, '52 53 8b da', jmp(a, lab['wsetx']) + b'\x90', 'VBE window set (4F05, window function): booster on (p16)')
     a = site['bl3'] + 4

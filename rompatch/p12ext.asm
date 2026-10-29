@@ -71,6 +71,12 @@ wsetx:  call L_bon
         mov bx,dx
         jmp WSET+4
 
+; ---- end of VBE 4F02 (the call at 56F7 replaces 'mov word [0x4FE],0', DS = 0): the replaced
+;      instruction, then the booster as from p15 to p16 (p18); bon refuses it under Windows enhanced
+;      mode, so a banked 4F02 of the Windows driver leaves CR58-CR5A as the reference does
+b4f02:  mov word [0x4FE],0
+        jmp L_bon
+
 ; ---- font load into plane 2 : CX characters of BH bytes from DS:SI to ES:DI,
 ;      DX bytes skipped after each (32 - BH) ----
 font:   push ax

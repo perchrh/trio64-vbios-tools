@@ -23,7 +23,7 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.07-p17"); the version found is printed, also for other BIOS versions
+;                    "2.04.07-p18"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
 ;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
@@ -41,11 +41,9 @@
 ;                                      the booster
 ;                    banked (F_BOOST)  (plain DOS: under Windows enhanced mode the ROM keeps the
 ;                                      booster off since p17, and these checks fail there)
-;                                      right after 4F02 the booster is still off (CR58 linear
-;                                      addressing off, CR59 = the real base, as the reference
-;                                      leaves it for the S3 Windows 9x driver, p16); after 4F05
-;                                      set window 0 it is on: CR58 linear addressing on with a
-;                                      64 KB window, CR59/CR5A = 000Ah, real base saved in CR6D
+;                                      the booster is on right after 4F02 (p18) and still after
+;                                      4F05 set window 0: CR58 linear addressing on with a 64 KB
+;                                      window, CR59/CR5A = 000Ah, real base saved in CR6D
 ;                    linear (F_LFB)    linear addressing on, window 1 MB or larger, CR59 = the real
 ;                                      base
 ;                    no flag           only status, refresh, line length and pedestal (106h,
@@ -414,14 +412,14 @@ t_mode: VS 'D:TEST mode '
         mov [m_st],ax
         test byte [m_flags],F_BOOST
         jz .set
-        call unlock             ; p16: the booster is off after 4F02 (CR58-5A as the reference)
+        call unlock             ; p18: the booster is on right after 4F02 (plain DOS)
         mov al,0x58
         call rdcr
         mov [r58a],ah
         mov al,0x59
         call rdcr
         mov [r59a],ah
-        mov ax,0x4F05           ; the first bank switch turns it on
+        mov ax,0x4F05           ; and stays on through a bank switch
         xor bx,bx
         xor dx,dx
         int 0x10
@@ -542,10 +540,11 @@ t_mode: VS 'D:TEST mode '
         jmp .ok
 .nv:    test al,F_BOOST
         jz .nb
-        test byte [r58a],0x10   ; after 4F02: linear addressing off, CR59 the real base (p16)
-        jnz .fail
-        mov al,[r59a]
-        cmp al,[base]
+        mov al,[r58a]           ; after 4F02: linear addressing on, 64 KB window, CR59 = 00 (p18)
+        and al,0x13
+        cmp al,0x10
+        jne .fail
+        cmp byte [r59a],0
         jne .fail
         mov al,[r58]
         and al,0x13
@@ -608,7 +607,7 @@ linelen:
         ret
 
 ; ---------------- VBE function tests ----------------
-; In 101h with the booster active (4F02, then 4F05 set window 0, p16): 4F03, 4F01 PhysBasePtr, 4F05 set/get, banked data check,
+; In 101h with the booster active (on after 4F02 since p18; the 4F05 set window 0 keeps it): 4F03, 4F01 PhysBasePtr, 4F05 set/get, banked data check,
 ; banked throughput. Then 4F03 in 4101h, 4F06 BL=3 in 101h and CR50 in 151h (p8 changes).
 t_func: mov ax,0x4F02
         mov bx,0x0101
