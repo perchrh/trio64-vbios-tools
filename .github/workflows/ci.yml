@@ -1,0 +1,109 @@
+# Build and test on GitHub Actions (README "Continuous integration").
+#
+# The repository is public, so the GitHub-hosted runners used here cost nothing. The workflow only
+# runs on pushes to main, on pull requests and by hand, skips changes that touch documentation alone,
+# and cancels a run when a newer commit of the same branch or pull request arrives.
+#
+# Every run: NASM 3.02 is built from its release source (cached), `make` builds every tool, the ROM is
+# built from the S3 reference BIOS 2.04.07 in reference/v2/2_04_07.bin (the Makefile default of IN and
+# REF) and checked against the pinned SHA-256 (make rom, make rom-test), then the emulator tests (2 and
+# 4 MB) and the EGA/CGA comparison with the reference run on that ROM; each of these runs once the ROM
+# is built, even when an earlier one failed. The patched ROM image is not kept. The coverage goal has
+# its own workflow, coverage.yml, which pull requests do not start.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'datasheets/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'datasheets/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NASM_VERSION: '3.02'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache NASM
+        id: nasm-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/nasm
+          key: nasm-${{ env.NASM_VERSION }}-${{ runner.os }}
+
+      - name: Build NASM ${{ env.NASM_VERSION }}
+        if: steps.nasm-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
+            "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
+          tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
+          ./configure --quiet
+          make -j"$(nproc)" nasm
+          mkdir -p ~/nasm
+          cp nasm ~/nasm/
+
+      - name: Check NASM
+        run: |
+          ~/nasm/nasm -v
+          ~/nasm/nasm -v | grep -q "version $NASM_VERSION"
+
+      - name: Build the tools
+        run: make NASM=$HOME/nasm/nasm
+
+      - name: Upload the tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: tools
+          path: build/
+          retention-days: 14
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the emulator test dependencies
+        run: pip install '.[coverage]'
+
+      - name: Build the ROM from the reference BIOS
+        id: rom
+        run: make rom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/ROM.BIN"
+
+      - name: ROM patcher tests
+        if: ${{ !cancelled() && steps.rom.outcome == 'success' }}
+        run: make rom-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: Emulator tests
+        if: ${{ !cancelled() && steps.rom.outcome == 'success' }}
+        run: make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: EGA/CGA against the reference BIOS
+        if: ${{ !cancelled() && steps.rom.outcome == 'success' }}
+        run: make ref-compare ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: Upload the emulator logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-logs
+          path: |
+            emu/logs/
+            emu/logs4/
+            !emu/**/*.BIN
+          retention-days: 14
+          if-no-files-found: ignore
