@@ -190,8 +190,8 @@ runs every emulator test while recording which ROM bytes execute, then `emu/code
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
 direct jump, call and word jump table, and reports the share the tests executed. Data (tables,
 fonts, strings, padding) and code nothing reaches (the routines our patches jump around) do not
-count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p17 is at
-86.5 % (15110 of 17462 bytes). The parts still not run include the display switch (AH=12h BL=35h),
+count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p18 is at
+86.5 % (15119 of 17471 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths.
 
 ### EGA/CGA against the reference BIOS
@@ -222,7 +222,7 @@ result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted
 compared with the original code first (the replaced routines in full), and the result is checked
 before it is written: the lower half sums to 00 and declares 32 KB, the upper half is zeros, every
 DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of the build
-that passed every emulator test (9f276f6c...).
+that passed every emulator test (f563989b...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
