@@ -360,6 +360,14 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
   was clean every time. Windows brings the box back with 4F02 8101h or 8103h (CX = 0, DX = 03E0h), which
   leaves the booster off until the program's next bank switch. CR6D keeps E0h afterwards; only the mode
   set hook reads it, and only when CR59/CR5A hold 000Ah.
+- p17 on the card (29 October 2026): under Windows, VSHOW's 4F05 calls leave the booster off (CR6D =
+  01h, CR58 83h, CR59/CR5A E000h). VSHOW 101h and 103h in a full-screen DOS box with Alt+Tab out and
+  back behave the same as with the stock BIOS, no worse (p16 lost the picture on every return). In
+  plain DOS the booster goes on as before. Warcraft II (DOS/4GW) switches banks through the 4F0A protected-mode code,
+  which it copies out of the ROM (5B5E-5CB5, unchanged from the reference): it never calls 4F05 or the
+  window function, so the booster stays off with it. After Windows' "Restart in MS-DOS mode" it hangs
+  before the first picture, with the stock BIOS as with p17; booted straight to DOS it runs: not the
+  ROM.
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
   DOS box reads the real registers.
