@@ -28,9 +28,11 @@ int10x: cmp ax,0x4F05
         in al,dx
         dec dx
         test al,0x10
-        jz .nl
+        jz .off
         test al,0x03
         jnz .lin
+        jmp short .nl
+.off:   call L_bon              ; LA off: the first bank switch of a banked mode turns the booster on (p16)
 .nl:    mov dl,0xC4             ; SR04 bit 3 = 0: planar (4 bpp), bank x 4, kept at 0040:04FE
         in al,dx
         mov ah,al               ; AH = SR index, put back below
@@ -60,6 +62,14 @@ int10x: cmp ax,0x4F05
         pop dx
         mov ax,0x4F05
         jmp INT_NEXT
+
+; ---- window set (the 4F05 BH=0 slow path and the window function, C000:584B jumps here): turn the
+;      booster on, then the replaced instructions (p16)
+wsetx:  call L_bon
+        push dx
+        push bx
+        mov bx,dx
+        jmp WSET+4
 
 ; ---- font load into plane 2 : CX characters of BH bytes from DS:SI to ES:DI,
 ;      DX bytes skipped after each (32 - BH) ----

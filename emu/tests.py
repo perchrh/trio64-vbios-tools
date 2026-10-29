@@ -14,13 +14,16 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p15), and the ROM under test carries
+                   the level rompatch/s3patch.py builds (2.04.07-p17), and the ROM under test carries
                    that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
                    half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
-                   across 4F02), the fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port
-                   accesses), the window function by far call, EAX/ECX kept across the 32-bit VGA
+                   across 4F02), the booster (p16: off after a banked 4F02, CR59/CR5A at the PCI base;
+                   on after the first 4F05 set window, and after the window function by far call; p17:
+                   off under Windows enhanced mode, INT 2Fh AX=1600h asked once per mode set), the
+                   fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port accesses once the
+                   booster is on), the window function by far call, EAX/ECX kept across the 32-bit VGA
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
                    AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
@@ -72,7 +75,9 @@ Tests
                    and video state as with clean registers and keep the upper halves; every call
                    returns with IF=0 and no timer tick; the driver sequence 4F00, 4F01 for every mode,
                    4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
-                   IBM registers); AH=00h with AL bit 7 keeps the text (IBM)
+                   IBM registers); the driver's banked 4F02 calls (bit 15, CX = lines, DX = 3D4h, from
+                   VGALOG) leave CR59/CR5A at the PCI base, where the driver turns its linear window on;
+                   AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
   v2_writes        (emulator only, Trio64V2 model) the datasheet rules about writes (docs/chip-rules.md):
                    CR26 = 00h after CR39 = A5h on every mode set (V2-REG-5), CR40 bit 0 and CR66 bit 0
@@ -304,7 +309,7 @@ def romver():
 
 
 def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p15)."""
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p17)."""
     t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
@@ -327,7 +332,7 @@ def t_rom_patches(c):
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
     chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
     if len(rom) >= 0x10000:
-        chk(rom[0x8000:0x10000] == bytes(0x8000), 'the upper 32 KB is not all zeros (p15)')
+        chk(rom[0x8000:0x10000] == bytes(0x8000), 'the upper 32 KB is not all zeros (since p15)')
     cr = m.r['crtc']
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
     m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # p11 clears with 32-bit stores: EAX bits 31-16 kept
@@ -336,6 +341,35 @@ def t_rom_patches(c):
     chk(eaxh == 0x1234, 'mode set: EAX bits 31-16 = %04X after 4F02 101h, the caller had 1234' % eaxh)
     chk(m.mem(0xA0000, 0x10000).count(0) == 0x10000, 'mode set clear: bank 0 at A0000 not zeroed by 4F02 101h')
     chk(cr.get(0x6A, 0) == 0, 'mode set clear: CR6A = %02X afterwards, expected bank 0' % cr.get(0x6A, 0))
+    # p16: the banked 4F02 leaves the linear registers as the reference (the S3 Windows 9x driver turns
+    # its linear window on at CR59/CR5A); the first bank switch turns the booster on
+    base = (cr.get(0x59, 0), cr.get(0x5A, 0))
+    chk(cr.get(0x58, 0) & 0x10 == 0 and base[0] and not base[1],
+        'booster on after 4F02 101h: CR58 %02X, CR59/5A %02X%02X' % (cr.get(0x58, 0), base[0], base[1]))
+    m.int10(0x4F05, bx=0, dx=0)
+    chk(cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A) and cr.get(0x6D) == base[0],
+        'booster not on after 4F05 in 101h: CR58 %02X, CR59/5A %02X%02X, CR6D %02X'
+        % (cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0)))
+    # p17: under Windows enhanced mode (INT 2Fh AX=1600h returns AL=04h) the booster stays off and
+    # CR6D = 01h remembers it, so INT 2Fh is asked once per mode set; the next mode set clears the
+    # mark and without Windows the booster goes on again
+    m.mu.mem_write(0x7E00, bytes.fromhex('b0042efe060800cf00'))  # mov al,4 / inc byte [cs:8] / iret
+    ivt2f = m.mem(0x2F * 4, 4)
+    m.mu.mem_write(0x2F * 4, struct.pack('<HH', 0, 0x07E0))
+    m.int10(0x4F02, bx=0x0101)
+    m.int10(0x4F05, bx=0, dx=1)
+    m.int10(0x4F05, bx=0, dx=2)
+    asked = m.mem(0x7E08, 1)[0]
+    chk(cr.get(0x58, 0) & 0x10 == 0 and cr.get(0x59, 0) == base[0] and cr.get(0x6D) == 1 and cr.get(0x6A) == 2,
+        'Windows: booster on or bank wrong (CR58 %02X, CR59/5A %02X%02X, CR6D %02X, CR6A %02X)'
+        % (cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0), cr.get(0x6A, 0)))
+    chk(asked == 1, 'Windows: INT 2Fh asked %d times in one mode, expected once' % asked)
+    m.mu.mem_write(0x2F * 4, ivt2f)
+    m.int10(0x4F02, bx=0x0101)
+    chk(cr.get(0x6D) == 0, 'the mode set did not clear the CR6D mark: %02X' % cr.get(0x6D, 0))
+    m.int10(0x4F05, bx=0, dx=0)
+    chk(cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x6D) == base[0],
+        'no booster after Windows ended: CR58 %02X, CR6D %02X' % (cr.get(0x58, 0), cr.get(0x6D, 0)))
     # p12: the fast 4F05 path from the INT 10h entry runs without the dispatcher, which saves the 32-bit
     # registers; it must keep them itself and use few port accesses
     io = [0]
@@ -360,6 +394,18 @@ def t_rom_patches(c):
     m.mu.reg_write(UC_X86_REG_SP, 0x7000)
     m.mu.emu_start(0x7D10, 0x7D15, count=100000)
     chk(cr.get(0x6A) == 6, 'window function (far call) BX=0 DX=6: CR6A = %02X' % cr.get(0x6A, 0))
+    # p16: the window function turns the booster on too (a program that never calls INT 10h 4F05)
+    m.int10(0x4F02, bx=0x0101)
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after a second 4F02 101h: CR58 %02X' % cr.get(0x58, 0))
+    m.mu.reg_write(UC_X86_REG_BX, 0)
+    m.mu.reg_write(UC_X86_REG_DX, 2)
+    m.mu.reg_write(UC_X86_REG_CS, 0)
+    m.mu.reg_write(UC_X86_REG_SS, 0)
+    m.mu.reg_write(UC_X86_REG_SP, 0x7000)
+    m.mu.emu_start(0x7D10, 0x7D15, count=100000)
+    chk(cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x5A) == 0x0A and cr.get(0x6A) == 2,
+        'window function (far call) in 101h: booster not on or bank wrong (CR58 %02X, CR5A %02X, CR6A %02X)'
+        % (cr.get(0x58, 0), cr.get(0x5A, 0), cr.get(0x6A, 0)))
     for ax, bx in ((0x0003, 0), (0x0013, 0), (0x1114, 0)):  # p12: 32-bit clear and font load, EAX kept
         m.mu.reg_write(UC_X86_REG_EAX, 0x9ABC0000 | ax)
         m.mu.reg_write(UC_X86_REG_ECX, 0x9ABC0000)
@@ -1165,7 +1211,8 @@ def t_windows(c):
     """The ways Windows calls the video BIOS (emulator only), from Microsoft's documented interfaces:
     VideoPortInt10 and the INT 10h interface of Windows 2000 and later pass 32-bit registers and DS/ES
     with a buffer below 1 MB; the calls may come with interrupts off (VDM, x86 BIOS emulator); the
-    Windows 9x display driver of S3 uses 4F00, 4F02 and 4F08 (README, Windows 9x driver test)."""
+    Windows 9x display driver of S3 uses 4F00, 4F02 and 4F08 and needs CR59/CR5A at the PCI base after its
+    banked 4F02 (README, Windows 9x driver test)."""
     fails = []
 
     def chk(cond, what):
@@ -1265,6 +1312,20 @@ def t_windows(c):
         msk = 0xFF if width == 8 else 0x3F
         exp = bytes((b & msk) if k % 4 != 3 else rd[k] for k, b in enumerate(pal))
         chk(o['eax'] & 0xFFFF == 0x4F and rd == exp, '%03Xh 4F09 palette not read back as written (%d bits)' % (v, width))
+    # the mode sets VGALOG recorded from the S3 driver (stock BIOS 2.04.11): banked 4F02 with bit 15, CX =
+    # lines, DX = 3D4h; then the driver turns its own linear window on (CR58 = 92h) at CR59/CR5A, so
+    # they must still hold the PCI base the BIOS found at POST (the p15 booster moved them to 000Ah:
+    # garbage on the desktop)
+    m2 = c.machine()
+    cr2 = m2.r['crtc']
+    base = (cr2.get(0x59, 0), cr2.get(0x5A, 0))
+    for v, lines in ((0x101, 480), (0x103, 600), (0x111, 480), (0x114, 600), (0x105, 768), (0x112, 480)):
+        if v not in modes:
+            continue
+        o = int10w(m2, dict(eax=0x4F02, ebx=0x8000 | v, ecx=lines, edx=0x3D4))
+        got = (cr2.get(0x59, 0), cr2.get(0x5A, 0))
+        chk(o['eax'] & 0xFFFF == 0x4F and got == base, 'driver 4F02 %04Xh: AX=%04X, CR59/5A %02X%02X, the PCI '
+            'base %02X%02X expected' % (0x8000 | v, o['eax'] & 0xFFFF, got[0], got[1], base[0], base[1]))
     o = int10w(m, dict(eax=0x0003))
     o = int10w(m, dict(eax=0x4F08, ebx=1))
     chk((o['ebx'] >> 8) & 0xFF == 6, 'mode 03h after the driver: DAC width %d bits, expected 6' % ((o['ebx'] >> 8) & 0xFF))

@@ -23,7 +23,7 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.07-p15"); the version found is printed, also for other BIOS versions
+;                    "2.04.07-p17"); the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
 ;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
@@ -39,8 +39,13 @@
 ;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and
 ;                                      CR59/CR5A back to the real base (CR59 at POST) and 00 after
 ;                                      the booster
-;                    banked (F_BOOST)  booster active: CR58 linear addressing on with a 64 KB
-;                                      window, CR59/CR5A = 000Ah, real base saved in CR6D
+;                    banked (F_BOOST)  (plain DOS: under Windows enhanced mode the ROM keeps the
+;                                      booster off since p17, and these checks fail there)
+;                                      right after 4F02 the booster is still off (CR58 linear
+;                                      addressing off, CR59 = the real base, as the reference
+;                                      leaves it for the S3 Windows 9x driver, p16); after 4F05
+;                                      set window 0 it is on: CR58 linear addressing on with a
+;                                      64 KB window, CR59/CR5A = 000Ah, real base saved in CR6D
 ;                    linear (F_LFB)    linear addressing on, window 1 MB or larger, CR59 = the real
 ;                                      base
 ;                    no flag           only status, refresh, line length and pedestal (106h,
@@ -407,6 +412,19 @@ t_mode: VS 'D:TEST mode '
         mov ax,0x4F02
         int 0x10
         mov [m_st],ax
+        test byte [m_flags],F_BOOST
+        jz .set
+        call unlock             ; p16: the booster is off after 4F02 (CR58-5A as the reference)
+        mov al,0x58
+        call rdcr
+        mov [r58a],ah
+        mov al,0x59
+        call rdcr
+        mov [r59a],ah
+        mov ax,0x4F05           ; the first bank switch turns it on
+        xor bx,bx
+        xor dx,dx
+        int 0x10
         jmp .set
 .vga:   xor ah,ah
         int 0x10
@@ -479,7 +497,16 @@ t_mode: VS 'D:TEST mode '
         mov [r1a],ah
         mov al,ah
         call phex2
-        ; checks
+        test byte [m_flags],F_BOOST
+        jz .nb4
+        mov dx,s_pre
+        call puts
+        mov al,[r58a]
+        call phex2
+        call sp1
+        mov al,[r59a]
+        call phex2
+.nb4:   ; checks
         cmp word [m_st],0x004F
         jne .fail
         mov ax,[m_meas]
@@ -515,6 +542,11 @@ t_mode: VS 'D:TEST mode '
         jmp .ok
 .nv:    test al,F_BOOST
         jz .nb
+        test byte [r58a],0x10   ; after 4F02: linear addressing off, CR59 the real base (p16)
+        jnz .fail
+        mov al,[r59a]
+        cmp al,[base]
+        jne .fail
         mov al,[r58]
         and al,0x13
         cmp al,0x10
@@ -576,10 +608,14 @@ linelen:
         ret
 
 ; ---------------- VBE function tests ----------------
-; In 101h with the booster active: 4F03, 4F01 PhysBasePtr, 4F05 set/get, banked data check,
+; In 101h with the booster active (4F02, then 4F05 set window 0, p16): 4F03, 4F01 PhysBasePtr, 4F05 set/get, banked data check,
 ; banked throughput. Then 4F03 in 4101h, 4F06 BL=3 in 101h and CR50 in 151h (p8 changes).
 t_func: mov ax,0x4F02
         mov bx,0x0101
+        int 0x10
+        mov ax,0x4F05           ; p16: the first bank switch turns the booster on
+        xor bx,bx
+        xor dx,dx
         int 0x10
         call unlock
         ; 4F03 must report 0101 (no linear bit)
@@ -2320,6 +2356,7 @@ s_hz    db ' Hz $'
 s_exp   db ' (exp $'
 s_line  db ') line $'
 s_regs  db ') CR58 59 5A 6D 90 SR1A: $'
+s_pre   db ' after 4F02 CR58 59: $'
 s_f03   db 'VBE  4F03 in boosted 101h (0101) ......... $'
 s_f03l  db 'VBE  4F03 in linear 4101h (4101) ......... $'
 s_f01   db 'VBE  4F01 PhysBasePtr = real base ........ $'
@@ -2406,6 +2443,8 @@ pwt     dd 0
 pprev   dw 0
 kbs     dd 0
 r58     db 0
+r58a    db 0                    ; CR58 and CR59 right after 4F02, before the first 4F05 (banked modes)
+r59a    db 0
 r59     db 0
 r5a     db 0
 r6d     db 0
