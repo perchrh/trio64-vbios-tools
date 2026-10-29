@@ -1,0 +1,87 @@
+# Test coverage of the ROM code on GitHub Actions (README "Continuous integration").
+#
+# Runs on pushes to main and by hand, never for pull requests: it runs every emulator test once more
+# with coverage recording, which takes long. Changes that touch documentation alone do not start it,
+# and a newer commit on main cancels the running one.
+#
+# NASM 3.02 is built from its release source (cached), `make` builds every tool, the ROM is built from
+# the S3 reference BIOS 2.04.07 in reference/v2/2_04_07.bin (the Makefile default of IN), then
+# `make coverage` runs the emulator tests with coverage recording and emu/codemap.py, which fails under
+# 80 % (AGENTS.md goal) and lists the code no test reaches. The patched ROM image is not kept.
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'datasheets/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NASM_VERSION: '3.02'
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache NASM
+        id: nasm-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/nasm
+          key: nasm-${{ env.NASM_VERSION }}-${{ runner.os }}
+
+      - name: Build NASM ${{ env.NASM_VERSION }}
+        if: steps.nasm-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
+            "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
+          tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
+          ./configure --quiet
+          make -j"$(nproc)" nasm
+          mkdir -p ~/nasm
+          cp nasm ~/nasm/
+
+      - name: Check NASM
+        run: |
+          ~/nasm/nasm -v
+          ~/nasm/nasm -v | grep -q "version $NASM_VERSION"
+
+      - name: Build the tools
+        run: make NASM=$HOME/nasm/nasm
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the emulator test dependencies
+        run: pip install '.[coverage]'
+
+      - name: Build the ROM from the reference BIOS
+        run: make rom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/ROM.BIN"
+
+      - name: Coverage
+        run: make coverage NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: Upload the coverage logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-logs
+          path: |
+            emu/logs/
+            !emu/**/*.BIN
+          retention-days: 14
+          if-no-files-found: ignore
