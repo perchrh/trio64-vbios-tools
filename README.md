@@ -368,6 +368,10 @@ Findings with the stock BIOS 2.04.11 (S3REGS.TXT and VGALOG.BIN from the card, 2
   window function, so the booster stays off with it. After Windows' "Restart in MS-DOS mode" it hangs
   before the first picture, with the stock BIOS as with p17; booted straight to DOS it runs: not the
   ROM.
+- p18 on the card in plain DOS (29 October 2026): Warcraft II and VIDSPEED set their banked modes with
+  4F02 (0101h, 0113h) and get the booster from the mode set (CR58 90h, CR59/CR5A 000Ah after the call,
+  CR6D E0h afterwards), where p17 left it off. Warcraft II tested fully, no problems (a map scrolling
+  fault on the way was the mouse driver).
 - S3REGS32 run while a DOS box is full screen, and S3REGS in a windowed DOS box, show the values the
   driver's port trapping returns (SR all 00h, A8h and 3Fh fill), not the chip; S3REGS in a full-screen
   DOS box reads the real registers.
@@ -599,6 +603,12 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 - Mode 106h runs at 108 MHz, above the datasheet single-clock limit (S3COMPAT WARN 02).
 - The BIOS writes SR04 = 03h in text modes where IBM writes 02h; bit 0 is reserved on the VGA and
   reads back as 0 on the card, so programs see the IBM value.
+
+### To do
+
+- Measure the booster with VIDSPEED in plain DOS: first with the stock BIOS, then with the latest ROM,
+  and write both banked results here. Since p18 VIDSPEED's banked mode (4F02 0113h) gets the booster
+  (VGALOG: CR58 90h, CR59/CR5A 000Ah after the call); with p17 it did not.
 
 ## Sources
 
