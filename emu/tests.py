@@ -15,7 +15,8 @@ video memory and no real bus speed, so those results stay with the hardware runs
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
                    the level rompatch/s3patch.py builds (2.04.07-p20), and the ROM under test carries
-                   that sign-on; an older ROM fails here
+                   that sign-on; an older ROM fails here. Our Trio64V+ ROM: the level
+                   rompatch/vplus/s3vpatch.py builds (1.03-08-p1)
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
                    half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
@@ -27,6 +28,17 @@ Tests
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
                    AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
+  vplus_patches    (our Trio64V+ ROM 1.03-08-pN, rompatch/vplus, with --chip vplus) the ROM file (sign-on of
+                   the level s3vpatch.py builds, checksum, 32 KB), the mode set clear (bank 0 zeroed, EAX
+                   bits 31-16 kept), the booster (on after a banked 4F02 and the window function after AH=00
+                   69h, off under Windows enhanced mode with INT 2Fh asked once per mode set, the PCI base
+                   back in CR59/CR5A at the next mode set), the ATC flip-flop reset after the mode set, the
+                   fast 4F05 path (result, CR6A, x4 in planar modes, the sequencer index and the 32-bit
+                   registers kept, at most 6 port writes where 1.03-08 needs 10; BH=1 and a bad BH as
+                   1.03-08), the 32-bit registers kept across the clears, font load, text, planar and 13h
+                   scrolls, AH=09h and AH=0Eh; all failures listed. On this ROM the tests tagged patch run
+                   only when tagged vplus too (version, stores, vplus_patches), and the failures 1.03-08
+                   itself has (VPLUS_BASE: errors, windows, s3compat_full) pass with a note
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
@@ -186,6 +198,9 @@ class Ctx:
         # our patched BIOS (2.04.07-pN sign-on) or another one (the stock BIOS of a Trio64-family card):
         # the tests tagged 'patch' check our patches and are skipped on another BIOS
         self.ours = bool(re.search(rb'Version 2\.04\.07-p\d+', self.rom[:0x100]))
+        # our Trio64V+ ROM (1.03-08-pN, rompatch/vplus): the tests tagged 'patch' run on it only when
+        # they are tagged 'vplus' too (the shared speed patches, its own patch test)
+        self.vours = bool(re.search(rb'Version 1\.03-08-p\d+', self.rom[:0x100]))
         os.makedirs(logs, exist_ok=True)
 
     def save(self, name, res):
@@ -237,7 +252,14 @@ def check_dbg(dbg, name):
 # ---------------------------------------------------------------- tests
 def t_version(c):
     """The tests are for the newest ROM: S3TEST's expected version (common/version.inc) is the level
-    s3patch.py builds, and the ROM under test carries that sign-on."""
+    s3patch.py builds, and the ROM under test carries that sign-on. Our Trio64V+ ROM: its sign-on is the
+    level rompatch/vplus/s3vpatch.py builds."""
+    if c.vours:
+        want = latest('vplus/s3vpatch.py')
+        m = re.search(rb'Version ([0-9.]+-\d\d-p\d+)', c.rom[:0x100])
+        got = m.group(1).decode() if m else '(no sign-on)'
+        check(got == want, 'the ROM is %s, the tests are for the newest Trio64V+ ROM %s (make vrom OUT=...)' % (got, want))
+        return want
     want = latest()
     check(romver() == want, 'common/version.inc ROMVER is %s, but rompatch/s3patch.py builds %s: update ROMVER'
           % (romver(), want))
@@ -317,9 +339,10 @@ def romver():
     return re.search(r"%define ROMVER '([^']*)'", t).group(1)
 
 
-def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p20)."""
-    t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
+def latest(patcher='s3patch.py'):
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p20), or
+    with 'vplus/s3vpatch.py' the Trio64V+ level (1.03-08-p1)."""
+    t = open(os.path.join(SRC, 'rompatch', patcher)).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
     return '%s-%s' % (ver, lv)
@@ -443,6 +466,139 @@ def t_rom_patches(c):
     chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 03 (CR90 = %02X)' % cr.get(0x90, 0))
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return 'ROM file and FIFO fix as expected'
+
+
+def t_vplus_patches(c):
+    """Our Trio64V+ ROM (1.03-08-pN, rompatch/vplus): the ROM file, the booster with the Windows check,
+    the base back at the next mode set, the fast 4F05 path and the window function, the attribute
+    controller flip-flop after the mode set, the 32-bit registers kept across the 32-bit clears, font load
+    and scrolls (the shared speed patches themselves: stores). Only on the Trio64V+ and UV+ models."""
+    if not c.vours:
+        raise Skip('not our Trio64V+ ROM (1.03-08-pN)')
+    if Machine.chip not in ('vplus', 'uvplus'):
+        raise Skip('Trio64V+ ROM (--chip vplus)')
+    m = c.machine()
+    fails = []
+
+    def chk(cond, what):
+        if not cond:
+            fails.append(what)
+
+    rom = c.rom
+    chk(('Version ' + latest('vplus/s3vpatch.py')).encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes'
+        % latest('vplus/s3vpatch.py'))
+    chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
+    chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
+    if len(rom) > 0x8000:
+        chk(rom[0x8000:] == bytes(len(rom) - 0x8000), 'the upper 32 KB is not all zeros')
+    cr = m.r['crtc']
+    base = (cr.get(0x59, 0), cr.get(0x5A, 0))           # the PCI base, 1.03-08 keeps bits 31-24 in CR6B
+    chk(base[0] and not base[1] and cr.get(0x6B) == base[0], 'POST: CR59/5A %02X%02X, CR6B %02X'
+        % (base[0], base[1], cr.get(0x6B, 0)))
+
+    def booster():
+        return cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A)
+
+    def regs():
+        return 'CR58 %02X, CR59/5A %02X%02X, CR6B %02X, CR6D %02X, CR6A %02X' % tuple(
+            cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x6B, 0x6D, 0x6A))
+    m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
+    m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # the clear with 32-bit stores keeps EAX bits 31-16
+    m.int10(0x4F02, bx=0x0101)
+    eaxh = m.mu.reg_read(UC_X86_REG_EAX) >> 16
+    chk(eaxh == 0x1234, 'mode set: EAX bits 31-16 = %04X after 4F02 101h, the caller had 1234' % eaxh)
+    chk(m.mem(0xA0000, 0x10000).count(0) == 0x10000, 'mode set clear: bank 0 at A0000 not zeroed by 4F02 101h')
+    # the banked 4F02 turns the booster on (64 KB linear window at A0000h); it stays on through 4F05
+    chk(booster() and cr.get(0x6A, 0) == 0, 'booster not on after 4F02 101h: ' + regs())
+    m.int10(0x4F05, bx=0, dx=1)
+    chk(booster() and cr.get(0x6A) == 1, 'booster not on after 4F05 in 101h: ' + regs())
+    # the next mode set puts the real base back (1.03-08 from CR6B, and the hook)
+    m.r['aff'] = 1                                     # the ATC flip-flop at data: the hook resets it
+    m.int10(0x0003)
+    chk(cr.get(0x58, 0) & 0x10 == 0 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == base,
+        'mode 03h after the booster: base not back: ' + regs())
+    chk(m.r['aff'] == 0, 'ATC flip-flop not reset after the mode set')
+    m.int10(0x0013)
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on in mode 13h: ' + regs())
+    # under Windows enhanced mode (INT 2Fh AX=1600h returns AL=04h) the booster stays off after 4F02 and
+    # after 4F05, and CR6D = 01h remembers it, so INT 2Fh is asked once per mode set; the next mode set
+    # clears the mark and without Windows the booster goes on again
+    m.mu.mem_write(0x7E00, bytes.fromhex('b0042efe060800cf00'))  # mov al,4 / inc byte [cs:8] / iret
+    ivt2f = m.mem(0x2F * 4, 4)
+    m.mu.mem_write(0x2F * 4, struct.pack('<HH', 0, 0x07E0))
+    m.int10(0x4F02, bx=0x0101)
+    m.int10(0x4F05, bx=0, dx=1)
+    m.int10(0x4F05, bx=0, dx=2)
+    asked = m.mem(0x7E08, 1)[0]
+    chk(cr.get(0x58, 0) & 0x10 == 0 and cr.get(0x59, 0) == base[0] and cr.get(0x6D) == 1 and cr.get(0x6A) == 2,
+        'Windows: booster on or bank wrong: ' + regs())
+    chk(asked == 1, 'Windows: INT 2Fh asked %d times in one mode, expected once' % asked)
+    m.mu.mem_write(0x2F * 4, ivt2f)
+    m.int10(0x4F02, bx=0x0101)
+    chk(booster() and cr.get(0x6D, 0) == 0, 'no booster after Windows ended (the CR6D mark not cleared?): ' + regs())
+    # the fast 4F05 path from the INT 10h entry runs without the dispatcher: it keeps the registers
+    # itself, puts the sequencer index back and writes fewer ports (1.03-08: 10 OUTs, the unlock of
+    # CR38/CR39 twice and SR08 saved, set and restored; the fast path: 6)
+    outs = [0]
+    h1 = m.mu.hook_add(UC_HOOK_INSN, lambda uc, p, s, v, u: outs.__setitem__(0, outs[0] + 1), None, 1, 0, UC_X86_INS_OUT)
+    for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
+        m.mu.reg_write(reg, 0x56780000)
+    m.r['si'] = 0x02
+    res = m.int10(0x4F05, bx=0, dx=3)
+    high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
+    m.mu.hook_del(h1)
+    chk(res['ax'] == 0x004F and res['bx'] == 0 and res['dx'] == 3 and cr.get(0x6A) == 3,
+        '4F05 in 101h: AX=%04X BX=%04X DX=%04X CR6A=%02X' % (res['ax'], res['bx'], res['dx'], cr.get(0x6A, 0)))
+    chk(high == [0x5678] * 5, '4F05: 32-bit register halves changed: %s' % ['%04X' % h for h in high])
+    chk(m.r['si'] == 0x02, '4F05: sequencer index %02X afterwards, the caller had 02h' % m.r['si'])
+    chk(outs[0] <= 6, '4F05 set window: %d port writes, the fast path needs at most 6' % outs[0])
+    res = m.int10(0x4F05, bx=0x0100)                   # get window: the normal path
+    chk(res['ax'] == 0x004F and res['dx'] == 3, '4F05 BH=1: AX=%04X DX=%04X, expected 004F, bank 3'
+        % (res['ax'], res['dx']))
+    res = m.int10(0x4F05, bx=0x0200, dx=4)             # bad BH: refused by 1.03-08, bank unchanged
+    chk(res['ax'] == 0x014F and cr.get(0x6A) == 3, '4F05 BH=2: AX=%04X CR6A=%02X, expected 014F, bank 3'
+        % (res['ax'], cr.get(0x6A, 0)))
+    m.int10(0x0012)                                    # planar: the bank is in 16 KB units (x4)
+    m.int10(0x4F05, bx=0, dx=1)
+    chk(cr.get(0x6A) == 4, '4F05 in mode 12h: CR6A = %02X, expected 04h (bank x 4)' % cr.get(0x6A, 0))
+    # the window function (far call): bank set, and the booster on for the S3 mode set with INT 10h
+    # AH=00 (69h = 101h), which does not pass the end of 4F02
+    m.int10(0x0069)
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after AH=00 69h: ' + regs())
+    m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
+    off, seg = struct.unpack('<HH', m.mem(0x3000C, 4))
+    m.mu.mem_write(0x7D10, b'\x9A' + struct.pack('<HH', off, seg) + b'\xF4')
+    m.mu.reg_write(UC_X86_REG_BX, 0)
+    m.mu.reg_write(UC_X86_REG_DX, 6)
+    m.mu.reg_write(UC_X86_REG_CS, 0)
+    m.mu.reg_write(UC_X86_REG_SS, 0)
+    m.mu.reg_write(UC_X86_REG_SP, 0x7000)
+    m.mu.emu_start(0x7D10, 0x7D15, count=100000)
+    chk(booster() and cr.get(0x6A) == 6, 'window function (far call) in 69h: booster not on or bank wrong: ' + regs())
+    for ax, bx in ((0x0003, 0), (0x0013, 0), (0x1114, 0)):  # 32-bit clear and font load: EAX/ECX kept
+        m.mu.reg_write(UC_X86_REG_EAX, 0x9ABC0000 | ax)
+        m.mu.reg_write(UC_X86_REG_ECX, 0x9ABC0000)
+        m.int10(ax, bx=bx)
+        high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX)]
+        chk(high == [0x9ABC, 0x9ABC], 'AX=%04X: EAX/ECX bits 31-16 changed: %s' % (ax, ['%04X' % h for h in high]))
+    # the text and planar scroll fills, window moves and AH=09h use EAX for 32-bit stores; AH=0Eh reaches
+    # the scroll without the dispatcher, so the helpers keep the 32-bit registers
+    for mode, calls in ((0x03, ((0x0601, 0x1F00, 0, 0x184F), (0x0702, 0x0700, 0x0305, 0x0A15),
+                                (0x0941, 0x001E, 5, 0))),
+                        (0x12, ((0x0601, 0x0E00, 0, 0x1D4F), (0x0701, 0x0300, 0x0305, 0x0A16))),
+                        (0x13, ((0x0601, 0x0100, 0, 0x1827), (0x0602, 0x0100, 0x0204, 0x1420),
+                                (0x0701, 0x0100, 0, 0x1827), (0x0702, 0x0100, 0x0204, 0x1420))),
+                        (0x0D, ((0x0703, 0x0600, 0x0102, 0x0A10),))):
+        m.int10(mode)
+        for ax, bx, cx, dx in calls + ((0x0200, 0, 0, 0x184F if mode != 0x12 else 0x1D4F), (0x0E0A, 7, 0, 0)):
+            for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
+                m.mu.reg_write(reg, 0x9ABC0000)
+            m.int10(ax, bx=bx, cx=cx, dx=dx)
+            high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
+            chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
+                % (mode, ax, ['%04X' % h for h in high]))
+    check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
+    return 'booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers'
 
 
 # S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)
@@ -1568,7 +1724,7 @@ def t_stores(c):
     return '%d operations' % len(ops)
 
 
-TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vga_registers', t_vga_registers),
+TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vplus_patches', t_vplus_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
@@ -1577,20 +1733,22 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
-# itself), patch (our changes to the reference BIOS), call (how the BIOS is called: registers, flags,
+# itself), patch (our changes to the reference BIOS; with vplus the test runs on our Trio64V+ ROM
+# 1.03-08-pN too, otherwise only on 2.04.07-pN), call (how the BIOS is called: registers, flags,
 # invalid input), tools (our DOS tools, not the BIOS), and where it runs: card = a tool that also runs
 # on the card, whose hardware log decides; emu = only in the emulator. vram: the result depends on
 # the video memory size (the VESA mode list, 4F06 maximum, the mode set clear of the whole memory, the
 # LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
 # functions, the tools) give the same output with 2 and 4 MB.
 TAGS = {
-    'version': 'rom patch emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
+    'version': 'rom patch vplus emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
-    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
+    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch vplus emu',
+    'vplus_patches': 'rom vbe patch vplus emu vram',
     'v2_writes': 's3 emu', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
 }
 
@@ -1600,18 +1758,47 @@ DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 9
             'stores': 55, 's3compat_vga': 45}
 
 
+# Our Trio64V+ ROM keeps these failures of its base 1.03-08, outside the backport (docs/vplus-backport.md,
+# "Left as in 1.03-08"); the unpatched 1.03-08 fails the same lines. A test of that ROM whose failure lines
+# all match passes with a note; any other line still fails it.
+VPLUS_BASE = {
+    # 2 MB: 1.03-08 sets 1024x768x16M and 1280x1024x32K/64K, which need more than 2 MB (the state then
+    # differs for the later refused calls too)
+    'errors': (r'4F02 BX=011[89A] accepted', r'4F02 BX=0(11[89A]|1FF|17F|200) \(refused\) changed the video state'),
+    # 4F06 uses 32-bit registers and the 1.03-08 dispatcher saves the 16-bit ones only
+    'windows': (r'4F06 set: upper halves changed: ',),
+    # the DCLK VCO at 101 MHz in 320x200 15/16/32 bpp: the Trio64V+ post divider cannot reach 12.6 MHz with
+    # the VCO in range; interlaced: 1600x1200, and with 4 MB 1024x768x16M and 1280x1024x32K/64K, whose
+    # non-interlaced clocks are above the Trio64V+ limits for the depth
+    's3compat_full': (r'VESA 010[DEF] 320x200x(15|16|32) .*VCO 101\.02MHz .*FAIL 0200$',
+                      r'VESA 0120 1600x1200x8 .*WARN 50$', r'VESA 011[89A] .*WARN 10$'),
+}
+
+
+def base_only(c, name, msg):
+    """The number of failure lines when every one is a known 1.03-08 failure of our Trio64V+ ROM, else 0."""
+    lines = [l.strip() for l in msg.split('\n')[1:] if l.strip()]
+    pats = VPLUS_BASE.get(name, ()) if c.vours else ()
+    ok = lines and pats and all(any(re.match(p, l) for p in pats) for l in lines)
+    return len(lines) if ok else 0
+
+
 def run_test(c, name, fn, verbose):
     """One test: returns (result text, failed, seconds)."""
     t0 = time.time()
     bad = False
     try:
-        if not c.ours and 'patch' in TAGS[name].split():
+        tags = TAGS[name].split()
+        if 'patch' in tags and not (c.ours or c.vours and 'vplus' in tags):
             raise Skip('not our patched BIOS')
         note = fn(c)
         res = 'PASS' + ('  (%s)' % note if note else '')
     except Skip as e:
         res = 'SKIP  %s' % e
     except Exception as e:  # noqa: BLE001 - report every kind of failure as a test result
+        n = base_only(c, name, str(e))
+        if n:
+            return 'PASS  (%d line%s as in 1.03-08, VPLUS_BASE)' % (n, 's' if n > 1 else ''), False, time.time() - t0
         bad = True
         res = 'FAIL  %s' % e
         if verbose:
@@ -1726,7 +1913,8 @@ def main():
         tests = [(t, byname[t]) for t in a.tests.split(',')]
     tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))]
     if not c.ours:
-        print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped')
+        print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped'
+              + (' unless tagged vplus (our Trio64V+ ROM 1.03-08-pN)' if c.vours else ''))
 
     if a.j > 1 and not (a.coverage or a.profile or a.calls):
         failed = run_parallel(c, tests, a)

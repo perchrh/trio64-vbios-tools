@@ -1,10 +1,11 @@
 ; p13: byte fill for the planar scroll (modes 0Dh-12h, AH=06h/07h): the BIOS writes with set/reset
 ; (write mode 0, GR01 = 0Fh), so the data byte does not matter and 32-bit stores fill four bytes per bus
-; write. Assembled in free space at 7F58h (25 bytes).
+; write. Assembled in free space at BFILL (bios.inc; 7F58h, 25 bytes); the Trio64V+ build (rompatch/vplus)
+; uses this file too.
 bits 16
 cpu 386
-org 0x7F58
 %include "bios.inc"
+org BFILL
 
 ; ---- bfill0: AX = 0, then bfill (the planar scroll leaves AX = 0 for its GR00/GR01 writes after) ----
 bfill0: xor ax,ax

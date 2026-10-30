@@ -121,6 +121,10 @@ standards or from the registers the BIOS set, not from our BIOS:
 
     python3 emu/tests.py --rom TRIO64VP.BIN --chip vplus
 
+Our Trio64V+ ROM (`1.03-08-pN` sign-on, section "Trio64V+ ROM") is in between: of the `patch` tests it
+runs those also tagged `vplus` (version, stores, and `vplus_patches` for its own patches), and the
+failures it keeps from 1.03-08 (below) pass with a note (`VPLUS_BASE` in `emu/tests.py`).
+
 S3COMPAT follows the BIOS too: on a VBE 1.x BIOS the VBE 2.0 functions (4F06 BL=2/3, 4F07 BL=80h,
 4F09, 4F0A) are INFO "not in VBE 1.x", a BIOS without the S3 OEM functions 4F14h gets INFO, and on a
 chip other than the Trio64V2 a missing standard VESA mode and the S3 mode number table of the 2.04
@@ -192,7 +196,8 @@ direct jump, call and word jump table, and reports the share the tests executed.
 fonts, strings, padding) and code nothing reaches (the routines our patches jump around) do not
 count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p20 is at
 86.5 % (15129 of 17481 bytes). The parts still not run include the display switch (AH=12h BL=35h),
-the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths.
+the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
+(`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run.
 
 ### EGA/CGA against the reference BIOS
 
@@ -241,6 +246,29 @@ input giving the same result whatever its upper half holds, `--no-vco-fix`, and 
 be refused (already patched, three patch sites changed, a wrong checksum, and with
 `--stock` the card's stock 2.04.11).
 
+## Trio64V+ ROM
+
+`rompatch/vplus/` backports this ROM's changes to the S3 Trio64V+ BIOS 1.03-08 (86C765, VBE 1.2), in
+`reference/vplus/1_03_08.bin`: the 32-bit mode set clears, font load, scrolls and AH=09h text, the
+booster with the Windows enhanced mode check, the fast 4F05h and the attribute controller flip-flop
+reset. The result signs on as 1.03-08-p1. The VCO fix is not possible on the Trio64V+ (its post
+divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus-backport.md` has the
+details, what 1.03-08 itself still gets wrong, and the per-call costs.
+
+    make vrom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with zeros above, for a 64 KB EEPROM)
+    make vrom-test [ROM=S3VPP1.BIN]
+    make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
+    make vref-compare ROM=S3VPP1.BIN
+
+`s3vpatch.py` works as `s3patch.py`: byte assertions at every patch site (the shared speed patches use
+the same signatures and the same .asm files, assembled with the 1.03-08 addresses of
+`rompatch/vplus/bios.inc`), the checksum, and the SHA-256 of the build that passed the emulator tests.
+`test_s3vpatch.py` checks that build, the checksum, that every changed byte belongs to a patch, and
+the refusals (an already patched image, changed patch sites, a wrong checksum, the Trio64V2 2.04.07).
+In the emulator tests the ROM runs on the Trio64V+ model (`CHIP=vplus`): `vplus_patches` checks its
+patches, `stores` the 32-bit stores, and the tests for the 2.04.07 patches are skipped. Not tried on a
+card yet.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
@@ -252,8 +280,9 @@ Every run builds NASM 3.02 from its release source (cached between runs) and the
 the .COM files are kept as the artifact `tools` for 14 days. It then builds the ROM from the S3
 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin` (`make rom`, `make rom-test` with the pinned
 SHA-256) and runs `make emu-test` and `make ref-compare` on it, each even when an earlier one failed;
-the emulator logs are kept as the artifact `emu-logs` (without .BIN files), the patched ROM image is
-not kept. The hardware logs remain the final word, as for the emulator tests run by hand.
+then builds the Trio64V+ ROM from `reference/vplus/1_03_08.bin` (`make vrom`, `make vrom-test`) and
+runs `make emu-test CHIP=vplus` and `make vref-compare` on it. The emulator logs are kept as the
+artifact `emu-logs` (without .BIN files), the patched ROM images are not kept. The hardware logs remain the final word, as for the emulator tests run by hand.
 
 `.github/workflows/coverage.yml` runs `make coverage` (the 80 % goal, with the list of code no test
 reaches) on the same ROM, for pushes to main and by hand only: pull requests do not start it, as it runs
@@ -679,6 +708,12 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   2.04.11, which has the same DDC code.
 - POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
   (without /Q); no difference to p19 is expected.
+- Mode 13h scroll and EAX (found 30 October 2026 while backporting to the Trio64V+): the 32-bit mode
+  13h scroll (p12, `p12ext.asm` scr13) uses EAX bits 31-16 without saving them. For AH=06h/07h the
+  dispatcher saves the 32-bit registers, but AH=0Eh takes the fast path at the INT 10h entry, so a line
+  feed on the last row in mode 13h returns with EAX bits 31-16 = 0000h (the reference keeps them; the
+  emulator shows it with mode 13h, the cursor on row 24, AX=0E0Ah). The Trio64V+ ROM keeps EAX there
+  (push eax / pop eax in `rompatch/vplus/vext.asm`); the same fix here would be a new level.
 - Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
   13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
   does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3

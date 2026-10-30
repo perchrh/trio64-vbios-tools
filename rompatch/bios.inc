@@ -20,6 +20,8 @@
 %define P13B     0x1442     ; p13 code: the old 16-bit clear loop after the p11 jump (dead, 21 bytes)
 %define P13C     0x1227     ; p13 code: the old 8-bit font load loop after the p12 jump (dead, 14 bytes)
 %define DFDN     0x7FAF     ; p13: dfdn (p13df.asm), in free space
+%define BFILL    0x7F58     ; p13: bfill0/bfill (p13bfill.asm), in free space
+%define CLEAR32  0x7FC0     ; p11: clear (clear32.asm), in free space
 %define WSET     0x584B     ; VBE window set (BX = window, DX = bank): 4F05 BH=0 and the window function
 %define SR0DRST  0x1C70     ; SR0D = AH (restores what 1C5F saved; the end of VBE 4F15)
 %define DDCWAIT  0x5F4E     ; DDC delay (AX = count in PIT clocks of 0.84 us; keeps every register)

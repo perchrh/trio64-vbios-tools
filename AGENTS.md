@@ -16,7 +16,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   `s3patch.py` together with `RESULT_SHA`: the first 16 hex digits of the SHA-256 of every assembled
   block of that same NASM 3.02 build (all files in `BLOCKS`, also new ones); s3patch uses them to name
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
-  repository also holds the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
+  repository also holds the Trio64V+ backport (`rompatch/vplus/`: `s3vpatch.py` builds 1.03-08-pN
+  from the S3 Trio64V+ BIOS 1.03-08 in `reference/vplus/`, with the same rules: byte assertions, a
+  pinned `RESULT_SHA` and `BLOCK_SHA`, `LEVEL` for its sign-on; docs/vplus-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a multiQ
   LCD (native 800x600, does not support 1280x1024 at all). "Out of range" on the multiQ in

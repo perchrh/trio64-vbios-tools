@@ -1,4 +1,5 @@
-; p13: the direction test the p13 fill and move helpers share. Assembled in free space at DFDN (7FAFh).
+; p13: the direction test the p13 fill and move helpers share. Assembled in free space at DFDN (7FAFh;
+; the Trio64V+ build rompatch/vplus has its own DFDN).
 bits 16
 cpu 386
 %include "bios.inc"
