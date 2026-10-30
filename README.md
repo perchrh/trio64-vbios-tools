@@ -777,6 +777,11 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
     the data book; an INFO line shows the clock /M set; the debug log records both (raw SR10/SR11).
     The VRAM test of S3COMPAT then runs at the /M clock, which is the point of the option.
   - The ROM's own clock for a card is still set with `make rom MCLK=...`; /M is for testing.
+  - Until then: S3CTL, a DOS tool for S3 ViRGE and Trio chips (https://skwrus.duckdns.org/RetroLoom/S3ctl),
+    sets the memory clock in MHz until reboot, according to its project page (not checked here: the
+    page was unreachable on 30 October 2026, so its chip list, range and PLL loading are unknown). Run
+    it before S3TEST or S3COMPAT; their MCLK lines then show S3CTL's clock, not the ROM's, so record
+    both with `S3REGS before` and `S3REGS after` around it. It cannot restore the ROM's clock: reboot.
 - Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
   13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
   does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3
