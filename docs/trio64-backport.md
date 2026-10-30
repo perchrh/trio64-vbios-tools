@@ -171,7 +171,7 @@ the patcher assumes; nothing was copied from it.
 | --- | --- | --- |
 | WSET 5123h is the window set, called by 4F05 (4CB3h) and the window function (4CC5h), then 5148h for BH = 1 | SetVideoMemoryWindow 5123h, GetVideoMemoryWindow 5148h, both called only from CPUVideoMemoryControl 4CB3h and DirectCallableCPUVideoMemoryControl 4CC5h | agrees; both read SR04 through 4640h (the sequencer index fix above) |
 | CR41 and CR52 bits 7-4 hold 3-bit refresh indexes, written only at POST | BIOS flag table: 640x480 in CR52 bits 6-4, 800x600 in CR52 bit 7 and CR41 bits 1-0, 1024x768 in CR41 bits 4-2, 1280x1024 in CR41 bits 7-5; ClearBIOSFlags 0E97h writes both 00h; the mode set reads CR52 masked with F0h | agrees; CR52 = 80h gives 800x600 index 1, and CR52 bit 3 (our Windows mark) is masked off by Phoenix's only reader |
-| CR6B/CR6C hold the linear base, copied to CR59/CR5A at each mode set | "Extended BIOS Flag 3/4": POST stores the high word of PCI BAR0 there (0F4Eh), the mode set copies CR6B to CR59 and CR6C bit 7 to CR5A (0307h) | agrees: CR6C is BIOS data, not free for a mark |
+| CR6B/CR6C hold the linear base, copied to CR59/CR5A at each mode set | "Extended BIOS Flag 3/4": POST stores the high word of PCI BAR0 there (0F4Eh; on the VL-Bus the word at 019Ch, 0780h), the mode set copies CR6B to CR59 and CR6C bit 7 to CR5A (0307h) | agrees: CR6C is BIOS data, not free for a mark. New: the data book gives CR6B bit 7 the PD bus width and bits 1-0 a signal stretch (T64-MEM-6), and BAR0 is 8 MB aligned, so a base below 2 GB writes bit 7 = 0 (32-bit PD bus, 1 MB) and a base such as E1000000h sets bit 0; on the VL-Bus Phoenix writes 07h. Whether the chip takes this from a register write is open: S3REGS on the card (CR6B, CR36, PCI BAR0) shows it |
 | Memory size found at POST | ConfigureAndClearVideoMemory 12DCh: 4 MB only with fast page strapping on a Trio64 (SRA bit 6 for RAS1), then 2 and 1 MB | new detail, see Memory above |
 | The 1600x1200 register block 0831h-0870h is used only by the removed mode | a word at 01C7h holds 0871h, the address right after that block ("might point to 0871h") | our code ends at 086Eh and 0871h is unchanged |
 | The 64 zero bytes at 3CE9h | an empty entry of the VGA parameter table | not used for code |
@@ -182,3 +182,5 @@ the patcher assumes; nothing was copied from it.
   69.8 MHz, above the data book's 60 MHz; build it with `MCLK=60` or lower and check the memory with
   S3COMPAT's VRAM test.
 - S3TEST and S3COMPAT logs from the card.
+- S3REGS from the card after POST: CR6B against PCI BAR0 bits 31-24 and the memory found (CR36 bits
+  7-5), for the CR6B question above (T64-MEM-6).
