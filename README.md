@@ -664,6 +664,12 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 
 ### To do
 
+- No picture on the multiQ LCD (native 800x600) with the current ROM (noted 30 October 2026): nothing
+  during POST and, it seems, nothing afterwards either; the stock BIOS showed a picture on it before.
+  Test the stock BIOS on the multiQ first, to rule out the monitor and the cable; if it shows a
+  picture, flash p18, p19 and p20 in turn to find the level that lost it (p19 added CR23 = 00h before
+  CR26 and the DDC fixes, p20 shortened the POST wait before the graphics engine reset), and compare
+  S3REGS snapshots of mode 03h between the stock BIOS and the failing level.
 - Measure the booster with VIDSPEED in plain DOS: first with the stock BIOS, then with the latest ROM,
   and write both banked results here. VIDSPEED's banked mode (4F02 0113h) gets the booster (VGALOG:
   CR58 90h, CR59/CR5A 000Ah after the call).
