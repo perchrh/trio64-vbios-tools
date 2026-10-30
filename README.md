@@ -684,6 +684,19 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 
 ## Sources
 
+### Missing documents
+
+Documents the project does not have; what depends on them is marked where it is used.
+
+- Trio32 datasheet of its own: the Trio32/Trio64 book (March 1995) covers both chips, but rules of the
+  Trio32 alone were left out (`docs/chip-rules.md`), and the OEM function survey has no Trio32 entry.
+- Trio3D (86C365) and Trio3D/2X (86C362/86C368) datasheets: their BIOSes were compared with this ROM
+  ("Not taken" sections, Sources), but no chip rule is written for them, and nothing from those BIOSes
+  is taken where it depends on the chip.
+- Trio64V2/DX & GX: only the preliminary book (changes from the Trio64V+) is at hand, no final edition.
+- An S3 document on the BIOS interface: the S3 OEM functions (4F14h) and the S3 mode numbers are known
+  only from BIOS images (`docs/chip-rules.md`, "S3 OEM functions (4F14h)").
+
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
 - S3 Trio64V2/DX and GX datasheet (preliminary): MCLK limits per memory type and DCLK limits, the
   DCLK VCO maximum of 340 MHz, the 3-bit DCLK R divider (SR12 bit 7), CR36 memory types, CR87 1-cycle
