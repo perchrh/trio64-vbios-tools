@@ -26,7 +26,9 @@
 ; Tool contract
 ;   vinit   AX = a free 64 KB segment for the buffer, DS:DX -> ASCIIZ file name. Creates the file,
 ;           hooks INT 10h, sets PIT channel 0 to mode 2 (same 18.2 Hz tick, readable counter) and
-;           writes the environment. On failure it prints a note on stderr and /V stays off.
+;           writes the environment. On failure it prints a note on stderr and /V stays off. The hook
+;           passes EAX-EDI to the BIOS and back to the caller with bits 31-16 unchanged by the logging
+;           (before 30 October 2026 it handed back the timer reading in EAX bits 31-16).
 ;   vdone   before every program exit (no-op when /V is off): unhooks INT 10h, PIT back to mode 3,
 ;           writes D:END, closes the file.
 ;   All other routines do nothing while [vflag] = 0, keep all registers (32-bit too) and work with any
@@ -837,7 +839,13 @@ vi10:   cmp byte [cs:vquiet],0
         pop es
         je .log
 .chain: jmp far [cs:vold10]
-.log:   mov [cs:vi_ax],ax
+.log:   mov [cs:vi_eax],eax             ; the 32-bit registers go to the BIOS and back to the caller
+        mov [cs:vi_eax+4],ebx           ; unchanged by the logging (vtnow uses EAX)
+        mov [cs:vi_eax+8],ecx
+        mov [cs:vi_eax+12],edx
+        mov [cs:vi_eax+16],esi
+        mov [cs:vi_eax+20],edi
+        mov [cs:vi_ax],ax
         mov [cs:vi_bx],bx
         mov [cs:vi_cx],cx
         mov [cs:vi_dx],dx
@@ -886,12 +894,12 @@ vi10:   cmp byte [cs:vquiet],0
         mov ax,[cs:vi_f]
         and ax,0xFDFF                   ; enter the BIOS with IF=0, like a real INT
         push ax
-        mov ax,[cs:vi_ax]
-        mov bx,[cs:vi_bx]
-        mov cx,[cs:vi_cx]
-        mov dx,[cs:vi_dx]
-        mov si,[cs:vi_si]
-        mov di,[cs:vi_di]
+        mov eax,[cs:vi_eax]
+        mov ebx,[cs:vi_eax+4]
+        mov ecx,[cs:vi_eax+8]
+        mov edx,[cs:vi_eax+12]
+        mov esi,[cs:vi_eax+16]
+        mov edi,[cs:vi_eax+20]
         mov bp,[cs:vi_bp]
         mov es,[cs:vi_es]
         mov ds,[cs:vi_ds]
@@ -900,6 +908,12 @@ vi10:   cmp byte [cs:vquiet],0
         call far [cs:vold10]
         pushf
         pop word [cs:vo_f]
+        mov [cs:vo_eax],eax
+        mov [cs:vo_eax+4],ebx
+        mov [cs:vo_eax+8],ecx
+        mov [cs:vo_eax+12],edx
+        mov [cs:vo_eax+16],esi
+        mov [cs:vo_eax+20],edi
         mov [cs:vo_ax],ax
         mov [cs:vo_bx],bx
         mov [cs:vo_cx],cx
@@ -934,12 +948,12 @@ vi10:   cmp byte [cs:vquiet],0
         and bx,0x0200
         or ax,bx
         mov [ss:bp+4],ax
-        mov ax,[cs:vo_ax]
-        mov bx,[cs:vo_bx]
-        mov cx,[cs:vo_cx]
-        mov dx,[cs:vo_dx]
-        mov si,[cs:vo_si]
-        mov di,[cs:vo_di]
+        mov eax,[cs:vo_eax]
+        mov ebx,[cs:vo_eax+4]
+        mov ecx,[cs:vo_eax+8]
+        mov edx,[cs:vo_eax+12]
+        mov esi,[cs:vo_eax+16]
+        mov edi,[cs:vo_eax+20]
         mov es,[cs:vo_es]
         mov ds,[cs:vo_ds]
         mov bp,[cs:vo_bp]
@@ -954,6 +968,8 @@ align 4
 vlost   dd 0
 vindos  dd 0
 vold10  dd 0
+vi_eax  dd 0,0,0,0,0,0                  ; EAX EBX ECX EDX ESI EDI of the call (vi10)
+vo_eax  dd 0,0,0,0,0,0                  ; and after it
 vt0     dd 0
 vtag    dd 0
 vtag2   dd 0

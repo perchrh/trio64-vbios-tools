@@ -11,8 +11,13 @@ __pycache__/
 *.egg-info/
 emu/logs/
 emu/logs4/
+emu/logs1/
 emu/vlogs/
 emu/vlogs4/
+emu/vlogs1/
+emu/tlogs/
+emu/tlogs4/
+emu/tlogs1/
 *.untested
 nasm/
 poetry.lock

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """s3vpatch.py - build the Trio64V+ ROM (1.03-08-p1) from the S3 Trio64V+ BIOS 1.03-08.
 
-    python3 rompatch/vplus/s3vpatch.py 1_03_08.BIN -o S3VPP1.BIN [--size 32|64] [--nasm nasm] [-q]
-    make vrom OUT=S3VPP1.BIN
+    python3 rompatch/vplus/s3vpatch.py 1_03_08.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
+                                       [--nasm nasm] [-q]
+    make vrom OUT=S3VPP1.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
 assembler driver and the shared patch code of s3patch.py next to it.
@@ -15,17 +16,20 @@ Input
 Output
   32 KB (--size 64: 64 KB, the upper 32 KB zeros, for a 64 KB EEPROM)
 
-What is applied (the backport of 2.04.07-p1 to p20, docs/vplus-backport.md)
+What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
   code   assembled with nasm at the addresses in vplus/bios.inc:
          vhooks.asm  mode set hook (forget the Windows refusal, real linear base back from CR6B,
                      attribute controller flip-flop reset after the mode set); the booster (64 KB
                      linear window at A0000h in banked packed modes, on at the end of a banked 4F02
                      and at the first bank switch, not under Windows enhanced mode)
-         vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry, 32-bit font
-                     load and mode 13h scroll
-         shared with the Trio64V2 build (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
+         vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry
+         shared with the other builds (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
-         VGA mode set clear)
+         VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
+         Trio64 build)
+  MCLK   (only with --mclk) the MCLK PLL entry of --memtype, at most 60 MHz; without it the MCLK is as
+         in 1.03-08 (52.79 MHz with 1-cycle EDO, 59.96 MHz with fast page or 2-cycle EDO, picked by the
+         card's strapping)
   sign-on "1.03-08-p1", checksum byte 7FFF
 
 Not applied, and why (docs/vplus-backport.md): the VCO fix (the Trio64V+ post divider R has 2 bits, at
@@ -44,7 +48,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED = os.path.dirname(HERE)                  # rompatch/: s3patch.py and the shared .asm files
 sys.path.insert(0, SHARED)
 import s3patch  # noqa: E402
-from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites  # noqa: E402
+from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, mclk_put  # noqa: E402
 
 LEVEL = 'p1'
 VERSION = '1.03-08'
@@ -53,7 +57,8 @@ RESULT_SHA = '47418ec6f2bf21b51f0c860508f20ee6fbc6fb311a5130c5dd5ae7c240de26de' 
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
-    'vhooks.asm': 'f830c6adc0a588ce', 'vext.asm': 'ebc946aa9b0f79e1',
+    'vhooks.asm': 'f830c6adc0a588ce', 'vext.asm': '911cb6e38ca370ef',
+    'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '5df0f0902ec6065b',
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
@@ -73,6 +78,13 @@ SIG = dict({k: s3patch.SIG[k] for k in SHARED_SIG},
     int10='fb fc 80 fc 0e 74 ?? 80 fc 0c 74 ?? 80 fc 0d 74 ?? 50 53 51 52 56 57 55 06 1e 8b ec',
     cr59='b0 6b e8 ?? ?? b0 59 ef 32 e4 fe c0 ef',      # mode set: CR59 = CR6B, CR5A = 00h (not patched; hook relies on it)
 )
+# MCLK (build option): POST picks the MCLK PLL pair (SR11 = M, then SR10 = N/R) by the strapped memory
+# type, CR36 bit 3 (code at 0A3Bh): 1-cycle EDO A8h (52.79 MHz in 1.03-08), 2-cycle EDO and fast page
+# A6h (59.96 MHz). The Trio64V+ limit is 60 MHz for every type (16.67 ns MCLK cycle, data book table
+# 4-6, MEM-1; its feature list names 50 MHz for EDO, which 1.03-08 itself exceeds).
+MCLK_ENTRY = {'edo1': 0x00A8, 'fpm': 0x00A6}
+MCLK_MAX = {'edo1': 60.0, 'fpm': 60.0}
+
 # Code at bios.inc addresses: (symbol, original bytes)
 SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
           ('GETCRTC', '50 ba cc 03 ec ba b4 03 a8 01 74 03 ba d4 03 58 c3'),
@@ -86,7 +98,9 @@ SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
 # patch sites use), assembled in this order (s3patch.assemble)
 BLOCKS = [
     ('vhooks.asm', 0x7AE0, 0x7BA8 - 0x7AE0, ('hook', 'h4f02', 'bon')),
-    ('vext.asm', 0x7BA8, 0x7CC7 - 0x7BA8, ('int10x', 'font', 'scr13', 'wsetx')),   # calls bon
+    ('vext.asm', 0x7BA8, 0x7C05 - 0x7BA8, ('int10x', 'wsetx')),   # calls bon
+    ('font32.asm', 'FONT32', 0x7C21 - 0x7C05, ('font',)),
+    ('scr13.asm', 'SCR13', 0x7CC7 - 0x7C21, ('scr13',)),
     ('p13fill.asm', 'P13A', 0x7CEA - 0x7CC7, ('wfillt', 'wfill')),
     ('p13df.asm', 'DFDN', 0x7CF2 - 0x7CEA, ('dfdn',)),
     ('p13move.asm', 'P13B', 21, ('wmove',)),               # dead: old clear loop
@@ -96,8 +110,9 @@ BLOCKS = [
 ]
 
 
-def patch(lo, nasm='nasm'):
-    """lo: the 32 KB 1.03-08 image. Returns (new 32 KB, log lines)."""
+def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
+    """lo: the 32 KB 1.03-08 image; mclk: MHz for the MCLK entry of memtype (None: as 1.03-08).
+    Returns (new 32 KB, log lines)."""
     d = bytearray(lo)
     log = []
     m = re.search(rb'S3 86C765 Video BIOS\. Version (\d\.\d\d-\d\d)\r\n', d[:0x100])
@@ -147,6 +162,8 @@ def patch(lo, nasm='nasm'):
         raise PatchError('mode set clear return differs from bios.inc')
     if (sym['P13B'], sym['P13C']) != (site['clr'] + 5, site['font'] + 3):
         raise PatchError('P13B/P13C are not the dead code after the clear and font load jumps')
+    if not sig_match(d, 0x0A3B, 'b3 10 be a6 00 b0 36 e8 ?? ?? f6 c4 08 75 03 be a8 00 e8'):
+        raise PatchError('POST does not pick the MCLK entries A6h/A8h by CR36 bit 3 at 0A3Bh')
 
     def put(off, old, new, why):
         old, new = (bytes.fromhex(x) if isinstance(x, str) else bytes(x) for x in (old, new))
@@ -170,6 +187,8 @@ def patch(lo, nasm='nasm'):
     a = site['m4f02'] + 6
     put(a, d[a:a + 3], call(a, lab['h4f02']), 'VBE 4F02: mode set via the hook, then the booster unless Windows runs')
     speed_sites(d, put, site, sym, lab, tags=False)
+    if mclk is not None:
+        mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype])
 
     # 3. sign-on and checksum
     s = m.start(1)
@@ -233,6 +252,10 @@ def main():
     ap.add_argument('input', help='the Trio64V+ BIOS 1.03-08: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (32 KB, or 64 KB with --size 64)')
     ap.add_argument('--size', type=int, choices=(32, 64), default=32, help='output size in KB (64: zeros above)')
+    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype, at most 60 '
+                    '(default: as 1.03-08, 52.79 for 1-cycle EDO, 59.96 for fast page/2-cycle EDO)')
+    ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',
+                    help='the MCLK entry --mclk sets: edo1 (1-cycle EDO) or fpm (fast page and 2-cycle EDO)')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
     a = ap.parse_args()
@@ -241,10 +264,10 @@ def main():
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]
-        new_lo, log = patch(lo, a.nasm)
+        new_lo, log = patch(lo, a.nasm, a.mclk, a.memtype)
         img = new_lo + bytes(0x8000 if a.size == 64 else 0)
         errs = verify(img, a.size)
-        known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA
+        known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 of the 32 KB %s, expected %s)' % (out_sha, RESULT_SHA))
@@ -263,7 +286,9 @@ def main():
             print('  ' + line)
     print('%s: %s-%s, %d KB, checksum %02X (the lower 32 KB sums to 00), SHA-256 of the 32 KB %s%s'
           % (a.output, VERSION, LEVEL, a.size, img[0x7FFF], out_sha,
-             ', identical to the tested build' if known else ''))
+             ', identical to the tested build' if known or out_sha == RESULT_SHA else
+             ', MCLK build option: the code is the tested build, the MCLK is yours to check on the card'
+             if a.mclk is not None else ''))
     return 0
 
 

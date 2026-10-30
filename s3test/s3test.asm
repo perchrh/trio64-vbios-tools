@@ -1,9 +1,24 @@
-; S3TEST.COM - regression test for the patched Trio64V2/DX VBIOS (386+)
-; The tool version (VERSION) and the ROM version it expects (ROMVER) come from common/version.inc.
+; S3TEST.COM - regression test for our patched VBIOSes: Trio64V2/DX, Trio64V+ and Trio64 (386+)
+; The tool version (VERSION) and the ROM versions it expects (ROMVER, VROMVER, TROMVER) come from
+; common/version.inc.
 ;
 ; Purpose
-;   Confirms that every change made to the BIOS (2.04.07, the S3 reference BIOS) is present and working. It is the
-;   quick check to run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
+;   Confirms that every change made to the BIOS is present and working: 2.04.07 (the S3 reference BIOS)
+;   on a Trio64V2, 1.03-08 (S3's Trio64V+ BIOS, rompatch/vplus) on a Trio64V+, Phoenix 1.5-07 (S3's
+;   reference for the Trio64, rompatch/trio64) on a Trio64. It is the quick check to
+;   run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
+;
+; Test set by chip (common/chip.inc, found before the first test)
+;   Trio64V2     every test below, the signature against ROMVER
+;   Trio64V+     the signature against VROMVER; no pedestal and refresh default lines, its own mode list
+;                (vmodelist: 1.03-08's modes, the booster without the CR6D check, no FIFO check), no
+;                4F01 PhysBasePtr, 4F03 in 4101h, 4F06 BL=3 or CR50 lines (VBE 1.2, no 512x384), and the
+;                4F05 line without the 0040:04FE and linear-mode bits
+;   Trio64       as the Trio64V+, the signature against TROMVER and its own mode list (tmodelist: the
+;                defaults of 1.5-07-p1, no interlace, 800x600 at 60 Hz)
+;   other chips  no ROM of ours exists: the version found is INFO, then only the tests that need none
+;                (checksum, chip, MCLK, memory type, VGA clear, font load, scrolls, AH=09h, timings)
+;   Modes flagged F_2MB (above 1 MB) are not set when CR36 reports 1 MB.
 ;
 ; Usage
 ;   S3TEST [/V] > S3TEST.LOG
@@ -23,13 +38,19 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.07-p20"); the version found is printed, also for other BIOS versions
+;                    "2.04.07-p21") on a Trio64V2, VROMVER ("1.03-08-p1") on a Trio64V+, TROMVER
+;                    ("1.5-07-p1") on a Trio64; the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
 ;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
 ;                    PCI 8901 rev 06 Trio64V2/DX/GX on the test card)
-;   MCLK             SR10 = 42h, SR11 = 41h after POST: 59.96 MHz memory clock
-;   Memory type      CR36 bits 3-2 = 00: the RAM is still run as 1-cycle EDO
+;   MCLK             SR10/SR11 after POST: a valid PLL setting (M, N at least 1, SR10 bit 7 clear, VCO
+;                    135-270 MHz) at or below the data book maximum for the chip and the strapped memory
+;                    type (Trio64V2: 60 MHz 1-cycle EDO, 66.67 MHz the others; Trio32/64/V+ 60 MHz;
+;                    UV+ 66.67 MHz). The line shows the kHz and the limit; the default build of our
+;                    Trio64V2 ROM sets 59.96 MHz, a build with MCLK=... another value
+;   Memory type      INFO, not counted: CR36 bits 3-2 as strapped on the card (the BIOS keeps them;
+;                    the test card is 1-cycle EDO, 00)
 ;   Pedestal         SR1A bit 5 = 0 (no blank pedestal, deepest black) and bit 4 = 1
 ;   Refresh defaults CR41 bits 7-5 = 100b and CR52 bits 2-0 = 001b: 1280x1024 and 1600x1200
 ;                    default to 60 Hz
@@ -68,7 +89,8 @@
 ;   Font load (p12): plane 2 holds the 8x16 font after AX=1114h and the 8x8 font after AX=1112h, as the
 ;                    tables of AX=1130h BH=06h/03h (fail bits 1 8x16, 2 8x8)
 ;   Mode 13h scroll (p12): AH=06h full screen and a window, AH=07h a window, AH=06h AL=0, each checked
-;                    pixel by pixel (fail bits 1, 2, 4, 8)
+;                    pixel by pixel (fail bits 1, 2, 4, 8); an AH=0Eh line feed on the last row keeps
+;                    EAX bits 31-16 (p21, fail bit 10h)
 ;   Text scroll (p13): mode 03h, AH=06h/07h full screen, even, odd and one-cell-wide windows, AL=0
 ;                    window and full screen, every cell checked (fail bits 1-40h, one per case)
 ;   AH=09h text (p13): counts 1, 2, 3, 5, 80 on page 0 and 3 on page 1, every cell of page 0 checked
@@ -88,6 +110,11 @@ org 0x100
 F_VGA   equ 1
 F_BOOST equ 2
 F_LFB   equ 4
+F_2MB   equ 8                           ; needs more than 1 MB: not set with 1 MB (CR36 bits 7-5 = 110b)
+RK_V2   equ 0                           ; test set: Trio64V2, our ROM 2.04.07-pN (ROMVER)
+RK_VP   equ 1                           ; Trio64V+, our ROM 1.03-08-pN (VROMVER)
+RK_OTHER equ 2                          ; any other chip: the tests that need no ROM of ours
+RK_T64  equ 3                           ; Trio64, our ROM 1.5-07-pN (TROMVER): as RK_VP, its own mode list
 
 start:  cld
         call tickrd
@@ -149,10 +176,30 @@ start:  cld
         mov ax,[bp_]
         mov [vls],ax
         mov [lst],ax
-        call t_rom
+        call chipfind                   ; the test set follows the chip (common/chip.inc)
+        mov byte [rkind],RK_OTHER
+        jc .k
+        cmp byte [chip],CHIP_T64V2
+        jne .k1
+        mov byte [rkind],RK_V2
+.k1:    cmp byte [chip],CHIP_T64VP
+        jne .k2
+        mov byte [rkind],RK_VP
+.k2:    cmp byte [chip],CHIP_T64
+        jne .k
+        mov byte [rkind],RK_T64
+.k:     call t_rom
         call t_chip
         call t_post
         mov si,modelist
+        cmp byte [rkind],RK_VP
+        jne .mt
+        mov si,vmodelist
+.mt:    cmp byte [rkind],RK_T64
+        jne .mk
+        mov si,tmodelist
+.mk:    cmp byte [rkind],RK_OTHER
+        je .mld
 .ml:    lodsw
         cmp ax,0xFFFF
         je .mld
@@ -165,20 +212,29 @@ start:  cld
         mov [m_xres],ax
         lodsw
         mov [m_line],ax
-        push si
+        test byte [m_flags],F_2MB       ; a mode above 1 MB is not set on a 1 MB card
+        jz .m2
+        call memsize
+        cmp al,1
+        je .ml
+.m2:    push si
         call t_mode
         pop si
         jmp .ml
-.mld:   call t_func
+.mld:   cmp byte [rkind],RK_OTHER       ; our ROM's VBE behaviour, flip-flop reset and 4F05 path
+        je .gen
+        call t_func
         call t_ff
-        call t_vclr
+.gen:   call t_vclr
         call t_font
         call t_scr13
         call t_txscr
         call t_ah09
         call t_plscr
+        cmp byte [rkind],RK_OTHER
+        je .nbk
         call t_bank
-        call t_time
+.nbk:   call t_time
         ; final: text mode, write report
         mov ax,0x0003
         int 0x10
@@ -212,9 +268,28 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: 'Version ' and ROMVER (now "2.04.07-p14") within C000:0000-00FF, and an 8-bit checksum of 00 over the
-; lower 32 KB (the half the VGA BIOS runs from).
+; Expect: 'Version ' and the version of our ROM for the chip within C000:0000-00FF (Trio64V2: ROMVER, now
+; "2.04.07-p21"; Trio64V+: VROMVER, now "1.03-08-p1"), and an 8-bit checksum of 00 over the lower 32 KB
+; (the half the VGA BIOS runs from). On another chip there is no ROM of ours: the version found is an
+; INFO line, not counted.
 t_rom:  mov dx,s_sig
+        mov di,s_romver
+        mov cx,ROMVLEN
+        cmp byte [rkind],RK_VP
+        jne .t1
+        mov dx,s_sigv
+        mov di,s_vromver
+        mov cx,VROMVLEN
+.t1:    cmp byte [rkind],RK_T64
+        jne .t3
+        mov dx,s_sigt
+        mov di,s_tromver
+        mov cx,TROMVLEN
+.t3:    cmp byte [rkind],RK_OTHER
+        jne .t2
+        mov dx,s_sigo
+.t2:    mov [sigp],di
+        mov [sigl],cx
         call puts
         push ds
         mov ax,0xC000
@@ -231,8 +306,7 @@ t_rom:  mov dx,s_sig
         mov dx,s_nover
         call puts
         xor al,al
-        call result
-        jmp .ck
+        jmp .pr2
 .fs:    add si,8
         mov bx,si                       ; print the version found, up to the line end
         mov cx,12
@@ -246,12 +320,12 @@ t_rom:  mov dx,s_sig
         pop ds
         inc si
         loop .pv
-.pe:    push es                         ; compare with ROMVER, which must end there
+.pe:    push es                         ; compare with ROMVER/VROMVER, which must end there
         push cs
         pop es
         mov si,bx
-        mov di,s_romver
-        mov cx,ROMVLEN
+        mov di,[cs:sigp]
+        mov cx,[cs:sigl]
         repe cmpsb
         pop es
         mov al,0
@@ -260,7 +334,14 @@ t_rom:  mov dx,s_sig
         jae .pr
         mov al,1
 .pr:    pop ds
-        call result
+.pr2:   cmp byte [rkind],RK_OTHER       ; no ROM of ours for this chip: INFO
+        jne .pr3
+        mov al,2
+        call ccount
+        mov dx,s_info
+        call puts
+        jmp .ck
+.pr3:   call result
 .ck:    push ds
         mov ax,0xC000
         mov ds,ax
@@ -322,8 +403,16 @@ t_chip: call unlock
 
 ; ---------------- POST state ----------------
 ; Read the registers the BIOS set at boot, before any mode set by this program.
-; Expect: SR10/SR11 = 42h/41h (59.96 MHz MCLK), CR36 bits 3-2 = 00 (1-cycle EDO),
-; SR1A & 30h = 10h (pedestal off), CR41 bits 7-5 = 100b and CR52 bits 2-0 = 001b (60 Hz defaults).
+; MCLK: SR10 (N bits 4-0, R bits 6-5, bit 7 reserved) and SR11 (M bits 6-0) give
+; f = 14.31818 MHz x (M+2) / ((N+2) x 2^R). PASS when M and N are at least 1, SR10 bit 7 is 0, the VCO
+; (f before the divider) is in 135 MHz to [mvcomax] (PLL-1, PLL-2) and f is at most the data book
+; maximum for the chip and the memory type the card is strapped for (CR36 bits 3-2): [mclkmax] (MEM-1:
+; 60 MHz on the Trio32/64 and Trio64V+, 66.67 MHz on the Trio64UV+), on the Trio64V2 60 MHz for 1-cycle
+; EDO and 66.67 MHz for the others (V2-MEM-1). Not a fixed value: the ROM can be built for another
+; MCLK (README "MCLK build option"); the default build sets 59.96 MHz (Trio64V2, 1-cycle EDO).
+; Memory type: CR36 bits 3-2, set by the card's strapping and kept by the BIOS; INFO, not counted.
+; Our Trio64V2 ROM also: SR1A & 30h = 10h (pedestal off), CR41 bits 7-5 = 100b and CR52 bits 2-0 =
+; 001b (60 Hz defaults).
 t_post: call unlock
         mov al,0x59                     ; the real LFB base, as the system BIOS assigned it (PCI BAR0)
         call rdcr
@@ -341,18 +430,75 @@ t_post: call unlock
         mov bh,ah
         mov al,ah
         call phex2
-        cmp bx,0x4142           ; SR11=41 SR10=42
-        sete al
-        call result
-        mov dx,s_edo
+        call sp1
+        movzx eax,bh                    ; VCO kHz = 14318 x (M+2) / (N+2)
+        and al,0x7F
+        add eax,2
+        imul eax,eax,14318
+        movzx ecx,bl
+        and cl,0x1F
+        add ecx,2
+        xor edx,edx
+        div ecx
+        mov [mvco],eax
+        mov cl,bl
+        shr cl,5
+        and cl,3
+        shr eax,cl                      ; f = VCO / 2^R
+        mov [mkhz],eax
+        call pdec
+        mov al,'/'
+        call putc
+        call mclklim                    ; EAX = the limit (kHz)
+        mov [mlim],eax
+        call pdec
+        mov dx,s_khz
+        call puts
+        test bl,0x80                    ; SR10 bit 7 reserved
+        jnz .mf
+        test bl,0x1F                    ; N >= 1
+        jz .mf
+        test bh,0x7F                    ; M >= 1
+        jz .mf
+        cmp dword [mvco],135000
+        jb .mf
+        mov eax,270000                  ; no chip found: 270 MHz (every chip's MCLK VCO maximum)
+        cmp byte [chip],CHIP_NONE
+        je .mv
+        mov eax,[mvcomax]
+.mv:    cmp [mvco],eax
+        ja .mf
+        mov eax,[mkhz]
+        cmp eax,[mlim]
+        ja .mf
+        mov al,1
+        jmp .mr
+.mf:    xor al,al
+.mr:    call result
+        mov dx,s_edo                    ; memory type: INFO
         call puts
         mov al,0x36
         call rdcr
         mov al,ah
         call phex2
-        test ah,0x0C
-        setz al
-        call result
+        call sp1
+        shr ah,2
+        and ah,3
+        movzx bx,ah
+        shl bx,1
+        mov dx,[memnames+bx]
+        cmp byte [chip],CHIP_T64        ; Trio32/64: 10b is EDO (one EDO mode), 00b/01b reserved
+        je .t64
+        cmp byte [chip],CHIP_T32
+        jne .mn
+.t64:   mov dx,[memn64+bx]
+.mn:    call puts
+        mov al,2
+        call ccount
+        mov dx,s_info
+        call puts
+        cmp byte [rkind],RK_V2          ; pedestal and refresh defaults: our Trio64V2 ROM only
+        jne .x
         mov dx,s_ped
         call puts
         mov al,0x1A
@@ -389,6 +535,45 @@ t_post: call unlock
         jmp .r
 .bad:   xor al,al
 .r:     call result
+.x:     ret
+
+; The MCLK limit of the chip and the strapped memory type (see t_post): EAX = kHz. Needs the S3
+; registers unlocked. Keeps the other registers.
+mclklim:
+        push bx
+        mov eax,60000                   ; no chip found: the Trio32/64/V+ value
+        cmp byte [chip],CHIP_NONE
+        je .r
+        mov eax,[mclkmax]
+        cmp byte [chip],CHIP_T64V2      ; Trio64V2: by the memory type (V2-MEM-1)
+        jne .r
+        push eax
+        mov al,0x36
+        call rdcr
+        mov bl,ah
+        pop eax
+        test bl,0x0C
+        jnz .r                          ; SGRAM, 2-cycle EDO, fast page: 66.67 MHz
+        mov eax,60000                   ; 1-cycle EDO
+.r:     pop bx
+        ret
+
+; The video memory CR36 bits 7-5 report (the BIOS writes them at POST after testing the memory;
+; datasheets: 000b 4 MB, 100b 2 MB, 110b 1 MB, 111b 0.5 MB on the Trio32): AL = 1, 2 or 4 (0.5 MB
+; gives 1). Keeps the other registers.
+memsize:
+        push bx
+        call unlock
+        mov al,0x36
+        call rdcr
+        and ah,0xE0
+        mov al,4
+        jz .r
+        mov al,2
+        cmp ah,0x80
+        je .r
+        mov al,1
+.r:     pop bx
         ret
 
 ; ---------------- one mode ----------------
@@ -528,8 +713,11 @@ t_mode: VS 'D:TEST mode '
         jz .nv
         test byte [r58],0x10
         jnz .fail
+        cmp byte [rkind],RK_V2  ; CR90 exists on the Trio64V2 only
+        jne .nf
         test byte [r90],0x80    ; FIFO fix
         jnz .fail
+.nf:
         mov al,[r59]            ; real base restored, CR5A cleared
         cmp al,0
         je .fail
@@ -554,6 +742,8 @@ t_mode: VS 'D:TEST mode '
         jne .fail
         cmp byte [r5a],0x0A
         jne .fail
+        cmp byte [rkind],RK_V2  ; 2.04.07-pN keeps the real base in CR6D; 1.03-08 has it in CR6B
+        jne .ok
         cmp byte [r6d],0
         je .fail
         jmp .ok
@@ -628,6 +818,8 @@ t_func: mov ax,0x4F02
         cmp word [tmp],0x0101
         sete al
         call result
+        cmp byte [rkind],RK_V2          ; VBE 1.2 (1.03-08) has no PhysBasePtr
+        jne .n01
         ; 4F01 PhysBasePtr == the real base from POST (with the booster on, CR59/5A hold 000Ah)
         mov ax,0x4F01
         mov cx,0x0101
@@ -655,7 +847,7 @@ t_func: mov ax,0x4F02
         jmp .r1
 .f1:    xor al,al
 .r1:    call result
-        ; 4F05 set bank 3, get
+.n01:   ; 4F05 set bank 3, get
         mov ax,0x4F05
         xor bx,bx
         mov dx,3
@@ -702,6 +894,8 @@ t_func: mov ax,0x4F02
         cmp dword [kbs],60000
         setae al
         call result
+        cmp byte [rkind],RK_V2          ; linear modes, 4F06 BL=3 and 512x384: 2.04.07-pN only
+        jne .x
         ; linear mode: 4F03 must report 4101
         mov ax,0x4F02
         mov bx,0x4101
@@ -796,7 +990,7 @@ t_func: mov ax,0x4F02
         cmp byte [tmp+1],0x40
         sete al
         call result
-        ret
+.x:     ret
 
 ; ---------------- ATC flip-flop reset after mode set ----------------
 ; Put the attribute controller flip-flop in the data state (one write to 3C0h), set mode 03,
@@ -974,8 +1168,11 @@ fchk:   push ds
 ; ---------------- mode 13h scroll (p12: 32-bit for AH=06h) ----------------
 ; A000 is filled with (7x + 13y) mod 256, then each case is checked pixel by pixel against the same
 ; formula: A AH=06h AL=1 full screen, fill 1Fh; B AH=06h AL=2 rows 3-10, columns 5-20, fill 05h;
-; C AH=07h AL=1 the same window, fill 44h; D AH=06h AL=0 rows 1-3, columns 2-4, fill 33h.
-; Fail bits 1 A, 2 B, 4 C, 8 D.
+; C AH=07h AL=1 the same window, fill 44h; D AH=06h AL=0 rows 1-3, columns 2-4, fill 33h; E (p21) an
+; AH=0Eh line feed on the last row, which scrolls through the same code without the dispatcher that
+; saves the 32-bit registers: EAX bits 31-16 must come back as the caller had them (5A5Ah; the
+; reference BIOS keeps them, p12-p20 returned 0000h).
+; Fail bits 1 A, 2 B, 4 C, 8 D, 10h E.
 t_scr13:
         VS 'D:TEST mode 13h scroll'
         call vnl
@@ -1002,7 +1199,20 @@ t_scr13:
         or [tmp],al
 .ok:    add si,20
         jmp .n
-.e:     mov dx,s_scr
+.e:     mov ax,0x0013                   ; E: AH=0Eh line feed on the last row keeps EAX bits 31-16
+        int 0x10
+        mov ah,0x02
+        xor bh,bh
+        mov dx,0x1827
+        int 0x10
+        mov eax,0x5A5A0E0A
+        mov bx,0x0007
+        int 0x10
+        shr eax,16
+        cmp ax,0x5A5A
+        je .ee
+        or byte [tmp],0x10
+.ee:    mov dx,s_scr
         jmp bits_result
 
 fill13: push es
@@ -1352,7 +1562,10 @@ t_plscr:
         mov si,plstab
         mov dx,s_pls
         call plrun
-        VS 'D:TEST planar scroll 6Ah'
+        cmp byte [rkind],RK_OTHER       ; S3 mode 6Ah: the mode number of the S3 BIOSes of our ROMs
+        jne .s6
+        ret
+.s6:    VS 'D:TEST planar scroll 6Ah'
         call vnl
         call vflush
         mov si,plst6a
@@ -1637,6 +1850,8 @@ t_bank: VS 'D:TEST 4F05'
         and ah,0x1F
         cmp ah,0x08
         jne .f8
+        cmp byte [rkind],RK_V2          ; 0040:04FE: 2.04.07 keeps the bank there, 1.03-08 does not
+        jne .lf
         push es
         xor ax,ax
         mov es,ax
@@ -1644,7 +1859,9 @@ t_bank: VS 'D:TEST 4F05'
         pop es
         je .lf
 .f8:    or byte [tmp],8
-.lf:    mov ax,0x4F02
+.lf:    cmp byte [rkind],RK_V2          ; linear 4101h: 2.04.07-pN only (VBE 1.2 has no LFB)
+        jne .e
+        mov ax,0x4F02
         mov bx,0x4101
         int 0x10
         call unlock
@@ -2325,19 +2542,58 @@ modelist:
         dw 0x4103,603,F_LFB,800,1056
         dw 0x0105,601,F_BOOST,1024,1344   ; 1024x768x8
         dw 0x0106,602,0,1280,1688         ; 1280x1024x4 (p9: DMT 60 Hz, 108.4 MHz)
-        dw 0x0107,602,F_BOOST,1280,1688   ; 1280x1024x8 (p6 60 Hz, DMT)
-        dw 0x0120,600,F_BOOST,1600,2160   ; 1600x1200x8 (p6 60 Hz)
+        dw 0x0107,602,F_BOOST|F_2MB,1280,1688   ; 1280x1024x8 (p6 60 Hz, DMT)
+        dw 0x0120,600,F_BOOST|F_2MB,1600,2160   ; 1600x1200x8 (p6 60 Hz)
         dw 0x0003,700,F_VGA,720,900       ; back to text: FIFO fix, base restore
+        dw 0x0013,700,F_VGA,320,400
+        dw 0xFFFF
+
+; Trio64V+, our ROM 1.03-08-pN: the booster in the banked modes, the base back in the VGA modes. The rates
+; and line totals are 1.03-08's (VESA DMT 60 Hz; it has no 320x240, 400x300 or 512x384 modes); its
+; 1280x1024 uses a 1696-pixel line, not DMT's 1688, which the ROM leaves as it is (not checked).
+vmodelist:
+        dw 0x0003,700,F_VGA,720,900
+        dw 0x0013,700,F_VGA,320,400
+        dw 0x0012,597,F_VGA,640,800
+        dw 0x0101,597,F_BOOST,640,800     ; 640x480x8
+        dw 0x0111,597,F_BOOST,640,800     ; 640x480x16
+        dw 0x0103,603,F_BOOST,800,1056    ; 800x600x8
+        dw 0x0105,601,F_BOOST,1024,1344   ; 1024x768x8
+        dw 0x0107,602,F_BOOST|F_2MB,1280,0   ; 1280x1024x8
+        dw 0x0003,700,F_VGA,720,900       ; back to text: base restore
+        dw 0x0013,700,F_VGA,320,400
+        dw 0xFFFF
+
+; Trio64, our ROM 1.5-07-pN: the defaults after its changes (no interlace, 800x600 at 60 Hz). The rates are
+; Phoenix's (VESA DMT 60 Hz within 1.5 Hz); its 1024x768 and 1280x1024 timings use 1352- and 1760-pixel
+; lines and its 640x480x16 a 796-pixel line, not DMT's, which the ROM leaves as they are (not checked).
+tmodelist:
+        dw 0x0003,700,F_VGA,720,900
+        dw 0x0013,700,F_VGA,320,400
+        dw 0x0012,597,F_VGA,640,800
+        dw 0x0101,597,F_BOOST,640,800     ; 640x480x8
+        dw 0x0111,598,F_BOOST,640,0       ; 640x480x16
+        dw 0x0103,607,F_BOOST,800,1056    ; 800x600x8 (60 Hz since 1.5-07-p1, CR52 = 80h at POST)
+        dw 0x0105,598,F_BOOST,1024,0      ; 1024x768x8 (non-interlaced since 1.5-07-p1)
+        dw 0x0107,603,F_BOOST|F_2MB,1280,0   ; 1280x1024x8 (non-interlaced since 1.5-07-p1)
+        dw 0x0003,700,F_VGA,720,900       ; back to text: base restore
         dw 0x0013,700,F_VGA,320,400
         dw 0xFFFF
 
 s_vname db 'S3TEST.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
-s_title db 'S3TEST ',VERSION,' - Trio64V2/DX VBIOS ',ROMVER,' test suite',13,10
+s_title db 'S3TEST ',VERSION,' - VBIOS test suite: Trio64V2 ',ROMVER,', Trio64V+ ',VROMVER,', Trio64 ',TROMVER,13,10
         db 'Category column: ROM (image), CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10,13,10,'$'
 s_romver db ROMVER
 ROMVLEN equ $-s_romver
+s_vromver db VROMVER
+VROMVLEN equ $-s_vromver
+s_tromver db TROMVER
+TROMVLEN equ $-s_tromver
 s_sig   db 'ROM  ROM signature ',ROMVER,' ............ $'
+s_sigv  db 'ROM  ROM signature ',VROMVER,' ............. $'
+s_sigt  db 'ROM  ROM signature ',TROMVER,' .............. $'
+s_sigo  db 'ROM  ROM version (no ROM of ours for the chip) $'
 s_nover db '(no version string)$'
 s_cks   db 'ROM  ROM checksum (C000:0000-7FFF) = $'
 s_chip  db 'S3   Chip ID CR2D 2E 2F 30, PCI rev ...... $'
@@ -2345,8 +2601,17 @@ s_pci   db ', PCI $'
 s_rev   db ' rev $'
 s_na    db 'n/a$'
 s_info  db '  INFO',13,10,'$'
-s_mclk  db 'S3   MCLK SR10 SR11 (42 41 = 59.96 MHz) .. $'
-s_edo   db 'S3   CR36 memory type (bits 3-2 = 00 EDO)  $'
+s_mclk  db 'S3   MCLK SR10 SR11 kHz/data book max .... $'
+s_khz   db ' kHz$'
+s_edo   db 'S3   CR36 memory type (strapping) ........ $'
+memnames dw s_m00,s_m01,s_m10,s_m11      ; CR36 bits 3-2: Trio64V+ and Trio64V2 (01b SGRAM on the V2/GX)
+memn64  dw s_mrs,s_mrs,s_medo,s_m11      ; Trio32/Trio64
+s_m00   db '1-cycle EDO$'
+s_m01   db 'SGRAM$'
+s_m10   db '2-cycle EDO$'
+s_m11   db 'fast page$'
+s_medo  db 'EDO$'
+s_mrs   db 'reserved$'
 s_ped   db 'S3   SR1A pedestal off, bit 4 set ........ $'
 s_ref   db 'S3   Refresh defaults CR41 CR52 (88 x1) .. $'
 s_mode  db 'Mode $'
@@ -2370,7 +2635,7 @@ s_c50   db 'S3   CR50 in 512x384x8 151h (40) ........ $'
 s_ff    db 'VGA  ATC flip-flop reset by mode set ..... $'
 s_vclr  db 'VGA  VGA mode set clear 13h 12h 03h ..... $'
 s_font  db 'EGA  Font load 8x16 and 8x8 in plane 2 .. $'
-s_scr   db 'VGA  Mode 13h scroll AH=06h/07h data .... $'
+s_scr   db 'VGA  Mode 13h scroll AH=06h/07h/0Eh .... $'
 s_txs   db 'CGA  Text scroll AH=06h/07h cells ....... $'
 s_ah09  db 'CGA  AH=09h text char/attribute count ... $'
 s_pls   db 'EGA  Planar scroll 12h/0Dh AH=06h/07h ... $'
@@ -2399,8 +2664,11 @@ silent  db 0                            ; /S given
 vwant   db 0                            ; /V given
 s_cf    db '  FAIL $'
 s_ci    db '  INFO $'
-s_help  db 'S3TEST ',VERSION,' - regression test for the Trio64V2/DX VBIOS ',ROMVER,13,10
+s_help  db 'S3TEST ',VERSION,' - regression test for our VBIOSes: Trio64V2 ',ROMVER,', Trio64V+ ',VROMVER,13,10
+        db '  and Trio64 ',TROMVER,13,10
         db '  S3TEST [/V] [/S] > S3TEST.LOG',13,10
+        db 'The test set follows the chip; on other Trio64-family chips only the tests that',13,10
+        db 'need no ROM of ours run.',13,10
         db '  /V                  debug log in S3TEST.DBG (BIOS calls, registers, timing)',13,10
         db '  /S                  silent: no monitor warning, no key press',13,10
         db '  /H, /?              this help',13,10
@@ -2448,6 +2716,12 @@ r59     db 0
 r5a     db 0
 r6d     db 0
 base    db 0                    ; CR59 at POST: the real LFB base (bits 31-24)
+rkind   db 0                    ; the test set: RK_V2, RK_VP or RK_OTHER (by the chip)
+sigp    dw 0                    ; the ROM version the signature test expects, and its length
+sigl    dw 0
+mvco    dd 0                    ; MCLK PLL VCO, MCLK and its data book limit at POST (kHz)
+mkhz    dd 0
+mlim    dd 0
 r90     db 0
 r1a     db 0
 mibuf   times 256 db 0

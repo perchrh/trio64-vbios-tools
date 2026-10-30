@@ -97,9 +97,12 @@ font:   push ax
         ret
 
 ; ---- mode 13h scroll : 32-bit moves and fills for AH=06h; AH=07h (DF set) ----
-;      runs the original word code
+;      runs the original word code. Keeps EAX (p21): AH=0Eh scrolls through here from its fast path at
+;      the INT 10h entry, without the dispatcher that saves the 32-bit registers, so a line feed on the
+;      last row of mode 13h returned EAX bits 31-16 = 0000h (the reference keeps them)
 scr13:  cmp byte [bp+0x1],0x07
         je .orig
+        push eax
         cmp cx,[0x44A]
         jne .win
         mov bx,ax               ; full width: one block move and one fill
@@ -123,6 +126,7 @@ scr13:  cmp byte [bp+0x1],0x07
         rep stosd
         adc cx,cx
         rep stosw
+        pop eax
         add sp,4
         ret
 .win:   shl bx,3                ; window: line by line
@@ -159,6 +163,7 @@ scr13:  cmp byte [bp+0x1],0x07
         add di,bx
         dec dx
         jnz .fl
+        pop eax
         add sp,4
         ret
 .orig:  cmp cx,[0x44A]
