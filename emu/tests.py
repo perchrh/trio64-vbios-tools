@@ -49,7 +49,8 @@ Tests
                    all PASS, 4F15 INFO (the model has no DDC lines)
   s3compat_full    the whole S3COMPAT /Q (every VESA mode banked and linear, the S3 modes, the VESA
                    functions, pass 2): every line PASS except the known BIOS warnings (8x14 font, 106h
-                   above the single-clock limit) and the lines that judge video memory through banks,
+                   above the single-clock limit, the CR86 and CR90/CR91 rules in 012Eh, 010Fh, 0131h,
+                   0134h and 012Ah, which are clean on the card) and the lines that judge video memory through banks,
                    the LFB or planar windows above 64 KB, which the model does not have
   vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
                    caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
@@ -658,6 +659,12 @@ S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] 
                          r'Banked window and LFB same memory .*WARN 01$']
 S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
                   r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
+                  # the datasheet rules CR86 (V2-REG-3: End Horizontal Blank 00h in the 320-wide modes) and
+                  # CR90/CR91 (V2-REG-4: L1 FFh for 1920 bytes) and 012Ah's 75.16 MHz (packed 24 above 75
+                  # MHz): the same registers as the reference except the 320x240 timing, and the five
+                  # modes show a clean picture on the card (S3COMPAT and VSHOW /R, 30 October 2026)
+                  r'VESA 012E .*WARN 80$', r'VESA 010F .*WARN 80$', r'VESA 0131 .*WARN 80$',
+                  r'VESA 0134 .*WARN 80$', r'VESA 012A .*WARN 82$',
                   r'.*INFO$']
 # with 4 MB the BIOS (2.04.07, unchanged by the patches) offers modes whose default DCLK is above the
 # datasheet maximum for their depth (50 MHz at 32 bpp, 95 MHz at 15/16 bpp): WARN 02, as 106h

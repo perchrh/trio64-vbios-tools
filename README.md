@@ -133,10 +133,10 @@ found; `docs/chip-rules.md` lists every rule with its ID, chips, source and the 
 it. On the Trio64V2 a DCLK VCO outside 135-340 MHz (the datasheet range) is FAIL 200; inside it but
 below 170 MHz (the minimum of XFree86, not of the datasheet) it is WARN 08. The Trio64V2 POST part also
 checks SR1A bit 4 and the PCI subsystem ID handover (ROM C000:0040-0043 to CR81-CR84, CR37 bit 2
-cleared), and its VESA lines CR32 bit 3 (FAIL 1000) and the CR86 and CR90/CR91 rules (WARN 80, until a
-card run confirms them). The emulator test `v2_writes` (tag `s3 emu`, Trio64V2 model only) checks the
-rules that concern writes: CR26 = 00h after CR39 = A5h on every mode set, and CR40 bit 0 and CR66 bit 0
-changed only with the screen off or in vertical retrace.
+cleared), and its VESA lines CR32 bit 3 (FAIL 1000) and the CR86 and CR90/CR91 rules (WARN 80; on this
+ROM 012Eh, 010Fh, 0131h, 0134h and 012Ah, see Known remaining items). The emulator test `v2_writes`
+(tag `s3 emu`, Trio64V2 model only) checks the rules that concern writes: CR26 = 00h after CR39 = A5h
+on every mode set, and CR40 bit 0 and CR66 bit 0 changed only with the screen off or in vertical retrace.
 
 On every chip S3COMPAT also checks the MCLK against the chip's maximum (60 MHz on the Trio32/64 and
 Trio64V+, 66.67 MHz on the Trio64UV+), PLL M and N of at least 1, packed 24 bpp by either encoding
@@ -578,6 +578,15 @@ machine, so neither bit is set by the ROM. The Trio64V+ datasheet (SR15 bit 7, "
 Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/). It uses the same font as the S3 Trio64. 
 - An LFB is offered on the planar mode 104h (S3COMPAT WARN 20), as in stock and the reference.
 - Mode 106h runs at 108 MHz, above the datasheet single-clock limit (S3COMPAT WARN 02).
+- S3COMPAT WARN 80 in 012Eh, 010Fh, 0131h and 0134h: End Horizontal Blank is 00h, so CR86 = 00h cannot
+  be 1 less (V2-REG-3). The reference sets the same registers in 012Eh and 010Fh; 0131h and 0134h get
+  it from the ROM's 320x240 timing (the reference has 2Fh there).
+- S3COMPAT WARN 82 in 012Ah (640x480x24): DCLK 75.16 MHz, 3 x 25.05 MHz, above the 75 MHz packed 24
+  limit (02), and L1 (CR90/CR91) FFh, 2048 bytes per line where 1920 need EFh (V2-REG-4, 80); both as
+  in the reference.
+- These five modes show a clean picture on the card (edges and line ends, S3COMPAT and VSHOW /R,
+  30 October 2026), so the emulator test `s3compat_full` accepts the five lines. Every graphics mode
+  VSHOW /A shows is clean on the card with p18 in plain DOS (30 October 2026).
 - The BIOS writes SR04 = 03h in text modes where IBM writes 02h; bit 0 is reserved on the VGA and
   reads back as 0 on the card, so programs see the IBM value.
 
