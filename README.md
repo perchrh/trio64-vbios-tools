@@ -593,6 +593,22 @@ AX = 004Fh from them, the real-mode status. The ROM keeps that:
 The ELSA Winner 1000/T2D BIOS (ELSA 6.01.00, built on S3's 1.01.04) and S3's 1.01.04 have no reason
 to be compared here: 1.01.04 has no 4F0A, and ELSA's own 4F0A reports a wrong table length.
 
+### Not taken: the S3 OEM functions (4F14h) of later BIOSes
+
+The S3 OEM functions of 2.04.11, the Trio3D BIOS 2.0B.10 and the Trio3D/2X BIOS 2.0C.10 were compared
+with this ROM's (2.04.07) on 30 October 2026, every BL 00h-1Fh with BH 00h-07h in the emulator:
+
+- BL=01h (refresh rate set, get and list) and BL=02h (mode list and mode information) return the same
+  results in all four; S3 changed nothing there.
+- The query (BL=00h BH=00h) differs only in its version number (0010h, 0411h, 0B10h, 0C10h).
+- The only addition of relevance is BL=00h BH=01h in the Trio3D and Trio3D/2X BIOSes: the BIOS build
+  date in BCD, read from the ROM header. No program or driver is known to use it, so it brings
+  nothing.
+- BL=03h-05h of the Trio3D/2X BIOS work on that chip's own registers and do not apply here.
+
+None of them is ported: they bring nothing for this card, and a driver or utility may check the query's
+version and expect the 2.04.07 behaviour.
+
 ### Kept outside the ROM
 
 | TSR | Fixes | Why not in the ROM |
