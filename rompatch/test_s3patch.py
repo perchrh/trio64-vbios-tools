@@ -9,7 +9,7 @@ REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN (optional) the 64 
 repository.
 
 Tests
-  build          the reference gives the tested build: SHA-256 f563989b... (NASM 3.02), sign-on 2.04.07-p18,
+  build          the reference gives the tested build: SHA-256 889d6658... (NASM 3.02), sign-on 2.04.07-p20,
                  byte-identical to --rom when given
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
                  32 KB size, the upper 32 KB is zeros

@@ -16,6 +16,8 @@ must do, written from the datasheets alone.
   Nothing here may come from reading a BIOS image (its code, tables or strings): those findings belong
   in README.md ("Features and changes", "Byte-level changes") and are implementation knowledge, not chip
   rules. Keep the two apart, so the rules can be handed to someone who has never seen a BIOS image.
+  The one exception is the section "S3 OEM functions (4F14h)": no datasheet describes them, so it is
+  taken from BIOS images, says so, and its entries are not chip rules.
 - **Inheritance.** The Trio64V2/DX & GX and the Trio64UV+ books describe only what differs from the
   Trio64V+. A V+ rule that those books do not change applies to them too. Such rules carry no chip
   prefix and say which chips they cover.
@@ -112,7 +114,7 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 | V2-REG-2 | V2 | CR32 bit 3: "Reserved = 0. This bit should never be set to 1" | V2 4.1 | must | VESA lines fail 1000 |
 | V2-REG-3 | V2 | With DAC power saving on (CR86 bit 7 = 0), CR86 bits 6-0 "must be at least 1 less than the End Horizontal Blank value programmed in CR5D_3, CR5_7 and CR3_4-0" | V2 4.2 (CR86) | must | VESA lines WARN 80 (not yet confirmed on a card; the ROM's violations in 012Eh, 010Fh, 0131h and 0134h show a clean picture on the card, 30 October 2026) |
 | V2-REG-4 | V2 | With CR90 bit 7 = 1 (primary stream L1 on), the 11-bit L1 (CR90 bits 2-0, CR91) = (bytes of displayed pixels per scan line / 8) - 1 | V2 4.2 (CR90, CR91) | must | VESA lines WARN 80 (not yet confirmed on a card; the ROM's violation in 012Ah shows a clean picture on the card, 30 October 2026) |
-| V2-REG-5 | V2 | "The BIOS must write 00H to this register [CR26] upon each mode set"; CR39 = A5h first, and CR23 must be 00h before CR26 is written | V2 4.2 (CR23, CR26) | must | emulator `v2_writes` |
+| V2-REG-5 | V2 | "The BIOS must write 00H to this register [CR26] upon each mode set"; CR39 = A5h first, and CR23 must be 00h before CR26 is written | V2 4.2 (CR23, CR26) | must | emulator `v2_writes` (CR23 = 5Ah before each mode set; the ROM clears it since p19) |
 | V2-REG-6 | V2 | CR40 bit 0 and CR66 bit 0 are changed only during screen off (SR01 bit 5 = 1, which may take up to 3 HSYNCs to take effect) or vertical retrace | V2 4.1 | must | emulator `v2_writes` |
 | V2-REG-7 | V2 | BEE8h index D and E have undefined power-on values; software initialises them before the graphics engine is used (two steps: the write takes effect with the next engine command); the family rule ENG-1 | V2 4.1; UV+ ER010-B item 4 | must | emulator `engine_init` |
 
@@ -135,6 +137,38 @@ and the video BIOS; none is checked yet (no UV+ hardware or BIOS at hand).
 | UV-REG-2 | With DAC power saving on (CR85 bit 3 = 0), CR86 bits 6-0 must be at least 1 less than the End Horizontal Blank value (the V2-REG-3 rule) | UV+ CR86 | must (WARN 80 until confirmed) |
 
 UV-REG-1 and UV-REG-2 are checked by the VESA lines (fail 1000, WARN 80) when S3COMPAT finds a Trio64UV+.
+
+## S3 OEM functions (4F14h): from BIOS images, not datasheets
+
+None of the datasheets describes a BIOS interface (VBE or S3's own INT 10h functions), and no S3 document
+on the OEM function AX=4F14h is at hand. This section is the exception to the source rule above: it
+records which BIOSes of each chip offer 4F14h and what the functions return, observed in the emulator
+(every BL 00h-1Fh with BH 00h-07h, 30 October 2026). It describes BIOS behaviour, not the chip: a BIOS
+for the same chip may or may not have the functions. The Trio32 and the Trio3D/2X are left out (no
+datasheet at hand for them, README "Missing documents").
+
+| Chip | BIOSes examined | 4F14h |
+| --- | --- | --- |
+| T64 | Phoenix 1.4-04 and 1.5-07, Number Nine 2.03.10, Diamond Stealth 64 DRAM 2.09, Hercules Graphite Terminator D2g, ELSA Winner 1000 Trio 1.02.00 | none: BL=00h returns AX = 4F00h (not supported) |
+| V+ | S3 1.03-08, Phoenix 1.02-02, Octek Mirage 64 (Phoenix 1.01-05), Diamond Stealth64 Video 1.03 | none |
+| UV+ | S3 1.00-06 | none |
+| V2 | S3 1.01.04 (VBE 1.2), ELSA Winner 1000/T2D 6.01.00 | none |
+| V2 | S3 2.04.07 (the base of this ROM) and 2.04.11 (the card's stock BIOS) | BL=00h, 01h, 02h as below, the same results in both |
+
+The functions of the S3 2.04.x BIOSes (inputs and outputs besides AX = 004Fh for success, 014Fh for a
+failed or unknown subfunction):
+
+| ID | Function | Behaviour | Checked by |
+| --- | --- | --- | --- |
+| OEM-1 | BL=00h BH=00h query | BX = version of the OEM functions (0010h in 2.04.07, 0411h in 2.04.11), CX = 0003h, SI = video memory in 64 KB units (as 4F00h), DI = PCI device ID (8901h) | S3COMPAT "4F14 S3 OEM functions" bit 1; INFO when BL=00h does not return AL = 4Fh |
+| OEM-2 | BL=01h BH=00h set refresh | CX = mode, DI = rate in Hz: the rate the next set of that mode uses (the refresh fields in CR41, CR52 and CR6B) | S3COMPAT bits 8, 10, 20 |
+| OEM-3 | BL=01h BH=01h get refresh | CX = mode: DI = the rate set for it | S3COMPAT bit 8 |
+| OEM-4 | BL=01h BH=02h list refresh | CX = mode, DX = index (0 first): DI = rate in Hz, DX = next index, 0 after the last | S3COMPAT bit 8; S3COMPAT "DCLK VCO at every refresh rate" (`tvco`: every listed rate set and its PLL checked) |
+| OEM-5 | BL=02h BH=02h mode list | DX = index: CX = mode, DX = next index, 0 after the last; the modes of the 4F00h list that 4F01h marks as supported, in its order | S3COMPAT bit 2 |
+| OEM-6 | BL=02h BH=03h mode information | CX = mode: EDI = XRes << 16 OR YRes, SI bits 7-0 = bits per pixel, as 4F01h (graphics modes) | S3COMPAT bit 4 |
+
+A program or driver may check the query's version (OEM-1) and expect this behaviour, so a BIOS for this
+card keeps it unchanged (README "Not taken: the S3 OEM functions (4F14h) of later BIOSes").
 
 ## Datasheet errors and gaps
 

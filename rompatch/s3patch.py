@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p18) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (2.04.07-p20) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P18.BIN [--no-vco-fix] [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN OUT=S3V2P18.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P20.BIN [--no-vco-fix] [--nasm nasm] [-q]
+    make rom IN=REF2047.BIN OUT=S3V2P20.BIN
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -36,7 +36,14 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
   p18    the booster on again at the end of a banked VBE 4F02 (as up to p15), still refused under
          Windows enhanced mode: in plain DOS every bank switch path gets it (INT 10h 4F05, the window
          function, the 4F0A protected-mode code, direct CR6A writes), not only the first two
-  sign-on "2.04.07-p18", checksum byte 7FFF
+  p19    as the S3 BIOS 2.04.11: the DDC delay of VBE 4F15 (ddcwait.asm in place at 5F4E) sets PIT
+         channel 2 with B6h, the 4F15 probe passes its 0255h delay in AX (5E07), and interrupts are off
+         for the whole 4F15 operation (p19.asm: ddcin, ddcout); every mode set writes CR23 = 00h before
+         CR26 = 00h (p19.asm: cr2326, Trio64V2 datasheet section 4.2)
+  p20    POST passes its delay before the graphics engine reset in AX (14E2): the delay with RAM
+         refresh off (CR88 bit 6) is 0Ah PIT clocks (8 us) as S3 meant, not the CR88 word left in AX
+         (4088h, 13.8 ms); 2.04.07 and 2.04.11 both load BX there
+  sign-on "2.04.07-p20", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -45,15 +52,16 @@ with the known reference image the SHA-256 of the build that passed the emulator
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p18'
+LEVEL = 'p20'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = 'f563989baeb75a95d3d121e6db09e58097977a00fd50e5557dffd4c5e1ee3a56'  # 2.04.07-p18 (NASM 3.02), emulator tests passed
+RESULT_SHA = '889d6658c7701f8185d01fb01333bf905e96d07a7d100a19af20b1d6f50173d2'  # 2.04.07-p20 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
 BLOCK_SHA = {
-    'wincheck.asm': 'd885136ca6b113c3', 'hooks.asm': '9dfbf5093eb2c86f',
+    'wincheck.asm': 'd885136ca6b113c3', 'p19.asm': 'b778a484de923cb0',
+    'ddcwait.asm': '7a7c2786c4eadb62', 'hooks.asm': '9dfbf5093eb2c86f',
     'p12ext.asm': '3539b720a090ae04', 'crtc240.asm': 'c82f2ec50dacb61d',
     'vbe4f06.asm': 'bdd213f1622291bb', 'clear32.asm': '28a181904074b700',
     'p13df.asm': '7e785b4ba99b8749', 'p13fill.asm': 'a81b8264916f413c',
@@ -84,7 +92,8 @@ def bios_symbols(path=os.path.join(HERE, 'bios.inc')):
 SITES = dict(modetab=0x20D3, m4f02=0x56D9, boost=0x56F7, bl3=0x59B7, base=0x5CCD, lfb=0x5CE9,
              clr=0x143D, int10=0x210D, vclr=0x2C29, font=0x1224, scr=0x31F5, memsize=0x1B0F,
              old4f06=0x59C0, txfull=0x2ED5, txwmov=0x2EE4, txwfil=0x2EF6, plfull=0x3126,
-             plwin=0x3171, ah09a=0x3512, ah09b=0x3516)
+             plwin=0x3171, ah09a=0x3512, ah09b=0x3516, cr26=0x1A62, ddcin=0x5D01, ddcout=0x5D53,
+             ddcax=0x5E07, postdly=0x14E1)
 SIG = dict(
     m4f02='8e 1e ?? ?? e8 ?? ?? 61 8a d8 24',            # mov ds,[cs:SEG_BDA] / call MODESET
     boost='c7 06 fe 04 00 00 c3 c6 46 1b 01',            # mov word [4FEh],0 / ret
@@ -109,6 +118,11 @@ SIG = dict(
     plwin='33 c0 8b f1 f3 aa 03 fb 8b ce 4a 75 f5 ba ce 03',  # planar window: fill lines
     ah09a='97 f3 ab c3',                                   # AH=09h text: char/attribute words
     ah09b='e8 ?? ?? f3 ab c3',                             # AH=09h text, page > 0
+    cr26='b8 26 00 ef 33 c0 ba c4 03 ec',                  # mode set: CR26 = 00h (mov ax,0026h / out dx,ax)
+    ddcin='e8 ?? ?? b0 53 e8 ?? ?? 50 80 cc 10 ef',        # 4F15: call GETCRTC / CR53 bit 4 (MMIO) on
+    ddcout='58 e8 ?? ?? 1f c3',                            # 4F15 end: pop ax / call SR0DRST / pop ds / ret
+    ddcax='bb 55 02 e8 ?? ??',                             # 4F15 probe: mov bx,0255h / call DDCWAIT
+    postdly='53 bb 0a 00 e8 ?? ?? 5b b8 66 02 ef',         # POST: push bx / mov bx,000Ah / call DDCWAIT / pop bx / CR66 = 02h
 )
 # Code at bios.inc addresses: (symbol, original bytes)
 SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
@@ -117,7 +131,13 @@ SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
           ('INT_AH0E', 'e9 ?? ?? e9 ?? ?? e9 ?? ?? 8b c6 80 fc 4f'),
           ('SEG_SCR', '00 00 00 00 00 a0'),
           ('DFDN', '00 00 00 00 00 00 00 00'),
-          ('WSET', '52 53 8b da ba c4 03 b0 04 e8')]
+          ('WSET', '52 53 8b da ba c4 03 b0 04 e8'),
+          ('SR0DRST', '52 ba c4 03 ef 5a c3'),
+          # the 2.04.07 DDC delay, replaced in full by ddcwait.asm (p19)
+          ('DDCWAIT', '50 53 51 52 57 8b d8 83 fb 00 74 49 d1 e3 72 45 ba 61 00 ec 8a c8 0c 01 ee e8 3f 00 '
+                      '8b f8 9c fa b0 86 e6 43 e4 80 b0 00 e6 42 e6 42 e4 80 9d e8 29 00 8b d0 e8 24 00 f7 d8 '
+                      '03 c2 3b c3 72 f5 b0 86 e6 43 e4 80 8b c7 e6 42 86 c4 e6 42 e4 80 ba 61 00 8a c1 ee 5f '
+                      '5a 59 5b 58 c3 9c fa b0 80 e6 43 e4 80 e4 42 86 c4 e4 42 86 c4 9d c3')]
 
 # Data patches: (offset, old, new, purpose)
 DATA = [
@@ -136,7 +156,9 @@ DATA = [
 # The new code: (file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels the
 # patch sites use). Each file is assembled with -DL_<label> for the labels of the files before it.
 BLOCKS = [
-    ('wincheck.asm', 0x7C8B, 0x7CFB - 0x7C8B, ('wcheck', 'wclear', 'lfbchk')),   # p17
+    ('wincheck.asm', 0x7C8B, 0x7CC8 - 0x7C8B, ('wcheck', 'wclear', 'lfbchk')),   # p17
+    ('p19.asm', 0x7CC8, 0x7CFB - 0x7CC8, ('cr2326', 'ddcin', 'ddcout')),
+    ('ddcwait.asm', 'DDCWAIT', 0x6D, ('ddcwait',)),         # in place of the 2.04.07 DDC delay
     ('hooks.asm', 0x7E80, 0x7F58 - 0x7E80, ('hook', 'bon', 'basefix')),          # calls wincheck.asm
     ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13', 'wsetx', 'b4f02')),  # calls bon (hooks.asm)
     ('crtc240.asm', 0x7E40, 0x40, ('crtc8', 'crtc16')),
@@ -335,6 +357,11 @@ def patch(lo, nasm='nasm', vcofix=True):
         raise PatchError('mode set clear return differs from bios.inc')
     if (sym['P13A'], sym['P13B'], sym['P13C']) != (site['old4f06'], site['clr'] + 5, site['font'] + 3):
         raise PatchError('P13A/P13B/P13C are not the dead code after the p8, p11 and p12 jumps')
+    if (call_target(d, site['ddcin']), call_target(d, site['ddcout'] + 1), call_target(d, site['ddcax'] + 3)) != \
+            (sym['GETCRTC'], sym['SR0DRST'], sym['DDCWAIT']):
+        raise PatchError('VBE 4F15 does not call GETCRTC, SR0DRST and DDCWAIT where expected')
+    if call_target(d, site['postdly'] + 4) != sym['DDCWAIT']:
+        raise PatchError('POST engine reset does not call DDCWAIT at %04X' % (site['postdly'] + 4))
 
     def put(off, old, new, why):
         old, new = (hexb(x) if isinstance(x, str) else bytes(x) for x in (old, new))
@@ -410,6 +437,16 @@ def patch(lo, nasm='nasm', vcofix=True):
     put(a, 'f3 ab c3', jmp(a, lab['wfill']), 'AH=09h text: char/attribute with wfill (p13)')
     a = site['ah09b'] + 3
     put(a, 'f3 ab c3', jmp(a, lab['wfill']), 'AH=09h text, page > 0: with wfill (p13)')
+    a = site['cr26']
+    put(a, 'b8 26 00 ef', call(a, lab['cr2326']) + b'\x90', 'mode set: CR23 = 00h before CR26 = 00h (p19)')
+    a = site['ddcin']
+    put(a, d[a:a + 3], call(a, lab['ddcin']), 'VBE 4F15: interrupts off for the DDC operation (p19, as 2.04.11)')
+    a = site['ddcout'] + 1
+    put(a, d[a:a + 3], call(a, lab['ddcout']), 'VBE 4F15 end: interrupts on again (p19)')
+    a = site['ddcax']
+    put(a, 'bb 55 02', 'b8 55 02', 'VBE 4F15 probe: delay count in AX, not BX (p19, as 2.04.11)')
+    a = site['postdly'] + 1
+    put(a, 'bb 0a 00', 'b8 0a 00', 'POST delay before the engine reset: count 0Ah in AX, not BX (p20)')
     a = site['vclr'] + 4                    # xor bl,bl / mov es,bx / xor di,di / jmp wfill (9 bytes in place)
     put(a, '32 db 8e c3 33 ff f3 ab c3', b'\x32\xdb\x8e\xc3\x33\xff' + jmp(a + 6, lab['wfill']),
         'VGA mode set clear: in place, rep stosw replaced by a jump to wfill (p14)')
