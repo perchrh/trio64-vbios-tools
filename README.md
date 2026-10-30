@@ -763,6 +763,12 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   2.04.11, which has the same DDC code.
 - POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
   (without /Q); no difference to p19 is expected.
+- Possible S3TEST option `/M:50` (future work, noted 30 October 2026): the MCLK the ROM was built for
+  (`make rom MCLK=50`). S3TEST would then FAIL its MCLK line when the measured clock is more than
+  about 0.5 MHz away (the PLL gives 50.11 MHz for 50), so a log shows that the intended build was
+  flashed; today any clock up to the data book limit passes, the default build too. Not S3TEST setting
+  a lower clock itself: that tests the card's memory, not the BIOS; a ROM built with `MCLK=` and
+  S3COMPAT's VRAM test do that.
 - Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
   13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
   does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3
