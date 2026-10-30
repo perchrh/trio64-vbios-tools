@@ -659,10 +659,14 @@ S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] 
                          r'Banked window and LFB same memory .*WARN 01$']
 S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
                   r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
-                  # the datasheet rules CR86 (V2-REG-3: End Horizontal Blank 00h in the 320-wide modes) and
-                  # CR90/CR91 (V2-REG-4: L1 FFh for 1920 bytes) and 012Ah's 75.16 MHz (packed 24 above 75
-                  # MHz): the same registers as the reference except the 320x240 timing, and the five
-                  # modes show a clean picture on the card (S3COMPAT and VSHOW /R, 30 October 2026)
+                  # Accepted datasheet warnings, checked on the card with p18 (S3COMPAT, VSHOW /R and /A,
+                  # 30 October 2026): the five modes show a clean picture at the edges and line ends.
+                  # 012Eh, 010Fh (320x200) WARN 80: End Horizontal Blank is 00h, so CR86 = 00h cannot be
+                  #   "1 less" (V2-REG-3); the reference 2.04.07 sets the same registers.
+                  # 0131h, 0134h (320x240) WARN 80: the same rule; EHB 00h comes from the ROM's 320x240
+                  #   timing (VESA 640x480 at 60 Hz halved), the reference has 2Fh there.
+                  # 012Ah (640x480x24) WARN 82: 02 = DCLK 75.16 MHz (3 x 25.05 MHz) above the 75 MHz packed
+                  #   24 limit, 80 = L1 (CR90/CR91) FFh where V2-REG-4 wants EFh; both as in the reference.
                   r'VESA 012E .*WARN 80$', r'VESA 010F .*WARN 80$', r'VESA 0131 .*WARN 80$',
                   r'VESA 0134 .*WARN 80$', r'VESA 012A .*WARN 82$',
                   r'.*INFO$']

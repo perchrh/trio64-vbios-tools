@@ -4824,7 +4824,9 @@ dschk:  call rdall
 ;   WARN 80   CR90 bit 7 = 1 (L1 fetch length on) and the 11-bit L1 value (CR90 bits 2-0, CR91) not
 ;             [(bytes of displayed pixels per line) / 8] - 1, from 4F01 XRes and BitsPerPixel; text
 ;             and planar modes are not judged (V2-REG-4)
-; WARN rather than FAIL for the two CR86/CR90 rules: they are new and not yet confirmed on the card.
+; WARN rather than FAIL for the two CR86/CR90 rules: they are new and not confirmed in general. On the
+; card with the 2.04.07-p18 ROM, the modes that break them (012Eh, 010Fh, 0131h, 0134h: CR86 with End
+; Horizontal Blank 00h; 012Ah: L1 FFh) show a clean picture (30 October 2026, README Known remaining items).
 regchk: test byte [q_rs15],0x20          ; SR15 bit 5 left set (REG-1)
         jz .f1
         FAILB 0x1000
