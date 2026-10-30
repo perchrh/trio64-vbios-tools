@@ -44,8 +44,8 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P18.BIN NASM=nasm/nasm-3.02/nasm
-    make rom OUT=S3V2P18.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P19.BIN NASM=nasm/nasm-3.02/nasm
+    make rom OUT=S3V2P19.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -67,7 +67,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P18.BIN
+    make emu-test ROM=path/to/S3V2P19.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -184,7 +184,7 @@ category column: compare from the sixth column.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P18.BIN
+    make coverage ROM=path/to/S3V2P19.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -196,7 +196,7 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare ROM=S3V2P18.BIN
+    make ref-compare ROM=S3V2P19.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -210,10 +210,10 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(level p18) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(level p19) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P18.BIN
-    make rom OUT=S3V2P18.BIN
+    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P19.BIN
+    make rom OUT=S3V2P19.BIN
 
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
@@ -229,10 +229,10 @@ instructions differently (NASM 2.16.01 puts the REP prefix before the operand-si
 MOVSD/STOSD, 3.01 and 3.02 after it; such an image works the same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom OUT=S3V2P18.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom OUT=S3V2P19.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P18.BIN]
-    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P18.BIN]
+    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P19.BIN]
+    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P19.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
@@ -393,7 +393,7 @@ upper 32 KB is zeros (the ROM header declares 32 KB). The lower half checksums t
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
-120 bytes of the lower 32 KB are free: 0x7CC8-7CFA, 0x7E36-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
+100 bytes of the lower 32 KB are free: 0x7CD9-7CFA, 0x7E36-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
 0x7F51-7F57, 0x7FB7-7FBF, 0x7FE3-7FFE.
 
 Picture and monitor
@@ -461,6 +461,25 @@ Fixes
   reserved 10b).
 - **VBE 4F06 BL=3:** the real maximum line length, BX = min(8184, memory / lines) rounded down to 8 and
   CX = BX in pixels (4368 in 101h with 2 MB, 8184 with 4 MB; the reference returns 546).
+- **DDC (VBE 4F15), as in the S3 BIOS 2.04.11** (the card's stock BIOS), p19:
+  - The delay the DDC code waits between line changes sets PIT channel 2 with B6h (mode 3, low then
+    high byte). 2.04.07 wrote 86h, only the latch command, loaded the count in whatever access mode
+    channel 2 had and never read the latch; the 8254 ignores a second latch while one is pending, so
+    the first read gave a stale count and most delays came out far too short.
+  - The probe passes its 0255h delay in AX (5E07h); 2.04.07 loaded BX, so the delay used whatever AX
+    held.
+  - Interrupts are off for the whole 4F15 operation, so a timer interrupt cannot stretch a clock
+    pulse.
+  - All three are the 2.04.11 code. POST calls the same delay once (14E5h), so POST now waits there
+    as with the stock BIOS (13.8 ms; To do).
+  - Whether this card connects the DDC lines to the VGA connector is
+    not known: Windows 98 showed a generic monitor with the stock 2.04.11 (To do).
+- **CR23 before CR26:** every mode set writes CR23 = 00h, then CR26 = 00h (p19). Trio64V2 datasheet
+  section 4.2: CR23 "must be 00H before CR26 is written", and "the BIOS must write 00H to [CR26] upon
+  each mode set (assuming CR23 is at its default value of 00H)". A driver that used vertical
+  interpolation for a video window (section 3.2.2) may leave CR23 set; 2.04.07 wrote only CR26.
+  2.04.11 clears CR23 first when the mode in the BIOS data area is above 13h; the ROM does it on every
+  mode set (CR23 is reserved, 00h by default).
 - The card's POST flags (0xD1 = 05h) and CR80 POST value (00h).
 
 ### Byte-level changes
@@ -468,9 +487,9 @@ Fixes
 Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
 zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
-| Offset | 2.04.07 | p18 | Purpose |
+| Offset | 2.04.07 | p19 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p18 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p19 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |
@@ -507,6 +526,7 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x1227-1234 | old font loop (dead after the jump) | code | `p13bfa.asm`: bfilla 1227 |
 | 0x143D-1441 | 2E 8E 06 48 1D | E9 80 6B 90 90 | S3/VESA mode set clear: rep stosd |
 | 0x1442-1453 | old clear loop (dead after the jump) | code | `p13move.asm`: wmove 1442 |
+| 0x1A62-1A65 | B8 26 00 EF | E8 63 62 90 | mode set: CR23 = 00h before CR26 = 00h (`cr2326`) |
 | 0x20D3-20D4 | 7B 26 | 80 7E | INT 10h AH=00 table: mode set via the hook |
 | 0x210F-2111 | 80 FC 0E | E9 E9 5B | INT 10h entry: fast 4F05 BH=0 |
 | 0x2C2D-2C35 | 9 bytes | 9 bytes | VGA mode set clear: in place, rep stosw replaced by a jump to wfill |
@@ -525,7 +545,12 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x59C0-59E2 | old 4F06 BL=3 code (dead after the call) | code | `p13fill.asm`: wfillt 59C0, wfill 59C5 |
 | 0x5CCF-5CD2 | 8B C3 0B C0 | E8 6E 22 90 | LFB base read: real base while the booster is on |
 | 0x5CED-5CEF | 25 00 10 | E8 CF 1F | 4F05/4F03 linear test ignores the booster window |
+| 0x5D01-5D03 | E8 68 B5 | E8 CD 1F | VBE 4F15: interrupts off for the DDC operation (`ddcin`, then GETCRTC) |
+| 0x5D54-5D56 | E8 19 BF | E8 7E 1F | VBE 4F15 end: interrupts on again (`ddcout`, then SR0D restore) |
+| 0x5E07 | BB | B8 | VBE 4F15 probe: mov ax,0255h, the delay count in AX (2.04.07: mov bx) |
+| 0x5F4E-5FBA | old DDC delay | code | `ddcwait.asm`: ddcwait 5F4E, the 2.04.11 delay (5FB4-5FBA: nop) |
 | 0x7C8B-7CC7 | 00 | code | `wincheck.asm`: wcheck 7C8B (no booster under Windows enhanced mode), wclear 7CAF, lfbchk 7CBF. 0x7C8A is not free: it is the high byte of the word count at 0x7C89 that the descender glyph load at 0x3FC7 reads |
+| 0x7CC8-7CD8 | 00 | code | `p19.asm`: cr2326 7CC8, ddcin 7CD1, ddcout 7CD5 |
 | 0x7CFB-7E35 | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, b4f02 7D71, font 7D7A, scr13 7D96 |
 | 0x7E40-7E78 | 00 | tables | `crtc240.asm`: crtc8 7E40, crtc16 7E60 |
 | 0x7E80-7F50 | 00 | code | `hooks.asm`: hook 7E80, bon 7EF3, basefix 7F40 |
@@ -533,11 +558,13 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | 27 | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | 8A | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
-No code was copied from another project; all ROM code was written for this BIOS.
+No code was copied from another project; the ROM code was written for this BIOS, except the DDC delay
+(`ddcwait.asm`), which reproduces the routine of S3's own BIOS 2.04.11, the same vendor and code base
+as the reference 2.04.07 the ROM is built on.
 
 | Item in the ROM | Origin | What was taken |
 | --- | --- | --- |
@@ -547,6 +574,24 @@ No code was copied from another project; all ROM code was written for this BIOS.
 | LFB mode set handling | S3VBEFIX | Only the observation that the booster's base must be restored before an LFB mode; implemented differently |
 | Refresh and LCD timings | Not from S3REFRSH | The ROM carries the timings itself: VESA DMT 640x480 @ 60 Hz (800x525) and the BIOS's own 640x480 tables halved for 320x240 |
 | Memory clock 59.96 MHz | Trio64V2 datasheet | PLL values chosen to meet the 16.67 ns 1-cycle EDO limit |
+| DDC fixes, CR23 before CR26 | S3 BIOS 2.04.11 (the card's stock BIOS); Trio64V2 datasheet section 4.2 | The DDC delay routine, the probe's count in AX and interrupts off during 4F15 as in 2.04.11; CR23 = 00h before CR26 on every mode set (2.04.11 does it only after modes above 13h) |
+
+### Not taken from 2.04.11: AX in the 4F0A protected-mode code
+
+The S3 BIOS 2.04.11 (the card's stock BIOS) saves AX in its VBE 4F0A protected-mode functions (set
+window, display start, palette) and restores it before the return. 2.04.07, and so this ROM, returns
+AX = 004Fh from them, the real-mode status. The ROM keeps that:
+
+- VBE 2.0 section 4.13: "Currently undefined registers may be destroyed with the exception of ESI,
+  EBP, DS and SS". AX has no defined output there, so both conform.
+- A program that checks AX = 004Fh after the call, as after INT 10h, works only with 004Fh returned;
+  with AX kept it gets its own AX back, often 4F05h, because callers load the same registers as for
+  the real-mode call. Only a program that relies on AX surviving, which the specification does not
+  allow, gains from 2.04.11's change, and none is known.
+- Warcraft II switches banks through this code and works with the ROM.
+
+The ELSA Winner 1000/T2D BIOS (ELSA 6.01.00, built on S3's 1.01.04) and S3's 1.01.04 have no reason
+to be compared here: 1.01.04 has no 4F0A, and ELSA's own 4F0A reports a wrong table length.
 
 ### Kept outside the ROM
 
@@ -595,14 +640,27 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 - Measure the booster with VIDSPEED in plain DOS: first with the stock BIOS, then with the latest ROM,
   and write both banked results here. VIDSPEED's banked mode (4F02 0113h) gets the booster (VGALOG:
   CR58 90h, CR59/CR5A 000Ah after the call).
+- DDC on the card (p19): run S3COMPAT with the Eizo connected; its 4F15 line shows whether the probe
+  now finds DDC2. If it still reports caps 0000, the board probably does not connect the serial port
+  lines to the VGA connector (pins 12 and 15); Windows 98 showed a generic monitor with the stock
+  2.04.11, which has the same DDC code.
+- POST delay with the count in BX: at 14E5h the POST code sets CR88 bit 6, then calls the DDC delay
+  (5F4Eh) with `mov bx,000Ah`, but the delay takes its count in AX; AX holds the CR88 index and value
+  there (4088h with CR88 = 00h before, as on the card: 13.8 ms) instead of 0Ah (8 us). 2.04.11 has the
+  same mix-up. Fix it (AX = 000Ah) and test the result on the card.
+- Clear video memory with the Trio64V2 graphics engine at VESA mode sets (idea from the Trio3D BIOS,
+  which fills video memory with its 2D engine at POST, and the Phoenix Trio64 BIOS 1.4, which clears
+  with the engine): could cut the 2 MB clear of about 39 ms to a few ms. Needs most of the free bytes,
+  must leave the engine idle and in a clean state for Windows and DOS programs, and the emulator would
+  need an engine model to test it.
 
 ## Sources
 
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
 - S3 Trio64V2/DX and GX datasheet (preliminary): MCLK limits per memory type and DCLK limits, the
   DCLK VCO maximum of 340 MHz, the 3-bit DCLK R divider (SR12 bit 7), CR36 memory types, CR87 1-cycle
-  linear addressing, CR90/CR91 FIFO, the PCI subsystem ID (section 3.8), SR1A, CR26, CR32, CR40, CR66
-  and CR86 rules.
+  linear addressing, CR90/CR91 FIFO, the PCI subsystem ID (section 3.8), SR1A, CR23/CR26, CR32, CR40,
+  CR66 and CR86 rules.
 - XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c`: the DCLK PLL range 170-340 MHz for the
   Trio64V2/DX/GX, which S3COMPAT uses as its WARN limit and the ROM patcher for every refresh entry
 - S3 Trio64V+ (86C765) datasheet, from the S3VBEFIX repository: PLL formula and VCO range, CR67 colour
@@ -614,7 +672,17 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 - [DOS compatibility tests by gona.mactar.hu](https://gona.mactar.hu/DOS_TESTS/): known S3 issues.
 - The stock 2.04.11 dump, disassembled to locate the mode set, refresh tables and VBE handlers.
 - The S3 reference BIOS 2.04.07, the base of the current ROM, compared with 2.04.11 to find the same
-  routines and tables at its addresses.
+  routines and tables at its addresses, and on 30 October 2026 instruction by instruction: 2.04.11
+  fixes the DDC delay and adds CR23 = 00h before CR26 (both in p19), keeps AX in the 4F0A code (not
+  taken, see above) and counts planar modes per 256 KB in 4F01 (not taken: 2.04.07's NumberOfImagePages
+  is the correct count).
+- Compared on 30 October 2026, nothing better to take: the ELSA Winner 1000/T2D BIOS 6.01.00 (S3's
+  1.01.04 plus about 3 KB from ELSA: VBE 2.0, LFB, its own mode numbers 212h-218h, 75 Hz defaults, a
+  65 MHz MCLK; same S3 DDC code, delays on PIT channel 0; it has S3's 8x14 font, which needs 3.5 KB
+  this ROM does not have free), S3's 1.01.04 (VBE 1.2, no LFB) and the S3 Trio3D BIOS 2.0B.07 (the same
+  2.0x code base as 2.04.07: its clear, scroll and text routines are 2.04.07's; its new code is
+  Trio3D-specific, among it a POST memory test that fills video memory with the Trio3D 2D engine).
+- VBE 2.0 specification section 4.13: the registers the 4F0A protected-mode functions may destroy.
 - Reviewed on 28 October 2026, nothing new for the 86C775: riplin's annotated disassembly of the
   Phoenix S3 Trio64 BIOS 1.5-07 EDO for the Trio32/Trio64 (86C764x, PCI 5333:8811),
   [hag `research/s3/bios/86c764x.asm`](https://github.com/riplin/hag/blob/main/research/s3/bios/86c764x.asm),

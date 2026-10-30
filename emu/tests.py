@@ -14,7 +14,7 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p18), and the ROM under test carries
+                   the level rompatch/s3patch.py builds (2.04.07-p19), and the ROM under test carries
                    that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
@@ -81,9 +81,14 @@ Tests
                    AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
   v2_writes        (emulator only, Trio64V2 model) the datasheet rules about writes (docs/chip-rules.md):
-                   CR26 = 00h after CR39 = A5h on every mode set (V2-REG-5), CR40 bit 0 and CR66 bit 0
-                   changed only with the screen off or in vertical retrace (V2-REG-6); modes 03h, 12h,
-                   13h, 101h, 111h, 112h
+                   CR26 = 00h after CR39 = A5h on every mode set, with CR23 = 00h at that moment although
+                   CR23 was 5Ah before the mode set (V2-REG-5, p19), CR40 bit 0 and CR66 bit 0 changed
+                   only with the screen off or in vertical retrace (V2-REG-6); modes 03h, 12h, 13h, 101h,
+                   111h, 112h
+  ddc              (p19) VBE 4F15 BL=00h, the DDC probe: AX = 004Fh, every access to the serial port
+                   register (MMIO A000:FF20h) with interrupts off, the delays on PIT channel 2 set with
+                   B6h (never the 86h latch command of 2.04.07) and the probe's 0255h delay loaded as
+                   04AAh (the count in AX, doubled for mode 3); the model has no monitor, so BX = 0000h
   engine_init      (emulator only, Trio64V+/UV+/V2 models) a BIOS that uses the graphics engine writes
                    BEE8h index D and E before its first command (ENG-1); skipped when it uses none
   -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
@@ -105,7 +110,7 @@ import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES  # noqa: E402
-from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_WRITE  # noqa: E402
+from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
                                UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_EFLAGS,
@@ -310,7 +315,7 @@ def romver():
 
 
 def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p18)."""
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p19)."""
     t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
@@ -1384,7 +1389,9 @@ def t_display_switch(c):
 def t_v2_writes(c):
     """Trio64V2 datasheet rules about writes, which only the model can see (docs/chip-rules.md):
     V2-REG-5: the BIOS writes 00h to CR26 on each mode set, with A5h in CR39 first ('Synchronization 2',
-    section 4.2); V2-REG-6: CR40 bit 0 and CR66 bit 0 change only with the screen off (SR01 bit 5) or in
+    section 4.2), and CR23 must be 00h when CR26 is written: CR23 is set to 5Ah before each mode set (a
+    driver may leave it set after vertical interpolation, section 3.2.2), so the BIOS has to clear it
+    first (p19; the reference 2.04.07 writes CR26 only); V2-REG-6: CR40 bit 0 and CR66 bit 0 change only with the screen off (SR01 bit 5) or in
     vertical retrace (section 4.1). Checked for VGA modes 03h, 12h, 13h and the VESA modes 101h, 111h
     and 112h. Only on the Trio64V2 model (--chip v2)."""
     if Machine.chip != 'v2':
@@ -1395,12 +1402,20 @@ def t_v2_writes(c):
             ('101h', lambda: m.int10(0x4F02, bx=0x101)), ('111h', lambda: m.int10(0x4F02, bx=0x111)),
             ('112h', lambda: m.int10(0x4F02, bx=0x112))]
     for name, fn in sets:
+        m.r['crtc'][0x23] = 0x5A                # as a driver may leave it (vertical interpolation)
         m.wlog = []
         fn()
         log, m.wlog = m.wlog, None
         if not any(reg == 'CR' and i == 0x26 and v == 0 and cr39 == 0xA5
                    for reg, i, v, old, sr01, vr, cr39 in log):
             errs.append('%s: no CR26 = 00h with CR39 = A5h (V2-REG-5)' % name)
+        cr23 = 0x5A
+        for reg, i, v, old, sr01, vr, cr39 in log:
+            if reg == 'CR' and i == 0x23 and cr39 == 0xA5:
+                cr23 = v
+            elif reg == 'CR' and i == 0x26 and cr23:
+                errs.append('%s: CR26 written with CR23 = %02Xh (V2-REG-5)' % (name, cr23))
+                break
         for reg, i, v, old, sr01, vr, cr39 in log:
             if reg == 'CR' and i in (0x40, 0x66) and (v ^ old) & 1 and not sr01 & 0x20 and not vr:
                 errs.append('%s: CR%02X bit 0 %d->%d with the screen on outside retrace (V2-REG-6)'
@@ -1408,6 +1423,48 @@ def t_v2_writes(c):
     m.int10(0x03)
     check(not errs, '%d: %s' % (len(errs), '; '.join(errs[:8])))
     return '%d mode sets' % len(sets)
+
+
+def t_ddc(c):
+    """p19: the DDC code of VBE 4F15 as in the S3 BIOS 2.04.11. BL=00h (the probe the S3COMPAT 4F15 line
+    makes): returns 004Fh; every access to the serial port register (A000:FF20h through MMIO) happens
+    with interrupts off (2.04.11 pushf/cli around the operation, p19 ddcin/ddcout); the delays program
+    PIT channel 2 with B6h (mode 3, low then high byte) and never write 86h, the latch command 2.04.07
+    sent before loading a count; the probe's delay of 0255h arrives in AX (5E07, 2.04.07 loaded BX) and
+    so is loaded as 04AAh (mode 3 counts by 2). The model has no monitor on the DDC lines: BX = 0000h."""
+    if not c.ours:
+        raise Skip('p19 DDC code (our ROM only)')
+    m = c.machine()
+    pit43, loads, mmio = [], [], []
+    st = {'lo': None}
+
+    def out(uc, port, size, val, ud):
+        if port == 0x43:
+            pit43.append(val & 0xFF)
+            st['lo'] = None
+        elif port == 0x42:
+            if st['lo'] is None:
+                st['lo'] = val & 0xFF
+            else:
+                loads.append(st['lo'] | (val & 0xFF) << 8)
+                st['lo'] = None
+
+    def acc(uc, kind, addr, size, val, ud):
+        mmio.append(bool(uc.reg_read(UC_X86_REG_EFLAGS) & 0x200))
+    h1 = m.mu.hook_add(UC_HOOK_INSN, out, None, 1, 0, UC_X86_INS_OUT)
+    h2 = m.mu.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, acc, None, 0xAFF20, 0xAFF20)
+    m.mu.ctl_remove_cache(0xC0000, 0xC8000)
+    r = m.int10(0x4F15, bx=0x0000)
+    m.mu.hook_del(h1)
+    m.mu.hook_del(h2)
+    check(r['ax'] == 0x004F, '4F15 BL=00h returned AX=%04X' % r['ax'])
+    check(mmio, 'no access to the serial port register A000:FF20h')
+    check(not any(mmio), '%d of %d serial port accesses with interrupts on' % (sum(mmio), len(mmio)))
+    check(0x86 not in pit43, 'PIT channel 2 latch command 86h written (the 2.04.07 delay)')
+    check(0xB6 in pit43, 'PIT channel 2 never set with B6h')
+    check(0x04AA in loads, 'the probe delay 0255h not loaded as 04AAh (loads: %s)'
+          % ' '.join('%04X' % x for x in loads[:8]))
+    return '%d serial port accesses, %d PIT loads, BX=%04X' % (len(mmio), len(loads), r['bx'])
 
 
 def t_engine_init(c):
@@ -1473,7 +1530,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
-         ('v2_writes', t_v2_writes), ('engine_init', t_engine_init)]
+         ('v2_writes', t_v2_writes), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
@@ -1491,7 +1548,7 @@ TAGS = {
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
-    'v2_writes': 's3 emu', 'engine_init': 's3 emu',
+    'v2_writes': 's3 emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
 }
 
 
