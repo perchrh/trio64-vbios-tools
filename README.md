@@ -606,8 +606,10 @@ with this ROM's (2.04.07) on 30 October 2026, every BL 00h-1Fh with BH 00h-07h i
   nothing.
 - BL=03h-05h of the Trio3D/2X BIOS work on that chip's own registers and do not apply here.
 
-None of them is ported: they bring nothing for this card, and a driver or utility may check the query's
-version and expect the 2.04.07 behaviour.
+None of them is ported: they bring nothing for this card. Windows compatibility also argues for
+leaving 4F14h as it is: the Windows 9x S3 driver and S3's utilities were written against these BIOSes,
+and a driver or utility may check the query's version (0010h) and expect the 2.04.07 behaviour, so a
+changed version or added subfunctions could break them for no gain.
 
 ### Kept outside the ROM
 
