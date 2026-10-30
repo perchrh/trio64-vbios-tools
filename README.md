@@ -648,6 +648,14 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   (5F4Eh) with `mov bx,000Ah`, but the delay takes its count in AX; AX holds the CR88 index and value
   there (4088h with CR88 = 00h before, as on the card: 13.8 ms) instead of 0Ah (8 us). 2.04.11 has the
   same mix-up. Fix it (AX = 000Ah) and test the result on the card.
+- Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
+  13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
+  does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3
+  (banking with enhanced mapping), which mode 13h does not set, so chained 320x200x256 games (for
+  example Duke Nukem 3D in its 320x200 VGA mode) write through the slower chain-4 path. Not a ROM
+  default: Mode X/Mode Y games set mode 13h and then switch to unchained planar access, which the
+  linear window bypasses (S3 Speed Up warns that DOOM breaks), and a BIOS cannot know which program
+  will do that. As an opt-in TSR in the S3ALIAS style; gain not measured.
 - Clear video memory with the Trio64V2 graphics engine at VESA mode sets (idea from the Trio3D BIOS,
   which fills video memory with its 2D engine at POST, and the Phoenix Trio64 BIOS 1.4, which clears
   with the engine): could cut the 2 MB clear of about 39 ms to a few ms. Needs most of the free bytes,
