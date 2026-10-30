@@ -14,14 +14,14 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p17), and the ROM under test carries
+                   the level rompatch/s3patch.py builds (2.04.07-p18), and the ROM under test carries
                    that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
                    half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
-                   across 4F02), the booster (p16: off after a banked 4F02, CR59/CR5A at the PCI base;
-                   on after the first 4F05 set window, and after the window function by far call; p17:
-                   off under Windows enhanced mode, INT 2Fh AX=1600h asked once per mode set), the
+                   across 4F02), the booster (p18: on after a banked 4F02, real base in CR6D; p16: on
+                   after the window function by far call in AH=00 mode 59h; p17: off under Windows
+                   enhanced mode, INT 2Fh AX=1600h asked once per mode set), the
                    fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port accesses once the
                    booster is on), the window function by far call, EAX/ECX kept across the 32-bit VGA
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
@@ -75,8 +75,8 @@ Tests
                    and video state as with clean registers and keep the upper halves; every call
                    returns with IF=0 and no timer tick; the driver sequence 4F00, 4F01 for every mode,
                    4F02, 4F08 to 8 bits, 4F09 palette, back to mode 03h (6-bit DAC, EGA palette, the
-                   IBM registers); the driver's banked 4F02 calls (bit 15, CX = lines, DX = 3D4h, from
-                   VGALOG) leave CR59/CR5A at the PCI base, where the driver turns its linear window on;
+                   IBM registers); under Windows (INT 2Fh AX=1600h answering 04h) the driver's banked
+                   4F02 calls (bit 15, CX = lines, DX = 3D4h, from VGALOG) leave CR59/CR5A at the PCI base, where the driver turns its linear window on;
                    AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
   v2_writes        (emulator only, Trio64V2 model) the datasheet rules about writes (docs/chip-rules.md):
@@ -309,7 +309,7 @@ def romver():
 
 
 def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p17)."""
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p18)."""
     t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
@@ -334,6 +334,7 @@ def t_rom_patches(c):
     if len(rom) >= 0x10000:
         chk(rom[0x8000:0x10000] == bytes(0x8000), 'the upper 32 KB is not all zeros (since p15)')
     cr = m.r['crtc']
+    base = (cr.get(0x59, 0), cr.get(0x5A, 0))           # the PCI base the BIOS found at POST
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
     m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # p11 clears with 32-bit stores: EAX bits 31-16 kept
     m.int10(0x4F02, bx=0x0101)
@@ -341,18 +342,19 @@ def t_rom_patches(c):
     chk(eaxh == 0x1234, 'mode set: EAX bits 31-16 = %04X after 4F02 101h, the caller had 1234' % eaxh)
     chk(m.mem(0xA0000, 0x10000).count(0) == 0x10000, 'mode set clear: bank 0 at A0000 not zeroed by 4F02 101h')
     chk(cr.get(0x6A, 0) == 0, 'mode set clear: CR6A = %02X afterwards, expected bank 0' % cr.get(0x6A, 0))
-    # p16: the banked 4F02 leaves the linear registers as the reference (the S3 Windows 9x driver turns
-    # its linear window on at CR59/CR5A); the first bank switch turns the booster on
-    base = (cr.get(0x59, 0), cr.get(0x5A, 0))
-    chk(cr.get(0x58, 0) & 0x10 == 0 and base[0] and not base[1],
-        'booster on after 4F02 101h: CR58 %02X, CR59/5A %02X%02X' % (cr.get(0x58, 0), base[0], base[1]))
+    # p18: without Windows the banked 4F02 turns the booster on (64 KB linear window at A0000, the real
+    # base kept in CR6D), so every bank switch path gets it; it stays on through 4F05
+    chk(base[0] and not base[1] and cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A)
+        and cr.get(0x6D) == base[0], 'booster not on after 4F02 101h: CR58 %02X, CR59/5A %02X%02X, CR6D %02X'
+        % (cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0)))
     m.int10(0x4F05, bx=0, dx=0)
     chk(cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A) and cr.get(0x6D) == base[0],
         'booster not on after 4F05 in 101h: CR58 %02X, CR59/5A %02X%02X, CR6D %02X'
         % (cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0)))
-    # p17: under Windows enhanced mode (INT 2Fh AX=1600h returns AL=04h) the booster stays off and
-    # CR6D = 01h remembers it, so INT 2Fh is asked once per mode set; the next mode set clears the
-    # mark and without Windows the booster goes on again
+    # p17/p18: under Windows enhanced mode (INT 2Fh AX=1600h returns AL=04h) the booster stays off after
+    # 4F02 (CR58-5A as the reference, for the S3 Windows 9x driver) and after 4F05, and CR6D = 01h
+    # remembers it, so INT 2Fh is asked once per mode set; the next mode set clears the mark and
+    # without Windows the booster goes on again
     m.mu.mem_write(0x7E00, bytes.fromhex('b0042efe060800cf00'))  # mov al,4 / inc byte [cs:8] / iret
     ivt2f = m.mem(0x2F * 4, 4)
     m.mu.mem_write(0x2F * 4, struct.pack('<HH', 0, 0x07E0))
@@ -366,10 +368,10 @@ def t_rom_patches(c):
     chk(asked == 1, 'Windows: INT 2Fh asked %d times in one mode, expected once' % asked)
     m.mu.mem_write(0x2F * 4, ivt2f)
     m.int10(0x4F02, bx=0x0101)
-    chk(cr.get(0x6D) == 0, 'the mode set did not clear the CR6D mark: %02X' % cr.get(0x6D, 0))
-    m.int10(0x4F05, bx=0, dx=0)
     chk(cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x6D) == base[0],
-        'no booster after Windows ended: CR58 %02X, CR6D %02X' % (cr.get(0x58, 0), cr.get(0x6D, 0)))
+        'no booster after Windows ended (the CR6D mark not cleared?): CR58 %02X, CR6D %02X'
+        % (cr.get(0x58, 0), cr.get(0x6D, 0)))
+    m.int10(0x4F05, bx=0, dx=0)
     # p12: the fast 4F05 path from the INT 10h entry runs without the dispatcher, which saves the 32-bit
     # registers; it must keep them itself and use few port accesses
     io = [0]
@@ -394,9 +396,10 @@ def t_rom_patches(c):
     m.mu.reg_write(UC_X86_REG_SP, 0x7000)
     m.mu.emu_start(0x7D10, 0x7D15, count=100000)
     chk(cr.get(0x6A) == 6, 'window function (far call) BX=0 DX=6: CR6A = %02X' % cr.get(0x6A, 0))
-    # p16: the window function turns the booster on too (a program that never calls INT 10h 4F05)
-    m.int10(0x4F02, bx=0x0101)
-    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after a second 4F02 101h: CR58 %02X' % cr.get(0x58, 0))
+    # p16: the window function turns the booster on too; it matters for the S3 modes set with INT 10h
+    # AH=00 (59h = 101h), which do not pass the end of 4F02 (a program that never calls 4F05)
+    m.int10(0x0059)
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after AH=00 59h: CR58 %02X' % cr.get(0x58, 0))
     m.mu.reg_write(UC_X86_REG_BX, 0)
     m.mu.reg_write(UC_X86_REG_DX, 2)
     m.mu.reg_write(UC_X86_REG_CS, 0)
@@ -1318,6 +1321,8 @@ def t_windows(c):
     # garbage on the desktop)
     m2 = c.machine()
     cr2 = m2.r['crtc']
+    m2.mu.mem_write(0x7E00, bytes.fromhex('b004cf'))      # INT 2Fh AX=1600h: Windows 98 (enhanced mode)
+    m2.mu.mem_write(0x2F * 4, struct.pack('<HH', 0, 0x07E0))
     base = (cr2.get(0x59, 0), cr2.get(0x5A, 0))
     for v, lines in ((0x101, 480), (0x103, 600), (0x111, 480), (0x114, 600), (0x105, 768), (0x112, 480)):
         if v not in modes:
