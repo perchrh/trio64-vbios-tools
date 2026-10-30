@@ -202,8 +202,8 @@ runs every emulator test while recording which ROM bytes execute, then `emu/code
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
 direct jump, call and word jump table, and reports the share the tests executed. Data (tables,
 fonts, strings, padding) and code nothing reaches (the routines our patches jump around) do not
-count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p20 is at
-86.5 % (15129 of 17481 bytes). The parts still not run include the display switch (AH=12h BL=35h),
+count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p21 is at
+86.6 % (15135 of 17487 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
 (`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run.
 
