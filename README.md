@@ -222,7 +222,7 @@ result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted
 compared with the original code first (the replaced routines in full), and the result is checked
 before it is written: the lower half sums to 00 and declares 32 KB, the upper half is zeros, every
 DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of the build
-that passed every emulator test (f563989b...).
+that passed every emulator test (5d8bb3e0...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP

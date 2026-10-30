@@ -52,12 +52,13 @@ import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 LEVEL = 'p19'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = 'f563989baeb75a95d3d121e6db09e58097977a00fd50e5557dffd4c5e1ee3a56'  # 2.04.07-p18 (NASM 3.02), emulator tests passed
+RESULT_SHA = '5d8bb3e079286edd5ee141979f63dc543a113182c11f7e2b960a132a1853ff37'  # 2.04.07-p19 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
 BLOCK_SHA = {
-    'wincheck.asm': 'd885136ca6b113c3', 'hooks.asm': '9dfbf5093eb2c86f',
+    'wincheck.asm': 'd885136ca6b113c3', 'p19.asm': 'b778a484de923cb0',
+    'ddcwait.asm': '7a7c2786c4eadb62', 'hooks.asm': '9dfbf5093eb2c86f',
     'p12ext.asm': '3539b720a090ae04', 'crtc240.asm': 'c82f2ec50dacb61d',
     'vbe4f06.asm': 'bdd213f1622291bb', 'clear32.asm': '28a181904074b700',
     'p13df.asm': '7e785b4ba99b8749', 'p13fill.asm': 'a81b8264916f413c',
