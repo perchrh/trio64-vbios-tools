@@ -777,11 +777,16 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
     the data book; an INFO line shows the clock /M set; the debug log records both (raw SR10/SR11).
     The VRAM test of S3COMPAT then runs at the /M clock, which is the point of the option.
   - The ROM's own clock for a card is still set with `make rom MCLK=...`; /M is for testing.
-  - Until then: S3CTL, a DOS tool for S3 ViRGE and Trio chips (https://skwrus.duckdns.org/RetroLoom/S3ctl),
-    sets the memory clock in MHz until reboot, according to its project page (not checked here: the
-    page was unreachable on 30 October 2026, so its chip list, range and PLL loading are unknown). Run
-    it before S3TEST or S3COMPAT; their MCLK lines then show S3CTL's clock, not the ROM's, so record
-    both with `S3REGS before` and `S3REGS after` around it. It cannot restore the ROM's clock: reboot.
+  - Until then: S3CTL (https://github.com/RetroLoom/S3ctl, GPL-3.0, a DOS tool for S3 ViRGE and Trio
+    chips) sets the memory clock until reboot: `S3CTL --chip=trio mclk 50`, 30-60 MHz. From its source
+    (30 October 2026): it searches M 0-127, N 0-31 and R 1/2/4/8 with the VCO in 135-270 MHz, writes
+    SR11 = M and SR10 = N/R, and loads with SR15 bit 0 set and cleared (T64-PLL-1). It tries N = 0
+    too, which the data books forbid (PLL-2), and for 50 MHz the equal-error candidates start at
+    N = 0; if it picks that, the MCLK lines of S3TEST and S3COMPAT FAIL because of S3CTL, not the ROM.
+    It does not know the Trio64V2 (PCI 8901h, CR2D = 89h) and reports a ViRGE there; its clock code is
+    the same for every family, but give `--chip=trio` on the V2. It cannot restore the ROM's clock:
+    reboot. Run `S3REGS before`, then S3CTL, then `S3REGS after` (the SR10/SR11 values on record),
+    then S3TEST and S3COMPAT without /Q (its VRAM test at that clock).
 - Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
   13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
   does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3
