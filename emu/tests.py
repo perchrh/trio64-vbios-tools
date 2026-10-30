@@ -14,9 +14,9 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p20), and the ROM under test carries
-                   that sign-on; an older ROM fails here. Our Trio64V+ ROM: the level
-                   rompatch/vplus/s3vpatch.py builds (1.03-08-p1)
+                   the level rompatch/s3patch.py builds (2.04.07-p21), and the ROM under test carries
+                   that sign-on; an older ROM fails here. VROMVER (S3TEST on a Trio64V+) is the level
+                   rompatch/vplus/s3vpatch.py builds (1.03-08-p1), and our Trio64V+ ROM carries it
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
                    half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
@@ -26,7 +26,7 @@ Tests
                    fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port accesses once the
                    booster is on), the window function by far call, EAX/ECX kept across the 32-bit VGA
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
-                   AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
+                   the mode 13h scroll (p21), AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
   vplus_patches    (our Trio64V+ ROM 1.03-08-pN, rompatch/vplus, with --chip vplus) the ROM file (sign-on of
                    the level s3vpatch.py builds, checksum, 32 KB), the mode set clear (bank 0 zeroed, EAX
@@ -111,7 +111,9 @@ Tests
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
   --chip v2|vplus|uvplus|trio64|trio32   the chip of the model (default v2, the card)
-  --vram 2|4       the video memory the CR36 strapping reports (2 MB, the card; 4 MB, the chip maximum)
+  --vram 1|2|4     the video memory CR36 reports (2 MB, the card; 4 MB, the chip maximum; 1 MB, a Trio64V+ or
+                   Trio64 card before an upgrade). The BIOS finds the size at POST (it writes CR36 bits 7-5
+                   after testing the last 64 KB of 4 and 2 MB); the model answers with the size given here
   -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
@@ -252,10 +254,13 @@ def check_dbg(dbg, name):
 # ---------------------------------------------------------------- tests
 def t_version(c):
     """The tests are for the newest ROM: S3TEST's expected version (common/version.inc) is the level
-    s3patch.py builds, and the ROM under test carries that sign-on. Our Trio64V+ ROM: its sign-on is the
-    level rompatch/vplus/s3vpatch.py builds."""
+    s3patch.py builds, and the ROM under test carries that sign-on; VROMVER is the level
+    rompatch/vplus/s3vpatch.py builds. Our Trio64V+ ROM: its sign-on is that level."""
+    vwant = latest('vplus/s3vpatch.py')
+    check(romver('VROMVER') == vwant, 'common/version.inc VROMVER is %s, but rompatch/vplus/s3vpatch.py builds %s: '
+          'update VROMVER' % (romver('VROMVER'), vwant))
     if c.vours:
-        want = latest('vplus/s3vpatch.py')
+        want = vwant
         m = re.search(rb'Version ([0-9.]+-\d\d-p\d+)', c.rom[:0x100])
         got = m.group(1).decode() if m else '(no sign-on)'
         check(got == want, 'the ROM is %s, the tests are for the newest Trio64V+ ROM %s (make vrom OUT=...)' % (got, want))
@@ -333,14 +338,15 @@ def t_vga_palettes(c):
 
 
 # ---------------------------------------------------------------- the patches on top of the stock ROM
-def romver():
-    """The ROM version S3TEST is built to expect (common/version.inc)."""
+def romver(name='ROMVER'):
+    """The ROM version S3TEST is built to expect (common/version.inc): ROMVER on a Trio64V2, VROMVER on a
+    Trio64V+."""
     t = open(os.path.join(SRC, 'common', 'version.inc')).read()
-    return re.search(r"%define ROMVER '([^']*)'", t).group(1)
+    return re.search(r"%%define %s '([^']*)'" % name, t).group(1)
 
 
 def latest(patcher='s3patch.py'):
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p20), or
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p21), or
     with 'vplus/s3vpatch.py' the Trio64V+ level (1.03-08-p1)."""
     t = open(os.path.join(SRC, 'rompatch', patcher)).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
@@ -448,13 +454,17 @@ def t_rom_patches(c):
         high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX)]
         chk(high == [0x9ABC, 0x9ABC], 'AX=%04X: EAX/ECX bits 31-16 changed: %s' % (ax, ['%04X' % h for h in high]))
     # p13: the text and planar scroll fills, the window moves and AH=09h use EAX for 32-bit stores; AH=0Eh
-    # reaches the scroll from its fast path without the dispatcher, so the helpers must keep EAX
+    # reaches the scroll from its fast path without the dispatcher, so the helpers must keep EAX; p21:
+    # the mode 13h scroll (p12) too
+    last = {0x03: 0x184F, 0x12: 0x1D4F, 0x13: 0x1827, 0x0D: 0x1827}
     for mode, calls in ((0x03, ((0x0601, 0x1F00, 0, 0x184F), (0x0702, 0x0700, 0x0305, 0x0A15),
                                 (0x0941, 0x001E, 5, 0))),
                         (0x12, ((0x0601, 0x0E00, 0, 0x1D4F), (0x0701, 0x0300, 0x0305, 0x0A16))),
+                        (0x13, ((0x0601, 0x0100, 0, 0x1827), (0x0602, 0x0100, 0x0204, 0x1420),
+                                (0x0702, 0x0100, 0x0204, 0x1420))),
                         (0x0D, ((0x0703, 0x0600, 0x0102, 0x0A10),))):
         m.int10(mode)
-        for ax, bx, cx, dx in calls + ((0x0200, 0, 0, 0x184F if mode != 0x12 else 0x1D4F), (0x0E0A, 7, 0, 0)):
+        for ax, bx, cx, dx in calls + ((0x0200, 0, 0, last[mode]), (0x0E0A, 7, 0, 0)):
             for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
                 m.mu.reg_write(reg, 0x9ABC0000)
             m.int10(ax, bx=bx, cx=cx, dx=dx)
@@ -590,7 +600,7 @@ def t_vplus_patches(c):
                                 (0x0701, 0x0100, 0, 0x1827), (0x0702, 0x0100, 0x0204, 0x1420))),
                         (0x0D, ((0x0703, 0x0600, 0x0102, 0x0A10),))):
         m.int10(mode)
-        for ax, bx, cx, dx in calls + ((0x0200, 0, 0, 0x184F if mode != 0x12 else 0x1D4F), (0x0E0A, 7, 0, 0)):
+        for ax, bx, cx, dx in calls + ((0x0200, 0, 0, {0x12: 0x1D4F, 0x03: 0x184F}.get(mode, 0x1827)), (0x0E0A, 7, 0, 0)):
             for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
                 m.mu.reg_write(reg, 0x9ABC0000)
             m.int10(ax, bx=bx, cx=cx, dx=dx)
@@ -660,7 +670,8 @@ def t_s3test(c):
     for cat, l in tl:
         m = re.match(r'Mode ([0-9A-F]{4}) ', l)
         check(not m or cat == mode_cat(int(m.group(1), 16) & 0xBFFF), 'S3TEST: %s line in category %s' % (l[:9], cat))
-    check(len(results) >= 30, 'only %d result lines' % len(results))
+    want = 30 if c.ours else 24             # the Trio64V+ set has no LFB, 4F06 BL=3, 512x384 and pedestal lines
+    check(len(results) >= want, 'only %d result lines' % len(results))
     bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     if v:
@@ -1743,7 +1754,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 TAGS = {
     'version': 'rom patch vplus emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch card vram', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch vplus card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
@@ -1762,9 +1773,10 @@ DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 9
 # "Left as in 1.03-08"); the unpatched 1.03-08 fails the same lines. A test of that ROM whose failure lines
 # all match passes with a note; any other line still fails it.
 VPLUS_BASE = {
-    # 2 MB: 1.03-08 sets 1024x768x16M and 1280x1024x32K/64K, which need more than 2 MB (the state then
-    # differs for the later refused calls too)
-    'errors': (r'4F02 BX=011[89A] accepted', r'4F02 BX=0(11[89A]|1FF|17F|200) \(refused\) changed the video state'),
+    # 1.03-08 sets the modes that need more memory than the card has (2 MB: 1024x768x16M, 1280x1024x32K/64K;
+    # 1 MB also 107h, 112h, 115h-117h, 120h); the state then differs for the later refused calls too
+    'errors': (r'4F02 BX=01(07|12|1[5-9A]|20) accepted',
+               r'4F02 BX=0(1(07|12|1[5-9A]|20)|1FF|17F|200) \(refused\) changed the video state'),
     # 4F06 uses 32-bit registers and the 1.03-08 dispatcher saves the 16-bit ones only
     'windows': (r'4F06 set: upper halves changed: ',),
     # the DCLK VCO at 101 MHz in 320x200 15/16/32 bpp: the Trio64V+ post divider cannot reach 12.6 MHz with
@@ -1870,9 +1882,10 @@ def main():
     ap.add_argument('--chip', choices=('v2', 'vplus', 'uvplus', 'trio64', 'trio32'), default='v2',
                     help='the chip the model is (vgaemu.CHIPS): v2 = Trio64V2/DX (the card, default), vplus = '
                          'Trio64V+, uvplus = Trio64UV+, trio64 = Trio64, trio32 = Trio32; ID registers, PCI device and the PLL post divider follow it')
-    ap.add_argument('--vram', type=int, choices=(2, 4), default=2,
-                    help='video memory the CR36 strapping reports: 2 MB (the card, default) or 4 MB (the '
-                         '86C775 maximum; the model still has one 64 KB window, no banked or linear memory)')
+    ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
+                    help='video memory CR36 bits 7-5 report after POST: 2 MB (the card, default), 4 MB (the '
+                         'maximum of every Trio64-family chip but the Trio32) or 1 MB (a Trio64V+ or Trio64 '
+                         'card before an upgrade); the model still has one 64 KB window, no banked or linear memory')
     a = ap.parse_args()
     Machine.vram = a.vram
     Machine.chip = a.chip

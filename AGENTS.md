@@ -7,7 +7,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 - Hardware: Gainward S3 Trio64V2/DX (86C775), 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901.
 - The ROM is a 64 KB image. The lower 32 KB is the S3 reference BIOS 2.04.07 with our patches
-  (currently -p20); the upper 32 KB is zeros (from p15; up to p14 it was the card's Trio64V+ BIOS
+  (currently -p21); the upper 32 KB is zeros (from p15; up to p14 it was the card's Trio64V+ BIOS
   1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
 - The patched ROM images are kept outside this repository. `rompatch/` holds the ROM code (nasm) and
   `s3patch.py`, which builds the current level from the S3 reference 2.04.07 alone
@@ -29,8 +29,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Stay compatible with the standard VGA modes (00h-13h) and the VESA modes. Never change what a
   standard mode returns to a program; use standard VESA/VGA timings; keep 70 Hz for 320x200 and
   640x400 text/graphics.
-- The RAM must stay treated as 1-cycle EDO (CR36 bits 3-2 = 00). MCLK is 59.96 MHz, the 1-cycle EDO
-  maximum. Do not raise it.
+- The RAM must stay treated as 1-cycle EDO (CR36 bits 3-2 = 00): the ROM never writes those bits, the
+  card's strapping decides. The default build's MCLK is 59.96 MHz, the 1-cycle EDO maximum; do not
+  raise it. Other clocks come only from the build option (`MCLK=`, `MEMTYPE=`), which sets one entry of
+  the BIOS's MCLK table within the data book limit for that memory type (README "MCLK build option").
 - Blank pedestal off (SR1A bit 5 = 0): the deepest black is wanted.
 - Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in the lower
   32 KB; the upper 32 KB is zeros.
@@ -60,8 +62,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   BIOSes. Chip limits (VCO range, DCLK maxima, R bits) come from `common/chip.inc`, after the chip is
   found; never write the Trio64V2 values into a test. A check whose expectation is a choice of our
   BIOS rather than a standard (default refresh rates, the mode list, the S3 mode numbers, VBE 2.0
-  functions on a VBE 1.x BIOS) is WARN or INFO on another BIOS. The emulator tests tagged `patch`
-  are skipped for a ROM without the `2.04.07-pN` sign-on; `--chip` selects the chip model.
+  functions on a VBE 1.x BIOS) is WARN or INFO on another BIOS. S3TEST picks its test set by the chip
+  (Trio64V2: our 2.04.07 ROM; Trio64V+: our 1.03-08 ROM; others: only the tests that need no ROM of
+  ours). The emulator tests tagged `patch` are skipped for a ROM without the `2.04.07-pN` sign-on,
+  except those also tagged `vplus` on our Trio64V+ ROM; `--chip` selects the chip model.
 - Runs are non-interactive (to look at a mode, use VSHOW). Output must be redirectable to a
   file; anything meant for the person at the screen goes to stderr.
 - Write and commit the log (INT 21h AH=40h, then AH=68h) before each test starts, so that after a
@@ -111,13 +115,14 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   the final word. Compare with the previous log: the pass, fail and warn counts and every changed line
   should be explained.
 - The tests are for the newest ROM: a new level changes `LEVEL` in rompatch/s3patch.py and `ROMVER` in
-  common/version.inc together; the emulator test `version` fails when they differ or when the ROM
-  under test is older.
+  common/version.inc together (for the Trio64V+ ROM `LEVEL` in rompatch/vplus/s3vpatch.py and
+  `VROMVER`); the emulator test `version` fails when they differ or when the ROM under test is older.
 - Memory configurations: the ROM supports 2 MB (the test card) and 4 MB (the 86C775 maximum, CR36
-  bits 7-5 = 000b) of video memory. `make emu-test ROM=...` runs every test with 2 MB and the ones
-  tagged `vram` (their result depends on the memory size) again with 4 MB; a new test that reads the
-  memory size or the VESA mode list gets the tag. Expected values follow the memory size, never a
-  fixed 2 MB.
+  bits 7-5 = 000b) of video memory; the Trio64V+ ROM also 1 MB. The BIOS sizes the memory at every
+  POST, so there is no build option for it. `make emu-test ROM=...` runs every test with 2 MB and the
+  ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=vplus`
+  also with 1 MB; a new test that reads the memory size or the VESA mode list gets the tag. Expected
+  values follow the memory size, never a fixed 2 MB.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
   every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive
   descent and does not count data, padding or code nothing reaches). A new patch or a new BIOS

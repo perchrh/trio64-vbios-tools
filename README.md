@@ -12,7 +12,7 @@ is for the Windows 9x desktop.
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
-| S3TEST.COM | Regression test for the ROM patches (signature, clocks, EDO, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings) | `S3TEST > S3TEST.LOG` |
+| S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip: our Trio64V2 ROM, our Trio64V+ ROM, or on other chips only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them | `VGALOG` (or `VGALOG /M`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
@@ -44,8 +44,8 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P20.BIN NASM=nasm/nasm-3.02/nasm
-    make rom OUT=S3V2P20.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P21.BIN NASM=nasm/nasm-3.02/nasm
+    make rom OUT=S3V2P21.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -67,7 +67,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P20.BIN
+    make emu-test ROM=path/to/S3V2P21.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -124,6 +124,14 @@ standards or from the registers the BIOS set, not from our BIOS:
 Our Trio64V+ ROM (`1.03-08-pN` sign-on, section "Trio64V+ ROM") is in between: of the `patch` tests it
 runs those also tagged `vplus` (version, stores, and `vplus_patches` for its own patches), and the
 failures it keeps from 1.03-08 (below) pass with a note (`VPLUS_BASE` in `emu/tests.py`).
+
+S3TEST picks its test set by the chip it finds (`common/chip.inc`), before the first test. On a
+Trio64V2 it checks our 2.04.07 ROM (ROMVER), on a Trio64V+ our 1.03-08 ROM (VROMVER: the booster
+without the CR6D base, no pedestal, refresh default, LFB, 4F06 BL=3 or 512x384 lines, its own mode
+list), and on any other chip, where there is no ROM of ours, only the tests that need none (checksum,
+chip, MCLK against the data book, memory type, VGA clear, font load, scrolls, AH=09h, timings); the
+version found is then INFO. The MCLK line compares the clock with the data book maximum for the chip
+and the strapped memory type, so a ROM built with another MCLK passes as long as it is within it.
 
 S3COMPAT follows the BIOS too: on a VBE 1.x BIOS the VBE 2.0 functions (4F06 BL=2/3, 4F07 BL=80h,
 4F09, 4F0A) are INFO "not in VBE 1.x", a BIOS without the S3 OEM functions 4F14h gets INFO, and on a
@@ -188,7 +196,7 @@ category column: compare from the sixth column.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P20.BIN
+    make coverage ROM=path/to/S3V2P21.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -201,7 +209,7 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare ROM=S3V2P20.BIN
+    make ref-compare ROM=S3V2P21.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -215,10 +223,10 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(level p20) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(level p21) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P20.BIN
-    make rom OUT=S3V2P20.BIN
+    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P21.BIN
+    make rom OUT=S3V2P21.BIN
 
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
@@ -227,24 +235,63 @@ result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted
 compared with the original code first (the replaced routines in full), and the result is checked
 before it is written: the lower half sums to 00 and declares 32 KB, the upper half is zeros, every
 DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of the build
-that passed every emulator test (889d6658...).
+that passed every emulator test (515bf9fe...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
 MOVSD/STOSD, 3.01 and 3.02 after it; such an image works the same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom OUT=S3V2P20.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom OUT=S3V2P21.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P20.BIN]
-    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P20.BIN]
+    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P21.BIN]
+    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P21.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
 N 1-31 and a defined R code (pllcodes), the free bytes still 00, a 64 KB
 input giving the same result whatever its upper half holds, `--no-vco-fix`, and the inputs that must
 be refused (already patched, three patch sites changed, a wrong checksum, and with
-`--stock` the card's stock 2.04.11).
+`--stock` the card's stock 2.04.11), and the MCLK build option below (mclk).
+
+### MCLK build option
+
+    make rom OUT=S3V2P21-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make vrom OUT=S3VPP1-55.BIN MCLK=55 [MEMTYPE=edo1]
+
+Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
+for (CR36 bits 3-2, set by resistors on the board and kept by the BIOS). `MCLK` sets the entry of
+`MEMTYPE` to the nearest MCLK PLL setting (M 1-127, N 1-31, R 0-3, VCO 135-270 MHz) at or below the
+data book limit; the other entries stay. The build prints the frequency it got (50 gives 50.11 MHz, 55
+gives 55.04 MHz, 60 gives 59.96 MHz).
+
+| Chip, ROM | MEMTYPE | Entry | Default | Data book maximum |
+| --- | --- | --- | --- | --- |
+| Trio64V2, 2.04.07-p21 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
+| | fpm (fast page and 2-cycle EDO) | C9h | 59.96 MHz | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
+| | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
+| Trio64V+, 1.03-08-p1 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
+| | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
+
+The Trio64V+ feature list names 50 MHz for EDO and 1-cycle EDO; the timing table allows 60 MHz, which
+S3COMPAT checks (MEM-1), and 1.03-08 itself runs 52.79 MHz. Below 40 MHz the option refuses (the data
+books give no minimum; it guards against typing errors). Without `MCLK` the build is the tested one and
+its SHA-256 is checked; with it the code is the same and only the MCLK entry and the checksum differ,
+so the clock is judged on the card: S3TEST's MCLK line and S3COMPAT's POST line compare it with the
+data book limit for the strapped type, and S3COMPAT's VRAM test (without /Q) shows whether the memory
+keeps up. Which clock a given card's memory runs at is not a data book question: start at the default
+and go down if the VRAM test shows errors.
+
+### Video memory sizes
+
+The data books allow 1, 2 or 4 MB on the Trio64, Trio64V+ and Trio64V2 (Trio32: 0.5 to 2 MB; on the
+Trio64 4 MB needs fast page memory, on the Trio64V2/GX SGRAM is 1 or 2 MB). No build option is needed:
+both BIOSes find the size at every POST. They write 4 MB into CR36 bits 7-5, test the last 64 KB bank,
+then 2 MB, and write the size that holds (2.04.07 at 19C0h, 1.03-08 at 0E80h); the data books say the
+same ("the S3 BIOS determines this value directly and writes it to CR36_7-5 after reset"). So a card
+upgraded from 1 to 2 MB, or from 2 to 4 MB where the board has the sockets, works with the same ROM.
+The emulator answers with a fixed size (`--vram`): `make emu-test` runs the tests whose result depends on
+the size with 2 and 4 MB, and on the Trio64V+ also with 1 MB.
 
 ## Trio64V+ ROM
 
@@ -305,7 +352,9 @@ same with or without /V. The debug file contains:
   first memory mismatches with address, expected and read value
 
 The file is committed before every mode set and VBE call (except 4F05), so after a freeze its last
-lines show the call that hung. Expect a debug file of 1-2 MB for S3COMPAT and a longer run.
+lines show the call that hung. The INT 10h hook passes the 32-bit registers through unchanged (until
+30 October 2026 it handed back the timer reading in EAX bits 31-16, which made S3TEST's p21 check fail
+under /V only). Expect a debug file of 1-2 MB for S3COMPAT and a longer run.
 The line format is described at the top of `common/vdebug.inc`.
 
 ## Windows 9x driver test
@@ -517,6 +566,12 @@ Fixes
   interpolation for a video window (section 3.2.2) may leave CR23 set; 2.04.07 wrote only CR26.
   2.04.11 clears CR23 first when the mode in the BIOS data area is above 13h; the ROM does it on every
   mode set (CR23 is reserved, 00h by default).
+- **Mode 13h scroll keeps EAX** (p21): the 32-bit mode 13h scroll (p12, `p12ext.asm` scr13) used EAX
+  bits 31-16 without saving them. AH=06h/07h pass the dispatcher, which saves the 32-bit registers,
+  but AH=0Eh takes its fast path at the INT 10h entry, so a line feed on the last row in mode 13h
+  returned EAX bits 31-16 = 0000h; the reference keeps them. Found 30 October 2026 while backporting
+  to the Trio64V+ (whose dispatcher saves only 16-bit registers). S3TEST's mode 13h scroll line checks
+  it (fail bit 10h), the emulator test rom_patches too.
 - The card's POST flags (0xD1 = 05h) and CR80 POST value (00h).
 
 ### Byte-level changes
@@ -524,9 +579,9 @@ Fixes
 Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
 zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
-| Offset | 2.04.07 | p20 | Purpose |
+| Offset | 2.04.07 | p21 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p20 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p21 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |
@@ -589,7 +644,7 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x5F4E-5FBA | old DDC delay | code | `ddcwait.asm`: ddcwait 5F4E, the 2.04.11 delay (5FB4-5FBA: nop) |
 | 0x7C8B-7CC7 | 00 | code | `wincheck.asm`: wcheck 7C8B (no booster under Windows enhanced mode), wclear 7CAF, lfbchk 7CBF. 0x7C8A is not free: it is the high byte of the word count at 0x7C89 that the descender glyph load at 0x3FC7 reads |
 | 0x7CC8-7CD8 | 00 | code | `p19.asm`: cr2326 7CC8, ddcin 7CD1, ddcout 7CD5 |
-| 0x7CFB-7E35 | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, b4f02 7D71, font 7D7A, scr13 7D96 |
+| 0x7CFB-7E3B | 00 | code | `p12ext.asm`: int10x 7CFB (the fast 4F05 path turns the booster on), wsetx 7D67, b4f02 7D71, font 7D7A, scr13 7D96 (keeps EAX since p21) |
 | 0x7E40-7E78 | 00 | tables | `crtc240.asm`: crtc8 7E40, crtc16 7E60 |
 | 0x7E80-7F50 | 00 | code | `hooks.asm`: hook 7E80, bon 7EF3, basefix 7F40 |
 | 0x7F58-7F70 | 00 | code | `p13bfill.asm`: bfill0 7F58, bfill 7F5A |
@@ -708,12 +763,6 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   2.04.11, which has the same DDC code.
 - POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
   (without /Q); no difference to p19 is expected.
-- Mode 13h scroll and EAX (found 30 October 2026 while backporting to the Trio64V+): the 32-bit mode
-  13h scroll (p12, `p12ext.asm` scr13) uses EAX bits 31-16 without saving them. For AH=06h/07h the
-  dispatcher saves the 32-bit registers, but AH=0Eh takes the fast path at the INT 10h entry, so a line
-  feed on the last row in mode 13h returns with EAX bits 31-16 = 0000h (the reference keeps them; the
-  emulator shows it with mode 13h, the cursor on row 24, AX=0E0Ah). The Trio64V+ ROM keeps EAX there
-  (push eax / pop eax in `rompatch/vplus/vext.asm`); the same fix here would be a new level.
 - Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
   13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
   does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3

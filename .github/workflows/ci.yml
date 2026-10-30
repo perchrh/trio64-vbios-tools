@@ -126,6 +126,7 @@ jobs:
             emu/logs4/
             emu/vlogs/
             emu/vlogs4/
+            emu/vlogs1/
             !emu/**/*.BIN
           retention-days: 14
           if-no-files-found: ignore

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p20) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (2.04.07-p21) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P20.BIN [--no-vco-fix] [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN OUT=S3V2P20.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P21.BIN [--no-vco-fix] [--mclk MHZ [--memtype edo1|fpm|sgram]]
+                                [--nasm nasm] [-q]
+    make rom IN=REF2047.BIN OUT=S3V2P21.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -43,7 +44,14 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
   p20    POST passes its delay before the graphics engine reset in AX (14E2): the delay with RAM
          refresh off (CR88 bit 6) is 0Ah PIT clocks (8 us) as S3 meant, not the CR88 word left in AX
          (4088h, 13.8 ms); 2.04.07 and 2.04.11 both load BX there
-  sign-on "2.04.07-p20", checksum byte 7FFF
+  p21    the 32-bit mode 13h scroll (p12ext.asm scr13) keeps EAX: AH=0Eh reaches it without the
+         dispatcher that saves the 32-bit registers, and a line feed on the last row returned EAX bits
+         31-16 = 0000h
+  MCLK   (only with --mclk) the MCLK PLL entry POST uses for --memtype, the memory type the card is
+         strapped for (CR36 bits 3-2): edo1 at most 60 MHz, fpm (fast page and 2-cycle EDO) and sgram at
+         most 66.67 MHz (V2-MEM-1); without it 59.96 MHz for edo1 and fpm, 66.2 MHz for sgram. The code
+         is the tested build either way; the result SHA-256 is checked only without --mclk
+  sign-on "2.04.07-p21", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -52,17 +60,17 @@ with the known reference image the SHA-256 of the build that passed the emulator
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p20'
+LEVEL = 'p21'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = '889d6658c7701f8185d01fb01333bf905e96d07a7d100a19af20b1d6f50173d2'  # 2.04.07-p20 (NASM 3.02), emulator tests passed
+RESULT_SHA = '515bf9fe7f663b695991d6bd08be4ef9c1a3c6088b44ab82bbf43613504baaf4'  # 2.04.07-p21 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
 BLOCK_SHA = {
     'wincheck.asm': 'd885136ca6b113c3', 'p19.asm': 'b778a484de923cb0',
     'ddcwait.asm': '7a7c2786c4eadb62', 'hooks.asm': '9dfbf5093eb2c86f',
-    'p12ext.asm': '3539b720a090ae04', 'crtc240.asm': 'c82f2ec50dacb61d',
+    'p12ext.asm': 'c9aa27eb15778b3a', 'crtc240.asm': 'c82f2ec50dacb61d',
     'vbe4f06.asm': 'bdd213f1622291bb', 'clear32.asm': '28a181904074b700',
     'p13df.asm': '7e785b4ba99b8749', 'p13fill.asm': 'a81b8264916f413c',
     'p13move.asm': 'a9696e8fdb426c67', 'p13bfill.asm': '973ba6c5bf3d0cff',
@@ -314,6 +322,47 @@ def vco_fix(d, log, lo=170.0):
     return n
 
 
+# ------------------------------------------------------------------ MCLK (build option)
+# POST picks the MCLK PLL pair (SR11 = M, then SR10 = N/R) by the memory type the card is strapped for
+# (CR36 bits 3-2, code at 14A5h): 1-cycle EDO C7h, 2-cycle EDO and fast page C9h (bit 3 set), SGRAM
+# CBh (01b, the Trio64V2/GX). --mclk sets the entry of --memtype; the others stay. The limits are the
+# Trio64V2 data book's (V2-MEM-1): 60 MHz for 1-cycle EDO, 66 MHz (15 ns) for fast page and SGRAM; it
+# gives no separate value for 2-cycle EDO, which shares the fast page entry.
+MCLK_ENTRY = {'edo1': 0x00C7, 'fpm': 0x00C9, 'sgram': 0x00CB}
+MCLK_MAX = {'edo1': 60.0, 'fpm': 66.67, 'sgram': 66.67}
+MCLK_MIN = 40.0     # no data book minimum; a guard against typing errors (2.04.07's own lowest is 50.11)
+FREF = 14.31818
+
+
+def mclk_pll(target, fmax, fmin=MCLK_MIN):
+    """The MCLK PLL setting closest to target MHz, at most fmax: (M, N/R byte, MHz, VCO MHz). The MCLK
+    PLL has R 0-3 in SR10 bits 6-5 (bit 7 reserved, V2-PLL-3), M 1-127, N 1-31 (PLL-2) and its VCO in
+    135-270 MHz (PLL-1; the Trio64V2 raises only the DCLK PLL maximum). Ties: the smaller N, then R."""
+    if not fmin <= target <= fmax:
+        raise PatchError('MCLK %.2f MHz: outside %.2f-%.2f MHz' % (target, fmin, fmax))
+    best = None
+    for r in range(4):
+        for n in range(1, 32):
+            for m in range(1, 128):
+                vco = FREF * (m + 2) / (n + 2)
+                f = vco / (1 << r)
+                if 135 <= vco <= 270 and fmin <= f <= fmax + 1e-9:
+                    key = (abs(f - target), n, r)
+                    if best is None or key < best[0]:
+                        best = (key, m, (r << 5) | n, f, vco)
+    if best is None:
+        raise PatchError('MCLK %.2f MHz: no PLL setting in range' % target)
+    return best[1:]
+
+
+def mclk_put(d, put, entries, memtype, mhz, fmax):
+    """Set the MCLK entry of memtype to mhz (s3patch and s3vpatch). Returns the log text."""
+    m, nr, f, vco = mclk_pll(mhz, fmax)
+    a = entries[memtype]
+    put(a, d[a:a + 2], bytes([m, nr]), 'MCLK for %s (build option): %.2f MHz, VCO %.1f MHz' % (memtype, f, vco))
+    return f
+
+
 # ------------------------------------------------------------------ the patcher
 def jmp(at, to):
     return b'\xE9' + rel16(at, 3, to)
@@ -374,8 +423,9 @@ def speed_sites(d, put, site, sym, lab, tags=True):
         t('VGA mode set clear: in place, rep stosw replaced by a jump to wfill', 'p14'))
 
 
-def patch(lo, nasm='nasm', vcofix=True):
-    """lo: the lower 32 KB (2.04.07). Returns (new lower 32 KB, log lines)."""
+def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
+    """lo: the lower 32 KB (2.04.07); mclk: MHz for the MCLK entry of memtype (None: the default build).
+    Returns (new lower 32 KB, log lines)."""
     d = bytearray(lo)
     log = []
     m = re.search(rb'S3 86C775/86C785 Video BIOS\. Version (2\.04\.\d\d)\r\n', d[:0x100])
@@ -423,6 +473,8 @@ def patch(lo, nasm='nasm', vcofix=True):
     if (call_target(d, site['ddcin']), call_target(d, site['ddcout'] + 1), call_target(d, site['ddcax'] + 3)) != \
             (sym['GETCRTC'], sym['SR0DRST'], sym['DDCWAIT']):
         raise PatchError('VBE 4F15 does not call GETCRTC, SR0DRST and DDCWAIT where expected')
+    if not sig_match(d, 0x14A5, 'b3 10 be c9 00 b0 36 e8 ?? ?? f6 c4 08 75 0b be cb 00 f6 c4 04 75 03 be c7 00 e8'):
+        raise PatchError('POST does not pick the MCLK entries C7h/C9h/CBh by CR36 bits 3-2 at 14A5h')
     if call_target(d, site['postdly'] + 4) != sym['DDCWAIT']:
         raise PatchError('POST engine reset does not call DDCWAIT at %04X' % (site['postdly'] + 4))
 
@@ -436,6 +488,8 @@ def patch(lo, nasm='nasm', vcofix=True):
     # 2. data
     for off, old, new, why in DATA:
         put(off, old, new, why)
+    if mclk is not None:
+        mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype])
 
     # 3. code
     blocks, lab = assemble(sym, nasm)
@@ -541,6 +595,11 @@ def main():
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
     ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
+    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype (default: 59.96 '
+                    'for 1-cycle EDO and for fast page/2-cycle EDO, 66.2 for SGRAM, as the default build)')
+    ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',
+                    help='the MCLK entry --mclk sets: edo1 (1-cycle EDO, at most 60 MHz), fpm (fast page and '
+                         '2-cycle EDO, 66.67 MHz), sgram (Trio64V2/GX, 66.67 MHz); default edo1')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
     a = ap.parse_args()
@@ -549,10 +608,10 @@ def main():
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]                       # a 64 KB input: only its lower half is used
-        new_lo, log = patch(lo, a.nasm, not a.no_vco_fix)
+        new_lo, log = patch(lo, a.nasm, not a.no_vco_fix, a.mclk, a.memtype)
         img = new_lo + bytes(0x8000)            # the upper 32 KB: zeros
         errs = verify(img, not a.no_vco_fix)
-        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA
+        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA and a.mclk is None
         out_sha = hashlib.sha256(img).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 %s, expected %s)' % (out_sha, RESULT_SHA))
@@ -571,7 +630,9 @@ def main():
             print('  ' + line)
     print('%s: %s-%s, checksum %02X (the lower 32 KB sums to 00, the upper 32 KB is zeros), SHA-256 %s%s'
           % (a.output, VERSION, LEVEL, img[0x7FFF], out_sha,
-             ', identical to the tested build' if known else ''))
+             ', identical to the tested build' if known or out_sha == RESULT_SHA else
+             ', MCLK build option: the code is the tested build, the MCLK is yours to check on the card'
+             if a.mclk is not None else ''))
     return 0
 
 

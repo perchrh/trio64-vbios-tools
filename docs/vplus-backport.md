@@ -1,6 +1,6 @@
 # Backporting to a Trio64V+ BIOS
 
-What of this ROM's changes (2.04.07-p1 to p20, README "Features and changes") could go into a video
+What of this ROM's changes (2.04.07-p1 to p21, README "Features and changes") could go into a video
 BIOS for the Trio64V+ (86C765), and what the Trio64V+ ROM in `rompatch/vplus` carries. Collected on
 30 October 2026. The test hardware, a specific Trio64V+ card, is still to come; until its logs exist,
 the build is checked in the emulator only.
@@ -32,11 +32,11 @@ code base: none of the patch sites would match it.
 The mode 13h scroll keeps EAX on the Trio64V+: the 1.03-08 dispatcher saves only the 16-bit registers,
 so the 2.04.07 code (`p12ext.asm`), which uses EAX bits 31-16 without saving them, would hand them back
 changed after every AH=06h in mode 13h. The emulator test `vplus_patches` checks it. The same code in
-2.04.07-p20 does this through AH=0Eh, which bypasses the 32-bit dispatcher there (README "To do").
+2.04.07-p20 did this through AH=0Eh, which bypasses the 32-bit dispatcher there; fixed in p21.
 
 Checked in the emulator (Trio64V+ model): `make vrom-test` (the pinned SHA-256, checksum, every changed
-byte at a patch site, the free bytes still 00, the refusals); `make emu-test CHIP=vplus` with 2 and
-4 MB, where every test that applies passes, `vplus_patches` and `stores` among them, apart from the
+byte at a patch site, the free bytes still 00, the refusals); `make emu-test CHIP=vplus` with 1, 2
+and 4 MB, where every test that applies passes, `vplus_patches` and `stores` among them, apart from the
 1.03-08 failures below; `make vref-compare`: 2389 calls in the CGA, MDA and EGA modes behave as in
 1.03-08. The S3COMPAT logs of the emulator runs (the whole S3COMPAT with 2 and 4 MB, its VBE part, its
 VGA part) and the VSHOW /R log are line for line those of 1.03-08, apart from the sign-on. Test coverage
@@ -61,7 +61,7 @@ other failure still shows.
 
 | Test | 1.03-08 behaviour |
 | --- | --- |
-| errors (2 MB) | 4F02 sets 118h (1024x768x16M), 119h and 11Ah (1280x1024x32K/64K), which need more than 2 MB and which its own 4F01 marks unsupported; a refused mode should leave the video state as it is. With 4 MB the test passes. |
+| errors (1 and 2 MB) | 4F02 sets the modes that need more memory than the card has, which its own 4F01 marks unsupported: with 2 MB 118h (1024x768x16M), 119h and 11Ah (1280x1024x32K/64K), with 1 MB also 107h, 112h, 115h-117h and 120h; a refused mode should leave the video state as it is. With 4 MB the test passes. |
 | windows | 4F06 changes the upper halves of EAX, ECX and EDX: it uses 32-bit registers and the 1.03-08 dispatcher saves the 16-bit ones only. The test calls the BIOS the ways Windows does and expects the upper halves kept. |
 | s3compat_full | FAIL 200 in 10Dh-10Fh (the VCO above); WARN 50 for 1600x1200, which runs interlaced at 98 Hz, the most the chip allows. With 4 MB also WARN 10 (interlaced) for 118h (1024x768x16M) and 119h/11Ah (1280x1024x32K/64K): non-interlaced, their pixel clocks would be above the Trio64V+ limits for the depth (CLK-1: 50 MHz at 32 bpp, 80 MHz at 15 and 16 bpp; 60 Hz needs 65 and 108 MHz). |
 
@@ -86,7 +86,8 @@ keeps the 32-bit registers around 4F06); neither is part of this backport.
 
 | Change in this ROM | What decides it |
 | --- | --- |
-| MCLK 59.96 MHz | 1.03-08 sets 52.79 MHz (SR10 = 42h, SR11 = 39h). 59.96 MHz is within the Trio64V+ limit of 60 MHz (MEM-1), but whether the memory of a card runs at it is decided on that card, with the VRAM test of S3COMPAT. Not in 1.03-08-p1. |
+| MCLK 59.96 MHz | 1.03-08 picks its MCLK by the strapped memory type: 52.79 MHz (SR10 = 42h, SR11 = 39h, entry A8h) for 1-cycle EDO, 59.96 MHz (A6h) for fast page and 2-cycle EDO. 1.03-08-p1 keeps both; `make vrom MCLK=... [MEMTYPE=edo1|fpm]` sets one, at most 60 MHz (MEM-1; README "MCLK build option"). Whether the memory of a card runs at a higher clock is decided on that card, with the VRAM test of S3COMPAT. |
+| Memory size | 1, 2 or 4 MB in the data book. 1.03-08 sizes the memory at every POST (0E80h: 4 MB, then 2 MB, else 1 MB, written to CR36 bits 7-5), so a card upgraded from 1 to 2 MB needs no other ROM. The emulator tests run with 1, 2 and 4 MB. |
 
 ## Already right in 1.03-08
 
@@ -131,5 +132,22 @@ Palette loads, pixels, AH=0Eh and the graphics-mode AH=09h are equal in all thre
 
 - The test card: S3TEST and S3COMPAT logs from it with 1.03-08 and 1.03-08-p1. If its BIOS is not
   1.03-08, the base and the addresses follow that BIOS.
-- S3TEST expects 2.04.07 (ROMVER) and checks Trio64V2 patches; on the Trio64V+ ROM its patch lines
-  are not meaningful. S3COMPAT and VSHOW apply as they are.
+- S3TEST has a Trio64V+ test set (since 30 October 2026): on a Trio64V+ it expects VROMVER
+  (1.03-08-p1) and checks this ROM's patches (README "Other Trio64-family BIOSes"). S3COMPAT and VSHOW
+  apply as they are.
+
+## Test cards
+
+The cards at hand (30 October 2026); their stock BIOSes are to be dumped before anything is flashed.
+
+| Card | Chip | Memory | FCC ID | This ROM |
+| --- | --- | --- | --- | --- |
+| STB (1995), H0A3CC | Trio64V+ 86C765 | 2 MB | EKSUSA765PCI | 1.03-08-p1 applies to the chip; the STB stock BIOS may be an STB build of another S3 version |
+| Gainward VGA-GW503 (1996) | Trio64V+ | 2 MB EDO (the board maximum) | ICUVGA-GW503 | the likely source of 1.03-08 (the GW503A dump carries it in its upper half) |
+| Hercules Terminator 64 | Trio64V+ | 2 MB | ICUVGA-GW503C | probably the same board family: the FCC ID has the grantee code and board name (ICU, GW503) of the Gainward cards |
+| ExpertColor DSP-3364P (1994), E0A2AA | Trio64 86C764-P | 1 MB EDO 50 ns, upgraded to 2 MB | LUT-DSP3364P | none: a Trio64, not a Trio64V+. Do not flash 1.03-08-p1 on it. The tools run on it; S3TEST runs only the tests that need no ROM of ours |
+| Gainward Genesis EV | Trio64V2/DX | 2 MB EDO | ICUVGA-GW503A | the Trio64V2 ROM (2.04.07-pN): the test card |
+
+On the Trio64 the data book allows EDO only with 1 or 2 MB (fast page memory for 4 MB, T64-MEM-3).
+Before flashing a Trio64V+ card, compare its stock BIOS with 1.03-08: the board flags, the subsystem ID
+and the MCLK table may differ between makers.

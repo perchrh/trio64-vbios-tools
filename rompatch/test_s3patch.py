@@ -9,7 +9,7 @@ REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN (optional) the 64 
 repository.
 
 Tests
-  build          the reference gives the tested build: SHA-256 889d6658... (NASM 3.02), sign-on 2.04.07-p20,
+  build          the reference gives the tested build: SHA-256 515bf9fe... (NASM 3.02), sign-on 2.04.07-p21,
                  byte-identical to --rom when given
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
                  32 KB size, the upper 32 KB is zeros
@@ -21,6 +21,9 @@ Tests
   input_64k      a 64 KB image with the reference in the lower half gives the same result, whatever
                  its upper half holds
   novco          --no-vco-fix keeps the 22 refresh entries below 170 MHz and still checksums
+  mclk           --mclk 50, 55 and 60 (1-cycle EDO) and 66 (fast page) give a valid MCLK PLL pair within
+                 0.5 MHz in that memory type's entry and change nothing else but the checksum; 61 MHz for
+                 1-cycle EDO, 67 MHz for fast page and 39 MHz are refused (V2-MEM-1)
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte
                  changed at a patch site (p12, p13 and p14 sites, with the checksum corrected), a wrong
                  checksum, another BIOS version (the stock 2.04.11, with --stock)
@@ -83,6 +86,33 @@ def corrupt(img, off):
     return bytes(t)
 
 
+def mclk_cases(tmp, ref, img, entries, run):
+    """--mclk: 50, 55 and 60 MHz for edo1 and the highest allowed value for fpm give a valid MCLK PLL pair
+    (M 1-127, N 1-31, SR10 bit 7 clear, VCO 135-270 MHz) within 0.5 MHz of the request in the entry of
+    that memory type, and differ from the default build only there and in the checksum byte; values
+    outside the limits are refused. Returns the problems."""
+    bad = []
+    for mhz, mt in (('50', 'edo1'), ('55', 'edo1'), ('60', 'edo1'), ('66', 'fpm')):
+        rc, out, err = run(tmp, ref, ['--mclk', mhz, '--memtype', mt])
+        if rc or not out:
+            bad.append('%s MHz %s: %s' % (mhz, mt, err))
+            continue
+        a = entries[mt]
+        m, nr = out[a], out[a + 1]
+        vco = 14.31818 * (m + 2) / ((nr & 0x1F) + 2)
+        f = vco / (1 << ((nr >> 5) & 3))
+        diff = [i for i in range(0x8000) if out[i] != img[i] and i not in (a, a + 1, 0x7FFF)]
+        if not (1 <= m <= 127 and 1 <= nr & 0x1F <= 31 and not nr & 0x80 and 135 <= vco <= 270
+                and abs(f - float(mhz)) < 0.5) or diff or sum(out[:0x8000]) & 0xFF:
+            bad.append('%s MHz %s: M %02X N/R %02X (%.2f MHz, VCO %.1f), %d other bytes differ'
+                       % (mhz, mt, m, nr, f, vco, len(diff)))
+    for mhz, mt in [('61', 'edo1'), ('67', 'fpm'), ('39', 'edo1')]:
+        rc, out, err = run(tmp, ref, ['--mclk', mhz, '--memtype', mt])
+        if rc != 1 or out is not None:
+            bad.append('%s MHz %s not refused' % (mhz, mt))
+    return bad
+
+
 def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum tests for s3patch.py')
@@ -128,6 +158,8 @@ def main():
     low = len(vco_out(nimg)) if nimg else -1
     result('novco', rc == 0 and low == 22 and not image_checks(nimg), err or '%d entries below 170 MHz kept' % low)
 
+    bad = mclk_cases(tmp, ref, img, s3patch.MCLK_ENTRY, run)
+    result('mclk', not bad, '; '.join(bad) or '50, 55, 60 MHz edo1 and the fpm maximum valid, out-of-range values refused')
     s = s3patch.SITES
     cases = [('already patched', img[:0x8000]),
              ('p12 site (INT 10h entry)', corrupt(ref, s['int10'] + 2)),
