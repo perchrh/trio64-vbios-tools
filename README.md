@@ -656,11 +656,6 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   default: Mode X/Mode Y games set mode 13h and then switch to unchained planar access, which the
   linear window bypasses (S3 Speed Up warns that DOOM breaks), and a BIOS cannot know which program
   will do that. As an opt-in TSR in the S3ALIAS style; gain not measured.
-- Clear video memory with the Trio64V2 graphics engine at VESA mode sets (idea from the Trio3D BIOS,
-  which fills video memory with its 2D engine at POST, and the Phoenix Trio64 BIOS 1.4, which clears
-  with the engine): could cut the 2 MB clear of about 39 ms to a few ms. Needs most of the free bytes,
-  must leave the engine idle and in a clean state for Windows and DOS programs, and the emulator would
-  need an engine model to test it.
 
 ## Sources
 
