@@ -202,9 +202,15 @@ class Machine:
             return 0xFF
         if port in (0x3D5, 0x3B5):
             i = r['ci']
-            # Trio64V2 rev 06, EDO; CR36 bits 7-5 = the strapped memory size (100b 2 MB, 000b 4 MB)
+            # CR36 bits 7-5 = the memory size (110b 1 MB, 100b 2 MB, 000b 4 MB); bits 3-2 the memory type:
+            # 1-cycle EDO (00b) on the Trio64V2/V+ models, EDO (10b) on the Trio32/Trio64, whose 00b is
+            # reserved, and fast page (11b) on the Trio64 with 4 MB, which the data book requires for it
+            # (pin 50 as RAS1, T64-MEM-3)
             c = CHIPS[Machine.chip]['ids']
-            fixed = {0x2D: c[0], 0x2E: c[1], 0x2F: c[2], 0x30: c[3], 0x36: {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]}
+            cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
+            if Machine.chip in ('trio64', 'trio32'):
+                cr36 |= 0x0C if Machine.vram == 4 else 0x08
+            fixed = {0x2D: c[0], 0x2E: c[1], 0x2F: c[2], 0x30: c[3], 0x36: cr36}
             return fixed.get(i, r['crtc'].get(i, 0))
         if port == 0x3CF: return r['gc'].get(r['gi'], 0)
         if port == 0x3C1: return r['atc'].get(r['ai'] & 0x1F, 0)

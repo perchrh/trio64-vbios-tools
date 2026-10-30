@@ -15,6 +15,7 @@
 %define SCR_FULL 0x2382     ; mode 13h scroll, original full-width path
 %define SCR_WIN  0x23A9     ; mode 13h scroll, original window path
 %define WSET     0x5123     ; VBE window set (BH = window, DX = bank): 4F05 and the window function, any BH
+%define GWIN     0x5148     ; VBE window get (BH = 1 -> DX = bank): after WSET in 4F05 and the window function
 %define P13C     0x0EAC     ; bfilla: the old 8-bit font load loop after the font jump (dead, 14 bytes)
 ; the new code, in the space s3tpatch.py frees or finds unused (see its FREE list)
 %define TBON     0x0B4C     ; bon, unlk, relk (tbon.asm): the end of the refresh lists after their compaction
@@ -28,3 +29,4 @@
 %define DFDN     0x4E2E     ; dfdn (p13df.asm): the 4F01 record of 106h
 %define BFILL    0x0D79     ; bfill0/bfill (p13bfill.asm): a CRTC table of a removed interlaced entry
 %define P13B     0x0DDD     ; wmove (p13move.asm): a CRTC table of a removed interlaced entry
+%define TWIN     0x4D70     ; sr04 (twin.asm): the end of the first VESA list after its compaction

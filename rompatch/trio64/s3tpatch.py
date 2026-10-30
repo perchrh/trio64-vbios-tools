@@ -31,14 +31,16 @@ What is applied (docs/trio64-backport.md)
           the Trio64V2 ROM)
   code    assembled with nasm at the addresses in trio64/bios.inc: tbon.asm and tlock.asm (booster with
           the Windows check), thook.asm (mode set hook: Windows mark cleared, ATC flip-flop reset), tglue.asm (the
-          entries from 4F02 and the window set); shared with the other builds (rompatch/): font32.asm,
+          entries from 4F02 and the window set), twin.asm (the window set and get read SR04 with the
+          sequencer index kept); shared with the other builds (rompatch/): font32.asm,
           scr13.asm, p13fill.asm, p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (32-bit font load,
           mode 13h scroll, text and planar scrolls, AH=09h text, VGA mode set clear)
   MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 60 MHz (MEM-1); without it the
           build's own clock stays (54.9 MHz in the reference build)
   sign-on "1.5-07-p1", checksum byte 7FFF
 
-Not applied: the fast 4F05 path (Phoenix's 4F05 already takes 10 port accesses), the 32-bit S3/VESA
+Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in
+1.5-07-p1 with the booster check and the sequencer index kept), the 32-bit S3/VESA
 mode set clear (Phoenix clears with the graphics engine), the base restore (Phoenix writes CR59/CR5A
 back at every mode set), the Trio64V2 register fixes and VBE 2.0.
 
@@ -59,14 +61,14 @@ LEVEL = 'p1'
 VERSION = '1.5-07'
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = '53e32072ec47624d01d44026925f9d885189bf7624c2a2d506f1f65cbf1ea38a'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = '8aea34579111cb4a22b6cb835e98d833c6b40a3c9d4c00037026727f8857dd0f'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'eca8b7f0a47c3e60', 'tbon.asm': '863b6862dfad0947',
     'thook.asm': 'fe2efef3f3bc43c4', 'tglue.asm': 'e73f5978fa2f4043',
     'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '1445892a7cc60234',
     'p13fill.asm': '466a65fde38ca9a1', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '2a4ce99637fc0ce5', 'p13bfill.asm': 'e420891842c6096f',
-    'p13bfa.asm': 'bef577de13494d8c',
+    'p13bfa.asm': 'bef577de13494d8c', 'twin.asm': 'b6e0009a74fd8ca0',
 }
 
 # ---------------------------------------------------------------- the 1.5-07 tables (first 4 KB and 4D28h)
@@ -95,19 +97,22 @@ ALT916 = (0x7E30, 0x7F51)                        # the 9x16 alternate font table
 
 SITES = dict(modetab=0x568C, m4f02=0x4C12, int10=0x56C6, post52=0x0E97, mclk=0x0354,
              vclr=0x1D88, font=0x0EA9, scr=0x237C, txfull=0x2046, txwmov=0x2055, txwfil=0x2067,
-             plfull=0x22AD, plwin=0x22F8, ah09a=0x26D4, ah09b=0x26D8)
+             plfull=0x22AD, plwin=0x22F8, ah09a=0x26D4, ah09b=0x26D8, wsr04=0x5134, gsr04=0x5163)
 SHARED_SIG = ('vclr', 'font', 'scr', 'txfull', 'txwmov', 'txwfil', 'plfull', 'plwin', 'ah09a', 'ah09b')
 SIG = dict({k: s3patch.SIG[k] for k in SHARED_SIG},
     m4f02='60 2e 8e 1e ?? ?? e8 ?? ?? 61 c3',           # 4F02: pusha / mov ds,[cs:SEG_BDA] / call MODESET / popa / ret
     int10='fb fc 80 fc 0e 74 ?? 80 fc 0c 74 ?? 80 fc 0d 74 ?? 50 53 51 52 56 57 55 06 1e 8b ec 2e 8e 1e ?? ??',
     post52='e8 ?? ?? e8 ?? ?? b8 41 00 ef b8 52 00 ef e8 ?? ?? c3',   # POST: CR41 = 00h, CR52 = 00h
+    wsr04='e8 ?? ?? f6 c4 08',                          # window set: call RDREG (SR04) / test ah,08h
+    gsr04='e8 ?? ?? 33 d2',                             # window get: call RDREG (SR04) / xor dx,dx
     mclk='be b5 03 b8 1b 00 ef b0 1a 2e 8a 64 01 ef b0 10 2e 8a 64 01 ef fe c0 2e 8a 24 ef',  # POST MCLK from 3B5h
 )
 SYMSIG = [('GETCRTC', '50 ba cc 03 ec ba b4 03 a8 01 74 03 ba d4 03 58 c3'),
           ('RDREG', 'ee 42 8a e0 ec 4a 86 c4 c3'),
           ('INT_AH0E', 'e9 ?? ?? e9 ?? ?? e9 ?? ?? 8b c6 80 fc 4f'),
           ('SEG_SCR', '00 00 00 00 00 a0'),
-          ('WSET', '52 53 b8 4f 01 80 ff 00 75 18 8b da ba c4 03 b0 04 e8 ?? ?? f6 c4 08 75 03 c1 e3 02 e8')]
+          ('WSET', '52 53 b8 4f 01 80 ff 00 75 18 8b da ba c4 03 b0 04 e8 ?? ?? f6 c4 08 75 03 c1 e3 02 e8'),
+          ('GWIN', '53 b8 4f 01 80 ff 01 75 24 e8 ?? ?? b0 6a e8 ?? ?? 8a dc 80 e3 7f ba c4 03 b0 04 e8 ?? ?? 33 d2')]
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
 MCLK_MAX = 60.0                                 # MEM-1: 16.67 ns on the Trio32/Trio64
 
@@ -123,6 +128,7 @@ BLOCKS = [
     ('p13move.asm', 'P13B', 0x0DF6 - 0x0DDD, ('wmove',)),
     ('p13bfill.asm', 'BFILL', 0x0D92 - 0x0D79, ('bfill0', 'bfill')),
     ('p13bfa.asm', 'P13C', 14, ('bfilla',)),                      # dead: the old font loop
+    ('twin.asm', 'TWIN', 0x4D82 - 0x4D70, ('sr04',)),
 ]
 
 
@@ -277,6 +283,9 @@ def patch(lo, nasm='nasm', mclk=None):
         raise PatchError('INT 10h entry targets differ from bios.inc')
     if (site['scr'] + 6, site['scr'] + 6 + d[site['scr'] + 5]) != (sym['SCR_FULL'], sym['SCR_WIN']):
         raise PatchError('mode 13h scroll targets differ from bios.inc')
+    for k, base in (('wsr04', 'WSET'), ('gsr04', 'GWIN')):
+        if call_target(d, site[k]) != sym['RDREG'] or not sym[base] < site[k] < sym[base] + 0x2D:
+            raise PatchError('%s: the SR04 read at %04X is not a call of RDREG in %s' % (k, site[k], base))
     if sym['P13C'] != site['font'] + 3:
         raise PatchError('P13C is not the dead code after the font load jump')
 
@@ -317,6 +326,10 @@ def patch(lo, nasm='nasm', mclk=None):
     put(a, d[a:a + 3], call(a, lab['h4f02']), 'VBE 4F02: mode set via the hook, then the booster unless Windows runs')
     a = sym['WSET']
     put(a, '52 53 b8 4f 01', jmp(a, lab['wsetp']) + b'\x90\x90', 'VBE window set (4F05, window function): booster on with BH = 0')
+    for k in ('wsr04', 'gsr04'):
+        a = site[k]
+        put(a, d[a:a + 3], call(a, lab['sr04']), 'VBE window %s: SR04 read with the sequencer index kept'
+            % ('set' if k == 'wsr04' else 'get'))
     speed_sites(d, put, site, sym, lab, tags=False, skip=('wset', 'clr', 'int10'))
     a = site['post52'] + 10
     put(a, 'b8 52 00', 'b8 52 80', 'POST: CR52 = 80h, 800x600 defaults to 60 Hz (VESA DMT) instead of 56 Hz')

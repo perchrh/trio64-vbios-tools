@@ -626,7 +626,8 @@ def t_t64_patches(c):
     """Our Trio64 ROM (1.5-07-pN, rompatch/trio64): the ROM file, the refresh defaults (no mode runs
     interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
-    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, the window function, and the 32-bit
+    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, the window function, the sequencer
+    index kept by the window set and get (4F05 BH=0 and 1), and the 32-bit
     registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh. Only on the Trio64 model."""
     if not c.tours:
         raise Skip('not our Trio64 ROM (1.5-07-pN)')
@@ -704,6 +705,12 @@ def t_t64_patches(c):
     # 4F05 BH=1 and a bad BH as Phoenix answers them; the window function turns the booster on in AH=00 69h
     res = m.int10(0x4F05, bx=0x0100)
     chk(res['ax'] == 0x004F, '4F05 BH=1: AX=%04X' % res['ax'])
+    # the window set and get read SR04 and put the sequencer index back (Phoenix leaves 04h)
+    for bx, dx, want in ((0x0000, 3, None), (0x0100, 0, 3)):
+        m.r['si'] = 0x02
+        res = m.int10(0x4F05, bx=bx, dx=dx)
+        chk(res['ax'] == 0x004F and m.r['si'] == 0x02 and (want is None or res['dx'] == want),
+            '4F05 BH=%d: AX=%04X DX=%04X, SR index %02X after it (02h before)' % (bx >> 8, res['ax'], res['dx'], m.r['si']))
     res = m.int10(0x4F05, bx=0x0200, dx=4)
     chk(res['ax'] != 0x004F, '4F05 BH=2: AX=%04X, expected a refusal' % res['ax'])
     m.int10(0x0069)
@@ -1926,8 +1933,6 @@ T64_BASE = {
     # state behind that differs from its baseline, on 1.5-07 as on our ROM
     's3compat_vga': (r'AX=1130 BH=4 8x8 upper half .*WARN 02$',),
     's3compat_full': (r'AX=1130 BH=4 8x8 upper half .*WARN 02$', r'Mode 03 after all tests vs baseline .*WARN 01$'),
-    # Phoenix's window set reads SR04 and leaves the sequencer index at 04h (S3TEST 4F05 line, fail bit 2)
-    's3test': (r'4F05 regs, SR index, CR6A, planar, LFB 02  FAIL$',),
 }
 
 
@@ -2033,6 +2038,8 @@ def main():
                          'maximum of every Trio64-family chip but the Trio32) or 1 MB (a Trio64V+ or Trio64 '
                          'card before an upgrade); the model still has one 64 KB window, no banked or linear memory')
     a = ap.parse_args()
+    if a.chip == 'trio32' and a.vram == 4:
+        ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')
     Machine.vram = a.vram
     Machine.chip = a.chip
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'

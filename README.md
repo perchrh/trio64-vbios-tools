@@ -111,7 +111,8 @@ modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
 
 `--chip` (`v2`, `vplus`, `uvplus`, `trio64`, `trio32`) makes the model that chip: its PCI device ID and
 revision, CR2D-CR2F, the PCI subsystem ID (Trio64V2 only) and the width of the PLL post divider R (3
-bits on the Trio64V2 only). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
+bits on the Trio64V2 only) and the memory type strapped in CR36 bits 3-2 (EDO, 10b, on the Trio64
+and Trio32, fast page on the Trio64 with 4 MB; `--vram 4` is refused for the Trio32). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
 system memory (UMA), which neither the tools nor the model know about, so only its register rules are
 judged. The tools
 find the chip themselves (`common/chip.inc`) and judge the clocks by that chip's datasheet limits.
@@ -209,7 +210,7 @@ count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2
 86.6 % (15135 of 17487 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
 (`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
-1.5-07-p1 (`CHIP=trio64`) is at 84.6 % (13317 of 15739 bytes), its new code all run.
+1.5-07-p1 (`CHIP=trio64`) is at 84.6 % (13330 of 15752 bytes), its new code all run.
 
 ### EGA/CGA against the reference BIOS
 
@@ -295,9 +296,12 @@ both BIOSes find the size at every POST. They write 4 MB into CR36 bits 7-5, tes
 then 2 MB, and write the size that holds (2.04.07 at 19C0h, 1.03-08 at 0E80h); the data books say the
 same ("the S3 BIOS determines this value directly and writes it to CR36_7-5 after reset"). So a card
 upgraded from 1 to 2 MB, or from 2 to 4 MB where the board has the sockets, works with the same ROM.
-Phoenix 1.5-07, the Trio64 ROM's base, does the same. The emulator answers with a fixed size (`--vram`):
-`make emu-test` runs the tests whose result depends on the size with 2 and 4 MB, and on the Trio64V+ and
-the Trio64 also with 1 MB.
+Phoenix 1.5-07, the Trio64 ROM's base, does the same, but tries 4 MB only on a Trio64 strapped for fast
+page memory (CR36 bit 2), as the data book allows (docs/trio64-backport.md, "Memory"). The emulator
+answers with a fixed size (`--vram`): `make emu-test` runs the tests whose result depends on the size with
+2 and 4 MB (the Trio32 only with 2 MB, its maximum), and on the Trio64V+, the Trio64 and the Trio32 also
+with 1 MB. The Trio64 and Trio32 models are strapped EDO (CR36 bits 3-2 = 10b), the Trio64 with 4 MB fast
+page (11b).
 
 ## Trio64V+ ROM
 
@@ -329,7 +333,7 @@ card yet.
 `reference/trio64/1_5_07.bin` (the CP764 build): the reference BIOS S3 gave the card makers for the
 Trio64, as far as the 14 Trio64 images at hand show (no S3-built one among them). The result signs on as
 1.5-07-p1. Besides the 32-bit speed patches, the booster with the Windows check and the ATC flip-flop
-reset, it removes the interlaced refresh entries and the modes that exist only interlaced on the Trio64
+reset, and 4F05 keeping the sequencer index (Phoenix left it at 04h), it removes the interlaced refresh entries and the modes that exist only interlaced on the Trio64
 (106h, 118h, 119h, 11Ah, 120h), so no mode defaults to an interlaced timing, and 800x600 defaults to 60
 Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
 what 1.5-07 still gets wrong and the comparison of the base candidates.
@@ -880,4 +884,7 @@ Documents the project does not have; what depends on them is marked where it is 
   description (40:87 bit 1 selects MDA or CGA replacement) is standard VGA behaviour, which the ROM
   keeps unchanged from the reference. Licence: hag is MIT (Copyright (c) 2023 riplin), which covers
   riplin's own annotations and code but not the reproduced Phoenix/S3 ROM bytes and tables; VOGONS
-  posts carry no licence. Nothing from either was copied.
+  posts carry no licence. Nothing from either was copied. Read again on 30 October 2026 for the Trio64
+  ROM, whose base is that BIOS: it confirms the patcher's assumptions (window set and get, the CR41/CR52
+  refresh fields, CR6B/CR6C as the PCI base, the memory sizing) and showed the sequencer index that 4F05
+  left at 04h; docs/trio64-backport.md, "Cross-check with riplin's annotated disassembly".

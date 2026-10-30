@@ -123,8 +123,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Memory configurations: the ROM supports 2 MB (the test card) and 4 MB (the 86C775 maximum, CR36
   bits 7-5 = 000b) of video memory; the Trio64V+ and Trio64 ROMs also 1 MB. The BIOS sizes the memory at every
   POST, so there is no build option for it. `make emu-test ROM=...` runs every test with 2 MB and the
-  ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=vplus`
-  or `CHIP=trio64` also with 1 MB; a new test that reads the memory size or the VESA mode list gets the tag. Expected
+  ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=vplus`,
+  `CHIP=trio64` or `CHIP=trio32` also with 1 MB (the Trio32 never with 4 MB, its maximum is 2 MB; a 4 MB
+  Trio64 is fast page memory by its data book, and the model straps it so); a new test that reads the memory size or the VESA mode list gets the tag. Expected
   values follow the memory size, never a fixed 2 MB.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
   every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive

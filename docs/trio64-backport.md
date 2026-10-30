@@ -26,9 +26,10 @@ the "1.5-07 EDO" build). It refuses the Britek "VIEWTOP" build (other sign-on te
 | 32-bit speed patches | VGA mode set clear, font load, mode 13h scroll (with EAX kept), text and planar scrolls, AH=09h: the shared `speed_sites` and .asm files, the same signatures as in 2.04.07 and 1.03-08. |
 | Booster with the Windows check | On after a banked 4F02 and at the window set with BH = 0 (4F05 and the window function both call Phoenix's window set at 5123h). The refusal mark is CR52 bit 3 (`tbon.asm` says why not CR6C or CR6D). Phoenix relocks the S3 registers after its calls and its unlock routine changes AX, so the code unlocks itself and leaves CR38/CR39 as found. |
 | ATC flip-flop reset | In the mode set hook (AH=00 table and 4F02's call). |
+| Sequencer index kept by 4F05 | Phoenix's window set (5123h) and get (5148h) read SR04 (chain 4) and left the 3C4h index at 04h. Both reads now go through `sr04` (`twin.asm`), which reads SR04 and writes the index back as found, for 4F05 and the window function, BH = 0 and 1. The data book does not require it (it defines the registers, not what a BIOS call leaves in an index); S3's own 2.04.07 and 1.03-08 leave the index as found, and S3TEST's 4F05 line expects that (fail bit 2). |
 | MCLK build option | `MCLK=` sets the single MCLK entry at 3B5h, at most 60 MHz (MEM-1); without it the build's own clock stays. |
 
-Not applied: the fast 4F05 path (Phoenix's 4F05 already takes 10 port accesses), the 32-bit S3/VESA
+Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in 1.5-07-p1 with the booster check and the sequencer index kept), the 32-bit S3/VESA
 mode set clear (Phoenix clears with the graphics engine), the base restore (Phoenix writes CR59 from
 CR6B and CR5A from CR6C bit 7 at every mode set), the PLL N = 0 fix (the N = 0 entries were the
 interlaced 1280x1024 ones, now removed), the Trio64V2 register fixes and VBE 2.0.
@@ -49,16 +50,18 @@ reads (checked with a broad INT 10h workload in the emulator) that is enough for
 | 0D79-0D91, 0DDD-0DF5 (25 each) | CRTC tables only removed entries used | `p13bfill.asm`, `p13move.asm` |
 | 4E2E-4E39 (12) | the 4F01 record of 106h | `p13df.asm` |
 | 0EAC-0EB9 (14) | the old font loop after the font jump | `p13bfa.asm` |
+| 4D70-4D7C (13 of 18) | the end of the first VESA list after its compaction | `twin.asm`: sr04 |
 
-Free after the build: 4D70-4D81 and 4DD1-4DDF (the ends of the VESA lists and the mode map), the rest of
-0604h and 0B4Ch, and about 40 bytes of sign-on padding.
+Free after the build: 4D7D-4D81 and 4DD1-4DDF (the ends of the VESA list and the mode map), the rest of
+0604h, 0140h and 0B4Ch, and about 40 bytes of sign-on padding. Not free, although zero: the 64 bytes at
+3CE9h are an empty slot of the VGA parameter table, which programs read through the save pointer table.
 
 ## Checked in the emulator (Trio64 model)
 
 `make trom-test`: the tables (no list starts with an interlaced entry, every kept entry unchanged), every
 other byte unchanged, another maker's timing bytes and MCLK kept, the MCLK option, the refusals.
 `make emu-test CHIP=trio64` with 2, 4 and 1 MB: `t64_patches` (defaults, removed modes, booster, Windows
-check, lock state, ATC flip-flop, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
+check, lock state, ATC flip-flop, sequencer index after 4F05 BH = 0 and 1, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
 `make tref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07. S3COMPAT's VESA lines: every mode
 non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): 84.6 % of the code, every byte of
 the new code among it.
@@ -73,7 +76,6 @@ unpatched 1.5-07 gives the same lines:
 | errors (1 MB) | 4F02 sets 107h, 112h and 115h-117h, which need more than 1 MB (1.5-07 also set 118h-120h, now removed). |
 | windows | 4F06 changes the upper halves of EAX, ECX and EDX (the dispatcher saves only the 16-bit registers). |
 | s3compat_vga, s3compat_full | The upper half of the 8x8 font (AX=1130h BH=4) is Phoenix's own design (WARN 02); S3COMPAT's run leaves a register state behind that differs from its baseline (WARN 01). |
-| s3test | Phoenix's window set reads SR04 and leaves the sequencer index at 04h: S3TEST's 4F05 line FAIL 02. A save and restore of the index in our window set entry would fix it for BH = 0; not done. |
 
 Phoenix's 1024x768 and 1280x1024 timings and its 640x480x16 use other line totals than VESA DMT
 (1352, 1760 and 796 pixels); S3TEST's Trio64 mode list does not check them.
@@ -148,9 +150,31 @@ the DDC fixes (2.04.07 code), the black level (SR1A is a Trio64V2 register), and
 
 ## Memory
 
-The Trio64 takes 1, 2 or 4 MB, EDO only up to 2 MB (fast page memory for 4 MB, T64-MEM-3). Phoenix
-sizes the memory at POST as the S3 BIOSes do (CR36 written with 4 MB, then 2 MB, in the emulator), so the
-DSP-3364P's upgrade from 1 to 2 MB needs no other ROM. The emulator tests run with 1, 2 and 4 MB.
+The Trio64 takes 1, 2 or 4 MB, EDO only up to 2 MB: CR36 bits 7-5 = 000b is "4 MBytes (Trio64 only)",
+and fast page memory is required for 4 MB (T64-MEM-3), because the second bank needs pin 50 as RAS1,
+which with EDO is the second OE. The Trio32 takes at most 2 MB. Phoenix sizes the memory at every POST
+(ConfigureAndClearVideoMemory, 12DCh, in riplin's disassembly): only when CR36 bit 2 says fast page mode
+and the chip is not a Trio32 it sets SRA bit 6 (pin 50 = RAS1) and tests 4 MB; then 2 MB, then 1 MB, and
+writes the size found into CR36 bits 7-5. So the DSP-3364P's upgrade from 1 to 2 MB needs no other ROM,
+and a 4 MB Trio64 card is fast page memory by the data book and by the BIOS. The emulator straps the
+Trio64 as EDO (CR36 bits 3-2 = 10b) with 1 and 2 MB and as fast page (11b) with 4 MB; the Trio32 model
+has no 4 MB run.
+
+## Cross-check with riplin's annotated disassembly
+
+riplin's annotated disassembly of the 1.5-07 EDO build (hag `research/s3/bios/86c764x.asm`, MIT licence
+for the annotations; README "Sources") names each routine with its ROM offset. The code from 1000h on is
+the same in every 1.5-07 build, so its offsets are those of our base. Read on 30 October 2026 against what
+the patcher assumes; nothing was copied from it.
+
+| Our assumption | riplin | Result |
+| --- | --- | --- |
+| WSET 5123h is the window set, called by 4F05 (4CB3h) and the window function (4CC5h), then 5148h for BH = 1 | SetVideoMemoryWindow 5123h, GetVideoMemoryWindow 5148h, both called only from CPUVideoMemoryControl 4CB3h and DirectCallableCPUVideoMemoryControl 4CC5h | agrees; both read SR04 through 4640h (the sequencer index fix above) |
+| CR41 and CR52 bits 7-4 hold 3-bit refresh indexes, written only at POST | BIOS flag table: 640x480 in CR52 bits 6-4, 800x600 in CR52 bit 7 and CR41 bits 1-0, 1024x768 in CR41 bits 4-2, 1280x1024 in CR41 bits 7-5; ClearBIOSFlags 0E97h writes both 00h; the mode set reads CR52 masked with F0h | agrees; CR52 = 80h gives 800x600 index 1, and CR52 bit 3 (our Windows mark) is masked off by Phoenix's only reader |
+| CR6B/CR6C hold the linear base, copied to CR59/CR5A at each mode set | "Extended BIOS Flag 3/4": POST stores the high word of PCI BAR0 there (0F4Eh), the mode set copies CR6B to CR59 and CR6C bit 7 to CR5A (0307h) | agrees: CR6C is BIOS data, not free for a mark |
+| Memory size found at POST | ConfigureAndClearVideoMemory 12DCh: 4 MB only with fast page strapping on a Trio64 (SRA bit 6 for RAS1), then 2 and 1 MB | new detail, see Memory above |
+| The 1600x1200 register block 0831h-0870h is used only by the removed mode | a word at 01C7h holds 0871h, the address right after that block ("might point to 0871h") | our code ends at 086Eh and 0871h is unchanged |
+| The 64 zero bytes at 3CE9h | an empty entry of the VGA parameter table | not used for code |
 
 ## Pending
 
