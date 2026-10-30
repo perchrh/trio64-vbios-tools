@@ -1,9 +1,11 @@
-; S3TEST.COM - regression test for our patched VBIOSes: Trio64V2/DX and Trio64V+ (386+)
-; The tool version (VERSION) and the ROM versions it expects (ROMVER, VROMVER) come from common/version.inc.
+; S3TEST.COM - regression test for our patched VBIOSes: Trio64V2/DX, Trio64V+ and Trio64 (386+)
+; The tool version (VERSION) and the ROM versions it expects (ROMVER, VROMVER, TROMVER) come from
+; common/version.inc.
 ;
 ; Purpose
 ;   Confirms that every change made to the BIOS is present and working: 2.04.07 (the S3 reference BIOS)
-;   on a Trio64V2, 1.03-08 (S3's Trio64V+ BIOS, rompatch/vplus) on a Trio64V+. It is the quick check to
+;   on a Trio64V2, 1.03-08 (S3's Trio64V+ BIOS, rompatch/vplus) on a Trio64V+, Phoenix 1.5-07 (S3's
+;   reference for the Trio64, rompatch/trio64) on a Trio64. It is the quick check to
 ;   run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
 ;
 ; Test set by chip (common/chip.inc, found before the first test)
@@ -12,6 +14,8 @@
 ;                (vmodelist: 1.03-08's modes, the booster without the CR6D check, no FIFO check), no
 ;                4F01 PhysBasePtr, 4F03 in 4101h, 4F06 BL=3 or CR50 lines (VBE 1.2, no 512x384), and the
 ;                4F05 line without the 0040:04FE and linear-mode bits
+;   Trio64       as the Trio64V+, the signature against TROMVER and its own mode list (tmodelist: the
+;                defaults of 1.5-07-p1, no interlace, 800x600 at 60 Hz)
 ;   other chips  no ROM of ours exists: the version found is INFO, then only the tests that need none
 ;                (checksum, chip, MCLK, memory type, VGA clear, font load, scrolls, AH=09h, timings)
 ;   Modes flagged F_2MB (above 1 MB) are not set when CR36 reports 1 MB.
@@ -34,8 +38,8 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.07-p21") on a Trio64V2, VROMVER ("1.03-08-p1") on a Trio64V+; the version
-;                    found is printed, also for other BIOS versions
+;                    "2.04.07-p21") on a Trio64V2, VROMVER ("1.03-08-p1") on a Trio64V+, TROMVER
+;                    ("1.5-07-p1") on a Trio64; the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
 ;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
@@ -110,6 +114,7 @@ F_2MB   equ 8                           ; needs more than 1 MB: not set with 1 M
 RK_V2   equ 0                           ; test set: Trio64V2, our ROM 2.04.07-pN (ROMVER)
 RK_VP   equ 1                           ; Trio64V+, our ROM 1.03-08-pN (VROMVER)
 RK_OTHER equ 2                          ; any other chip: the tests that need no ROM of ours
+RK_T64  equ 3                           ; Trio64, our ROM 1.5-07-pN (TROMVER): as RK_VP, its own mode list
 
 start:  cld
         call tickrd
@@ -178,15 +183,21 @@ start:  cld
         jne .k1
         mov byte [rkind],RK_V2
 .k1:    cmp byte [chip],CHIP_T64VP
-        jne .k
+        jne .k2
         mov byte [rkind],RK_VP
+.k2:    cmp byte [chip],CHIP_T64
+        jne .k
+        mov byte [rkind],RK_T64
 .k:     call t_rom
         call t_chip
         call t_post
         mov si,modelist
         cmp byte [rkind],RK_VP
-        jne .mk
+        jne .mt
         mov si,vmodelist
+.mt:    cmp byte [rkind],RK_T64
+        jne .mk
+        mov si,tmodelist
 .mk:    cmp byte [rkind],RK_OTHER
         je .mld
 .ml:    lodsw
@@ -269,7 +280,12 @@ t_rom:  mov dx,s_sig
         mov dx,s_sigv
         mov di,s_vromver
         mov cx,VROMVLEN
-.t1:    cmp byte [rkind],RK_OTHER
+.t1:    cmp byte [rkind],RK_T64
+        jne .t3
+        mov dx,s_sigt
+        mov di,s_tromver
+        mov cx,TROMVLEN
+.t3:    cmp byte [rkind],RK_OTHER
         jne .t2
         mov dx,s_sigo
 .t2:    mov [sigp],di
@@ -2548,16 +2564,35 @@ vmodelist:
         dw 0x0013,700,F_VGA,320,400
         dw 0xFFFF
 
+; Trio64, our ROM 1.5-07-pN: the defaults after its changes (no interlace, 800x600 at 60 Hz). The rates are
+; Phoenix's (VESA DMT 60 Hz within 1.5 Hz); its 1024x768 and 1280x1024 timings use 1352- and 1760-pixel
+; lines and its 640x480x16 a 796-pixel line, not DMT's, which the ROM leaves as they are (not checked).
+tmodelist:
+        dw 0x0003,700,F_VGA,720,900
+        dw 0x0013,700,F_VGA,320,400
+        dw 0x0012,597,F_VGA,640,800
+        dw 0x0101,597,F_BOOST,640,800     ; 640x480x8
+        dw 0x0111,598,F_BOOST,640,0       ; 640x480x16
+        dw 0x0103,607,F_BOOST,800,1056    ; 800x600x8 (60 Hz since 1.5-07-p1, CR52 = 80h at POST)
+        dw 0x0105,598,F_BOOST,1024,0      ; 1024x768x8 (non-interlaced since 1.5-07-p1)
+        dw 0x0107,603,F_BOOST|F_2MB,1280,0   ; 1280x1024x8 (non-interlaced since 1.5-07-p1)
+        dw 0x0003,700,F_VGA,720,900       ; back to text: base restore
+        dw 0x0013,700,F_VGA,320,400
+        dw 0xFFFF
+
 s_vname db 'S3TEST.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
-s_title db 'S3TEST ',VERSION,' - VBIOS test suite: Trio64V2 ',ROMVER,', Trio64V+ ',VROMVER,13,10
+s_title db 'S3TEST ',VERSION,' - VBIOS test suite: Trio64V2 ',ROMVER,', Trio64V+ ',VROMVER,', Trio64 ',TROMVER,13,10
         db 'Category column: ROM (image), CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10,13,10,'$'
 s_romver db ROMVER
 ROMVLEN equ $-s_romver
 s_vromver db VROMVER
 VROMVLEN equ $-s_vromver
+s_tromver db TROMVER
+TROMVLEN equ $-s_tromver
 s_sig   db 'ROM  ROM signature ',ROMVER,' ............ $'
 s_sigv  db 'ROM  ROM signature ',VROMVER,' ............. $'
+s_sigt  db 'ROM  ROM signature ',TROMVER,' .............. $'
 s_sigo  db 'ROM  ROM version (no ROM of ours for the chip) $'
 s_nover db '(no version string)$'
 s_cks   db 'ROM  ROM checksum (C000:0000-7FFF) = $'
@@ -2630,6 +2665,7 @@ vwant   db 0                            ; /V given
 s_cf    db '  FAIL $'
 s_ci    db '  INFO $'
 s_help  db 'S3TEST ',VERSION,' - regression test for our VBIOSes: Trio64V2 ',ROMVER,', Trio64V+ ',VROMVER,13,10
+        db '  and Trio64 ',TROMVER,13,10
         db '  S3TEST [/V] [/S] > S3TEST.LOG',13,10
         db 'The test set follows the chip; on other Trio64-family chips only the tests that',13,10
         db 'need no ROM of ours run.',13,10

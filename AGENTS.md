@@ -18,7 +18,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
   repository also holds the Trio64V+ backport (`rompatch/vplus/`: `s3vpatch.py` builds 1.03-08-pN
   from the S3 Trio64V+ BIOS 1.03-08 in `reference/vplus/`, with the same rules: byte assertions, a
-  pinned `RESULT_SHA` and `BLOCK_SHA`, `LEVEL` for its sign-on; docs/vplus-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
+  pinned `RESULT_SHA` and `BLOCK_SHA`, `LEVEL` for its sign-on; docs/vplus-backport.md) and the Trio64 ROM
+  (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
+  `reference/trio64/`, the same rules, `TROMVER`; docs/trio64-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a multiQ
   LCD (native 800x600, does not support 1280x1024 at all). "Out of range" on the multiQ in
@@ -63,9 +65,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   found; never write the Trio64V2 values into a test. A check whose expectation is a choice of our
   BIOS rather than a standard (default refresh rates, the mode list, the S3 mode numbers, VBE 2.0
   functions on a VBE 1.x BIOS) is WARN or INFO on another BIOS. S3TEST picks its test set by the chip
-  (Trio64V2: our 2.04.07 ROM; Trio64V+: our 1.03-08 ROM; others: only the tests that need no ROM of
-  ours). The emulator tests tagged `patch` are skipped for a ROM without the `2.04.07-pN` sign-on,
-  except those also tagged `vplus` on our Trio64V+ ROM; `--chip` selects the chip model.
+  (Trio64V2: our 2.04.07 ROM; Trio64V+: our 1.03-08 ROM; Trio64: our Phoenix 1.5-07 ROM; others: only
+  the tests that need no ROM of ours). The emulator tests tagged `patch` are skipped for a ROM without
+  the `2.04.07-pN` sign-on, except those also tagged `vplus` on our Trio64V+ ROM and `t64` on our Trio64
+  ROM; `--chip` selects the chip model.
 - Runs are non-interactive (to look at a mode, use VSHOW). Output must be redirectable to a
   file; anything meant for the person at the screen goes to stderr.
 - Write and commit the log (INT 21h AH=40h, then AH=68h) before each test starts, so that after a
@@ -116,12 +119,12 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   should be explained.
 - The tests are for the newest ROM: a new level changes `LEVEL` in rompatch/s3patch.py and `ROMVER` in
   common/version.inc together (for the Trio64V+ ROM `LEVEL` in rompatch/vplus/s3vpatch.py and
-  `VROMVER`); the emulator test `version` fails when they differ or when the ROM under test is older.
+  `VROMVER`, for the Trio64 ROM `LEVEL` in rompatch/trio64/s3tpatch.py and `TROMVER`); the emulator test `version` fails when they differ or when the ROM under test is older.
 - Memory configurations: the ROM supports 2 MB (the test card) and 4 MB (the 86C775 maximum, CR36
-  bits 7-5 = 000b) of video memory; the Trio64V+ ROM also 1 MB. The BIOS sizes the memory at every
+  bits 7-5 = 000b) of video memory; the Trio64V+ and Trio64 ROMs also 1 MB. The BIOS sizes the memory at every
   POST, so there is no build option for it. `make emu-test ROM=...` runs every test with 2 MB and the
   ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=vplus`
-  also with 1 MB; a new test that reads the memory size or the VESA mode list gets the tag. Expected
+  or `CHIP=trio64` also with 1 MB; a new test that reads the memory size or the VESA mode list gets the tag. Expected
   values follow the memory size, never a fixed 2 MB.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
   every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive

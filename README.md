@@ -12,7 +12,7 @@ is for the Windows 9x desktop.
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
-| S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip: our Trio64V2 ROM, our Trio64V+ ROM, or on other chips only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
+| S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip: our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them | `VGALOG` (or `VGALOG /M`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
@@ -122,13 +122,16 @@ standards or from the registers the BIOS set, not from our BIOS:
     python3 emu/tests.py --rom TRIO64VP.BIN --chip vplus
 
 Our Trio64V+ ROM (`1.03-08-pN` sign-on, section "Trio64V+ ROM") is in between: of the `patch` tests it
-runs those also tagged `vplus` (version, stores, and `vplus_patches` for its own patches), and the
-failures it keeps from 1.03-08 (below) pass with a note (`VPLUS_BASE` in `emu/tests.py`).
+runs those also tagged `vplus` (version, stores, s3test, and `vplus_patches` for its own patches), and
+the failures it keeps from 1.03-08 (below) pass with a note (`VPLUS_BASE` in `emu/tests.py`). Our
+Trio64 ROM (`1.5-07-pN`, section "Trio64 ROM") likewise with the tag `t64`, `t64_patches` and
+`T64_BASE`.
 
 S3TEST picks its test set by the chip it finds (`common/chip.inc`), before the first test. On a
 Trio64V2 it checks our 2.04.07 ROM (ROMVER), on a Trio64V+ our 1.03-08 ROM (VROMVER: the booster
 without the CR6D base, no pedestal, refresh default, LFB, 4F06 BL=3 or 512x384 lines, its own mode
-list), and on any other chip, where there is no ROM of ours, only the tests that need none (checksum,
+list), on a Trio64 our Phoenix 1.5-07 ROM (TROMVER: as on the Trio64V+, with its own mode list), and
+on any other chip (the Trio32), where there is no ROM of ours, only the tests that need none (checksum,
 chip, MCLK against the data book, memory type, VGA clear, font load, scrolls, AH=09h, timings); the
 version found is then INFO. The MCLK line compares the clock with the data book maximum for the chip
 and the strapped memory type, so a ROM built with another MCLK passes as long as it is within it.
@@ -205,7 +208,8 @@ fonts, strings, padding) and code nothing reaches (the routines our patches jump
 count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p21 is at
 86.6 % (15135 of 17487 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
-(`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run.
+(`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
+1.5-07-p1 (`CHIP=trio64`) is at 84.6 % (13317 of 15739 bytes), its new code all run.
 
 ### EGA/CGA against the reference BIOS
 
@@ -261,7 +265,7 @@ be refused (already patched, three patch sites changed, a wrong checksum, and wi
 
 Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
 for (CR36 bits 3-2, set by resistors on the board and kept by the BIOS). `MCLK` sets the entry of
-`MEMTYPE` to the nearest MCLK PLL setting (M 1-127, N 1-31, R 0-3, VCO 135-270 MHz) at or below the
+`MEMTYPE` (the Trio64 ROM has one entry for every type) to the nearest MCLK PLL setting (M 1-127, N 1-31, R 0-3, VCO 135-270 MHz) at or below the
 data book limit; the other entries stay. The build prints the frequency it got (50 gives 50.11 MHz, 55
 gives 55.04 MHz, 60 gives 59.96 MHz).
 
@@ -272,6 +276,7 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
 | Trio64V+, 1.03-08-p1 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
+| Trio64, 1.5-07-p1 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 60 MHz (MEM-1) |
 
 The Trio64V+ feature list names 50 MHz for EDO and 1-cycle EDO; the timing table allows 60 MHz, which
 S3COMPAT checks (MEM-1), and 1.03-08 itself runs 52.79 MHz. Below 40 MHz the option refuses (the data
@@ -290,8 +295,9 @@ both BIOSes find the size at every POST. They write 4 MB into CR36 bits 7-5, tes
 then 2 MB, and write the size that holds (2.04.07 at 19C0h, 1.03-08 at 0E80h); the data books say the
 same ("the S3 BIOS determines this value directly and writes it to CR36_7-5 after reset"). So a card
 upgraded from 1 to 2 MB, or from 2 to 4 MB where the board has the sockets, works with the same ROM.
-The emulator answers with a fixed size (`--vram`): `make emu-test` runs the tests whose result depends on
-the size with 2 and 4 MB, and on the Trio64V+ also with 1 MB.
+Phoenix 1.5-07, the Trio64 ROM's base, does the same. The emulator answers with a fixed size (`--vram`):
+`make emu-test` runs the tests whose result depends on the size with 2 and 4 MB, and on the Trio64V+ and
+the Trio64 also with 1 MB.
 
 ## Trio64V+ ROM
 
@@ -302,8 +308,6 @@ reset. The result signs on as 1.03-08-p1. The VCO fix is not possible on the Tri
 divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus-backport.md` has the
 details, what 1.03-08 itself still gets wrong, and the per-call costs.
 
-A port to the Trio64 (86C764) is planned, not built: `docs/trio64-backport.md` compares the Trio64 BIOS
-images at hand (Phoenix 1.4-04, 1.5-04, 1.5-07, Diamond 2.05) as bases and lists what carries over.
 
     make vrom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with zeros above, for a 64 KB EEPROM)
     make vrom-test [ROM=S3VPP1.BIN]
@@ -319,6 +323,27 @@ In the emulator tests the ROM runs on the Trio64V+ model (`CHIP=vplus`): `vplus_
 patches, `stores` the 32-bit stores, and the tests for the 2.04.07 patches are skipped. Not tried on a
 card yet.
 
+## Trio64 ROM
+
+`rompatch/trio64/` ports the same changes to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in
+`reference/trio64/1_5_07.bin` (the CP764 build): the reference BIOS S3 gave the card makers for the
+Trio64, as far as the 14 Trio64 images at hand show (no S3-built one among them). The result signs on as
+1.5-07-p1. Besides the 32-bit speed patches, the booster with the Windows check and the ATC flip-flop
+reset, it removes the interlaced refresh entries and the modes that exist only interlaced on the Trio64
+(106h, 118h, 119h, 11Ah, 120h), so no mode defaults to an interlaced timing, and 800x600 defaults to 60
+Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
+what 1.5-07 still gets wrong and the comparison of the base candidates.
+
+    make trom OUT=S3T64P1.BIN [VSIZE=64] [MCLK=55]
+    make trom-test [ROM=S3T64P1.BIN]
+    make emu-test ROM=S3T64P1.BIN CHIP=trio64 [LOGS=emu/tlogs]
+    make tref-compare ROM=S3T64P1.BIN
+
+`s3tpatch.py` checks the 1.5-07 code (1000h-7EFFh, the same in every 1.5-07 build) and the layout of
+its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that card's memory clock and
+timing bytes. The emulator test `t64_patches` checks the ROM's changes, `stores` its 32-bit stores, and
+S3TEST runs its Trio64 set. Not tried on a card yet.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
@@ -331,7 +356,9 @@ the .COM files are kept as the artifact `tools` for 14 days. It then builds the 
 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin` (`make rom`, `make rom-test` with the pinned
 SHA-256) and runs `make emu-test` and `make ref-compare` on it, each even when an earlier one failed;
 then builds the Trio64V+ ROM from `reference/vplus/1_03_08.bin` (`make vrom`, `make vrom-test`) and
-runs `make emu-test CHIP=vplus` and `make vref-compare` on it. The emulator logs are kept as the
+runs `make emu-test CHIP=vplus` and `make vref-compare` on it, and the Trio64 ROM from
+`reference/trio64/1_5_07.bin` with `make trom`, `make trom-test`, `make emu-test CHIP=trio64` and
+`make tref-compare`. The emulator logs are kept as the
 artifact `emu-logs` (without .BIN files), the patched ROM images are not kept. The hardware logs remain the final word, as for the emulator tests run by hand.
 
 `.github/workflows/coverage.yml` runs `make coverage` (the 80 % goal, with the list of code no test

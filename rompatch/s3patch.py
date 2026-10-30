@@ -206,6 +206,9 @@ def assemble(sym, nasm, srcdirs=(HERE,), blocks=None):
     in order), so the Trio64V+ patcher (vplus/s3vpatch.py) can assemble the shared files here with
     its own addresses. Returns [(offset, bytes, file)] and the labels."""
     tmp = tempfile.mkdtemp(prefix='s3patch_')
+    if os.sep in nasm or '/' in nasm:       # NASM runs in tmp: a relative path must not depend on it
+        nasm = os.path.abspath(nasm)
+    srcdirs = [os.path.abspath(d) for d in srcdirs]
     try:
         out, labels = [], {}
         for name, org, room, want in BLOCKS if blocks is None else blocks:
@@ -220,7 +223,9 @@ def assemble(sym, nasm, srcdirs=(HERE,), blocks=None):
             cmd = [nasm, '-f', 'bin'] + ['-i' + d + os.sep for d in srcdirs] + ['-o', binf] + \
                   ['-DL_%s=0x%04X' % kv for kv in sorted(labels.items())] + [os.path.join(tmp, name)]
             try:
-                r = subprocess.run(cmd, capture_output=True, text=True)
+                # in the temporary directory: NASM looks for an %include in the current directory
+                # before the -i paths, so a bios.inc where the patcher is started must not count
+                r = subprocess.run(cmd, capture_output=True, text=True, cwd=tmp)
             except OSError as e:
                 raise PatchError('cannot run nasm (%s): %s' % (nasm, e))
             if r.returncode:
@@ -379,19 +384,24 @@ def jcc(op, at, to):
     return bytes([op, r & 0xFF])
 
 
-def speed_sites(d, put, site, sym, lab, tags=True):
-    """The patch sites the Trio64V+ build shares (vplus/s3vpatch.py, the same signatures in 1.03-08):
-    the window set booster entry, the fast 4F05 jump, the 32-bit mode set clears, font load, scrolls
-    and AH=09h. put(off, old, new, why) checks the old bytes; tags=False leaves the 2.04.07 levels
-    out of the log."""
+def speed_sites(d, put, site, sym, lab, tags=True, skip=()):
+    """The patch sites the other builds share (vplus/s3vpatch.py, trio64/s3tpatch.py: the same
+    signatures in 1.03-08 and Phoenix 1.5-07): the window set booster entry, the fast 4F05 jump, the
+    32-bit mode set clears, font load, scrolls and AH=09h. put(off, old, new, why) checks the old bytes;
+    tags=False leaves the 2.04.07 levels out of the log; skip names the sites a build leaves out
+    ('wset', 'clr', 'int10': Phoenix has its own window set, clears with the engine and keeps its
+    4F05)."""
     def t(why, lv):
         return '%s (%s)' % (why, lv) if tags else why
-    a = sym['WSET']
-    put(a, '52 53 8b da', jmp(a, lab['wsetx']) + b'\x90', t('VBE window set (4F05, window function): booster on', 'p16'))
-    a = site['clr']
-    put(a, d[a:a + 5], jmp(a, lab['clear']) + b'\x90\x90', t('S3/VESA mode set clear: rep stosd', 'p11'))
-    a = site['int10'] + 2
-    put(a, '80 fc 0e', jmp(a, lab['int10x']), t('INT 10h entry: fast 4F05 BH=0', 'p12'))
+    if 'wset' not in skip:
+        a = sym['WSET']
+        put(a, '52 53 8b da', jmp(a, lab['wsetx']) + b'\x90', t('VBE window set (4F05, window function): booster on', 'p16'))
+    if 'clr' not in skip:
+        a = site['clr']
+        put(a, d[a:a + 5], jmp(a, lab['clear']) + b'\x90\x90', t('S3/VESA mode set clear: rep stosd', 'p11'))
+    if 'int10' not in skip:
+        a = site['int10'] + 2
+        put(a, '80 fc 0e', jmp(a, lab['int10x']), t('INT 10h entry: fast 4F05 BH=0', 'p12'))
     a = site['font']
     put(a, '50 51 8a', jmp(a, lab['font']), t('font load: rep movsd per character', 'p12'))
     a = site['scr']

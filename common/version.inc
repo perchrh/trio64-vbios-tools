@@ -7,6 +7,7 @@
 ;          the level rompatch/s3patch.py builds. Override:
 ;              make ROMVER=2.04.07-p13   (or: nasm -DROMVER="'2.04.07-p13'" ...)
 ; VROMVER  the same on a Trio64V+: the level rompatch/vplus/s3vpatch.py builds (make VROMVER=...)
+; TROMVER  the same on a Trio64: the level rompatch/trio64/s3tpatch.py builds (make TROMVER=...)
 %ifndef VERSION
 %define VERSION '1.0'
 %endif
@@ -15,4 +16,7 @@
 %endif
 %ifndef VROMVER
 %define VROMVER '1.03-08-p1'
+%endif
+%ifndef TROMVER
+%define TROMVER '1.5-07-p1'
 %endif

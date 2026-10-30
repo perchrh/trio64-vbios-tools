@@ -22,11 +22,11 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
                      attribute controller flip-flop reset after the mode set); the booster (64 KB
                      linear window at A0000h in banked packed modes, on at the end of a banked 4F02
                      and at the first bank switch, not under Windows enhanced mode)
-         vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry, 32-bit font
-                     load and mode 13h scroll
-         shared with the Trio64V2 build (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
+         vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry
+         shared with the other builds (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
-         VGA mode set clear)
+         VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
+         Trio64 build)
   MCLK   (only with --mclk) the MCLK PLL entry of --memtype, at most 60 MHz; without it the MCLK is as
          in 1.03-08 (52.79 MHz with 1-cycle EDO, 59.96 MHz with fast page or 2-cycle EDO, picked by the
          card's strapping)
@@ -57,7 +57,8 @@ RESULT_SHA = '47418ec6f2bf21b51f0c860508f20ee6fbc6fb311a5130c5dd5ae7c240de26de' 
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
-    'vhooks.asm': 'f830c6adc0a588ce', 'vext.asm': 'ebc946aa9b0f79e1',
+    'vhooks.asm': 'f830c6adc0a588ce', 'vext.asm': '911cb6e38ca370ef',
+    'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '5df0f0902ec6065b',
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
@@ -97,7 +98,9 @@ SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
 # patch sites use), assembled in this order (s3patch.assemble)
 BLOCKS = [
     ('vhooks.asm', 0x7AE0, 0x7BA8 - 0x7AE0, ('hook', 'h4f02', 'bon')),
-    ('vext.asm', 0x7BA8, 0x7CC7 - 0x7BA8, ('int10x', 'font', 'scr13', 'wsetx')),   # calls bon
+    ('vext.asm', 0x7BA8, 0x7C05 - 0x7BA8, ('int10x', 'wsetx')),   # calls bon
+    ('font32.asm', 'FONT32', 0x7C21 - 0x7C05, ('font',)),
+    ('scr13.asm', 'SCR13', 0x7CC7 - 0x7C21, ('scr13',)),
     ('p13fill.asm', 'P13A', 0x7CEA - 0x7CC7, ('wfillt', 'wfill')),
     ('p13df.asm', 'DFDN', 0x7CF2 - 0x7CEA, ('dfdn',)),
     ('p13move.asm', 'P13B', 21, ('wmove',)),               # dead: old clear loop

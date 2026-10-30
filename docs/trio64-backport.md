@@ -1,15 +1,84 @@
-# Porting to a Trio64 BIOS
+# The Trio64 ROM (1.5-07-p1)
 
-What of our Trio64V+ ROM (1.03-08-p1, `rompatch/vplus`, docs/vplus-backport.md) could go into a video
-BIOS for the Trio64 (86C764), and on which base. Collected on 30 October 2026 for the ExpertColor
-DSP-3364P (86C764-P, 1 MB EDO 50 ns upgraded to 2 MB). Its stock BIOS is not dumped yet; the findings
-below come from the Trio64 BIOS images at hand, run in the emulator on the Trio64 model
-(`emu/tests.py --chip trio64`), and from the Trio32/Trio64 data book (March 1995). Nothing here has
-run on a card.
+Our changes ported to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in `rompatch/trio64`.
+Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P, 1 MB EDO
+50 ns upgraded to 2 MB); not yet run on a card. The choice of base is below ("Base BIOS candidates").
 
-Scope as for the Trio64V+: no VBE 2.0 functions. No ROM is built yet; this is the plan.
+    make trom OUT=S3T64P1.BIN [VSIZE=64] [MCLK=55]   (rompatch/trio64/s3tpatch.py, 32 KB)
+    make trom-test ROM=S3T64P1.BIN
+    make emu-test ROM=S3T64P1.BIN CHIP=trio64
+    make tref-compare ROM=S3T64P1.BIN
 
-## Base BIOS candidates
+Base: `reference/trio64/1_5_07.bin`, the CP764 build of Phoenix 1.5-07 (08/19/96, MCLK 54.9 MHz,
+SHA-256 6a28c6b2...). Every 1.5-07 build at hand has the same code from 1000h to 7EFFh; the patcher
+checks that code (SHA-256) and the layout of the tables, so another card's own 1.5-07 dump is patched
+too and keeps its memory clock and timing bytes (checked with `expertcolor.BIN`, `86c764ptrio64.BIN` and
+the "1.5-07 EDO" build). It refuses the Britek "VIEWTOP" build (other sign-on text) and `86c764x2.bin`
+(a "V2680" tag at 7FF0h, where code goes).
+
+## What 1.5-07-p1 carries
+
+| Change | How |
+| --- | --- |
+| No interlaced defaults | The 11 refresh entries that run interlaced (CR42 bit 5, found by setting every mode at every refresh index in the emulator) are removed. The modes that also have non-interlaced rates (1024x768 and 1280x1024 at 8, 15 and 16 bpp, and the 2xxh modes 204h, 205h, 208h with the same timings) now default to their lowest non-interlaced rate: 1024x768 at 59.8 Hz (65.3 MHz), 1280x1024 at 60.3 Hz (112.2 MHz, clock-doubled). |
+| Interlaced-only modes removed | 106h (1280x1024x4), 118h (1024x768x16M), 119h and 11Ah (1280x1024x32K/64K) and 120h (1600x1200) exist on the Trio64 only interlaced (1600x1200 at 60 Hz needs 162 MHz, the chip maximum is 135 MHz; the others need clocks above the single-clock limits for their depth, CLK-1). They are gone from the mode table, both VESA lists (4F00 no longer lists them, 4F02 refuses them with 014Fh) and the mode map. |
+| 800x600 at 60 Hz | POST writes CR52 = 80h instead of 00h: the refresh index of the 800x600 modes is 1, the 60.7 Hz entry (VESA DMT, line total 1056) instead of 56 Hz. Phoenix writes CR41/CR52 only at POST; a refresh utility can still choose another rate. |
+| 32-bit speed patches | VGA mode set clear, font load, mode 13h scroll (with EAX kept), text and planar scrolls, AH=09h: the shared `speed_sites` and .asm files, the same signatures as in 2.04.07 and 1.03-08. |
+| Booster with the Windows check | On after a banked 4F02 and at the window set with BH = 0 (4F05 and the window function both call Phoenix's window set at 5123h). The refusal mark is CR52 bit 3 (`tbon.asm` says why not CR6C or CR6D). Phoenix relocks the S3 registers after its calls and its unlock routine changes AX, so the code unlocks itself and leaves CR38/CR39 as found. |
+| ATC flip-flop reset | In the mode set hook (AH=00 table and 4F02's call). |
+| MCLK build option | `MCLK=` sets the single MCLK entry at 3B5h, at most 60 MHz (MEM-1); without it the build's own clock stays. |
+
+Not applied: the fast 4F05 path (Phoenix's 4F05 already takes 10 port accesses), the 32-bit S3/VESA
+mode set clear (Phoenix clears with the graphics engine), the base restore (Phoenix writes CR59 from
+CR6B and CR5A from CR6C bit 7 at every mode set), the PLL N = 0 fix (the N = 0 entries were the
+interlaced 1280x1024 ones, now removed), the Trio64V2 register fixes and VBE 2.0.
+
+## Where the code went
+
+The removed entries and modes freed 384 bytes in nine places; with two zero runs the stock BIOS never
+reads (checked with a broad INT 10h workload in the emulator) that is enough for all of it:
+
+| Range | Was | Now |
+| --- | --- | --- |
+| 0B4C-0BCF (132) | the end of the refresh lists after their compaction | `tbon.asm`: bon, unlk, relk |
+| 0831-0870 (64) | the 1600x1200 register block | `tlock.asm`: wcheck; `tglue.asm`: h4f02, wsetp |
+| 0604-0630 (45) | the end of the mode table | `font32.asm` |
+| 0140-0183 (68) | zero padding after the second sign-on block | `thook.asm` |
+| 7F52-7FFE (173) | zeros at the image end, after the 9x16 alternate font table (its 00h at 7F51h, and its last glyph's blank rows, look free but are not) | `scr13.asm` |
+| 4EBE-4EED (48) | the 4F01 records of 118h-120h | `p13fill.asm` |
+| 0D79-0D91, 0DDD-0DF5 (25 each) | CRTC tables only removed entries used | `p13bfill.asm`, `p13move.asm` |
+| 4E2E-4E39 (12) | the 4F01 record of 106h | `p13df.asm` |
+| 0EAC-0EB9 (14) | the old font loop after the font jump | `p13bfa.asm` |
+
+Free after the build: 4D70-4D81 and 4DD1-4DDF (the ends of the VESA lists and the mode map), the rest of
+0604h and 0B4Ch, and about 40 bytes of sign-on padding.
+
+## Checked in the emulator (Trio64 model)
+
+`make trom-test`: the tables (no list starts with an interlaced entry, every kept entry unchanged), every
+other byte unchanged, another maker's timing bytes and MCLK kept, the MCLK option, the refusals.
+`make emu-test CHIP=trio64` with 2, 4 and 1 MB: `t64_patches` (defaults, removed modes, booster, Windows
+check, lock state, ATC flip-flop, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
+`make tref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07. S3COMPAT's VESA lines: every mode
+non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): 84.6 % of the code, every byte of
+the new code among it.
+
+## Left as in 1.5-07
+
+The emulator tests pass these on our Trio64 ROM with a note (`T64_BASE` in `emu/tests.py`); the
+unpatched 1.5-07 gives the same lines:
+
+| Test | 1.5-07 behaviour |
+| --- | --- |
+| errors (1 MB) | 4F02 sets 107h, 112h and 115h-117h, which need more than 1 MB (1.5-07 also set 118h-120h, now removed). |
+| windows | 4F06 changes the upper halves of EAX, ECX and EDX (the dispatcher saves only the 16-bit registers). |
+| s3compat_vga, s3compat_full | The upper half of the 8x8 font (AX=1130h BH=4) is Phoenix's own design (WARN 02); S3COMPAT's run leaves a register state behind that differs from its baseline (WARN 01). |
+| s3test | Phoenix's window set reads SR04 and leaves the sequencer index at 04h: S3TEST's 4F05 line FAIL 02. A save and restore of the index in our window set entry would fix it for BH = 0; not done. |
+
+Phoenix's 1024x768 and 1280x1024 timings and its 640x480x16 use other line totals than VESA DMT
+(1352, 1760 and 796 pixels); S3TEST's Trio64 mode list does not check them.
+
+## Base BIOS candidates (30 October 2026)
 
 No S3-built Trio64 BIOS turned up among 14 Trio64 images (no "S3 86C764 Video BIOS", as there is "S3
 86C765 Video BIOS 1.03-08" for the Trio64V+). What S3 gave the card makers for the Trio64 appears to be
@@ -44,11 +113,8 @@ call of the mode set (m4f02), GETCRTC, RDREG and SEG_SCR. They do not match: the
 clear (clr), the 4F05 and window function code (w4f05, wfn, WSET), UNLOCK and the mode set entry
 (MODESET), and the CR59 write of 1.03-08 (cr59).
 
-The free space is the deciding difference. The Trio64V+ code takes 590 bytes in 1.03-08 (the hook and
-booster 200, the fast 4F05 path, font load and mode 13h scroll 287, the fills and moves about 90, the
-32-bit clear 35); only 1.4-04 has room for all of it. The zero runs in the sign-on area (87-120
-bytes from 10Ch-12Dh) and a 64-byte zero block near 3B00h-3D00h in each Phoenix image may be free too;
-whether any code or table reads them is not checked yet (coverage records reads).
+The free space was the deciding difference: 1.5-07 has 173 bytes at its end, the Trio64V+ code takes
+about 590 bytes in 1.03-08, and only 1.4-04 (755 bytes) had room for all of it as it was.
 
 ### S3's own Trio64V+ BIOS 1.03-08 on a Trio64
 
@@ -72,54 +138,23 @@ It would also identify as "S3 86C765" and "Trio64V+" (4F00 OEM string). So 1.03-
 means more than the backport: per-mode FIFO parameters, no reserved bits, the card's CR5C, and new
 names, all to be proven on the card.
 
-**Recommendation:** Phoenix 1.5-07, S3's reference for the Trio64, as the card's own dump: a patcher can
-assert only the shared code (1000h-7EFFh) and the patch sites, so it fits every 1.5-07 build and keeps
-the card's memory clock and timing bytes. Its 164-179 free bytes hold the VGA speed patches; the
-booster and the rest need the sign-on padding and the 64-byte block to be free, or a smaller booster.
-Phoenix 1.4-04 is the fallback with room for everything; it has no 115h (800x600x16M), 118h-11Ah or
-120h (1600x1200), which 1.5-0x lists. 1.03-08 only if an S3-built image matters more than the FIFO
-work it needs.
-
-## What ports, and how
-
-| Change of our ROMs | On a Phoenix Trio64 BIOS |
-| --- | --- |
-| 32-bit VGA mode set clear, font load, mode 13h scroll (with EAX kept, p21), text and planar scrolls, AH=09h text | The sites match, so `speed_sites` and the shared .asm files (`p13*.asm`, the vext.asm font and scr13 code) apply with the Phoenix addresses. The emulator shows for 1.5-07 the same 8- and 16-bit stores as for 1.03-08 (mode set 03h 4096 bytes and 16520 words, 13h/12h 32768 words, mode 13h scroll 32000 words, mode 12h clear 38400 bytes, font load 4096 bytes). Size: about 240 bytes (font 28, scr13 120, wfill 35, dfdn 8, bfill 25, wmove 21; bfilla in the dead bytes after the font jump). |
-| S3/VESA mode set clear (32-bit) | Not needed: Phoenix clears with the graphics engine (no CPU stores in 4F02 in the emulator, which does not run the engine; the README noted this for 1.4-04 before). |
-| Booster: 64 KB linear window at A0000h in banked modes | The chip has it: CR58 bits 1-0 = 00b is a 64 KB window, CR59/CR5A its position, and with CR31 bit 0 the bank in CR6A is added (data book section 13, CR58). Phoenix 1.5-07 keeps the PCI base in CR6B from POST and writes CR59 back from it (CR5A = 00h) at every mode set, as 1.03-08 does (emulator; the other Phoenix versions not checked), so vhooks.asm's approach fits. 4F02's mode set call matches the m4f02 signature (the place for the booster after a banked 4F02). The window set code (4F05 and the window function) is Phoenix's own: its sites have to be found and asserted anew. |
-| Windows enhanced mode check | Generic code (INT 2Fh AX=1600h). Its refusal mark lives in CR6D on our ROMs; the Trio64 data book documents no CR6D. CR6C ("reserved for use by the S3 BIOS", Phoenix writes 00h at POST) is the candidate, once it is confirmed that Phoenix does not use it otherwise. CR6B is not: on the Trio64 its bit 7 and bits 1-0 also have hardware meanings (PD bus size, signal timing). |
-| Fast 4F05h | Phoenix's 4F05 takes 10 port accesses (1.03-08: 16, our fast path: 9), so the gain is small. The INT 10h entry matches, so the jump point exists; lowest priority. |
-| Attribute controller flip-flop reset after the mode set | Generic; needs the AH=00 table entry and the 4F02 call redirected to a hook, as in vhooks.asm. The dispatcher has the same layout (the int10 signature matches); the table address is still to be read from the code. |
-| PLL N = 0 in 1280x1024 (106h, 107h) | New for this base (not in our ROMs): the data books require N >= 1 (PLL-2). The same clock, 75.16 MHz, comes from M = 40, N = 2, R = 1 (VCO 150.3 MHz) instead of M = 19, N = 0: a data patch with byte assertions, as the VCO fix of s3patch.py. |
-| MCLK build option | A single MCLK entry in these BIOSes (1.4-04: 38Dh, SR11 then SR10; 1.5-07: 3B5h), not one per memory type: `MCLK=` would set that entry, at most 60 MHz (MEM-1). `expertcolor.BIN` runs 69.8 MHz, above the data book maximum; a ROM of ours for that card would stay at or below 60 MHz unless the README rule is changed for it. Whether its 50 ns EDO keeps up at a given clock is the card's question (S3COMPAT's VRAM test). |
-| DCLK VCO fix | As on the Trio64V+: R has 2 bits, so a clock below 16.9 MHz cannot have its VCO in range. The Phoenix images show no VCO below 135 MHz in the emulator; nothing to do. |
+**Chosen:** Phoenix 1.5-07, S3's reference for the Trio64 (30 October 2026). The space for the whole
+port came from removing the interlaced entries and modes (above), not from an older base.
 
 ## Does not apply to the Trio64
 
 The FIFO fix (CR90/CR91, Trio64V2), CR23/CR26 (Trio64V2), the POST delay in AX (CR88, Trio64V2/GX),
 the DDC fixes (2.04.07 code), the black level (SR1A is a Trio64V2 register), and everything VBE 2.0.
 
-## Left as they are
-
-The refresh defaults (800x600 at 56 Hz, 1024x768 interlaced) and the 8x8 upper font are choices of
-the Phoenix BIOS; changing them means new CRTC tables and refresh entries, which is a feature, not a
-port. 4F06's 32-bit registers and 4F02 accepting modes that do not fit the memory are the same faults
-as in 1.03-08 (docs/vplus-backport.md, "Left as in 1.03-08").
-
 ## Memory
 
-The Trio64 takes 1, 2 or 4 MB, EDO only up to 2 MB (fast page memory for 4 MB, T64-MEM-3). The
-DSP-3364P has 2 MB EDO after its upgrade. Whether the Phoenix BIOSes size the memory at POST as the S3
-BIOSes do is not checked yet (the data book says the S3 BIOS does).
+The Trio64 takes 1, 2 or 4 MB, EDO only up to 2 MB (fast page memory for 4 MB, T64-MEM-3). Phoenix
+sizes the memory at POST as the S3 BIOSes do (CR36 written with 4 MB, then 2 MB, in the emulator), so the
+DSP-3364P's upgrade from 1 to 2 MB needs no other ROM. The emulator tests run with 1, 2 and 4 MB.
 
-## Steps
+## Pending
 
-1. Dump the DSP-3364P's BIOS (S3REGS and a ROM dump, as for the other cards) and compare it with
-   `expertcolor.BIN`.
-2. If it is Phoenix 1.5-07 (likely), patch it: assert the shared code 1000h-7EFFh and the patch
-   sites, keep its first 4 KB (the card's clock and timing). First the VGA speed patches, then the
-   booster if the sign-on padding and the 64-byte block turn out to be free; Phoenix 1.4-04 if all of
-   it is wanted at once.
-3. A patcher in the style of `rompatch/vplus/s3vpatch.py` with the Phoenix addresses, the N = 0 data
-   patch and the MCLK entry; emulator tests on the Trio64 model (`CHIP=trio64`), a Trio64 test set in
-   S3TEST, then the card.
+- Dump the DSP-3364P's BIOS (and S3REGS) and patch that dump: if it is `expertcolor.BIN`, its MCLK is
+  69.8 MHz, above the data book's 60 MHz; build it with `MCLK=60` or lower and check the memory with
+  S3COMPAT's VRAM test.
+- S3TEST and S3COMPAT logs from the card.

@@ -10,8 +10,9 @@
 # 4 MB) and the EGA/CGA comparison with the reference run on that ROM; each of these runs once the ROM
 # is built, even when an earlier one failed. The Trio64V+ ROM (rompatch/vplus) is built the same way from
 # the S3 Trio64V+ BIOS 1.03-08 in reference/vplus/1_03_08.bin and goes through its patcher tests, the
-# emulator tests on the Trio64V+ model and the EGA/CGA comparison with 1.03-08. The patched ROM images are
-# not kept. The coverage goal has
+# emulator tests on the Trio64V+ model and the EGA/CGA comparison with 1.03-08, and the Trio64 ROM
+# (rompatch/trio64) from the Phoenix 1.5-07 in reference/trio64/1_5_07.bin the same way on the Trio64 model.
+# The patched ROM images are not kept. The coverage goal has
 # its own workflow, coverage.yml, which pull requests do not start.
 name: CI
 
@@ -116,6 +117,23 @@ jobs:
         if: ${{ !cancelled() && steps.vrom.outcome == 'success' }}
         run: make vref-compare ROM="$RUNNER_TEMP/VROM.BIN"
 
+      - name: Build the Trio64 ROM from Phoenix 1.5-07
+        id: trom
+        if: ${{ !cancelled() }}
+        run: make trom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/TROM.BIN"
+
+      - name: Trio64 ROM patcher tests
+        if: ${{ !cancelled() && steps.trom.outcome == 'success' }}
+        run: make trom-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/TROM.BIN"
+
+      - name: Trio64 emulator tests
+        if: ${{ !cancelled() && steps.trom.outcome == 'success' }}
+        run: make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/TROM.BIN" CHIP=trio64 LOGS=emu/tlogs
+
+      - name: Trio64 EGA/CGA against 1.5-07
+        if: ${{ !cancelled() && steps.trom.outcome == 'success' }}
+        run: make tref-compare ROM="$RUNNER_TEMP/TROM.BIN"
+
       - name: Upload the emulator logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -127,6 +145,9 @@ jobs:
             emu/vlogs/
             emu/vlogs4/
             emu/vlogs1/
+            emu/tlogs/
+            emu/tlogs4/
+            emu/tlogs1/
             !emu/**/*.BIN
           retention-days: 14
           if-no-files-found: ignore

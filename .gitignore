@@ -14,6 +14,9 @@ emu/logs4/
 emu/vlogs/
 emu/vlogs4/
 emu/vlogs1/
+emu/tlogs/
+emu/tlogs4/
+emu/tlogs1/
 *.untested
 nasm/
 poetry.lock

@@ -20,6 +20,8 @@
 %define P13C     0x0B2C     ; bfilla: the old 8-bit font load loop after the font jump (dead, 14 bytes)
 %define WSET     0x49C1     ; VBE window set (BX = window, DX = bank): 4F05 BH=0 and the window function
 ; the new code in the free block 7AE0-7FEF (the reference has zeros from 7AD9h; 7FF0h holds 'Cardex1')
+%define FONT32   0x7C05     ; font (font32.asm)
+%define SCR13    0x7C21     ; scr13 (scr13.asm)
 %define P13A     0x7CC7     ; wfillt/wfill (p13fill.asm)
 %define DFDN     0x7CEA     ; dfdn (p13df.asm)
 %define BFILL    0x7CF2     ; bfill0/bfill (p13bfill.asm)
