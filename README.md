@@ -44,8 +44,8 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P19.BIN NASM=nasm/nasm-3.02/nasm
-    make rom OUT=S3V2P19.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P20.BIN NASM=nasm/nasm-3.02/nasm
+    make rom OUT=S3V2P20.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -67,7 +67,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P19.BIN
+    make emu-test ROM=path/to/S3V2P20.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -184,7 +184,7 @@ category column: compare from the sixth column.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P19.BIN
+    make coverage ROM=path/to/S3V2P20.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -196,7 +196,7 @@ the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare ROM=S3V2P19.BIN
+    make ref-compare ROM=S3V2P20.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -210,10 +210,10 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(level p19) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(level p20) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P19.BIN
-    make rom OUT=S3V2P19.BIN
+    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P20.BIN
+    make rom OUT=S3V2P20.BIN
 
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
@@ -229,10 +229,10 @@ instructions differently (NASM 2.16.01 puts the REP prefix before the operand-si
 MOVSD/STOSD, 3.01 and 3.02 after it; such an image works the same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom OUT=S3V2P19.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom OUT=S3V2P20.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P19.BIN]
-    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P19.BIN]
+    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P20.BIN]
+    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P20.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
@@ -470,10 +470,18 @@ Fixes
     held.
   - Interrupts are off for the whole 4F15 operation, so a timer interrupt cannot stretch a clock
     pulse.
-  - All three are the 2.04.11 code. POST calls the same delay once (14E5h), so POST now waits there
-    as with the stock BIOS (13.8 ms; To do).
+  - All three are the 2.04.11 code. POST calls the same delay once (14E5h); see the next item.
   - Whether this card connects the DDC lines to the VGA connector is
     not known: Windows 98 showed a generic monitor with the stock 2.04.11 (To do).
+- **POST delay before the graphics engine reset** (p20): POST turns RAM refresh off (CR88 bit 6, a
+  register the datasheet calls valid only for the Trio64V2/GX), waits, resets the graphics engine
+  (CR66 = 02h, then 00h) and turns refresh on again. The wait loads its count 0Ah into BX, but the
+  delay routine takes AX, which still holds the CR88 index and value (4088h when CR88 was 00h). With
+  the broken 2.04.07 delay that was a random wait, often near 0; with the 2.04.11 delay (the stock BIOS
+  and p19) it was 13.8 ms. The ROM loads AX = 000Ah: 8 us, as S3 meant (2.04.11 has the same mix-up).
+  No visible effect is expected: POST is 14 ms shorter (2290 to 2276 ms on the emulator's virtual
+  clock), and RAM refresh is off for 8 us instead of 13.8 ms on a GX card. The short wait of 2.04.07
+  worked on cards everywhere, and at POST the video memory holds nothing worth keeping.
 - **CR23 before CR26:** every mode set writes CR23 = 00h, then CR26 = 00h (p19). Trio64V2 datasheet
   section 4.2: CR23 "must be 00H before CR26 is written", and "the BIOS must write 00H to [CR26] upon
   each mode set (assuming CR23 is at its default value of 00H)". A driver that used vertical
@@ -487,9 +495,9 @@ Fixes
 Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
 zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
-| Offset | 2.04.07 | p19 | Purpose |
+| Offset | 2.04.07 | p20 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p19 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p20 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |
@@ -526,6 +534,7 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x1227-1234 | old font loop (dead after the jump) | code | `p13bfa.asm`: bfilla 1227 |
 | 0x143D-1441 | 2E 8E 06 48 1D | E9 80 6B 90 90 | S3/VESA mode set clear: rep stosd |
 | 0x1442-1453 | old clear loop (dead after the jump) | code | `p13move.asm`: wmove 1442 |
+| 0x14E2 | BB | B8 | POST delay before the engine reset: mov ax,000Ah, the count in AX (p20) |
 | 0x1A62-1A65 | B8 26 00 EF | E8 63 62 90 | mode set: CR23 = 00h before CR26 = 00h (`cr2326`) |
 | 0x20D3-20D4 | 7B 26 | 80 7E | INT 10h AH=00 table: mode set via the hook |
 | 0x210F-2111 | 80 FC 0E | E9 E9 5B | INT 10h entry: fast 4F05 BH=0 |
@@ -558,7 +567,7 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 | 0x7F71-7FAE | 00 | code | `vbe4f06.asm`: bl3 7F71 |
 | 0x7FAF-7FB6 | 00 | code | `p13df.asm`: dfdn 7FAF |
 | 0x7FC0-7FE2 | 00 | code | `clear32.asm`: clear 7FC0 |
-| 0x7FFF | 0B | 8A | Checksum of the lower 32 KB |
+| 0x7FFF | 0B | 95 | Checksum of the lower 32 KB |
 
 ### Borrowed ideas
 
@@ -662,10 +671,8 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   now finds DDC2. If it still reports caps 0000, the board probably does not connect the serial port
   lines to the VGA connector (pins 12 and 15); Windows 98 showed a generic monitor with the stock
   2.04.11, which has the same DDC code.
-- POST delay with the count in BX: at 14E5h the POST code sets CR88 bit 6, then calls the DDC delay
-  (5F4Eh) with `mov bx,000Ah`, but the delay takes its count in AX; AX holds the CR88 index and value
-  there (4088h with CR88 = 00h before, as on the card: 13.8 ms) instead of 0Ah (8 us). 2.04.11 has the
-  same mix-up. Fix it (AX = 000Ah) and test the result on the card.
+- POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
+  (without /Q); no difference to p19 is expected.
 - Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
   13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
   does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3

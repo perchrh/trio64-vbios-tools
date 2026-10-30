@@ -14,7 +14,7 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p19), and the ROM under test carries
+                   the level rompatch/s3patch.py builds (2.04.07-p20), and the ROM under test carries
                    that sign-on; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
@@ -85,6 +85,9 @@ Tests
                    CR23 was 5Ah before the mode set (V2-REG-5, p19), CR40 bit 0 and CR66 bit 0 changed
                    only with the screen off or in vertical retrace (V2-REG-6); modes 03h, 12h, 13h, 101h,
                    111h, 112h
+  post_delay       (p20) POST waits with RAM refresh off (CR88 bit 6) before the graphics engine reset
+                   (CR66 = 02h): PIT channel 2 is loaded with 0014h there (0Ah in AX, doubled for mode
+                   3), not with the CR88 word left in AX (8110h in 2.04.07 and 2.04.11)
   ddc              (p19) VBE 4F15 BL=00h, the DDC probe: AX = 004Fh, every access to the serial port
                    register (MMIO A000:FF20h) with interrupts off, the delays on PIT channel 2 set with
                    B6h (never the 86h latch command of 2.04.07) and the probe's 0255h delay loaded as
@@ -315,7 +318,7 @@ def romver():
 
 
 def latest():
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p19)."""
+    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p20)."""
     t = open(os.path.join(SRC, 'rompatch', 's3patch.py')).read()
     lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
     ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
@@ -1425,6 +1428,46 @@ def t_v2_writes(c):
     return '%d mode sets' % len(sets)
 
 
+def t_post_delay(c):
+    """p20: the POST step at 14C6h turns RAM refresh off (CR88 bit 6), waits with the DDC delay (5F4Eh),
+    resets the graphics engine (CR66 = 02h, then 00h) and turns refresh on again. 2.04.07 and 2.04.11
+    load the count 0Ah into BX, but the delay takes AX, which still holds the CR88 index and value
+    (4088h with CR88 = 00h): 13.8 ms instead of 8 us with the 2.04.11 delay (p19). Here: between the
+    CR88 write that sets bit 6 and the CR66 = 02h write, PIT channel 2 is loaded with 0014h (0Ah doubled
+    for mode 3)."""
+    if not c.ours:
+        raise Skip('p20 POST delay (our ROM only)')
+    m = Machine(c.rom)
+    ev, st = [], {'lo': None, 'ci': None}
+
+    def out(uc, port, size, val, ud):
+        if port in (0x3D4, 0x3B4):
+            if size == 2:
+                ev.append(('CR', val & 0xFF, val >> 8))
+            else:
+                st['ci'] = val & 0xFF
+        elif port in (0x3D5, 0x3B5) and st['ci'] is not None:
+            ev.append(('CR', st['ci'], val & 0xFF))
+        elif port == 0x43:
+            st['lo'] = None
+        elif port == 0x42:
+            if st['lo'] is None:
+                st['lo'] = val & 0xFF
+            else:
+                ev.append(('PIT2', st['lo'] | (val & 0xFF) << 8, None))
+                st['lo'] = None
+    m.mu.hook_add(UC_HOOK_INSN, out, None, 1, 0, UC_X86_INS_OUT)
+    m.post()
+    on = [i for i, e in enumerate(ev) if e[0] == 'CR' and e[1] == 0x88 and e[2] & 0x40]
+    check(on, 'POST never sets CR88 bit 6 (RAM refresh off)')
+    rst = [i for i, e in enumerate(ev) if e[0] == 'CR' and e[1] == 0x66 and e[2] == 0x02 and i > on[0]]
+    check(rst, 'no graphics engine reset (CR66 = 02h) after CR88 bit 6')
+    loads = [e[1] for e in ev[on[0]:rst[0]] if e[0] == 'PIT2']
+    check(0x0014 in loads, 'PIT channel 2 loads between refresh off and the engine reset: %s, expected 0014h'
+          % (' '.join('%04X' % x for x in loads) or 'none'))
+    return 'refresh off, PIT channel 2 loaded with 0014h, engine reset'
+
+
 def t_ddc(c):
     """p19: the DDC code of VBE 4F15 as in the S3 BIOS 2.04.11. BL=00h (the probe the S3COMPAT 4F15 line
     makes): returns 004Fh; every access to the serial port register (A000:FF20h through MMIO) happens
@@ -1530,7 +1573,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
-         ('v2_writes', t_v2_writes), ('ddc', t_ddc), ('engine_init', t_engine_init)]
+         ('v2_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
@@ -1548,7 +1591,7 @@ TAGS = {
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch emu',
-    'v2_writes': 's3 emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
+    'v2_writes': 's3 emu', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
 }
 
 

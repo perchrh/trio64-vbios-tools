@@ -7,8 +7,9 @@
 ; in whatever access mode channel 2 had and never read that latch; the 8254 ignores a second latch while
 ; one is pending, so its first read returned a stale count and most delays came out far too short (the
 ; DDC clock then runs as fast as the bus allows). 2.04.11 sets channel 2 with B6h (mode 3, low then high
-; byte). Callers: the DDC code (5E0A, 5F10, 5F21) and POST (14E5, which passes its count in BX, not AX:
-; unchanged, as in 2.04.11; README To do).
+; byte). Callers: the DDC code (5E0A, 5F10, 5F21) and POST (14E5, the wait with RAM refresh off before
+; the graphics engine reset; it loaded its count 0Ah into BX, not AX, in 2.04.07 and 2.04.11 alike, so
+; the delay used the CR88 word left in AX: fixed in p20).
 bits 16
 %include "bios.inc"
 org DDCWAIT

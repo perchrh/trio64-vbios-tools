@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p19) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (2.04.07-p20) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P19.BIN [--no-vco-fix] [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN OUT=S3V2P19.BIN
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P20.BIN [--no-vco-fix] [--nasm nasm] [-q]
+    make rom IN=REF2047.BIN OUT=S3V2P20.BIN
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -40,7 +40,10 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
          channel 2 with B6h, the 4F15 probe passes its 0255h delay in AX (5E07), and interrupts are off
          for the whole 4F15 operation (p19.asm: ddcin, ddcout); every mode set writes CR23 = 00h before
          CR26 = 00h (p19.asm: cr2326, Trio64V2 datasheet section 4.2)
-  sign-on "2.04.07-p19", checksum byte 7FFF
+  p20    POST passes its delay before the graphics engine reset in AX (14E2): the delay with RAM
+         refresh off (CR88 bit 6) is 0Ah PIT clocks (8 us) as S3 meant, not the CR88 word left in AX
+         (4088h, 13.8 ms); 2.04.07 and 2.04.11 both load BX there
+  sign-on "2.04.07-p20", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -49,7 +52,7 @@ with the known reference image the SHA-256 of the build that passed the emulator
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p19'
+LEVEL = 'p20'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
 RESULT_SHA = '5d8bb3e079286edd5ee141979f63dc543a113182c11f7e2b960a132a1853ff37'  # 2.04.07-p19 (NASM 3.02), emulator tests passed
@@ -90,7 +93,7 @@ SITES = dict(modetab=0x20D3, m4f02=0x56D9, boost=0x56F7, bl3=0x59B7, base=0x5CCD
              clr=0x143D, int10=0x210D, vclr=0x2C29, font=0x1224, scr=0x31F5, memsize=0x1B0F,
              old4f06=0x59C0, txfull=0x2ED5, txwmov=0x2EE4, txwfil=0x2EF6, plfull=0x3126,
              plwin=0x3171, ah09a=0x3512, ah09b=0x3516, cr26=0x1A62, ddcin=0x5D01, ddcout=0x5D53,
-             ddcax=0x5E07)
+             ddcax=0x5E07, postdly=0x14E1)
 SIG = dict(
     m4f02='8e 1e ?? ?? e8 ?? ?? 61 8a d8 24',            # mov ds,[cs:SEG_BDA] / call MODESET
     boost='c7 06 fe 04 00 00 c3 c6 46 1b 01',            # mov word [4FEh],0 / ret
@@ -119,6 +122,7 @@ SIG = dict(
     ddcin='e8 ?? ?? b0 53 e8 ?? ?? 50 80 cc 10 ef',        # 4F15: call GETCRTC / CR53 bit 4 (MMIO) on
     ddcout='58 e8 ?? ?? 1f c3',                            # 4F15 end: pop ax / call SR0DRST / pop ds / ret
     ddcax='bb 55 02 e8 ?? ??',                             # 4F15 probe: mov bx,0255h / call DDCWAIT
+    postdly='53 bb 0a 00 e8 ?? ?? 5b b8 66 02 ef',         # POST: push bx / mov bx,000Ah / call DDCWAIT / pop bx / CR66 = 02h
 )
 # Code at bios.inc addresses: (symbol, original bytes)
 SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
@@ -356,6 +360,8 @@ def patch(lo, nasm='nasm', vcofix=True):
     if (call_target(d, site['ddcin']), call_target(d, site['ddcout'] + 1), call_target(d, site['ddcax'] + 3)) != \
             (sym['GETCRTC'], sym['SR0DRST'], sym['DDCWAIT']):
         raise PatchError('VBE 4F15 does not call GETCRTC, SR0DRST and DDCWAIT where expected')
+    if call_target(d, site['postdly'] + 4) != sym['DDCWAIT']:
+        raise PatchError('POST engine reset does not call DDCWAIT at %04X' % (site['postdly'] + 4))
 
     def put(off, old, new, why):
         old, new = (hexb(x) if isinstance(x, str) else bytes(x) for x in (old, new))
@@ -439,6 +445,8 @@ def patch(lo, nasm='nasm', vcofix=True):
     put(a, d[a:a + 3], call(a, lab['ddcout']), 'VBE 4F15 end: interrupts on again (p19)')
     a = site['ddcax']
     put(a, 'bb 55 02', 'b8 55 02', 'VBE 4F15 probe: delay count in AX, not BX (p19, as 2.04.11)')
+    a = site['postdly'] + 1
+    put(a, 'bb 0a 00', 'b8 0a 00', 'POST delay before the engine reset: count 0Ah in AX, not BX (p20)')
     a = site['vclr'] + 4                    # xor bl,bl / mov es,bx / xor di,di / jmp wfill (9 bytes in place)
     put(a, '32 db 8e c3 33 ff f3 ab c3', b'\x32\xdb\x8e\xc3\x33\xff' + jmp(a + 6, lab['wfill']),
         'VGA mode set clear: in place, rep stosw replaced by a jump to wfill (p14)')
