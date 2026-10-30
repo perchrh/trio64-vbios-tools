@@ -25,6 +25,7 @@ the "1.5-07 EDO" build). It refuses the Britek "VIEWTOP" build (other sign-on te
 | 800x600 at 60 Hz | POST writes CR52 = 80h instead of 00h: the refresh index of the 800x600 modes is 1, the 60.7 Hz entry (VESA DMT, line total 1056) instead of 56 Hz. Phoenix writes CR41/CR52 only at POST; a refresh utility can still choose another rate. |
 | 32-bit speed patches | VGA mode set clear, font load, mode 13h scroll (with EAX kept), text and planar scrolls, AH=09h: the shared `speed_sites` and .asm files, the same signatures as in 2.04.07 and 1.03-08. |
 | Booster with the Windows check | On after a banked 4F02 and at the window set with BH = 0 (4F05 and the window function both call Phoenix's window set at 5123h). The refusal mark is CR52 bit 3 (`tbon.asm` says why not CR6C or CR6D). Phoenix relocks the S3 registers after its calls and its unlock routine changes AX, so the code unlocks itself and leaves CR38/CR39 as found. |
+| S3's fonts | The 8x8, 8x14 and 8x16 fonts of 1.03-08 (byte for byte those of 2.04.07, the Trio64V2 card's) replace Phoenix's in place: same sizes, same addresses, so AX=1130h and the mode set find them where they were. S3's 9-dot alternate tables have 20 (9x14) and 19 (9x16) entries, Phoenix's room 18 and 17: left out are 2Dh '-' and F1h (plus-minus) from 9x14 and 9Dh (yen) and ACh (one quarter) from 9x16, the entries closest to their 8-dot glyphs (1 to 8 pixels) and rarely used; in 9-dot modes these show their 8-dot shape. Keeping all entries would have taken the 166 bytes of the mode 13h scroll; the scroll was kept (decided 30 October 2026). No hardware reason against the transplant: the BIOS copies the glyphs into plane 2 as on every VGA. |
 | ATC flip-flop reset | In the mode set hook (AH=00 table and 4F02's call). |
 | Sequencer index kept by 4F05 | Phoenix's window set (5123h) and get (5148h) read SR04 (chain 4) and left the 3C4h index at 04h. Both reads now go through `sr04` (`twin.asm`), which reads SR04 and writes the index back as found, for 4F05 and the window function, BH = 0 and 1. The data book does not require it (it defines the registers, not what a BIOS call leaves in an index); S3's own 2.04.07 and 1.03-08 leave the index as found, and S3TEST's 4F05 line expects that (fail bit 2). |
 | MCLK build option | `MCLK=` sets the single MCLK entry at 3B5h, at most 60 MHz (MEM-1); without it the build's own clock stays. |
@@ -62,7 +63,8 @@ Free after the build: 4D7D-4D81 and 4DD1-4DDF (the ends of the VESA list and the
 other byte unchanged, another maker's timing bytes and MCLK kept, the MCLK option, the refusals.
 `make emu-test CHIP=trio64` with 2, 4 and 1 MB: `t64_patches` (defaults, removed modes, booster, Windows
 check, lock state, ATC flip-flop, sequencer index after 4F05 BH = 0 and 1, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
-`make tref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07. S3COMPAT's VESA lines: every mode
+`make tref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07 with S3's fonts (`--fonts-only`); `make trom-test`
+checks the fonts against 1.03-08 byte for byte. S3COMPAT's VESA lines: every mode
 non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): 84.6 % of the code, every byte of
 the new code among it.
 
@@ -75,7 +77,7 @@ unpatched 1.5-07 gives the same lines:
 | --- | --- |
 | errors (1 MB) | 4F02 sets 107h, 112h and 115h-117h, which need more than 1 MB (1.5-07 also set 118h-120h, now removed). |
 | windows | 4F06 changes the upper halves of EAX, ECX and EDX (the dispatcher saves only the 16-bit registers). |
-| s3compat_vga, s3compat_full | The upper half of the 8x8 font (AX=1130h BH=4) is Phoenix's own design (WARN 02); S3COMPAT's run leaves a register state behind that differs from its baseline (WARN 01). |
+| s3compat_full | S3COMPAT's run leaves a register state behind that differs from its baseline (WARN 01). Phoenix's 8x8 upper half (WARN 02, its own design) is gone with S3's fonts. |
 
 Phoenix's 1024x768 and 1280x1024 timings and its 640x480x16 use other line totals than VESA DMT
 (1352, 1760 and 796 pixels); S3TEST's Trio64 mode list does not check them.

@@ -161,8 +161,9 @@ trom:
 trom-test:
 	python3 rompatch/trio64/test_s3tpatch.py --nasm "$(NASMBIN)" --ref "$(TREF)" --vref "$(VREF)" $(if $(ROM),--rom "$(ROM)")
 
-tref-compare:
+tref-compare: | build
 	@test -n "$(ROM)" || { echo "tref-compare: set ROM (our Trio64 ROM; TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
-	$(PYTHON) emu/refcompare.py --chip trio64 --ref "$(TREF)" --rom "$(ROM)"
+	python3 rompatch/trio64/s3tpatch.py --fonts-only --fonts "$(VREF)" "$(TREF)" -o build/T64FONTS.BIN
+	$(PYTHON) emu/refcompare.py --chip trio64 --ref build/T64FONTS.BIN --rom "$(ROM)"
 
 .PHONY: all clean emu-test rom rom-test coverage ref-compare vrom vrom-test vref-compare trom trom-test tref-compare

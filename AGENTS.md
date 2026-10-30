@@ -153,7 +153,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   unpatched reference BIOS 2.04.07: same registers back, BIOS data, video memory, DAC and standard VGA
   registers after every call (`make ref-compare REF=... ROM=...`, emu/refcompare.py). Our
   changes there are speed only (32-bit stores) or VGA/S3 extended registers; a change that makes a
-  difference in those modes needs a reason in README.md.
+  difference in those modes needs a reason in README.md. The Trio64 ROM carries S3's fonts instead of
+  Phoenix's (README "Trio64 ROM"): `make tref-compare` compares it with 1.5-07 with those fonts only
+  (`s3tpatch.py --fonts-only`), so every other difference still shows.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and
   the DOS tools on top of it, under Unicorn with a VGA register model (`make emu-test ROM=...`). It
   models registers, a planar window and a virtual clock (refresh rates there follow the programmed

@@ -35,6 +35,10 @@ What is applied (docs/trio64-backport.md)
           sequencer index kept); shared with the other builds (rompatch/): font32.asm,
           scr13.asm, p13fill.asm, p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (32-bit font load,
           mode 13h scroll, text and planar scrolls, AH=09h text, VGA mode set clear)
+  fonts   S3's fonts from the Trio64V+ BIOS 1.03-08 (--fonts, default reference/vplus/1_03_08.bin; the
+          same bytes as in 2.04.07) in place of Phoenix's: 8x8, 8x14 and 8x16 whole, the 9-dot alternate
+          tables without two entries each (Phoenix's room, S3FONTS); --fonts-only applies only these,
+          the reference of make tref-compare
   MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 60 MHz (MEM-1); without it the
           build's own clock stays (54.9 MHz in the reference build)
   sign-on "1.5-07-p1", checksum byte 7FFF
@@ -61,7 +65,7 @@ LEVEL = 'p1'
 VERSION = '1.5-07'
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = '8aea34579111cb4a22b6cb835e98d833c6b40a3c9d4c00037026727f8857dd0f'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = '0d657bcf19c3af9e205288917e543677a46a057c2f5b87243e0b1119f2de4325'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'eca8b7f0a47c3e60', 'tbon.asm': '863b6862dfad0947',
     'thook.asm': 'fe2efef3f3bc43c4', 'tglue.asm': 'e73f5978fa2f4043',
@@ -113,6 +117,21 @@ SYMSIG = [('GETCRTC', '50 ba cc 03 ec ba b4 03 a8 01 74 03 ba d4 03 58 c3'),
           ('SEG_SCR', '00 00 00 00 00 a0'),
           ('WSET', '52 53 b8 4f 01 80 ff 00 75 18 8b da ba c4 03 b0 04 e8 ?? ?? f6 c4 08 75 03 c1 e3 02 e8'),
           ('GWIN', '53 b8 4f 01 80 ff 01 75 24 e8 ?? ?? b0 6a e8 ?? ?? 8a dc 80 e3 7f ba c4 03 b0 04 e8 ?? ?? 33 d2')]
+# S3's fonts, taken from the Trio64V+ BIOS 1.03-08 (the same bytes as in 2.04.07, on the Trio64V2 card):
+# (name, offset in 1.03-08, length, SHA-256 there, Phoenix's table of the same kind, its room). The 8x8,
+# 8x14 and 8x16 fonts have Phoenix's sizes and replace its tables in place, so no address changes. S3's
+# 9-dot alternate tables have 20 and 19 entries, Phoenix's room 18 and 17: the entries in ALT_DROP are
+# left out (their alternate glyphs differ least from the 8-dot ones: '-' by 1 pixel and '+-' in 9x14,
+# '1/4' by 1 pixel and the yen sign in 9x16), and those glyphs show their 8-dot shape in 9-dot modes.
+FONT_SRC = os.path.join(os.path.dirname(SHARED), 'reference', 'vplus', '1_03_08.bin')
+S3FONTS = [
+    ('8x8', 0x526C, 0x0800, '75c79a7e7fa423dda67ec6d6d76cec86b63f85677726368750c75b0920ddf319', 0x5720, 0x0800),
+    ('8x14', 0x5A6C, 0x0E00, '657ca6588b6bf729f0ed71a3d3c781a465bd30cdfb11eb5fc7e27594c0717ea1', 0x5F20, 0x0E00),
+    ('9x14 alternate', 0x686C, 301, 'eeca821495071577f416370bb31f075aff1344d2170a1696901e708b8ac61b17', 0x6D20, 0x6E2F - 0x6D20),
+    ('8x16', 0x6998, 0x1000, 'a8bad6fd78475a6bc2a05438c19207a9bb8c0f4f4099f60384e158cdc3eba580', 0x6E30, 0x1000),
+    ('9x16 alternate', 0x7998, 324, 'ebaabb3ef79a22c92935d68766b4543b3851289921b7806a0e82345635c8e224', 0x7E30, 0x7F52 - 0x7E30),
+]
+ALT_DROP = {'9x14 alternate': (0x2D, 0xF1), '9x16 alternate': (0x9D, 0xAC)}
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
 MCLK_MAX = 60.0                                 # MEM-1: 16.67 ns on the Trio32/Trio64
 
@@ -238,8 +257,46 @@ def edit_tables(d, log):
     return free + DROPPED
 
 
-def patch(lo, nasm='nasm', mclk=None):
-    """lo: the 32 KB 1.5-07 image. Returns (new 32 KB, log lines)."""
+def s3_fonts(src):
+    """S3's font tables from the 1.03-08 image src, the alternate tables trimmed to Phoenix's room:
+    [(name, Phoenix offset, bytes)]."""
+    out = []
+    for name, so, ln, sha, po, room in S3FONTS:
+        t = bytes(src[so:so + ln])
+        if hashlib.sha256(t).hexdigest() != sha:
+            raise PatchError('font source: the %s font at %04X is not that of 1.03-08' % (name, so))
+        if name in ALT_DROP:
+            h = 15 if '14' in name else 17
+            ent = [t[i:i + h] for i in range(0, ln - 1, h)]
+            keep = [e for e in ent if e[0] not in ALT_DROP[name]]
+            if len(ent) - len(keep) != len(ALT_DROP[name]):
+                raise PatchError('font source: the %s table lacks one of %s' % (name, ALT_DROP[name]))
+            t = b''.join(keep) + b'\x00'
+        if len(t) != room:
+            raise PatchError('font %s: %d bytes for a room of %d' % (name, len(t), room))
+        out.append((name, po, t))
+    return out
+
+
+def put_fonts(d, src, log):
+    """Replace Phoenix's fonts in d by S3's from src (1.03-08). Phoenix's tables are the code area's
+    (CODE_SHA); its alternate tables are checked to end where S3's trimmed ones end."""
+    for name, po, t in s3_fonts(src):
+        if name in ALT_DROP:
+            h = 15 if '14' in name else 17
+            a = po
+            while d[a]:
+                a += h
+            if a != po + len(t) - 1:
+                raise PatchError('Phoenix %s table at %04X ends at %04X, expected %04X' % (name, po, a, po + len(t) - 1))
+        d[po:po + len(t)] = t
+        log.append('%04X-%04X  %s font: S3\'s (1.03-08)%s' % (po, po + len(t) - 1, name,
+                   ', without %s' % ' and '.join('%02Xh' % c for c in ALT_DROP[name]) if name in ALT_DROP else ''))
+
+
+def patch(lo, nasm='nasm', mclk=None, fonts=None):
+    """lo: the 32 KB 1.5-07 image, fonts: the 1.03-08 image (default FONT_SRC). Returns (new 32 KB,
+    log lines)."""
     d = bytearray(lo)
     log = []
     m = re.search(rb'Phoenix S3 TRIO64 Enhanced VGA BIOS\. Version (\d\.\d-\d\d)', d[:0x100])
@@ -308,6 +365,8 @@ def patch(lo, nasm='nasm', mclk=None):
         raise PatchError('no room for the longer sign-on')
     d[s:s + len(txt) + 1] = txt + b'\x00'
     log.append('%04X  sign-on "%s"' % (s, txt.split(b'\r')[0].decode()))
+
+    put_fonts(d, open(FONT_SRC, 'rb').read() if fonts is None else fonts, log)
 
     # 2. code, each block into space that is zero now
     blocks, lab = s3patch.assemble(sym, nasm, (HERE, SHARED), BLOCKS)
@@ -390,6 +449,10 @@ def main():
     ap.add_argument('--size', type=int, choices=(32, 64), default=32, help='output size in KB (64: zeros above)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most 60 (default: the build\'s own)')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
+    ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '
+                    '(default reference/vplus/1_03_08.bin)')
+    ap.add_argument('--fonts-only', action='store_true', help='apply the fonts only (and the checksum): the '
+                    'reference make tref-compare compares our ROM with')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
     a = ap.parse_args()
     try:
@@ -397,7 +460,19 @@ def main():
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]
-        new_lo, log = patch(lo, a.nasm, a.mclk)
+        fonts = open(a.fonts, 'rb').read()
+        if a.fonts_only:
+            d, log = bytearray(lo), []
+            if sum(d) & 0xFF or hashlib.sha256(bytes(d[0x1000:0x7F00])).hexdigest() != CODE_SHA:
+                raise PatchError('not a clean %s image (checksum or the code 1000h-7EFFh)' % VERSION)
+            put_fonts(d, fonts, log)
+            d[0x7FFF] = 0
+            d[0x7FFF] = (-sum(d)) & 0xFF
+            with open(a.output, 'wb') as f:
+                f.write(bytes(d) + bytes(0x8000 if a.size == 64 else 0))
+            print('%s: %s with S3\'s fonts only (the tref-compare reference)' % (a.output, VERSION))
+            return 0
+        new_lo, log = patch(lo, a.nasm, a.mclk, fonts)
         img = new_lo + bytes(0x8000 if a.size == 64 else 0)
         errs = verify(img, a.size)
         known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None

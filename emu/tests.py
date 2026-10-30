@@ -626,7 +626,7 @@ def t_t64_patches(c):
     """Our Trio64 ROM (1.5-07-pN, rompatch/trio64): the ROM file, the refresh defaults (no mode runs
     interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
-    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, the window function, the sequencer
+    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h), the window function, the sequencer
     index kept by the window set and get (4F05 BH=0 and 1), and the 32-bit
     registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh. Only on the Trio64 model."""
     if not c.tours:
@@ -656,6 +656,13 @@ def t_t64_patches(c):
             cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x52, 0x6A, 0x38, 0x39))
     chk(base[0] and not base[1] and cr.get(0x52, 0) == 0x80, 'POST: CR59/5A %02X%02X, CR52 %02X (expected 80h)'
         % (base[0], base[1], cr.get(0x52, 0)))
+    # S3's fonts (1.03-08, the same as 2.04.07): AX=1130h returns Phoenix's addresses, now with S3's glyphs
+    vref = os.path.join(os.path.dirname(HERE), 'reference', 'vplus', '1_03_08.bin')
+    if os.path.exists(vref):
+        v = open(vref, 'rb').read()
+        for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000)):
+            r = m.int10(0x1130, bx=bh << 8)
+            chk(m.mem(r['es'] * 16 + r['bp'], ln) == v[so:so + ln], 'AX=1130h BH=%d: not S3\'s font' % bh)
     # the defaults: no interlace, 800x600 at 60 Hz (line total 1056, VESA DMT)
     for mode in (0x101, 0x103, 0x105, 0x107, 0x111, 0x114, 0x117, 0x110, 0x116, 0x204, 0x205, 0x208):
         r = m.int10(0x4F02, bx=mode)
@@ -1929,10 +1936,8 @@ T64_BASE = {
     'errors': VPLUS_BASE['errors'],
     # 4F06 uses 32-bit registers and the Phoenix dispatcher saves the 16-bit ones only
     'windows': (r'4F06 set: upper halves changed: ',),
-    # the 8x8 font's upper half (AX=1130h BH=4) is Phoenix's own design; S3COMPAT's run leaves a register
-    # state behind that differs from its baseline, on 1.5-07 as on our ROM
-    's3compat_vga': (r'AX=1130 BH=4 8x8 upper half .*WARN 02$',),
-    's3compat_full': (r'AX=1130 BH=4 8x8 upper half .*WARN 02$', r'Mode 03 after all tests vs baseline .*WARN 01$'),
+    # S3COMPAT's run leaves a register state behind that differs from its baseline, on 1.5-07 as on our ROM
+    's3compat_full': (r'Mode 03 after all tests vs baseline .*WARN 01$',),
 }
 
 
