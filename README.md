@@ -585,7 +585,8 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   limit (02), and L1 (CR90/CR91) FFh, 2048 bytes per line where 1920 need EFh (V2-REG-4, 80); both as
   in the reference.
 - These five modes show a clean picture on the card (edges and line ends, S3COMPAT and VSHOW /R,
-  30 October 2026), so the emulator test `s3compat_full` accepts the five lines.
+  30 October 2026), so the emulator test `s3compat_full` accepts the five lines. Every graphics mode
+  VSHOW /A shows is clean on the card with p18 in plain DOS (30 October 2026).
 - The BIOS writes SR04 = 03h in text modes where IBM writes 02h; bit 0 is reserved on the VGA and
   reads back as 0 on the card, so programs see the IBM value.
 
