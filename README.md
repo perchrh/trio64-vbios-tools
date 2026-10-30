@@ -763,14 +763,20 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
   2.04.11, which has the same DDC code.
 - POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
   (without /Q); no difference to p19 is expected.
-- Possible option `/M:50` for S3TEST and S3COMPAT (future work, noted 30 October 2026): the highest
-  memory clock the card's own memory allows, in MHz, given by the person running the test (from the
-  DRAM rating, or the clock the card's stock BIOS sets). The data book limit is the chip's (60 MHz for
-  1-cycle EDO on the Trio64V2 and Trio64V+), but a card with slower DRAM, for example the
-  ExpertColor DSP-3364P with 50 ns EDO, may need less. With /M the MCLK lines of both tools would
-  use the lower of the two as the limit and FAIL when the BIOS sets more, so the tests judge the ROM
-  for that hardware; without /M they keep the data book limit. The value only sets the expectation:
-  the tools do not program the clock (that is the ROM's job, `make rom MCLK=...`).
+- Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
+  that one ROM can be tested on several cards with different memory speeds: the tool sets the memory
+  clock to the given MHz for its run, then puts back the clock the BIOS set at POST when it ends (a
+  known state, as for the screen and the PIT). Design notes:
+  - Setting it: the nearest MCLK PLL pair (M 1-127, N 1-31, R 0-3, VCO 135-270 MHz, as the
+    `MCLK=` build option computes it) into SR11/SR10, then SR15 bit 0 set and cleared to load it
+    (T64-PLL-1; SR15 bit 5 never left set, REG-1). A value above the data book limit for the chip and
+    the strapped memory type is refused.
+  - It holds through the run: neither 2.04.07 nor 1.03-08 writes SR10/SR11 after POST, and the
+    SR15 = 03h of their mode sets only reloads what SR10/SR11 hold (emulator, 30 October 2026).
+  - Results: the MCLK line keeps judging the BIOS's POST clock (read before /M changes it) against
+    the data book; an INFO line shows the clock /M set; the debug log records both (raw SR10/SR11).
+    The VRAM test of S3COMPAT then runs at the /M clock, which is the point of the option.
+  - The ROM's own clock for a card is still set with `make rom MCLK=...`; /M is for testing.
 - Possible TSR (not for the ROM): the 64 KB linear window at A0000h in VGA mode 13h, as the "VGA mode
   13h speed up" of S3 Speed Up 3.11 (Dietmar Meschede, 1997; it needs his S3 VBE/Core 2.0 TSR, so it
   does not run with this ROM). The booster does not cover mode 13h: it needs CR31 bits 0 and 3
