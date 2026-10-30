@@ -302,6 +302,9 @@ reset. The result signs on as 1.03-08-p1. The VCO fix is not possible on the Tri
 divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus-backport.md` has the
 details, what 1.03-08 itself still gets wrong, and the per-call costs.
 
+A port to the Trio64 (86C764) is planned, not built: `docs/trio64-backport.md` compares the Trio64 BIOS
+images at hand (Phoenix 1.4-04, 1.5-04, 1.5-07, Diamond 2.05) as bases and lists what carries over.
+
     make vrom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with zeros above, for a 64 KB EEPROM)
     make vrom-test [ROM=S3VPP1.BIN]
     make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]

@@ -17,8 +17,11 @@ other VBE 2.0 additions). The Trio64V+ BIOSes at hand offer VBE 1.2.
 
 Base: the S3 BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96) in `reference/vplus/1_03_08.bin`, the
 upper 32 KB of the Gainward GW503A stock dump (SHA-256 0da79703...). S3's own BIOS for the chip, from the
-same 1.0x code base as the Trio64V2 BIOS 1.01.04. A Phoenix Trio64V+ BIOS (1.01-05, 1.02-02) is another
-code base: none of the patch sites would match it.
+same 1.0x code base as the Trio64V2 BIOS 1.01.04. A Phoenix Trio64V+ BIOS (1.01-05, 1.02-02) shares
+S3's code for the VGA functions (the speed patch signatures match, checked 30 October 2026) but has its
+own VBE and mode set code: the booster, 4F05 and mode set hook sites would have to be found anew, as
+docs/trio64-backport.md describes for the Phoenix Trio64 BIOSes. The Hercules Graphite Terminator BIOS
+D2g (09/19/97, PCI 8811h) matches every signature of 1.03-08, at other addresses.
 
 | Change | In 1.03-08-p1 |
 | --- | --- |
