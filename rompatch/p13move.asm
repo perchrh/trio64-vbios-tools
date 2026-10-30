@@ -1,5 +1,6 @@
 ; p13: word move for the text scroll window (AH=06h/07h, one line per call). Assembled at P13B, the
-; dead bytes of the old 16-bit mode set clear loop (1442h, 21 bytes).
+; dead bytes of the old 16-bit mode set clear loop (1442h, 21 bytes; in the Trio64V+ build
+; rompatch/vplus the same loop at 0E55h).
 bits 16
 cpu 386
 %include "bios.inc"

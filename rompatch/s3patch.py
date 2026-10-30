@@ -163,11 +163,11 @@ BLOCKS = [
     ('p12ext.asm', 0x7CFB, 0x7E40 - 0x7CFB, ('int10x', 'font', 'scr13', 'wsetx', 'b4f02')),  # calls bon (hooks.asm)
     ('crtc240.asm', 0x7E40, 0x40, ('crtc8', 'crtc16')),
     ('vbe4f06.asm', 0x7F71, 0x7FAF - 0x7F71, ('bl3',)),
-    ('clear32.asm', 0x7FC0, 0x7FE3 - 0x7FC0, ('clear',)),
+    ('clear32.asm', 'CLEAR32', 0x7FE3 - 0x7FC0, ('clear',)),
     ('p13df.asm', 'DFDN', 0x7FC0 - 0x7FAF, ('dfdn',)),
     ('p13fill.asm', 'P13A', 41, ('wfillt', 'wfill')),      # dead: old 4F06 BL=3 code
     ('p13move.asm', 'P13B', 21, ('wmove',)),               # dead: old clear loop (p11)
-    ('p13bfill.asm', 0x7F58, 0x7F71 - 0x7F58, ('bfill0', 'bfill')),
+    ('p13bfill.asm', 'BFILL', 0x7F71 - 0x7F58, ('bfill0', 'bfill')),
     ('p13bfa.asm', 'P13C', 14, ('bfilla',)),               # dead: old font loop (p12)
 ]
 
@@ -192,20 +192,24 @@ def call_target(img, at):
     return (at + 3 + struct.unpack_from('<h', img, at + 1)[0]) & 0xFFFF
 
 
-def assemble(sym, nasm, srcdir=HERE):
-    """Assemble the blocks. Returns [(offset, bytes, file)] and the labels."""
+def assemble(sym, nasm, srcdirs=(HERE,), blocks=None):
+    """Assemble the blocks (default BLOCKS). Each file is taken from the first of srcdirs that has it,
+    and '%include "bios.inc"' finds the bios.inc of the first directory (NASM searches the -i paths
+    in order), so the Trio64V+ patcher (vplus/s3vpatch.py) can assemble the shared files here with
+    its own addresses. Returns [(offset, bytes, file)] and the labels."""
     tmp = tempfile.mkdtemp(prefix='s3patch_')
     try:
         out, labels = [], {}
-        for name, org, room, want in BLOCKS:
+        for name, org, room, want in BLOCKS if blocks is None else blocks:
             org = sym[org] if isinstance(org, str) else org
-            src = os.path.join(srcdir, name)
-            if not os.path.exists(src):
-                raise PatchError('%s not found (keep the .asm files and bios.inc next to s3patch.py)' % src)
+            src = next((os.path.join(d, name) for d in srcdirs if os.path.exists(os.path.join(d, name))), None)
+            if src is None:
+                raise PatchError('%s not found in %s (keep the .asm files and bios.inc next to the patcher)'
+                                 % (name, ', '.join(srcdirs)))
             binf, mapf = os.path.join(tmp, name + '.bin'), os.path.join(tmp, name + '.map')
             with open(os.path.join(tmp, name), 'w') as f:  # the source plus a map file for the labels
                 f.write('%%include "%s"\n[map symbols %s]\n' % (src.replace('\\', '/'), mapf.replace('\\', '/')))
-            cmd = [nasm, '-f', 'bin', '-i' + srcdir + os.sep, '-o', binf] + \
+            cmd = [nasm, '-f', 'bin'] + ['-i' + d + os.sep for d in srcdirs] + ['-o', binf] + \
                   ['-DL_%s=0x%04X' % kv for kv in sorted(labels.items())] + [os.path.join(tmp, name)]
             try:
                 r = subprocess.run(cmd, capture_output=True, text=True)
@@ -311,6 +315,65 @@ def vco_fix(d, log, lo=170.0):
 
 
 # ------------------------------------------------------------------ the patcher
+def jmp(at, to):
+    return b'\xE9' + rel16(at, 3, to)
+
+
+def call(at, to):
+    return b'\xE8' + rel16(at, 3, to)
+
+
+def jcc(op, at, to):
+    """A short conditional or unconditional jump at 'at'."""
+    r = to - (at + 2)
+    assert -128 <= r <= 127
+    return bytes([op, r & 0xFF])
+
+
+def speed_sites(d, put, site, sym, lab, tags=True):
+    """The patch sites the Trio64V+ build shares (vplus/s3vpatch.py, the same signatures in 1.03-08):
+    the window set booster entry, the fast 4F05 jump, the 32-bit mode set clears, font load, scrolls
+    and AH=09h. put(off, old, new, why) checks the old bytes; tags=False leaves the 2.04.07 levels
+    out of the log."""
+    def t(why, lv):
+        return '%s (%s)' % (why, lv) if tags else why
+    a = sym['WSET']
+    put(a, '52 53 8b da', jmp(a, lab['wsetx']) + b'\x90', t('VBE window set (4F05, window function): booster on', 'p16'))
+    a = site['clr']
+    put(a, d[a:a + 5], jmp(a, lab['clear']) + b'\x90\x90', t('S3/VESA mode set clear: rep stosd', 'p11'))
+    a = site['int10'] + 2
+    put(a, '80 fc 0e', jmp(a, lab['int10x']), t('INT 10h entry: fast 4F05 BH=0', 'p12'))
+    a = site['font']
+    put(a, '50 51 8a', jmp(a, lab['font']), t('font load: rep movsd per character', 'p12'))
+    a = site['scr']
+    put(a, '3b 0e 4a', jmp(a, lab['scr13']), t('mode 13h scroll AH=06h: 32-bit', 'p12'))
+    a = site['txfull']                      # mov cx,bx / call wfillt / jmp short (the old target)
+    back = a + 11 + d[a + 10] - (0x100 if d[a + 10] > 0x7F else 0)
+    new = b'\x8b\xcb' + call(a + 2, lab['wfillt']) + jcc(0xEB, a + 5, back)
+    put(a, SIG['txfull'], new + b'\x90' * (11 - len(new)), t('text scroll full width: blank fill with wfill', 'p13'))
+    a = site['txwmov']                      # push cx/si/di, call wmove, pop, next line
+    new = b'\x51\x56\x57' + call(a + 3, lab['wmove']) + b'\x5f\x5e\x59\x03\xf3\x03\xfb\xfe\xce'
+    new += jcc(0x75, a + len(new), a)
+    put(a, SIG['txwmov'], new + b'\x90' * (18 - len(new)), t('text scroll window: line moves with wmove', 'p13'))
+    a = site['txwfil']                      # mov al,20h / mov ah,[bp+3] / call wfill / next line
+    new = b'\xb0\x20\x8a\x66\x03' + call(a + 5, lab['wfill']) + b'\x03\xfb\xfe\xca'
+    new += jcc(0x75, a + len(new), a + 5)
+    put(a, SIG['txwfil'], new + b'\x90' * (17 - len(new)), t('text scroll window: blank lines with wfill', 'p13'))
+    a = site['plfull']
+    put(a, '33 c0 f3 aa', call(a, lab['bfill0']) + b'\x90', t('planar scroll full width: fill with bfill', 'p13'))
+    a = site['plwin']                       # xor ax,ax / call bfilla (DI moved as rep stosb) / next line
+    new = b'\x33\xc0' + call(a + 2, lab['bfilla']) + b'\x03\xfb\x4a'
+    new += jcc(0x75, a + len(new), a + 2)
+    put(a, SIG['plwin'][:38], new + b'\x90' * (13 - len(new)), t('planar scroll window: fill lines with bfilla', 'p13'))
+    a = site['ah09a'] + 1
+    put(a, 'f3 ab c3', jmp(a, lab['wfill']), t('AH=09h text: char/attribute with wfill', 'p13'))
+    a = site['ah09b'] + 3
+    put(a, 'f3 ab c3', jmp(a, lab['wfill']), t('AH=09h text, page > 0: with wfill', 'p13'))
+    a = site['vclr'] + 4                    # xor bl,bl / mov es,bx / xor di,di / jmp wfill (9 bytes in place)
+    put(a, '32 db 8e c3 33 ff f3 ab c3', b'\x32\xdb\x8e\xc3\x33\xff' + jmp(a + 6, lab['wfill']),
+        t('VGA mode set clear: in place, rep stosw replaced by a jump to wfill', 'p14'))
+
+
 def patch(lo, nasm='nasm', vcofix=True):
     """lo: the lower 32 KB (2.04.07). Returns (new lower 32 KB, log lines)."""
     d = bytearray(lo)
@@ -382,61 +445,18 @@ def patch(lo, nasm='nasm', vcofix=True):
         log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
                    ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[0] == name for k in b[3])))
 
-    def jmp(at, to):
-        return b'\xE9' + rel16(at, 3, to)
-
-    def call(at, to):
-        return b'\xE8' + rel16(at, 3, to)
-
-    def jcc(op, at, to):                    # short conditional or unconditional jump at 'at'
-        r = to - (at + 2)
-        assert -128 <= r <= 127
-        return bytes([op, r & 0xFF])
-
     a = site['modetab']
     put(a, struct.pack('<H', sym['MODESET']), struct.pack('<H', lab['hook']), 'INT 10h AH=00 table: mode set via the hook')
     a = site['m4f02'] + 4
     put(a, d[a:a + 3], call(a, lab['hook']), 'VBE 4F02: mode set via the hook')
     a = site['boost']
     put(a, 'c7 06 fe 04 00 00', call(a, lab['b4f02']) + b'\x90' * 3, 'VBE 4F02 end: booster on unless Windows runs (p18)')
-    a = sym['WSET']
-    put(a, '52 53 8b da', jmp(a, lab['wsetx']) + b'\x90', 'VBE window set (4F05, window function): booster on (p16)')
     a = site['bl3'] + 4
     put(a, 'b8 ff 03 33 d2', call(a, lab['bl3']) + b'\xEB\xF8', 'VBE 4F06 BL=3: corrected routine, then mov ah,0 / ret')
     a = site['base'] + 2
     put(a, '8b c3 0b c0', call(a, lab['basefix']) + b'\x90', 'LFB base read: real base while the booster is on')
     a = site['lfb'] + 4
     put(a, '25 00 10', call(a, lab['lfbchk']), '4F05/4F03 linear test ignores the booster window')
-    a = site['clr']
-    put(a, d[a:a + 5], jmp(a, lab['clear']) + b'\x90\x90', 'S3/VESA mode set clear: rep stosd (p11)')
-    a = site['int10'] + 2
-    put(a, '80 fc 0e', jmp(a, lab['int10x']), 'INT 10h entry: fast 4F05 BH=0 (p12)')
-    a = site['font']
-    put(a, '50 51 8a', jmp(a, lab['font']), 'font load: rep movsd per character (p12)')
-    a = site['scr']
-    put(a, '3b 0e 4a', jmp(a, lab['scr13']), 'mode 13h scroll AH=06h: 32-bit (p12)')
-    a = site['txfull']                      # mov cx,bx / call wfillt / jmp short (the old target)
-    back = a + 11 + d[a + 10] - (0x100 if d[a + 10] > 0x7F else 0)
-    new = b'\x8b\xcb' + call(a + 2, lab['wfillt']) + jcc(0xEB, a + 5, back)
-    put(a, SIG['txfull'], new + b'\x90' * (11 - len(new)), 'text scroll full width: blank fill with wfill (p13)')
-    a = site['txwmov']                      # push cx/si/di, call wmove, pop, next line
-    new = b'\x51\x56\x57' + call(a + 3, lab['wmove']) + b'\x5f\x5e\x59\x03\xf3\x03\xfb\xfe\xce'
-    new += jcc(0x75, a + len(new), a)
-    put(a, SIG['txwmov'], new + b'\x90' * (18 - len(new)), 'text scroll window: line moves with wmove (p13)')
-    a = site['txwfil']                      # mov al,20h / mov ah,[bp+3] / call wfill / next line
-    new = b'\xb0\x20\x8a\x66\x03' + call(a + 5, lab['wfill']) + b'\x03\xfb\xfe\xca'
-    new += jcc(0x75, a + len(new), a + 5)
-    put(a, SIG['txwfil'], new + b'\x90' * (17 - len(new)), 'text scroll window: blank lines with wfill (p13)')
-    a = site['plfull']
-    put(a, '33 c0 f3 aa', call(a, lab['bfill0']) + b'\x90', 'planar scroll full width: fill with bfill (p13)')
-    a = site['plwin']                       # xor ax,ax / call bfilla (DI moved as rep stosb) / next line
-    new = b'\x33\xc0' + call(a + 2, lab['bfilla']) + b'\x03\xfb\x4a'
-    new += jcc(0x75, a + len(new), a + 2)
-    put(a, SIG['plwin'][:38], new + b'\x90' * (13 - len(new)), 'planar scroll window: fill lines with bfilla (p13)')
-    a = site['ah09a'] + 1
-    put(a, 'f3 ab c3', jmp(a, lab['wfill']), 'AH=09h text: char/attribute with wfill (p13)')
-    a = site['ah09b'] + 3
-    put(a, 'f3 ab c3', jmp(a, lab['wfill']), 'AH=09h text, page > 0: with wfill (p13)')
     a = site['cr26']
     put(a, 'b8 26 00 ef', call(a, lab['cr2326']) + b'\x90', 'mode set: CR23 = 00h before CR26 = 00h (p19)')
     a = site['ddcin']
@@ -447,9 +467,7 @@ def patch(lo, nasm='nasm', vcofix=True):
     put(a, 'bb 55 02', 'b8 55 02', 'VBE 4F15 probe: delay count in AX, not BX (p19, as 2.04.11)')
     a = site['postdly'] + 1
     put(a, 'bb 0a 00', 'b8 0a 00', 'POST delay before the engine reset: count 0Ah in AX, not BX (p20)')
-    a = site['vclr'] + 4                    # xor bl,bl / mov es,bx / xor di,di / jmp wfill (9 bytes in place)
-    put(a, '32 db 8e c3 33 ff f3 ab c3', b'\x32\xdb\x8e\xc3\x33\xff' + jmp(a + 6, lab['wfill']),
-        'VGA mode set clear: in place, rep stosw replaced by a jump to wfill (p14)')
+    speed_sites(d, put, site, sym, lab)
 
     # 4. DCLK VCO
     if vcofix:
