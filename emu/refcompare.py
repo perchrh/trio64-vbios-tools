@@ -3,6 +3,8 @@
 
     python3 emu/refcompare.py --ref REF2047.BIN --rom S3V2P15.BIN
     make ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
+    python3 emu/refcompare.py --chip vplus --ref reference/vplus/1_03_08.bin --rom S3VPP1.BIN
+    make vref-compare ROM=S3VPP1.BIN       (our Trio64V+ ROM against 1.03-08, the Trio64V+ model)
 
 Goal (AGENTS.md): in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves like the reference
 BIOS. Both run the same INT 10h calls in the emulator: mode sets at 200, 350 and 400 lines and without
@@ -10,7 +12,8 @@ the clear, AH=06h/07h scrolls with random windows and fills, AH=08h/09h/0Ah/0Eh 
 pixels, palettes (AH=0Bh, AX=10xxh), pages, cursor, fonts, AH=12h, AH=1Ah, AH=1Ch. After each call
 the registers a program gets back (with bits 31-16), the BIOS data area, video memory (A000-BFFF and the
 four planes), the DAC and the standard VGA registers (MISC, SR00-04, CR00-18, GR00-08, AR00-14) must
-be the same. The S3 extended registers are not compared: the ROM sets the memory clock, the pedestal
+be the same. The Trio64V+ ROM (rompatch/vplus) has the same goal against its base 1.03-08: --chip vplus
+runs both on the Trio64V+ model. The S3 extended registers are not compared: the ROM sets the memory clock, the pedestal
 and the FIFO bit on purpose. Exit code 1 when any call differs; the differences are listed.
 """
 import argparse
@@ -19,10 +22,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine
 from unicorn.x86_const import *
 ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
-ap.add_argument('--ref', required=True, help='S3 reference BIOS 2.04.07 (32 KB)')
+ap.add_argument('--ref', required=True, help='the unpatched base: S3 reference BIOS 2.04.07, or 1.03-08 with --chip vplus (32 KB)')
 ap.add_argument('--upper', help='image whose upper half goes with the reference (default: zeros, as in the ROM)')
-ap.add_argument('--rom', required=True, help='the ROM to compare (64 KB)')
+ap.add_argument('--rom', required=True, help='the ROM to compare (64 KB, or 32 KB for the Trio64V+)')
+ap.add_argument('--chip', choices=('v2', 'vplus', 'uvplus', 'trio64', 'trio32'), default='v2',
+                help='the chip the model is (vgaemu.CHIPS, default v2)')
 a = ap.parse_args()
+Machine.chip = a.chip
 ref=open(a.ref,'rb').read(); up=open(a.upper,'rb').read()[0x8000:] if a.upper else bytes(0x8000)
 A=Machine(ref[:0x8000]+up); A.post(); B=Machine(open(a.rom,'rb').read()); B.post()
 R32=(UC_X86_REG_EAX,UC_X86_REG_EBX,UC_X86_REG_ECX,UC_X86_REG_EDX,UC_X86_REG_ESI,UC_X86_REG_EDI)

@@ -59,24 +59,30 @@ build/S3REGS32.EXE: s3regs/s3regs32.asm common/version.inc | build
 #   make emu-test ROM=path/to/S3V2P15.BIN          every test with 2 MB, then the memory-size dependent
 #                                                  ones (tag vram) again with 4 MB
 #   make emu-test ROM=... VRAM=4                   every test with one size only (2 or 4 MB)
+#   make emu-test ROM=S3VPP1.BIN CHIP=vplus        our Trio64V+ ROM on the Trio64V+ model (CHIP: the chip of
+#                                                  the model, v2 by default; tests.py --chip)
 # Uses the virtual environment .venv when there is one, otherwise python3 (override with PYTHON=...).
 PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
 # emu-test runs this many tests at a time (default: every CPU; JOBS=1 for one after the other)
 JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
+CHIP ?= v2
+# the log folders of emu-test: $(LOGS) (2 MB) and $(LOGS)4 (4 MB)
+LOGS ?= emu/logs
 emu-test: all
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P15.BIN"; exit 2; }
 ifdef VRAM
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs -j $(JOBS) --vram $(VRAM)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM)
 else
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs -j $(JOBS)
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs4 -j $(JOBS) --vram 4 -t vram
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram
 endif
 
 # Test coverage of the ROM code (needs capstone too: pip install .[coverage]); fails under 80 %
 #   make coverage ROM=S3V2P15.BIN
+#   make coverage ROM=S3VPP1.BIN CHIP=vplus
 coverage: all
 	@test -n "$(ROM)" || { echo "coverage: set ROM to the 64 KB VBIOS image"; exit 2; }
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --coverage emu/logs/COVER.BIN
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --chip $(CHIP) --coverage emu/logs/COVER.BIN
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
 # The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF of ref-compare and rom-test
@@ -104,4 +110,23 @@ rom-test:
 	@test -n "$(REF)" || { echo "rom-test: set REF (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
 	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
-.PHONY: all clean emu-test rom rom-test coverage ref-compare
+# The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
+# reference/vplus/1_03_08.bin (VREF), docs/vplus-backport.md
+#   make vrom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64]          (32 KB; VSIZE=64: 64 KB, upper half zeros)
+#   make vrom-test [VREF=...] [ROM=S3VPP1.BIN]
+#   make vref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
+#   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
+VREF ?= reference/vplus/1_03_08.bin
+VSIZE ?= 32
+vrom:
+	@test -n "$(OUT)" || { echo "vrom: set OUT, e.g. make vrom OUT=S3VPP1.BIN (VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
+	python3 rompatch/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(VSIZE) "$(VREF)" -o "$(OUT)"
+
+vrom-test:
+	python3 rompatch/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(VREF)" --v2ref "$(REF)" $(if $(ROM),--rom "$(ROM)")
+
+vref-compare:
+	@test -n "$(ROM)" || { echo "vref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
+	$(PYTHON) emu/refcompare.py --chip vplus --ref "$(VREF)" --rom "$(ROM)"
+
+.PHONY: all clean emu-test rom rom-test coverage ref-compare vrom vrom-test vref-compare
