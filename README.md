@@ -429,7 +429,9 @@ tools record what it actually does:
 4. In an MS-DOS prompt: `S3REGS dos box windowed`, then Alt+Enter and `S3REGS dos box full screen`.
    These may show virtual values (the driver traps the ports of DOS boxes); compare with step 2.
 5. Exit to DOS (Shut Down, "Restart in MS-DOS mode", or leave WIN.COM): `S3REGS after Windows`, then
-   `VGALOG /D`. Bring S3REGS.TXT and VGALOG.BIN back.
+   `VGALOG /D`. Bring S3REGS.TXT and VGALOG.BIN back. `VGALOG /D` also works in an MS-DOS prompt while
+   Windows runs: it finds the copy loaded before Windows through the DOS memory chain, since Windows
+   hooks INT 10h after it in a DOS box.
 6. For a comparison, the same with the stock ROM (step 2 and 5 are enough).
 
 What to look for: SR10/SR11 on the desktop, in a full-screen DOS box and afterwards (does the driver

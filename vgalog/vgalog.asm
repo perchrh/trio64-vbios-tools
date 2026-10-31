@@ -11,10 +11,12 @@
 ;   VGALOG           install, then start the program to watch; VGALOG.BIN grows in the current directory
 ;   VGALOG /M        install in memory mode: every INT 10h call except the text and pixel functions is
 ;                    kept in a 32 KB ring buffer in memory (the last 1024 calls), nothing is written to
-;                    disk. For Windows 9x: load it before Windows, use Windows, leave it, then VGALOG /D.
+;                    disk. For Windows 9x: load it before Windows (AUTOEXEC.BAT), use Windows, then
+;                    VGALOG /D in a DOS box or after leaving Windows.
 ;   VGALOG /D        memory mode: write the ring buffer to VGALOG.BIN (oldest call first); the buffer
 ;                    is kept, so /D can be repeated. With no call logged yet it writes no file and says
-;                    "No events registered, not writing output file" (exit code 0)
+;                    "No events registered, not writing output file" (exit code 0). Run in a DOS box
+;                    while Windows runs, the calls logged during the write may be mixed into it
 ;   VGALOG /U        unload: puts INT 10h back, closes VGALOG.BIN and frees the memory
 ;   VGALOG /H, /?, /HELP  parameter list
 ;   A second install is refused while VGALOG is resident. Unloading only works while VGALOG is the last
@@ -49,8 +51,11 @@
 ;   the watched program runs as without VGALOG.
 ;
 ; How a resident copy is found
-;   The INT 10h vector must point to offset isr in a segment that holds the signature at offset sig.
-;   That segment is the resident copy's PSP; /U uses its saved vector and file handle.
+;   The INT 10h vector points to offset isr in a segment that holds the signature at offset sig: that
+;   segment is the resident copy's PSP (findres). /U needs this (it can only unhook as the last INT 10h
+;   hook) and uses the copy's saved vector and file handle. /D and the install check also search the
+;   DOS memory control block chain (findmem), with the upper memory blocks linked in for the walk: in
+;   a Windows 9x DOS box Windows hooks INT 10h after a VGALOG loaded before it, which still logs.
 ;   VGALOG.BIN size = 32 bytes per logged call.
 bits 16
 org 0x100
@@ -406,9 +411,56 @@ findres:
         repe cmpsb              ; DS:SI = our signature, ES:DI = the same offset in the hook's segment
 .r:     ret
 
+; ---------------- resident copy anywhere in DOS memory? -> ZF=1 and ES = its segment ----------------
+; In: nothing. The INT 10h vector first (findres); then the MCB chain from the first MCB (INT 21h
+; AH=52h, the word before the list of lists) with the UMBs linked in (AX=5803h, put back after): a
+; program block (owner = the paragraph after its MCB) other than this copy, with the signature at
+; offset sig. Stops at a block that is neither 'M' nor 'Z'. Changes AX, BX, CX, DX, SI, DI.
+findmem:
+        call findres
+        je .r
+        mov ax,0x5802                   ; UMB link state as found (AL)
+        int 0x21
+        push ax
+        mov ax,0x5803
+        mov bx,1                        ; link the UMBs into the chain for the walk
+        int 0x21
+        mov ah,0x52
+        int 0x21
+        mov ax,[es:bx-2]                ; first MCB
+        xor dl,dl                       ; DL = 1 when found
+.l:     mov es,ax
+        mov bx,ax
+        inc bx                          ; the block's first paragraph
+        cmp [es:1],bx                   ; owned by itself: a program's PSP block
+        jne .n
+        mov cx,cs
+        cmp bx,cx                       ; not this copy
+        je .n
+        mov es,bx
+        mov si,sig
+        mov di,si
+        mov cx,SIGLEN
+        repe cmpsb
+        je .f
+        mov es,ax
+.n:     cmp byte [es:0],'M'
+        jne .e                          ; 'Z' ends the chain, anything else is no MCB
+        add ax,[es:3]
+        inc ax
+        jmp .l
+.f:     inc dl                          ; ES = the resident copy
+.e:     pop bx
+        xor bh,bh                       ; the link state as found
+        and bl,1
+        mov ax,0x5803
+        int 0x21
+        cmp dl,1                        ; ZF = found
+.r:     ret
+
 ; ---------------- install ----------------
 install:
-        call findres
+        call findmem
         jne .go
         mov dx,s_twice
         mov ah,9
@@ -453,7 +505,7 @@ install:
         int 0x21
 
 ; ---------------- install in memory mode ----------------
-minst:  call findres
+minst:  call findmem
         jne .go
         mov dx,s_twice
         mov ah,9
@@ -482,7 +534,7 @@ minst:  call findres
         int 0x21
 
 ; ---------------- dump the ring buffer of a resident memory-mode copy ----------------
-dump:   call findres
+dump:   call findmem
         jne .nm
         cmp byte [es:mmode],1
         je .go
@@ -624,7 +676,7 @@ msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
 msgm    db 'VGALOG ',VERSION,' installed in memory mode: the last 1024 INT 10h calls (no text/pixel output), VGALOG /D writes them',13,10,'$'
 s_dump  db 'VGALOG ',VERSION,': ring buffer written to VGALOG.BIN',13,10,'$'
 s_none  db 'VGALOG ',VERSION,': No events registered, not writing output file',13,10,'$'
-s_notm  db 'VGALOG ',VERSION,': /D needs VGALOG resident in memory mode (VGALOG /M), as the last INT 10h hook.',13,10,'$'
+s_notm  db 'VGALOG ',VERSION,': /D needs VGALOG resident in memory mode (VGALOG /M).',13,10,'$'
 dhdr    db 'VGALOGM1',0,0,0,0,0,0,0,0
 dcnt    dw 0
 dfirst  dw 0

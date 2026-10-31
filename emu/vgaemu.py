@@ -19,7 +19,9 @@ What is emulated
     passes come to an end.
   - A small DOS (INT 21h) for .COM and .EXE programs (MZ header with relocations, run_exe): console and
     file output, create/close, IOCTL, InDOS, get/set vector, version, PSP (51h/62h), memory blocks
-    (48h-4Ah, with MCBs in front of the environment and the program), list of lists (52h, first MCB),
+    (48h-4Ah, with MCBs in front of the environment and the program; 49h and the exit free a block, 31h
+    keeps DX paragraphs, and a free block links a resident program to the next one, so the MCB chain
+    can be walked), list of lists (52h, the lowest MCB),
     allocation strategy and UMB link (58h, no UMBs), country (38h), date/time (zero), Ctrl-Break,
     default drive, commit, terminate and stay resident. INT 21h goes through the vector table to a stub
     at 0050:0020, so a program that hooks INT 21h (for example a TSR that stays resident when its own
@@ -596,14 +598,17 @@ class Machine:
                 self._mcb(seg - 1, b'M', self.psp, bx)
                 self.heap = seg + bx
                 uc.reg_write(UC_X86_REG_AX, seg)
-        elif ah in (0x49, 0x68, 0x50):
+        elif ah == 0x49:                                # free: the block's MCB gets owner 0
+            if es >= 1 and self.mem((es - 1) * 16, 1) in (b'M', b'Z'):
+                self.mu.mem_write((es - 1) * 16 + 1, b'\0\0')
+        elif ah in (0x68, 0x50):
             pass
         elif ah in (0x51, 0x62):
             uc.reg_write(UC_X86_REG_BX, self.psp)
-        elif ah == 0x52:                                # list of lists at 0070:0010, first MCB before it
-            uc.reg_write(UC_X86_REG_ES, 0x0070)
+        elif ah == 0x52:                                # list of lists at 0070:0010, first MCB before it:
+            uc.reg_write(UC_X86_REG_ES, 0x0070)         # the lowest MCB of the chain (_psp, AH=31h)
             uc.reg_write(UC_X86_REG_BX, 0x0010)
-            uc.mem_write(0x0700 + 0x10 - 2, struct.pack('<H', self.psp - 0x11))
+            uc.mem_write(0x0700 + 0x10 - 2, struct.pack('<H', self.mcb_first or self.psp - 0x11))
         elif ah == 0x58:                                # strategy / UMB link: first fit, no UMBs
             if ax & 0xFF in (0, 2):
                 uc.reg_write(UC_X86_REG_AX, 0)
@@ -619,11 +624,17 @@ class Machine:
         elif ah in (0x2A, 0x2C):
             uc.reg_write(UC_X86_REG_CX, 0)
             uc.reg_write(UC_X86_REG_DX, 0)
-        elif ah == 0x4C:
+        elif ah == 0x4C:                                # the program's blocks are free again
             c.exit = ('exit', ax & 0xFF)
+            for s in (self.psp - 0x11, self.psp - 1):
+                uc.mem_write(s * 16 + 1, b'\0\0')
             uc.emu_stop()
-        elif ah == 0x31:
-            c.exit = ('tsr', ax & 0xFF, dx)
+        elif ah == 0x31:                                # resident: its block shrinks to DX paragraphs,
+            c.exit = ('tsr', ax & 0xFF, dx)             # a free block after it ends the chain
+            self._mcb(self.psp - 1, b'M', self.psp, dx)
+            self.res_end = self.psp + dx
+            if self.res_end < MEM_TOP:
+                self._mcb(self.res_end, b'Z', 0, MEM_TOP - self.res_end - 1)
             uc.emu_stop()
         else:
             cf = 1
@@ -736,6 +747,12 @@ class Machine:
         self.psp = seg
         self.prog_end = MEM_TOP
         self.heap = 0
+        res_end = getattr(self, 'res_end', None)        # the chain: a free block from the resident
+        if res_end is not None and res_end < seg - 0x11:    # program's end to this program's MCBs
+            self._mcb(res_end, b'M', 0, seg - 0x11 - res_end - 1)
+        first = getattr(self, 'mcb_first', None)
+        if first is None or seg - 0x11 < first:
+            self.mcb_first = seg - 0x11
         psp = bytearray(256)
         psp[0:2] = b'\xCD\x20'
         psp[2:4] = struct.pack('<H', MEM_TOP)              # top of memory
