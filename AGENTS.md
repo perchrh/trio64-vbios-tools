@@ -22,9 +22,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
   `reference/trio64/`, the same rules, `TROMVER`; docs/trio64-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
-- Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a multiQ
-  LCD (native 800x600, does not support 1280x1024 at all). "Out of range" on the multiQ in
-  1280x1024 modes is the monitor, not the BIOS.
+- Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a Dell
+  2021FP (EDID over DDC2: Windows 98 identifies it with p21). The multiQ LCD (MQ215 B-1, native
+  800x600, no 1280x1024 at all) shows no picture on any card or machine since 31 October 2026: a
+  monitor fault, not the BIOS.
 
 ## Hard rules for the ROM
 
@@ -46,7 +47,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   (hang), see README "Omitted".
 - Fixes that change what a standard function returns, or need more ROM space than is free, stay as
   TSRs (S3ALIAS).
-- The 8x14 font is missing in the BIOS and that is accepted for now.
+- The 8x14 font is missing in the BIOS and that is accepted for now. The Trio64 ROM keeps its 8x14
+  font and 9x14 alternate table (S3's since 30 October 2026), to preserve the style of the era: do not
+  delete them for space. It also keeps DDC1 in VBE 4F15 (only VDIF was deleted).
 - A BIOS call of our ROMs leaves the index registers it touches as it found them, at least the
   sequencer index 3C4h, as S3's 2.04.07 and 1.03-08 do (S3TEST's 4F05 line checks it, fail bit 2).
   The data books do not require it; programs that set an index before an INT 10h call rely on it.
@@ -69,7 +72,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 - Test the VBIOS, not the hardware. Use the datasheet to judge what the BIOS programmed (clock limits,
   colour modes, memory mapping rules), not to characterise the chip.
-- Every test prints one result line: PASS, FAIL with a bit mask, WARN with a bit mask, or INFO.
+- Every test prints one result line: PASS, FAIL with a bit mask, WARN with a bit mask, or INFO. A test
+  or step left out because of the chip, its ROM, the memory size or an option prints a SKIP line
+  instead ("<category> <name> ...  SKIP: <reason>"), which is not a result and not counted by
+  category; the summary line counts the SKIP lines. Never leave something out silently.
   Known stock behaviour that is acceptable is a WARN, never a FAIL. A FAIL must mean the BIOS is wrong.
 - Expected values come from an independent reference: IBM tables (VGATEST), the VBE 2.0
   specification, VESA DMT, the datasheet, or a formula (EGA/CGA palettes, grey summing, 4F06

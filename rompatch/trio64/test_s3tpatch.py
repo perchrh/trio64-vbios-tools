@@ -15,11 +15,12 @@ Tests
                  modes are gone from the mode table, the VESA lists and the mode map, every kept entry is
                  byte for byte the one of 1.5-07 (only bit 7 of a new first entry set), and no list
                  reaches into the code placed after the lists
-  fonts          the 8x8, 8x14 and 8x16 fonts are those of 1.03-08 (--vref) byte for byte, each 9-dot
-                 alternate table is 1.03-08's without the entries of ALT_DROP and ends with its 00h where
-                 Phoenix's ended; --fonts-only changes the fonts and the checksum byte only
-  unchanged      outside the tables, the fonts, the patch sites, the code blocks, the sign-on and the
-                 checksum every byte is as in 1.5-07
+  fonts          all five font tables are those of 1.03-08 (--vref) byte for byte, end to end from 5720h
+                 to 7F90h, and the eight references to the moved 8x16 font and 9x16 table point at their
+                 new places; --fonts-only changes only the fonts, those references and the checksum byte
+  ddc            the 4F15 sites carry their new bytes and the VDIF code (DDC_FREED) is zero
+  unchanged      outside the tables, the fonts, the patch sites (DDC ones too), the code blocks, the
+                 zeroed VDIF code, the sign-on and the checksum every byte is as in 1.5-07
   oem_build      a 1.5-07 build with other memory timing bytes in its refresh entries and another MCLK
                  (as the card makers' builds differ) is patched too and keeps them
   input_64k      a 64 KB image with 1.5-07 in the lower half gives the same result, whatever its upper half
@@ -135,33 +136,48 @@ def main():
     errs = []
     if os.path.exists(a.vref):
         v = open(a.vref, 'rb').read()
-        for name, so, ln, _, po, room in s3tpatch.S3FONTS:
-            if name in s3tpatch.ALT_DROP:
-                h = 15 if '14' in name else 17
-                want = b''.join(v[so + i:so + i + h] for i in range(0, ln - 1, h)
-                                if v[so + i] not in s3tpatch.ALT_DROP[name]) + b'\x00'
-            else:
-                want = v[so:so + ln]
-            if img[po:po + room] != want or len(want) != room:
-                errs.append('%s font at %04X is not S3\'s' % (name, po))
+        where = {}
+        for name, so, ln, _, at in s3tpatch.S3FONTS:
+            where[name] = at
+            if img[at:at + ln] != v[so:so + ln]:
+                errs.append('%s font at %04X is not S3\'s' % (name, at))
+        for a_, old in s3tpatch.FONT_REFS.items():
+            want = where['8x16'] if old == 0x6E30 else where['9x16 alternate']
+            if struct.unpack_from('<H', img, a_)[0] != want:
+                errs.append('font reference %04X not %04X' % (a_, want))
         rc, fref, err = run(tmp, ref, ['--fonts-only'])
         if rc or not fref:
             errs.append('--fonts-only: ' + err)
         else:
-            fonts = set()
-            for _, _, _, _, po, room in s3tpatch.S3FONTS:
-                fonts |= set(range(po, po + room))
+            fonts = set(range(*s3tpatch.FONTS))
+            for a_ in s3tpatch.FONT_REFS:
+                fonts |= {a_, a_ + 1}
             if any(fref[i] != ref[i] for i in range(0x7FFF) if i not in fonts) or \
                     any(fref[i] != img[i] for i in fonts) or sum(fref) & 0xFF:
                 errs.append('--fonts-only changes other bytes or not the same fonts')
     else:
         errs.append('no %s' % a.vref)
-    result('fonts', not errs, '; '.join(errs) or '8x8, 8x14, 8x16 and the trimmed 9-dot tables of 1.03-08; --fonts-only the same')
+    result('fonts', not errs, '; '.join(errs) or 'the five tables of 1.03-08, %d references moved; --fonts-only the same'
+           % len(s3tpatch.FONT_REFS))
+    errs = []
+    for a_, _, new in s3tpatch.DDC_SITES:
+        if img[a_:a_ + len(new.split())] != bytes.fromhex(new):
+            errs.append('site %04X' % a_)
+    for lo, hi, _ in s3tpatch.DDC_FREED:
+        if img[lo:hi] != bytes(hi - lo):
+            errs.append('%04X-%04X not zero' % (lo, hi - 1))
+    result('ddc', not errs, '; '.join(errs) or '4F15 sites patched, %d bytes of VDIF code zero'
+           % sum(hi - lo for lo, hi, _ in s3tpatch.DDC_FREED))
     # every changed byte belongs to the tables, the fonts, a site, a block, the sign-on or the checksum
     sym = s3tpatch.s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
     allowed = set(range(*s3tpatch.LISTS)) | set(range(s3tpatch.MTAB, 0x0631)) | set(range(s3tpatch.VLIST, 0x4DE0))
-    for _, _, _, _, po, room in s3tpatch.S3FONTS:
-        allowed |= set(range(po, po + room))
+    allowed |= set(range(*s3tpatch.FONTS))
+    for a_, old, _ in s3tpatch.DDC_SITES:
+        allowed |= set(range(a_, a_ + len(old.split())))
+    for lo, hi, _ in s3tpatch.DDC_FREED:
+        allowed |= set(range(lo, hi))
+    for a_ in s3tpatch.FONT_REFS:
+        allowed |= {a_, a_ + 1}
     for lo, hi in s3tpatch.DROPPED + s3tpatch.UNUSED:
         allowed |= set(range(lo, hi))
     for name, org, room, _ in s3tpatch.BLOCKS:

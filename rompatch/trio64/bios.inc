@@ -18,12 +18,16 @@
 %define GWIN     0x5148     ; VBE window get (BH = 1 -> DX = bank): after WSET in 4F05 and the window function
 %define P13C     0x0EAC     ; bfilla: the old 8-bit font load loop after the font jump (dead, 14 bytes)
 ; the new code, in the space s3tpatch.py frees or finds unused (see its FREE list)
-%define TBON     0x0B4C     ; bon, unlk, relk (tbon.asm): the end of the refresh lists after their compaction
-%define TLOCK    0x0831     ; wcheck (tlock.asm): the register block of 1600x1200 (removed)
-%define THOOK    0x0140     ; hook (thook.asm): the zero padding after the second sign-on block
-%define TGLUE    0x085A     ; h4f02, wsetp (tglue.asm): the rest of the 1600x1200 register block
-%define SCR13    0x7F52     ; scr13 (scr13.asm): the zeros at the end of the image (the 9x16 alternate font
-                            ; table, 7E30h, ends with its 00h at 7F51h)
+%define TBON     0x0B4C     ; bon, relk (tbon.asm): the end of the refresh lists after their compaction
+%define THOOK    0x0BA6     ; hook (thook.asm): right after tbon.asm, up to 0BCFh
+%define TLOCK    0x0831     ; wcheck, unlk (tlock.asm): the register block of 1600x1200 (removed), all 64
+                            ; bytes (0871h, right after it, is named by a word at 01C7h and stays)
+%define TGLUE    0x0DEF     ; h4f02 (tglue.asm): after wmove, the rest of a removed CRTC table
+%define TWSET    0x4DD1     ; wsetp (twset.asm): the end of the VESA mode map after its compaction
+%define SCR13    0x7F91     ; scr13 (scr13.asm): the zeros at the end of the image, after S3's fonts
+                            ; (the 9x16 alternate table ends at 7F90h)
+%define SCR13W   0x0130     ; the window path of scr13 (scr13w.asm): the zero padding after the second
+                            ; sign-on block (in use up to 012Ch in the builds at hand)
 %define FONT32   0x0604     ; font (font32.asm): the end of the mode table after its compaction
 %define P13A     0x4EBE     ; wfillt/wfill (p13fill.asm): the 4F01 records of 118h-120h
 %define DFDN     0x4E2E     ; dfdn (p13df.asm): the 4F01 record of 106h

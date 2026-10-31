@@ -20,7 +20,7 @@ bon:
         push    bx
         push    dx
         call    GETCRTC
-        call    unlk                    ; BX = CR38/CR39 as found
+        call    L_unlk                  ; BX = CR38/CR39 as found (tlock.asm)
         mov     al, 0x58
         call    RDREG
         test    ah, 0x10                ; linear addressing on (the booster, or a program's window)
@@ -54,20 +54,8 @@ bon:
         pop     ax
         ret
 
-; ---------------- unlock / lock as found ----------------
-; unlk: In: DX = CRTC. Out: BL = CR38, BH = CR39 as found, both unlocked. Keeps the others but AX.
-; relk: In: DX = CRTC, BX from unlk. Puts CR38/CR39 back. Keeps the others but AX.
-unlk:   mov     al, 0x38
-        call    RDREG
-        mov     bl, ah
-        mov     al, 0x39
-        call    RDREG
-        mov     bh, ah
-        mov     ax, 0x4838
-        out     dx, ax
-        mov     ax, 0xA539
-        out     dx, ax
-        ret
+; ---------------- lock as found ----------------
+; relk: In: DX = CRTC, BX from unlk (tlock.asm). Puts CR38/CR39 back. Keeps the others but AX.
 relk:   mov     al, 0x39
         mov     ah, bh
         out     dx, ax

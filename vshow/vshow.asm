@@ -36,7 +36,10 @@
 ;   waits for a key (Esc cancels); /I shows it on the screen once, before the mode list. /S skips the
 ;   warning and the key. The /H help says so too.
 ;   Errors are printed as "VSHOW <version>: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
-;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw.
+;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw. /A and /R list a
+;   mode they leave out as "Mode XXXX: <reason>, skipped"; a mode 4F01 marks unsupported because it
+;   needs more memory than 4F00 reports says so: "not supported: needs 2560 KB, the card has 1024 KB
+;   (4F00)" (bytes per line times lines, four planes in a planar mode).
 ;
 ; Supported: 4 bpp planar, 8 bpp packed and 15/16/24/32 bpp direct colour modes, banked access through
 ; window A or B with the BIOS window granularity (no LFB use, so it also works without one).
@@ -331,7 +334,7 @@ showone:
         jmp sfail
 .i1:    test byte [mi],1
         jnz .i2
-        mov dx,s_esup
+        call memneed                    ; DX: the reason, with the sizes when memory is short
         jmp sfail
 .i2:    test byte [mi],0x10
         jnz .i3
@@ -1405,6 +1408,50 @@ bhex2:  push ax
         add al,7
 .o:     stosb
         ret
+; The reason for a mode 4F01 marks unsupported. In: [mi] from 4F01. When the mode needs more memory
+; than 4F00 reports (BytesPerScanLine * YResolution, times 4 planes in a planar mode), DX = ebuf with
+; "needs N KB, the card has M KB (4F00)", else DX = s_esup. Uses vib for the 4F00 call (the /A mode
+; list is copied out of it before). Keeps every register but DX.
+memneed:
+        pushad
+        movzx eax,word [mi+0x10]        ; bytes per line (per plane)
+        movzx ecx,word [mi+0x14]        ; lines
+        mul ecx
+        cmp byte [mi+0x1B],3            ; planar: four planes
+        jne .np
+        shl eax,2
+.np:    add eax,1023
+        shr eax,10                      ; KB needed
+        mov ebp,eax
+        mov ax,0x4F00
+        mov di,vib
+        int 0x10
+        cmp ax,0x004F
+        jne .gen
+        movzx ecx,word [vib+0x12]       ; 64 KB blocks
+        shl ecx,6
+        cmp ebp,ecx
+        jbe .gen
+        mov di,ebuf
+        mov si,s_need1
+        call rcpyd
+        mov eax,ebp
+        call bdec
+        mov si,s_need2
+        call rcpyd
+        mov eax,ecx
+        call bdec
+        mov si,s_need3
+        call rcpyd
+        mov al,'$'
+        stosb
+        popad
+        mov dx,ebuf
+        ret
+.gen:   popad
+        mov dx,s_esup
+        ret
+
 bdec:   push ebx
         push ecx
         push edx
@@ -1691,6 +1738,9 @@ s_colon db ': $'
 s_status db ', BIOS status $'
 s_e4f01 db 'mode info (4F01) failed$'
 s_esup  db 'not supported with this memory/monitor$'
+s_need1 db 'not supported: needs $'
+s_need2 db ' KB, the card has $'
+s_need3 db ' KB (4F00)$'
 s_etext db 'is a text mode$'
 s_emodel db 'memory model / colour depth not supported by VSHOW$'
 s_ewin  db 'no readable+writable window$'
@@ -1762,6 +1812,7 @@ t0      dd 0
 font    dd 0
 coltab  times 16 dd 0
 tbuf    times 80 db 0
+ebuf    times 64 db 0                   ; memneed's reason ('$')
 nbuf    times 16 db 0
 section .bss
 mi      resb 256

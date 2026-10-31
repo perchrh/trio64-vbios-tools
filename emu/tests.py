@@ -626,7 +626,8 @@ def t_t64_patches(c):
     """Our Trio64 ROM (1.5-07-pN, rompatch/trio64): the ROM file, the refresh defaults (no mode runs
     interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
-    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h), the window function, the sequencer
+    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2),
+    4F15 without VDIF, the window function, the sequencer
     index kept by the window set and get (4F05 BH=0 and 1), and the 32-bit
     registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh. Only on the Trio64 model."""
     if not c.tours:
@@ -656,13 +657,35 @@ def t_t64_patches(c):
             cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x52, 0x6A, 0x38, 0x39))
     chk(base[0] and not base[1] and cr.get(0x52, 0) == 0x80, 'POST: CR59/5A %02X%02X, CR52 %02X (expected 80h)'
         % (base[0], base[1], cr.get(0x52, 0)))
-    # S3's fonts (1.03-08, the same as 2.04.07): AX=1130h returns Phoenix's addresses, now with S3's glyphs
+    # S3's fonts (1.03-08, the same as 2.04.07), all five tables whole: AX=1130h finds each, the moved 8x16
+    # font and 9x16 table too
     vref = os.path.join(os.path.dirname(HERE), 'reference', 'vplus', '1_03_08.bin')
     if os.path.exists(vref):
         v = open(vref, 'rb').read()
-        for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000)):
+        for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000),
+                           (5, 0x686C, 301), (7, 0x7998, 324)):
             r = m.int10(0x1130, bx=bh << 8)
             chk(m.mem(r['es'] * 16 + r['bp'], ln) == v[so:so + ln], 'AX=1130h BH=%d: not S3\'s font' % bh)
+        # the mode set and AX=1114h load them into plane 2 through the moved addresses: S3's 8x16 glyphs,
+        # and in the 9-dot modes 03h and 07h all 19 of S3's 9x16 alternate glyphs on top
+        alt = {v[0x7998 + i * 17]: v[0x7998 + i * 17 + 1:0x7998 + i * 17 + 17] for i in range(19)}
+        for ax, nalt in ((0x0003, 19), (0x0007, 19), (0x1114, 0)):
+            m.int10(ax)
+            g = [bytes(m.planes[2][c * 32:c * 32 + 16]) for c in range(256)]
+            plain = [c for c in range(256) if c not in alt and g[c] != v[0x6998 + c * 16:0x6998 + c * 16 + 16]]
+            got = sum(g[c] == alt[c] for c in alt)
+            chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not S3\'s 8x16, %d of 19 alternate glyphs '
+                '(expected %d)' % (ax, len(plain), got, nalt))
+    # VBE 4F15 without VDIF (the model has no monitor on the DDC lines): BL=00h answers 004Fh with BX = 0000h
+    # and BL=01h fails, as on 1.5-07, after its 50-frame watch for a DDC1 monitor (DDC1 kept); BL=02h, read
+    # VDIF, fails at once (1.5-07 also watched 50 frames first)
+    m.int10(0x0003)
+    for bl, ax, bx, lo, hi in ((0, 0x004F, 0x0000, 45, 60), (1, 0x014F, 0x0001, 45, 60), (2, 0x014F, 0x0002, 0, 1)):
+        t = m.t
+        r = m.int10(0x4F15, bx=bl, es=0x3000, di=0)
+        frames = (m.t - t) * 70 / 1193182
+        chk(r['ax'] == ax and r['bx'] == bx and lo <= frames < hi, '4F15 BL=%d: AX=%04X BX=%04X, %.1f frames '
+            '(expected %04X %04X, %d to %d frames)' % (bl, r['ax'], r['bx'], frames, ax, bx, lo, hi))
     # the defaults: no interlace, 800x600 at 60 Hz (line total 1056, VESA DMT)
     for mode in (0x101, 0x103, 0x105, 0x107, 0x111, 0x114, 0x117, 0x110, 0x116, 0x204, 0x205, 0x208):
         r = m.int10(0x4F02, bx=mode)
@@ -798,6 +821,15 @@ def tagged(text, tool):
     return out
 
 
+def skips_counted(text, tool):
+    """The SKIP lines (tests and steps the chip, its ROM or the memory leave out) and the 'Skipped: N' of
+    the summary agree; returns the SKIP lines."""
+    lines = [l for l in text.split('\r\n') if '  SKIP: ' in l]
+    m = re.search(r'Skipped: (\d+)', text)
+    check(m and int(m.group(1)) == len(lines), '%s: summary %s, %d SKIP lines' % (tool, m and m.group(0), len(lines)))
+    return lines
+
+
 def t_s3test(c):
     com = c.tool('S3TEST.COM')
     v = '/V' if has_verbose() else ''
@@ -807,6 +839,7 @@ def t_s3test(c):
     out = r1.stdout.decode('latin1')
     check('Passed:' in out, 'no summary line')
     tl = tagged(out, 'S3TEST')
+    skips_counted(out, 'S3TEST')
     results = [l for cat, l in tl if l.endswith(('PASS', 'FAIL'))]
     for cat, l in tl:
         m = re.match(r'Mode ([0-9A-F]{4}) ', l)
@@ -924,6 +957,7 @@ def t_s3compat_vbe(c):
     c.save('S3CVBE', r)
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     lines = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
+    skips_counted(r.stdout.decode('latin1'), 'S3COMPAT')
     names = ('4F00 capabilities', '4F04 state masks', 'VBE invalid', 'VBE undefined', '4F0A table',
              '4F10 power', '4F15 DDC', '4F14 S3 OEM', 'DCLK VCO')
     tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
@@ -945,6 +979,7 @@ def t_s3compat_vga(c):
     check(r0.exit and r0.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r0.exit,))
     lines = r0.stdout.decode('latin1').split('\r\n')
     tl = tagged(r0.stdout.decode('latin1'), 'S3COMPAT')
+    skips_counted(r0.stdout.decode('latin1'), 'S3COMPAT')
     tests = [l for _, l in tl]
     for cat, l in tl:
         m = re.match(r'Mode ([0-9A-F]{2})h', l)
@@ -1002,6 +1037,7 @@ def t_s3compat_full(c):
     ge = [r'4F02 clear / D15 keep memory .*FAIL 0002$'] if m.ge_cmds else []
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
+    skips_counted(r.stdout.decode('latin1'), 'S3COMPAT')
     want = 230 if c.ours else 120       # another BIOS: fewer modes (17 in the Trio64 BIOS 1.4), no 4F14h
     check(len(tests) >= want and b'Time spent' in bytes(r.stdout), 'only %d result lines' % len(tests))
     bad = [l.strip() for l in tests if not l.endswith('PASS') and
@@ -1159,11 +1195,16 @@ def t_dos_exe(c):
 
 def t_vgalog_mem(c):
     """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped, nested BIOS calls with their
-    depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order."""
+    depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order, and with
+    no call yet it writes no file and says so."""
     com = c.tool('VGALOG.COM')
     m = c.machine()
     r = m.run_com(com, '/M', seg=0x2000)
     check(r.exit and r.exit[0] == 'tsr', 'VGALOG /M did not stay resident: %s' % (r.exit,))
+    r0 = m.run_com(com, '/D', seg=0x4000)           # no call yet: no file, a message instead
+    check(r0.exit == ('exit', 0) and 'VGALOG.BIN' not in r0.files
+          and b'No events registered, not writing output file' in r0.stdout,
+          '/D with no calls: exit %s, files %s, output %r' % (r0.exit, sorted(r0.files), r0.stdout[-80:]))
     calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=2)),
              (0x1130, dict(bx=0x0200)), (0x0003, {})]
     ret = {}

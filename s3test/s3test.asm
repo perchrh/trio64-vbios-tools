@@ -19,6 +19,11 @@
 ;   other chips  no ROM of ours exists: the version found is INFO, then only the tests that need none
 ;                (checksum, chip, MCLK, memory type, VGA clear, font load, scrolls, AH=09h, timings)
 ;   Modes flagged F_2MB (above 1 MB) are not set when CR36 reports 1 MB.
+;   Every test or step left out (by the chip, its ROM or the memory) prints a line with its name,
+;   "SKIP:" and the reason, for example "S3   SR1A pedestal off ...  SKIP: a choice of our Trio64V2
+;   ROM" on a Trio64V+, or "VBE  Mode 0107 (over 1 MB) ...  SKIP: needs more than 1 MB" on a 1 MB
+;   card. SKIP lines are not results (not in the PASS/FAIL counts or by category); the summary line
+;   counts them ("Skipped: N"). With 2 MB on our Trio64V2 ROM nothing is skipped.
 ;
 ; Usage
 ;   S3TEST [/V] > S3TEST.LOG
@@ -199,7 +204,18 @@ start:  cld
         jne .mk
         mov si,tmodelist
 .mk:    cmp byte [rkind],RK_OTHER
-        je .mld
+        jne .mk2
+        mov dx,s_mlist                  ; no ROM of ours: its mode list is not run
+        mov si,r_none
+        call skip
+        jmp .mld
+.mk2:   cmp byte [rkind],RK_V2
+        je .ml
+        push si                         ; SI: the mode list
+        mov dx,s_mchk                   ; the mode lines' CR90 and CR6D checks are the Trio64V2 ROM's
+        mov si,r_v2
+        call skip
+        pop si
 .ml:    lodsw
         cmp ax,0xFFFF
         je .mld
@@ -216,14 +232,36 @@ start:  cld
         jz .m2
         call memsize
         cmp al,1
-        je .ml
+        jne .m2
+        mov dx,s_mskip                  ; "VBE  Mode 0107 ... SKIP: needs more than 1 MB"
+        call puts
+        mov ax,[m_mode]
+        call phex4
+        mov dx,s_mskip2
+        push si
+        mov si,r_1mb
+        call skip
+        pop si
+        jmp .ml
 .m2:    push si
         call t_mode
         pop si
         jmp .ml
 .mld:   cmp byte [rkind],RK_OTHER       ; our ROM's VBE behaviour, flip-flop reset and 4F05 path
-        je .gen
-        call t_func
+        jne .fn
+        mov si,r_none
+        mov dx,s_f03
+        call skip
+        mov dx,s_f05
+        call skip
+        mov dx,s_dat
+        call skip
+        mov dx,s_thr
+        call skip
+        mov dx,s_ff
+        call skip
+        jmp .gen
+.fn:    call t_func
         call t_ff
 .gen:   call t_vclr
         call t_font
@@ -232,8 +270,12 @@ start:  cld
         call t_ah09
         call t_plscr
         cmp byte [rkind],RK_OTHER
-        je .nbk
-        call t_bank
+        jne .bk
+        mov dx,s_bank
+        mov si,r_none
+        call skip
+        jmp .nbk
+.bk:    call t_bank
 .nbk:   call t_time
         ; final: text mode, write report
         mov ax,0x0003
@@ -245,6 +287,10 @@ start:  cld
         mov dx,s_sum2
         call puts
         movzx eax,word [nfail]
+        call pdec
+        mov dx,s_sum6                   ; tests and steps not run on this card (SKIP lines)
+        call puts
+        movzx eax,word [nskip]
         call pdec
         mov dx,s_sum3
         call puts
@@ -498,8 +544,14 @@ t_post: call unlock
         mov dx,s_info
         call puts
         cmp byte [rkind],RK_V2          ; pedestal and refresh defaults: our Trio64V2 ROM only
-        jne .x
+        je .ped
+        mov si,r_v2
         mov dx,s_ped
+        call skip
+        mov dx,s_ref
+        call skip
+        jmp .x
+.ped:   mov dx,s_ped
         call puts
         mov al,0x1A
         call rdsr
@@ -819,7 +871,12 @@ t_func: mov ax,0x4F02
         sete al
         call result
         cmp byte [rkind],RK_V2          ; VBE 1.2 (1.03-08) has no PhysBasePtr
-        jne .n01
+        je .p01
+        mov dx,s_f01
+        mov si,r_vbe2
+        call skip
+        jmp .n01
+.p01:
         ; 4F01 PhysBasePtr == the real base from POST (with the booster on, CR59/5A hold 000Ah)
         mov ax,0x4F01
         mov cx,0x0101
@@ -895,7 +952,16 @@ t_func: mov ax,0x4F02
         setae al
         call result
         cmp byte [rkind],RK_V2          ; linear modes, 4F06 BL=3 and 512x384: 2.04.07-pN only
-        jne .x
+        je .lin
+        mov si,r_vbe2
+        mov dx,s_f03l
+        call skip
+        mov dx,s_f06s
+        call skip
+        mov dx,s_c50
+        call skip
+        jmp .x
+.lin:
         ; linear mode: 4F03 must report 4101
         mov ax,0x4F02
         mov bx,0x4101
@@ -1564,7 +1630,9 @@ t_plscr:
         call plrun
         cmp byte [rkind],RK_OTHER       ; S3 mode 6Ah: the mode number of the S3 BIOSes of our ROMs
         jne .s6
-        ret
+        mov dx,s_pl6a
+        mov si,r_none
+        jmp skip
 .s6:    VS 'D:TEST planar scroll 6Ah'
         call vnl
         call vflush
@@ -1881,7 +1949,38 @@ t_bank: VS 'D:TEST 4F05'
         je .e
 .f10:   or byte [tmp],0x10
 .e:     mov dx,s_bank
-        jmp bits_result
+        call bits_result
+        cmp byte [rkind],RK_V2          ; the 04FE and linear 4101h parts are the Trio64V2 ROM's
+        je .r
+        mov dx,s_bchk
+        mov si,r_vbe2
+        call skip
+.r:     ret
+
+; A test or step this card does not get (the chip, its ROM or the memory decide): In: DX = the line
+; text up to the result column, SI = the reason ('$'). Prints "<text>  SKIP: <reason>" and counts it in
+; [nskip] for the summary; not a result line (no PASS/FAIL/INFO), so the counts by category leave it
+; out; with /V also copied into the debug log. Keeps SI; changes AX, DX.
+skip:   call puts
+        mov dx,s_skip
+        call puts
+        mov dx,si
+        call puts
+        mov dx,s_sum3
+        call puts
+        cmp byte [vflag],1              ; /V: the line into the debug log too, as result does
+        jne .nv
+        pusha
+        mov si,[vls]
+        mov cx,[bp_]
+        sub cx,si
+        call vcopy
+        popa
+.nv:    mov ax,[bp_]                    ; the next line starts here (ccount and /V find it by [lst]/[vls])
+        mov [lst],ax
+        mov [vls],ax
+        inc word [nskip]
+        ret
 
 ; Print the test name at DX, the fail bits in [tmp] and PASS (bits 0) or FAIL.
 bits_result:
@@ -2677,9 +2776,22 @@ s_help  db 'S3TEST ',VERSION,' - regression test for our VBIOSes: Trio64V2 ',ROM
         db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
         db 'by a line frequency above its range: do not use one.',13,10,'$'
 s_sum4  db 'Time spent: $'
+s_sum6  db '  Skipped: $'
+s_skip  db '  SKIP: $'
+s_mlist db 'VBE  Mode list of our ROM ................ $'
+s_mchk  db 'S3   Mode lines: CR90 FIFO fix, CR6D base  $'
+s_mskip db 'VBE  Mode $'
+s_mskip2 db ' (over 1 MB) ............... $'
+s_f06s  db 'VBE  4F06 BL=3 max line 101h ............. $'
+s_bchk  db 'VBE  4F05 line: 0040:04FE, linear 4101h .. $'
+r_none  db 'no ROM of ours for this chip$'
+r_v2    db 'a choice of our Trio64V2 ROM$'
+r_vbe2  db 'VBE 2.0 (our Trio64V2 ROM); this ROM is VBE 1.2$'
+r_1mb   db 'needs more than 1 MB, the card has 1 MB$'
 s_sum5  db ' s',13,10,'$'
 
 npass   dw 0
+nskip   dw 0                            ; SKIP lines (tests and steps not run on this card)
 m_exp6  dw 0                            ; expected 4F06 BL=3 maximum line in 101h
 lst     dw 0                            ; start of the current result line in obuf
 catcnt  times 7*3 dw 0                  ; per category: PASS, FAIL, INFO

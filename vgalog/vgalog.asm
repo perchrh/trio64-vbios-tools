@@ -13,7 +13,8 @@
 ;                    kept in a 32 KB ring buffer in memory (the last 1024 calls), nothing is written to
 ;                    disk. For Windows 9x: load it before Windows, use Windows, leave it, then VGALOG /D.
 ;   VGALOG /D        memory mode: write the ring buffer to VGALOG.BIN (oldest call first); the buffer
-;                    is kept, so /D can be repeated
+;                    is kept, so /D can be repeated. With no call logged yet it writes no file and says
+;                    "No events registered, not writing output file" (exit code 0)
 ;   VGALOG /U        unload: puts INT 10h back, closes VGALOG.BIN and frees the memory
 ;   VGALOG /H, /?, /HELP  parameter list
 ;   A second install is refused while VGALOG is resident. Unloading only works while VGALOG is the last
@@ -496,7 +497,9 @@ dump:   call findres
         cmp eax,RBN
         jae .f
         mov cx,ax
-.f:     mov [dhdr+12],cx
+.f:     test cx,cx                      ; no calls since /M: nothing to write, say so
+        jz .none
+        mov [dhdr+12],cx
         mov [dcnt],cx
         mov ax,[es:rnext]               ; oldest slot = rnext - count
         sub ax,cx
@@ -548,6 +551,11 @@ dump:   call findres
 .cl:    mov ah,0x3E
         int 0x21
         mov dx,s_dump
+        mov ah,9
+        int 0x21
+        mov ax,0x4C00
+        int 0x21
+.none:  mov dx,s_none                   ; VGALOG.BIN is left as it is (not created, not emptied)
         mov ah,9
         int 0x21
         mov ax,0x4C00
@@ -615,6 +623,7 @@ msg     db 'VGALOG ',VERSION,' installed, logging INT 10h AH=00 and 4F01/4F02/4F
 msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
 msgm    db 'VGALOG ',VERSION,' installed in memory mode: the last 1024 INT 10h calls (no text/pixel output), VGALOG /D writes them',13,10,'$'
 s_dump  db 'VGALOG ',VERSION,': ring buffer written to VGALOG.BIN',13,10,'$'
+s_none  db 'VGALOG ',VERSION,': No events registered, not writing output file',13,10,'$'
 s_notm  db 'VGALOG ',VERSION,': /D needs VGALOG resident in memory mode (VGALOG /M), as the last INT 10h hook.',13,10,'$'
 dhdr    db 'VGALOGM1',0,0,0,0,0,0,0,0
 dcnt    dw 0
