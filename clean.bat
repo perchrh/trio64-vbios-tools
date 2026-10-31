@@ -6,4 +6,6 @@ del s3regs.txt
 del c:\s3regs.txt
 del c:\vgalog.bin
 del vgalog.bin
+del vgalogr.bin
+del s3regsr.txt
 
