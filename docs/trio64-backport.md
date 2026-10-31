@@ -259,9 +259,15 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   the Trio64V2 (8x9 font of 2.04.07).
 - **VGALOG** during VIDSPEED: 298 calls, all with CF clear and every VBE call 004Fh; the other
   chipsets' probes (FE00h, 7000h, BF03h, 6F00h, 5F00h) came back unchanged, as they should. MCLK
-  54.9 MHz in every record. Phoenix's VBE modes run with CR58 = 10h and CR59/CR5A = 000Ah: linear
-  addressing on, with its 64 KB window at A0000h, Phoenix's banking scheme. Not in Phoenix's mode
-  list, so not measured: 106h (1280x1024x4) and 10Dh-10Fh (320x200 high and true colour).
+  54.9 MHz in every record. The banked VBE modes run with CR58 = 10h and CR59/CR5A = 000Ah: linear
+  addressing on with a 64 KB window at A0000h, the booster (#47) switched on at the end of 4F02. Not
+  in Phoenix's mode list, so not measured: 106h (1280x1024x4) and 10Dh-10Fh (320x200 high and true
+  colour).
+- **Windows 98:** the desktop, DXDIAG and the user interface work; video playback (AVI and MPEG,
+  windowed and full screen) shows horizontal streaks over the whole screen, most likely display FIFO
+  underruns: p1's MCLK (54.9 MHz) gives the memory 21 % less bandwidth than the card's own 69.8 MHz,
+  while its 60 Hz defaults ask more of it than the card BIOS's 56 Hz and interlaced ones, with the
+  same FIFO values (#75, Pending).
 - **S3REGS before and after Windows 98:** the driver keeps the ROM's MCLK (SR10/SR11 41h 2Ch). It
   leaves SR12/SR13 at its last pixel clock (42h 2Bh, 40.3 MHz, 800x600 at 60 Hz; unused in mode 03h,
   which takes the fixed 28.322 MHz clock), the hardware cursor registers CR47-CR4F changed, and CR5C
@@ -283,6 +289,10 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   3.5 or 4.5 MCLKs, RAS precharge 2.5 or 3.5 MCLKs, a CAS/OE stretch of 0-6.5 ns; at 69.8 MHz 3.5
   MCLKs are 50.1 ns.
 - S3COMPAT again on the card with the fixed tools (#72, #73): no FAIL expected.
+- Video playback streaks under Windows 98 (#75): the Windows display settings, S3REGS32 on the
+  desktop and /W during playback, and the same video with the card's own BIOS, with p1 built with
+  `MCLK=60`, and with less display load; then the fix (display FIFO share per mode by the data
+  book's rule, section 7.4, or the MCLK).
 - The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
   with the 32-bit CPU clear on the Trio64V2). The 2.04.07 `clear32.asm` (35 bytes) would fit the free
   space; Phoenix's clear routine (121Eh) and its callers need a look first.
