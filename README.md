@@ -363,7 +363,9 @@ what 1.5-07 still gets wrong and the comparison of the base candidates.
 `s3tpatch.py` checks the 1.5-07 code (1000h-7EFFh, the same in every 1.5-07 build) and the layout of
 its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that card's memory clock and
 timing bytes. The emulator test `t64_patches` checks the ROM's changes, `stores` its 32-bit stores, and
-S3TEST runs its Trio64 set. Not tried on a card yet.
+S3TEST runs its Trio64 set. On the ExpertColor DSP-3364P (31 October 2026): S3TEST 26 PASS, 0 FAIL,
+banked writes at 81.7 MB/s with the booster; S3COMPAT's 49 FAILs there were test bugs (#72, #73),
+fixed in the tools (docs/trio64-backport.md, "On the card").
 
 ## Continuous integration
 

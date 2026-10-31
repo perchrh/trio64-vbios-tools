@@ -178,6 +178,10 @@ card keeps it unchanged (README "Not taken: the S3 OEM functions (4F14h) of late
   have bits 4-0, which the tools use (PLL-2).
 - T32/64 9.2 gives a power-on DCLK of 25.125 MHz, the SR12 description 25.175 MHz (the VGA clock);
   the 9.2 example labels SR12/SR13 as "CR12" and "CR13".
+- T32/64 does not say how the CRTC index decodes beyond CR6Dh. On a Trio64 card (DSP-3364P, 31 October
+  2026) CR80-CRFF read back as CR00-CR7F: only index bits 6-0 are decoded, so CR90 is CR10. Rules of
+  the later chips for CR80 and up (V2-REG-3, V2-REG-4) must not be applied, nor their registers
+  written, on a Trio32/Trio64; the tools check them on the Trio64V2 only (#72).
 - T32/64 CR6B: the register description says "reserved for use by the S3 BIOS" for bits 7-0 (CR6C
   likewise), while sections 6.2 and 7.1 give bit 7 the PD bus width and table 4-9 note 3 gives bits 1-0
   a signal stretch (T64-MEM-6). Software that keeps BIOS data in CR6B can change both; the tools assume

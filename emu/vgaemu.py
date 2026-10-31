@@ -187,6 +187,13 @@ class Machine:
             return (reload - (2 * el) % reload) & 0xFFFF
         return (reload - el % reload) & 0xFFFF
 
+    def _ci(self):
+        """The CRTC register the index in 3D4h/3B4h selects. The Trio32/Trio64 decode index bits 6-0 only:
+        on the DSP-3364P (Trio64) CR80-CRFF read back as CR00-CR7F (S3REGS, 31 October 2026), so CR90 is
+        CR10 there (#72). The later chips have registers above 7Fh (CR80-CR93 on the Trio64V2)."""
+        i = self.r['ci']
+        return i & 0x7F if Machine.chip in ('trio64', 'trio32') else i
+
     def _in(self, uc, port, size, ud):
         r = self.r
         self.t += 3                                     # about one ISA I/O cycle
@@ -201,7 +208,7 @@ class Machine:
         if port in (0x3D4, 0x3D5, 0x3DA) and not r['misc'] & 1:
             return 0xFF
         if port in (0x3D5, 0x3B5):
-            i = r['ci']
+            i = self._ci()
             # CR36 bits 7-5 = the memory size (110b 1 MB, 100b 2 MB, 000b 4 MB); bits 3-2 the memory type:
             # 1-cycle EDO (00b) on the Trio64V2/V+ models, EDO (10b) on the Trio32/Trio64, whose 00b is
             # reserved, and fast page (11b) on the Trio64 with 4 MB, which the data book requires for it
@@ -277,18 +284,18 @@ class Machine:
                 return                                  # colour I/O: the mono ports are not decoded
             if p in (0x3D4, 0x3D5, 0x3DA) and not r['misc'] & 1:
                 return
-            if p in (0x3D5, 0x3B5) and r['ci'] <= 7 and r['crtc'].get(0x11, 0) & 0x80:
-                if r['ci'] == 7:                        # CR11 bit 7 protects CR00-07 except CR07 bit 4
+            if p in (0x3D5, 0x3B5) and self._ci() <= 7 and r['crtc'].get(0x11, 0) & 0x80:
+                if self._ci() == 7:                        # CR11 bit 7 protects CR00-07 except CR07 bit 4
                     r['crtc'][7] = (r['crtc'].get(7, 0) & ~0x10) | (v & 0x10)
                 return
             if self.wlog is not None and p in (0x3C5, 0x3D5, 0x3B5):
-                reg, i, regs = ('SR', r['si'], r['seq']) if p == 0x3C5 else ('CR', r['ci'], r['crtc'])
+                reg, i, regs = ('SR', r['si'], r['seq']) if p == 0x3C5 else ('CR', self._ci(), r['crtc'])
                 self.wlog.append((reg, i, v, regs.get(i, 0), r['seq'].get(1, 0), self._retrace(),
                                   r['crtc'].get(0x39, 0)))
             if p == 0x3C4: r['si'] = v
             elif p == 0x3C5: r['seq'][r['si']] = v
             elif p in (0x3D4, 0x3B4): r['ci'] = v
-            elif p in (0x3D5, 0x3B5): r['crtc'][r['ci']] = v
+            elif p in (0x3D5, 0x3B5): r['crtc'][self._ci()] = v
             elif p == 0x3CE: r['gi'] = v
             elif p == 0x3CF: r['gc'][r['gi']] = v
             elif p == 0x3C0:

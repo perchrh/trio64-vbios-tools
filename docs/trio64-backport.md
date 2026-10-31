@@ -2,8 +2,8 @@
 
 Our changes ported to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in `rompatch/trio64`.
 Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P E0A2AA,
-2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); not yet run
-on a card. The choice of base is below ("Base BIOS candidates").
+2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); first run
+on that card on 31 October 2026 ("On the card" below). The choice of base is below ("Base BIOS candidates").
 
     make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with zeros above, TSIZE=32: 32 KB)
     make trom-test ROM=S3T64P1.BIN
@@ -220,6 +220,33 @@ card's ROM with `MCLK=60`. S3REGS with the stock BIOS shows the board's choices:
 timings) and CR36 bits 3-2 (11b fast page, 10b EDO: what the strapping tells the chip; with fast page
 Phoenix also tries 4 MB at POST and settles on the 2 MB found).
 
+## On the card (31 October 2026)
+
+The default build (1.5-07-p1, MCLK 54.9 MHz, 64 KB image) on the ExpertColor DSP-3364P: a picture at
+POST, Windows detects the card, the text font looks right (the glyphs are byte for byte the Trio64V2
+card's; S3COMPAT's 8x8 upper half check passes, which Phoenix's own font failed). The picture looked
+softer than on the Trio64V2 card: the analog output of the board, not the ROM.
+
+- **S3TEST:** 26 PASS, 0 FAIL. Banked write throughput 81.7 MB/s (the booster on a Trio64, as on the
+  Trio64V2 card); every mode at its 60 Hz class rate, non-interlaced; the sequencer index kept by 4F05.
+- **S3COMPAT:** 88 PASS, 48 + 1 FAIL, all test bugs, fixed in the tools: the 48 VGA lines failed with
+  `CR90=80(00)` (the CR90 check is the Trio64V2's, #72) and the LFB cross check ran without an LFB
+  (#73). The VRAM test passed at 54.9 MHz.
+- **VSHOW /R:** every listed mode; **VGALOG:** 7303 calls, none with an error.
+- **S3REGS:** CR36 = 8Eh (fast page, 2 MB, as the V53C16256HK50), CR68 = 8Dh (RAS low 3.5 MCLKs,
+  precharge 2.5 MCLKs, the fastest strapping: at the stock 69.8 MHz the row cycle was 86 ns against
+  the chips' 90 ns), CR6B = E0h with BAR0 E0000000h (bit 7 set, so the PD bus width question of
+  T64-MEM-6 does not arise on this machine), CR52 = 80h (800x600 at 60 Hz).
+- **CRTC index aliasing:** CR80-CRFF read back as CR00-CR7F (CR90 = CR10, CRA0 = CR20, ...): the
+  Trio64 decodes index bits 6-0 only. A write meant for CR80 and up lands in CR00-CR7F, so code for
+  the later chips (the Trio64V2's CR90 FIFO fix, CR86) must never run on a Trio64. The emulator's
+  Trio64 and Trio32 models alias the same way since 31 October 2026.
+- **Timings:** mode set 03h 1.3 ms, 4F05 26.8 us, but 4F02 101h with the clear 157 ms against 39 ms on
+  the Trio64V2 card: Phoenix's graphics engine clear of the 2 MB is four times slower than the
+  32-bit CPU clear of 2.04.07-p11. A candidate for a later level (see Pending).
+- **4F15:** caps 0000 (no DDC answer); the board is from 1994, before DDC, and may not connect the
+  lines.
+
 ## Pending
 
 - The DSP-3364P's own BIOS (dumped 31 October 2026, table above) is an earlier 1.5-07 build that
@@ -234,8 +261,8 @@ Phoenix also tries 4 MB at POST and settles on the 2 MB found).
   own speed (50 ns) is in CR68 bits 3-0, strapped on the board and never written by Phoenix: RAS low
   3.5 or 4.5 MCLKs, RAS precharge 2.5 or 3.5 MCLKs, a CAS/OE stretch of 0-6.5 ns; at 69.8 MHz 3.5
   MCLKs are 50.1 ns.
-- S3TEST and S3COMPAT logs from the card.
-- S3COMPAT's 4F15 line on the card with a DDC2 monitor: the EDID read through the DDC code (the
-  emulator has no monitor on the DDC lines).
-- S3REGS from the card after POST: CR6B against PCI BAR0 bits 31-24 and the memory found (CR36 bits
-  7-5), for the CR6B question above (T64-MEM-6).
+- S3COMPAT again on the card with the fixed tools (#72, #73): no FAIL expected.
+- The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
+  with the 32-bit CPU clear on the Trio64V2). The 2.04.07 `clear32.asm` (35 bytes) would fit the free
+  space; Phoenix's clear routine (121Eh) and its callers need a look first.
+- DDC on this board: whether its DDC lines are connected at all (4F15 gave caps 0000).

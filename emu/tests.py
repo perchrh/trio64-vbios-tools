@@ -1037,7 +1037,15 @@ def t_s3compat_full(c):
     ge = [r'4F02 clear / D15 keep memory .*FAIL 0002$'] if m.ge_cmds else []
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
-    skips_counted(r.stdout.decode('latin1'), 'S3COMPAT')
+    skips = skips_counted(r.stdout.decode('latin1'), 'S3COMPAT')
+    # #72: the CR90 check of the VGA lines is the Trio64V2's (on the Trio64 CR90 reads as CR10);
+    # #73: no LFB test without an LFB (VBE 1.x)
+    cr90 = any('CR90 is a Trio64V2 register' in l for l in skips)
+    check(cr90 == (Machine.chip != 'v2'), 'CR90 SKIP line %s on the %s model' % ('present' if cr90 else 'missing', Machine.chip))
+    m.int10(0x4F01, cx=0x101, es=0x3000, di=0)
+    lfb = bool(m.mem(0x30000, 1)[0] & 0x80)
+    nolfb = any('no linear frame buffer' in l for l in skips)
+    check(nolfb != lfb, 'LFB test: 4F01 offers %s LFB, SKIP line %s' % ('an' if lfb else 'no', 'present' if nolfb else 'missing'))
     want = 230 if c.ours else 120       # another BIOS: fewer modes (17 in the Trio64 BIOS 1.4), no 4F14h
     check(len(tests) >= want and b'Time spent' in bytes(r.stdout), 'only %d result lines' % len(tests))
     bad = [l.strip() for l in tests if not l.endswith('PASS') and
@@ -1280,6 +1288,8 @@ def t_s3regs(c):
     ch = text[text.index('WATCH'):text.index('END OF WATCH')].split('\r\n')[1:-1]
     exp = ['+300 SR10 %02X->41' % sr.get(0x10, 0), '+300 SR11 %02X->28' % sr.get(0x11, 0),
            '+500 CR54 %02X->10' % cr.get(0x54, 0)]
+    if Machine.chip in ('trio64', 'trio32'):    # CR80-CRFF mirror CR00-CR7F there (#72): CRC7 is CR47
+        exp += ['+500 CRC7 %02X->05' % cr.get(0x47, 0), '+500 CRD4 %02X->10' % cr.get(0x54, 0)]
     exp = [e for e in exp if e[10:12] != e[14:16]]  # a register that already held the value: no line
     check(ch == exp, 'watch lines: %s, expected %s' % (ch, exp))
     rh = m.run_pe32(exe, 'S3REGS32 /?')
