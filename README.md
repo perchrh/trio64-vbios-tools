@@ -939,6 +939,25 @@ Also at hand, but nothing our ROMs implement: VBE 3.0 (September 1998; refresh c
 4F02 with a CRTCInfoBlock and 4F0B), VBE/SCI 1.0 (4F15 BL=10h-16h, raw DDC line access), E-EDID
 Release A (EDID 1.3, the data 4F15 carries) and VBE/AF 1.0 (a loadable accelerator driver).
 
+Secondary references on VBE (also kept outside the repository; VESA's and the publishers' copyright):
+
+- Super VGA BIOS Extension, VESA standard VS891001 (1 October 1989), the first VBE, as transcribed
+  on the Gemixtes blog (2013): 4F00-4F05, the 15-bit mode numbers from 100h, mode 6Ah as 102h, and
+  window granularity. The base VBE 1.2 extends, and so a source for the Trio64V+ and Trio64 ROMs
+  until VBE 1.2 itself is at hand.
+- Brad Haakenson, "Examining the VESA VBE 2.0 Specification", Dr. Dobb's Journal, July 1995: what
+  VBE 2.0 changed from 1.2, which is where our VBE 2.0 and 1.2 ROMs differ. The VbeInfoBlock grew
+  from 256 to 512 bytes (asked for with "VBE2"); only bit 15 of the mode number means "do not clear"
+  (some 1.2 programs used bit 7); 4F06 sets the longest line the hardware takes instead of failing,
+  and takes bytes as well as pixels; 4F07 BL=80h waits for the vertical retrace; 4F09 and 4F0A are
+  new; 4F05 has no effect in a linear mode.
+- Myles Strous, "DOS Super VGA / VESA programming notes" 1.0 (about 1994): an application
+  programmer's view of VBE 1.2, with its function list and the mode list 100h-11Bh; a cross-check of
+  the mode numbers, nothing about the BIOS side. It points to Ralf Brown's Interrupt List and the
+  books of Ferraro and Wilton, which would be worth having.
+- Toby Opferman, "How To Use Super VGA (VESA 1.x Non-Linear)": banking through 4F05 and the window
+  granularity as an application does it; nothing a BIOS or the tools need beyond the VBE text.
+
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
 - S3 Trio64V2/DX and GX datasheet (preliminary): MCLK limits per memory type and DCLK limits, the
   DCLK VCO maximum of 340 MHz, the 3-bit DCLK R divider (SR12 bit 7), CR36 memory types, CR87 1-cycle
