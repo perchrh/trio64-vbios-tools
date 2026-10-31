@@ -912,66 +912,83 @@ Documents the project does not have; what depends on them is marked where it is 
 - Trio64V2/DX & GX: only the preliminary book (changes from the Trio64V+) is at hand, no final edition.
 - An S3 document on the BIOS interface: the S3 OEM functions (4F14h) and the S3 mode numbers are known
   only from BIOS images (`docs/chip-rules.md`, "S3 OEM functions (4F14h)").
-- The VESA standards in "VESA standards" below other than VBE 2.0 and VBE 1.2 are not at hand yet.
+- VESA standards our ROMs implement, not at hand yet:
+  - VBE/DDC 1.0 (February 1994), or DDC 2.0 (March 1996), which contains it: 4F15, which all three
+    ROMs have.
+  - DDC 1.0 (August 1994), DDC 2.0 and DDC Version 3 (December 1997): the DDC1 and DDC2B signalling
+    and timing, needed for the DDC2 work on the Trio64.
+  - VBE/PM 1.0 (February 1994) and DPMS 1.0 (August 1993): 4F10 power management and the sync states
+    it sets.
+  - DMT 1.0, Rev. 0.7 (December 1996): the timing reference of the tools and the refresh tables. It
+    contains the 1990-1993 monitor timing standards and guidelines (800x600 at 56, 60 and 72 Hz,
+    1024x768 at 60 and 70 Hz), which need no copies of their own.
+  - GTF 1.0 (December 1996): timings for modes DMT does not list, such as 1152x864 at 60 Hz.
+  - Mode 6Ah standard (August 1989): 800x600 in 16 colours as mode 6Ah, which our ROMs offer and
+    S3TEST checks.
+  - VBE 1.1 (VS900602): where 4F06 and 4F07 came in; VBE 1.2 restates it, so it is a check only.
+- Other references worth having: an IBM VGA technical reference (the standard functions and the
+  register defaults at first hand; today the IBM tables come from VGATEST), Ralf Brown's Interrupt
+  List (INT 10h with the vendor functions, of which VGADOC took its BIOS calls), Richard Ferraro's
+  "Programmer's Guide to the EGA, VGA and Super VGA Cards" (3rd edition, 1994) and Richard Wilton's
+  "Programmer's Guide to PC Video Systems" (2nd edition, 1994).
 
 ### VESA standards
 
-The VESA standards our ROMs implement or the tools check against. VESA allows only VBE 2.0 to be
-posted online (unmodified), so the PDFs are kept outside the repository.
+The VESA documents our ROMs implement or the tools check against. Only VBE 2.0 may be posted online
+(unmodified), so the copies are kept outside the repository; the links are the public ones.
 
-- VBE Core Functions 2.0, Rev. 1.1 (November 1994), at hand: 4F00-4F0A, the info blocks, the mode
-  numbers; the Trio64V2 ROM is VBE 2.0, and S3TEST and S3COMPAT check against it.
-- VBE 1.2 (Super VGA BIOS Extension, VS911022, 22 October 1991), at hand as the text retyped by
-  "Patch" (VESASP12.ZIP, also in the PC Game Programmer's Encyclopedia): the version the Trio64V+
-  and Trio64 ROMs report. What a 1.2 BIOS must do beyond 1.0: every ModeInfoBlock field valid (the
-  direct colour fields in memory models 6 and 7), ModeAttributes bit D1 always 1, unused fields zero
-  and exactly 256 bytes returned (from 1.1), the direct colour memory model, 4F08 (DAC width, reset
-  to 6 bits by a mode set), and the advice that INT 10h AH=0Fh returns a number AH=00h can set the
-  last Super VGA mode again with. The retyped ModeInfoBlock listing leaves out RsvdFieldPosition,
-  which its text describes.
-- VBE/DDC 1.0 (February 1994), or DDC 2.0 (March 1996), which contains it: defines 4F15, which all
-  three ROMs have.
-- DDC 1.0 (August 1994), DDC 2.0 and DDC Version 3 (December 1997): the DDC1 and DDC2B signalling and
-  timing, needed for the DDC2 work.
-- VBE/PM 1.0 (February 1994) and DPMS 1.0 (August 1993): 4F10 power management and the sync states it
-  sets.
-- DMT 1.0, Rev. 0.7 (December 1996): the timing reference for the tools and the refresh tables. It
-  already contains the 1990-1993 monitor timing standards and guidelines, so those need no copies of
-  their own.
-- GTF 1.0 (December 1996): timings for modes DMT does not list, such as 1152x864 at 60 Hz.
-- Mode 6Ah standard (August 1989): 800x600 in 16 colours as mode 6Ah, which our ROMs offer and S3TEST
-  checks.
+- [VBE Core Functions 2.0](https://web.archive.org/web/20081211174813/http://docs.ruudkoot.nl/vbe20.txt),
+  Rev. 1.1 (November 1994): 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE
+  2.0, and S3TEST and S3COMPAT check against it.
+- [VBE 1.2](https://web.archive.org/web/20090114055246/http://docs.ruudkoot.nl/vesasp12.txt) (Super
+  VGA BIOS Extension, VS911022, 22 October 1991), the text retyped by "Patch" (VESASP12.ZIP): the
+  version the Trio64V+ and Trio64 ROMs report. What a 1.2 BIOS must do beyond 1.0: every
+  ModeInfoBlock field valid (the direct colour fields in memory models 6 and 7), ModeAttributes bit
+  D1 always 1, unused fields zero and exactly 256 bytes returned (from 1.1), the direct colour memory
+  model, 4F08 (DAC width, reset to 6 bits by a mode set), and the advice that INT 10h AH=0Fh return a
+  number with which AH=00h sets the last Super VGA mode again. The retyped ModeInfoBlock listing
+  leaves out RsvdFieldPosition, which its text describes.
+- [VBE 1.0](https://web.archive.org/web/20131211151957/http://www.gemixtes.de/super-vga-bios-extension-standard-vs891001/)
+  (Super VGA BIOS Extension, VS891001, 1 October 1989), as transcribed on the Gemixtes blog: 4F00-4F05,
+  the 15-bit mode numbers from 100h, mode 6Ah as 102h, window granularity; the base of VBE 1.2.
 
-Also at hand, but nothing our ROMs implement: VBE 3.0 (September 1998; refresh control through
-4F02 with a CRTCInfoBlock and 4F0B), VBE/SCI 1.0 (4F15 BL=10h-16h, raw DDC line access), E-EDID
-Release A (EDID 1.3, the data 4F15 carries) and VBE/AF 1.0 (a loadable accelerator driver).
+At hand, but nothing our ROMs implement, so neither the ROMs nor the clean room depend on them:
+[VBE 3.0](http://www.petesqbsite.com/sections/tutorials/tuts/vbe3.pdf) (September 1998; refresh
+control through 4F02 with a CRTCInfoBlock and 4F0B, for a later level),
+[VBE/SCI 1.0](https://web.archive.org/web/20051221092948/http://www.vesa.org/Public/VBE/vbesci10-2w.pdf)
+(July 1997; 4F15 BL=10h-16h, raw access to the DDC lines, which would let a tool probe the Trio64
+board's DDC wiring), E-EDID Release A (February 2000; EDID 1.3, the data 4F15 carries) and
+[VBE/AF 1.0](https://web.archive.org/web/20081209121702/http://www.vesa.org/public/VBE/VBE-AF07.pdf)
+(August 1996; a loadable accelerator driver, not a ROM function).
 
-Secondary references on VBE (also kept outside the repository; VESA's and the publishers' copyright):
+Secondary references:
 
-- Super VGA BIOS Extension, VESA standard VS891001 (1 October 1989), the first VBE, as transcribed
-  on the Gemixtes blog (2013): 4F00-4F05, the 15-bit mode numbers from 100h, mode 6Ah as 102h, and
-  window granularity. The base VBE 1.2 extends, and so a source for the Trio64V+ and Trio64 ROMs
-  until VBE 1.2 itself is at hand.
-- Brad Haakenson, "Examining the VESA VBE 2.0 Specification", Dr. Dobb's Journal, July 1995: what
-  VBE 2.0 changed from 1.2, which is where our VBE 2.0 and 1.2 ROMs differ. The VbeInfoBlock grew
-  from 256 to 512 bytes (asked for with "VBE2"); only bit 15 of the mode number means "do not clear"
-  (some 1.2 programs used bit 7); 4F06 sets the longest line the hardware takes instead of failing,
-  and takes bytes as well as pixels; 4F07 BL=80h waits for the vertical retrace; 4F09 and 4F0A are
-  new; 4F05 has no effect in a linear mode.
-- Myles Strous, "DOS Super VGA / VESA programming notes" 1.0 (about 1994): an application
-  programmer's view of VBE 1.2, with its function list and the mode list 100h-11Bh; a cross-check of
-  the mode numbers, nothing about the BIOS side. It points to Ralf Brown's Interrupt List and the
-  books of Ferraro and Wilton, which would be worth having.
-- Toby Opferman, "How To Use Super VGA (VESA 1.x Non-Linear)": banking through 4F05 and the window
-  granularity as an application does it; nothing a BIOS or the tools need beyond the VBE text.
 - VGADOC 4b by Finn Thoegersen (1991-95), freeware: nine of its files are in `standards/thoegersen/`
   with its licence (`standards/README.md`). VGABIOS.TXT is a reference for the standard INT 10h
   functions, VGAREGS.TXT, EGAREGS.TXT and CGA.TXT for the registers, S3.TXT for the S3 chips up to
   the Trio64 (registers, IDs, S3 INT 10h functions, board mode lists), PCI.TXT for the PCI BIOS.
-  Its VESA.TXT summarizes VBE 1.0 to 2.0 and 4F10 (VBE/PM: BL=00h capabilities, 01h set, 02h get the
-  power state, the BH bits) with the VBE standard numbers (1.0 VS891001, 1.1 VS900602, 1.2
-  VS911022): a quick reference until VBE/PM itself is at hand. It has errors (4F0A takes BL=00h and
-  returns one table, not BX = function), so the standards decide.
+  Its [VESA.TXT](https://pdos.csail.mit.edu/6.828/2004/readings/hardware/vgadoc/VESA.TXT) summarizes
+  VBE 1.0 to 2.0 and 4F10 (VBE/PM: BL=00h capabilities, 01h set, 02h get the power state, the BH
+  bits) with the VBE standard numbers (1.0 VS891001, 1.1 VS900602, 1.2 VS911022): a quick reference
+  until VBE/PM itself is at hand. It has errors (4F0A takes BL=00h and returns one table, not BX =
+  function), so the standards decide.
+- Brad Haakenson, ["Examining the VESA VBE 2.0 Specification"](https://web.archive.org/web/20240508053621/https://www.drdobbs.com/architecture-and-design/examining-the-vesa-vbe-20-specification/184409592),
+  Dr. Dobb's Journal, July 1995: what VBE 2.0 changed from 1.2, which is where our VBE 2.0 and 1.2
+  ROMs differ. The VbeInfoBlock grew from 256 to 512 bytes (asked for with "VBE2"); only bit 15 of
+  the mode number means "do not clear" (some 1.2 programs used bit 7); 4F06 sets the longest line the
+  hardware takes instead of failing, and takes bytes as well as pixels; 4F07 BL=80h waits for the
+  vertical retrace; 4F09 and 4F0A are new; 4F05 has no effect in a linear mode.
+- Myles Strous, ["SuperVGA/VESA programmer's notes"](http://www.faqs.org/faqs/pc-hardware-faq/supervga-programming/)
+  1.0 (about 1994): an application programmer's view of VBE 1.2, with its function list and the mode
+  list 100h-11Bh; a cross-check of the mode numbers, and the pointers to Ralf Brown's list, Ferraro
+  and Wilton (Missing documents).
+- Toby Opferman, ["How To Use Super VGA (VESA 1.x Non-Linear)"](https://web.archive.org/web/20120328134352/http://www.opferman.net/Text/svga.txt):
+  banking through 4F05 and the window granularity as an application does it; a check of how
+  programs use 4F01 and 4F05, nothing more.
+
+Looked at and not used: the list of chipsets with VBE 2.0/3.0 (xerxys.info), and vbespy and vbetool,
+Linux tools that run a card's video BIOS to log or replay its mode sets (the emulator in `emu/` does
+this for our ROMs).
 
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
 - S3 Trio64V2/DX and GX datasheet (preliminary): MCLK limits per memory type and DCLK limits, the
