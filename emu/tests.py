@@ -64,8 +64,10 @@ Tests
                    above the single-clock limit, the CR86 and CR90/CR91 rules in 012Eh, 010Fh, 0131h,
                    0134h and 012Ah, which are clean on the card) and the lines that judge video memory through banks,
                    the LFB or planar windows above 64 KB, which the model does not have
-  vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
-                   caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
+  vgalog           VGALOG installs, writes the file header with the chip and ROM block (CR2D-CR30, CR36,
+                   ROM size, SR10/SR11, the ROM version) and logs 32 bytes per call, returns the BIOS
+                   results with the caller's interrupt flag; second install refused, /H, /U closes the
+                   file and unhooks; /M and /T files carry the same block
   vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
                    registers in and out, SR10/SR11 and CR58-5A/6D after), /D writes them in call order,
                    the S3 locks are put back, /U unhooks, /D afterwards is refused
@@ -129,7 +131,7 @@ Tests
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, REGNAMES  # noqa: E402
+from vgaemu import Machine, REGNAMES, CHIPS  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -1084,6 +1086,21 @@ def t_s3compat_full(c):
     return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
 
 
+def vgalog_info(c, m, blk, what):
+    """The chip and ROM block VGALOG writes (32 bytes): CR2D-CR30 and CR36 as the model's chip reports
+    them, the ROM size byte, SR10/SR11 as the POST left them, and the word after "Vers" in the ROM's
+    first 256 bytes."""
+    ids = CHIPS[Machine.chip]['ids'][:4]
+    cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
+    if Machine.chip in ('trio64', 'trio32'):
+        cr36 |= 0x0C if Machine.vram == 4 else 0x08
+    v = re.search(rb'Vers\S*\s+([^\s(]{1,15})', c.rom[:0x100])
+    want = bytes(ids) + bytes([cr36, c.rom[2], m.r['seq'].get(0x10, 0), m.r['seq'].get(0x11, 0)]) + \
+        (v.group(1) if v else b'').ljust(16, b'\0') + bytes(8)
+    check(blk == want, '%s: chip and ROM block %s, expected %s' % (what, blk.hex(' '), want.hex(' ')))
+    return (v.group(1) if v else b'').decode()
+
+
 def t_vgalog(c):
     if not os.path.exists(os.path.join(SRC, 'vgalog', 'vgalog.asm')):
         raise Skip('no vgalog/ in this tree')
@@ -1093,6 +1110,9 @@ def t_vgalog(c):
     check(r.exit and r.exit[0] == 'tsr', 'VGALOG did not stay resident: %s' % (r.exit,))
     log = r.files.get('VGALOG.BIN')
     check(log is not None, 'VGALOG.BIN not created')
+    check(log[:16] == b'VGALOGF1' + bytes(8), 'no file-mode header: %r' % bytes(log[:16]))
+    ver = vgalog_info(c, m, bytes(log[16:48]), 'file mode')
+    del log[:48]                                # the records follow
     m.com = r                                   # keep collecting the resident copy's DOS writes
     m.stdout_is_file = True
     m.psp = 0x2000
@@ -1105,7 +1125,7 @@ def t_vgalog(c):
             check(res['ax'] == want, 'AX=%04X returned AX=%04X' % (ax, res['ax']))
     m.com = None
     c.save('VGALOG', ri)
-    check(len(log) == 3 * 32, 'VGALOG.BIN has %d bytes, expected 96 (3 logged calls)' % len(log))
+    check(len(log) == 3 * 32, 'VGALOG.BIN has %d bytes after the header, expected 96 (3 logged calls)' % len(log))
     recs = [log[i:i + 16] for i in range(0, len(log), 16)]
     check([x[0] for x in recs] == [ord('B'), ord('A')] * 3, 'records not B/A pairs')
     rh = m.run_com(com, '/H', seg=0x4000)
@@ -1257,10 +1277,12 @@ def t_vgalog_mem(c):
     rd = m.run_com(com, '/D', seg=0x4000)
     check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
     b = rd.files.get('VGALOG.BIN')
-    check(b is not None and b[:8] == b'VGALOGM1', 'VGALOG.BIN has no memory-mode header')
-    total, n = struct.unpack_from('<IH', b, 8)
-    recs = [b[16 + 32 * i:48 + 32 * i] for i in range(n)]
-    check(len(b) == 16 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    check(b is not None and b[:8] == b'VGALOGM2', 'VGALOG.BIN has no memory-mode header')
+    total, n, flags = struct.unpack_from('<IHH', b, 8)
+    check(flags == 0, 'header flags %04X without /T' % flags)
+    vgalog_info(c, m, bytes(b[16:48]), '/M')
+    recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
+    check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
     top = [struct.unpack_from('<H', x, 2)[0] for x in recs if x[23] == 0]
     check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
           % ['%04X' % a for a in top])
@@ -1279,7 +1301,7 @@ def t_vgalog_mem(c):
     m.mu.mem_write(0x40, struct.pack('<HH', 0, 0x0060))
     rw = m.run_com(com, '/D', seg=0x4000)
     bw = rw.files.get('VGALOG.BIN')
-    check(rw.exit == ('exit', 0) and bw is not None and bw[:8] == b'VGALOGM1',
+    check(rw.exit == ('exit', 0) and bw is not None and bw[:8] == b'VGALOGM2',
           '/D behind another INT 10h hook: exit %s, output %r' % (rw.exit, bytes(rw.stdout)[-100:]))
     rt = m.run_com(com, '/M', seg=0x4000)
     check(rt.exit == ('exit', 1), 'second /M behind another hook not refused: %s' % (rt.exit,))
@@ -1332,10 +1354,12 @@ def t_vgalog_trace(c):
     rd = m.run_com(com, '/D', seg=0x4000)
     check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
     b = rd.files.get('VGALOG.BIN')
-    check(b is not None and b[:8] == b'VGALOGM1', 'VGALOG.BIN has no memory-mode header')
-    total, n = struct.unpack_from('<IH', b, 8)
-    recs = [b[16 + 32 * i:48 + 32 * i] for i in range(n)]
-    t = 16 + 32 * n
+    check(b is not None and b[:8] == b'VGALOGM2', 'VGALOG.BIN has no memory-mode header')
+    total, n, flags = struct.unpack_from('<IHH', b, 8)
+    check(flags == 1, 'header flags %04X with /T, expected 0001 (trace part follows)' % flags)
+    vgalog_info(c, m, bytes(b[16:48]), '/T')
+    recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
+    t = 48 + 32 * n
     check(b[t:t + 8] == b'VGALOGT1', 'no trace part after the %d calls' % n)
     ttot, tn = struct.unpack_from('<II', b, t + 8)
     check(len(b) == t + 16 + 4 * tn and tn == ttot, 'trace part: %d events in total, %d in the file, %d bytes'

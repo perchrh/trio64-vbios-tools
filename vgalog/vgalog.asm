@@ -30,6 +30,17 @@
 ;   VGALOG.BIN, so copy it away between runs. Calls made while DOS is busy are passed on but not logged.
 ;   Exit code 0 = done, 1 = refused, bad argument or the file could not be created.
 ;
+; Chip and ROM block, 32 bytes, read when VGALOG is installed (before Windows, so not virtualised), in
+; both kinds of file after their header (so files from different cards and ROMs can be told apart):
+;   +0  CR2D, CR2E, CR2F, CR30: the chip (88 11 = 86C732/764 Trio32/Trio64 or, CR2F bit 6 set, the
+;       86C765 Trio64V+; 89 01 = 86C775/785 Trio64V2), read with the S3 registers unlocked
+;   +4  CR36 (memory size and type, as strapped)    +5  ROM size in 512-byte blocks (C000:0002)
+;   +6  SR10, +7 SR11 (the memory clock PLL the POST set)
+;   +8  the ROM version: the word after "Version" or "Vers." in C000:0000-00FFh (for our ROMs
+;       "2.04.07-p21", "1.03-08-p1", "1.5-07-p2"), up to 15 characters, zero-padded
+;   +24 8 bytes 0 (reserved)
+;
+; File mode: a 16-byte header 'VGALOGF1' and 8 bytes 0, the chip and ROM block, then the records.
 ; Record format, 16 bytes per record, two records per call
 ;   +0  'B' before the call, 'A' after it        +1  0
 ;   +2  AX in    +4  BX in    +6  CX in    +8  DX in   (the same in both records)
@@ -38,8 +49,10 @@
 ;       memory configuration. Read without unlocking the S3 registers, as the BIOS left them.
 ;   A 'B' record without its 'A' record is the call that hung.
 ;
-; Memory mode (/M, dumped with /D): a 16-byte file header, then 32 bytes per call, oldest first
-;   header  'VGALOGM1', dd calls logged in total, dw records in the file, dw 0
+; Memory mode (/M, dumped with /D): a 48-byte file header, then 32 bytes per call, oldest first
+;   header  'VGALOGM2', dd calls logged in total, dw records in the file, dw flags (bit 0 = the trace
+;           part follows), then the chip and ROM block (32 bytes); the calls start at file offset 48.
+;           ('VGALOGM1', before 1 November 2026: no flags, no block, the calls at offset 16.)
 ;   +0  dw call number (low 16 bits of the total)
 ;   +2  AX, +4 BX, +6 CX, +8 DX, +10 ES, +12 DI as the caller gave them
 ;   +14 AX, +16 BX, +18 CX, +20 DX returned
@@ -79,7 +92,7 @@
 ;   hook) and uses the copy's saved vector and file handle. /D and the install check also search the
 ;   DOS memory control block chain (findmem), with the upper memory blocks linked in for the walk: in
 ;   a Windows 9x DOS box Windows hooks INT 10h after a VGALOG loaded before it, which still logs.
-;   VGALOG.BIN size = 32 bytes per logged call (and with /T 16 + 4 per trace event).
+;   VGALOG.BIN size = 48 + 32 bytes per logged call (and with /T 16 + 4 per trace event).
 bits 16
 org 0x100
 %include "version.inc"
@@ -107,6 +120,7 @@ tnext   dw 0                    ; byte offset of the next event in tseg
 tlast   dw 0                    ; byte offset of the last event
 ttotal  dd 0                    ; events in total
 oldi1   dd 0                    ; INT 1 vector while a mode set is traced
+info    times 32 db 0           ; the chip and ROM block (see the header), filled at install
 
 ; resident INT 10h handler
 isr:    cmp byte [cs:mmode],0
@@ -766,6 +780,16 @@ install:
         int 0x21
         jc .err
         mov [handle],ax
+        call getinfo                    ; the file header and the chip and ROM block first
+        mov bx,ax
+        mov ah,0x40
+        mov cx,16
+        mov dx,fhdr
+        int 0x21
+        mov ah,0x40
+        mov cx,32
+        mov dx,info
+        int 0x21
         mov ah,0x34                     ; InDOS flag
         int 0x21
         mov [indos],bx
@@ -819,6 +843,7 @@ minst:  call findmem
         int 0x21
 .go:    mov byte [mmode],1
         mov [mypsp],cs
+        call getinfo
         mov ax,0x3510
         int 0x21
         mov [old10],bx
@@ -865,6 +890,8 @@ dump:   call findmem
         jz .none
         mov [dhdr+12],cx
         mov [dcnt],cx
+        mov al,[es:tflag]               ; flags: bit 0 = the trace part follows
+        mov [dhdr+14],al
         mov ax,[es:rnext]               ; oldest slot = rnext - count
         sub ax,cx
         and ax,RBN-1
@@ -881,6 +908,15 @@ dump:   call findmem
         mov cx,16
         mov dx,dhdr
         int 0x21
+        jc .err
+        push ds                         ; the resident copy's chip and ROM block
+        push es
+        pop ds
+        mov ah,0x40
+        mov cx,32
+        mov dx,info
+        int 0x21
+        pop ds
         jc .err
         ; part 1: dfirst .. end (or count), part 2: 0 ..
         mov ax,RBN
@@ -975,6 +1011,97 @@ tdump:  mov eax,[es:ttotal]
         jnc .l
 .r:     ret
 
+; The chip and ROM block into info (DS = CS): CR2D-CR30 and CR36 with the S3 registers unlocked (CR38,
+; CR39 and the CRTC index put back), SR10/SR11 (through s3regs, which also puts SR08 and the indexes
+; back), the ROM size and version from C000h. Keeps all registers.
+getinfo:
+        pusha
+        push es
+        mov si,info + 6 - 26            ; s3regs: SR10 SR11 -> info+6/+7 (and CR58-CR6D -> +8..+11,
+        call s3regs                     ; overwritten by the version below)
+        mov dx,0x3D4
+        in al,dx
+        mov bl,al                       ; BL = CR index
+        mov al,0x38
+        call rd
+        mov bh,ah                       ; BH = CR38
+        mov al,0x39
+        call rd
+        mov cl,ah                       ; CL = CR39
+        mov ax,0x4838
+        out dx,ax
+        mov ax,0xA539
+        out dx,ax
+        mov di,info
+        mov al,0x2D
+.id:    push ax
+        call rd
+        mov [di],ah
+        inc di
+        pop ax
+        inc ax
+        cmp al,0x31
+        jb .id
+        mov al,0x36
+        call rd
+        mov [info+4],ah
+        mov al,0x39
+        mov ah,cl
+        out dx,ax
+        mov al,0x38
+        mov ah,bh
+        out dx,ax
+        mov al,bl
+        out dx,al
+        mov ax,0xC000
+        mov es,ax
+        mov al,[es:2]
+        mov [info+5],al
+        mov di,info+8                   ; the version: clear, then the word after "Vers"
+        mov cx,16
+        xor al,al
+.z:     mov [di],al
+        inc di
+        loop .z
+        xor si,si
+.f:     cmp dword [es:si],'Vers'
+        je .w
+        inc si
+        cmp si,0x100 - 4
+        jb .f
+        jmp .r
+.w:     add si,4
+.s1:    mov al,[es:si]                  ; the rest of the word ("ion", ".")
+        cmp al,' '
+        jbe .s2
+        inc si
+        cmp si,0x100
+        jb .s1
+        jmp .r
+.s2:    mov al,[es:si]                  ; the blanks after it
+        cmp al,' '
+        jne .c
+        inc si
+        cmp si,0x100
+        jb .s2
+        jmp .r
+.c:     mov di,info+8
+        mov cx,15
+.cl:    mov al,[es:si]
+        cmp al,' '
+        jbe .r                          ; ends at a blank, CR, LF or 0
+        cmp al,'('
+        je .r
+        mov [di],al
+        inc di
+        inc si
+        cmp si,0x100
+        jae .r
+        loop .cl
+.r:     pop es
+        popa
+        ret
+
 ; ---------------- unload ----------------
 unload: call findres
         je .go
@@ -1037,7 +1164,8 @@ thdr    db 'VGALOGT1',0,0,0,0,0,0,0,0
 s_dump  db 'VGALOG ',VERSION,': ring buffer written to VGALOG.BIN',13,10,'$'
 s_none  db 'VGALOG ',VERSION,': No events registered, not writing output file',13,10,'$'
 s_notm  db 'VGALOG ',VERSION,': /D needs VGALOG resident in memory mode (VGALOG /M).',13,10,'$'
-dhdr    db 'VGALOGM1',0,0,0,0,0,0,0,0
+dhdr    db 'VGALOGM2',0,0,0,0,0,0,0,0
+fhdr    db 'VGALOGF1',0,0,0,0,0,0,0,0
 dcnt    dw 0
 dfirst  dw 0
 s_use   db 'VGALOG ',VERSION,' - logs INT 10h AH=00 and VBE 4F01/4F02/4F06 calls to VGALOG.BIN',13,10
