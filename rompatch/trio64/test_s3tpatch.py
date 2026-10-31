@@ -18,9 +18,9 @@ Tests
   fonts          all five font tables are those of 1.03-08 (--vref) byte for byte, end to end from 5720h
                  to 7F90h, and the eight references to the moved 8x16 font and 9x16 table point at their
                  new places; --fonts-only changes only the fonts, those references and the checksum byte
-  ddc            the 4F15 sites carry their new bytes and the DDC1/VDIF code (DDC_FREED) is zero
+  ddc            the 4F15 sites carry their new bytes and the VDIF code (DDC_FREED) is zero
   unchanged      outside the tables, the fonts, the patch sites (DDC ones too), the code blocks, the
-                 zeroed DDC1/VDIF code, the sign-on and the checksum every byte is as in 1.5-07
+                 zeroed VDIF code, the sign-on and the checksum every byte is as in 1.5-07
   oem_build      a 1.5-07 build with other memory timing bytes in its refresh entries and another MCLK
                  (as the card makers' builds differ) is patched too and keeps them
   input_64k      a 64 KB image with 1.5-07 in the lower half gives the same result, whatever its upper half
@@ -166,7 +166,7 @@ def main():
     for lo, hi, _ in s3tpatch.DDC_FREED:
         if img[lo:hi] != bytes(hi - lo):
             errs.append('%04X-%04X not zero' % (lo, hi - 1))
-    result('ddc', not errs, '; '.join(errs) or '4F15 sites patched, %d bytes of DDC1/VDIF code zero'
+    result('ddc', not errs, '; '.join(errs) or '4F15 sites patched, %d bytes of VDIF code zero'
            % sum(hi - lo for lo, hi, _ in s3tpatch.DDC_FREED))
     # every changed byte belongs to the tables, the fonts, a site, a block, the sign-on or the checksum
     sym = s3tpatch.s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))

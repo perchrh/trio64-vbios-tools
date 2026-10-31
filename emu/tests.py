@@ -627,7 +627,7 @@ def t_t64_patches(c):
     interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
     S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2),
-    4F15 without DDC1 and VDIF, the window function, the sequencer
+    4F15 without VDIF, the window function, the sequencer
     index kept by the window set and get (4F05 BH=0 and 1), and the 32-bit
     registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh. Only on the Trio64 model."""
     if not c.tours:
@@ -676,15 +676,16 @@ def t_t64_patches(c):
             got = sum(g[c] == alt[c] for c in alt)
             chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not S3\'s 8x16, %d of 19 alternate glyphs '
                 '(expected %d)' % (ax, len(plain), got, nalt))
-    # VBE 4F15 without DDC1 and VDIF (the model has no monitor on the DDC lines): BL=00h answers 004Fh with
-    # BX = 0000h and BL=01h/02h fail, as on 1.5-07, but without its 50-frame watch for a DDC1 monitor
+    # VBE 4F15 without VDIF (the model has no monitor on the DDC lines): BL=00h answers 004Fh with BX = 0000h
+    # and BL=01h fails, as on 1.5-07, after its 50-frame watch for a DDC1 monitor (DDC1 kept); BL=02h, read
+    # VDIF, fails at once (1.5-07 also watched 50 frames first)
     m.int10(0x0003)
-    for bl, ax, bx in ((0, 0x004F, 0x0000), (1, 0x014F, 0x0001), (2, 0x014F, 0x0002)):
+    for bl, ax, bx, lo, hi in ((0, 0x004F, 0x0000, 45, 60), (1, 0x014F, 0x0001, 45, 60), (2, 0x014F, 0x0002, 0, 1)):
         t = m.t
         r = m.int10(0x4F15, bx=bl, es=0x3000, di=0)
         frames = (m.t - t) * 70 / 1193182
-        chk(r['ax'] == ax and r['bx'] == bx and frames < 1, '4F15 BL=%d: AX=%04X BX=%04X, %.1f frames (expected '
-            '%04X %04X, under 1 frame)' % (bl, r['ax'], r['bx'], frames, ax, bx))
+        chk(r['ax'] == ax and r['bx'] == bx and lo <= frames < hi, '4F15 BL=%d: AX=%04X BX=%04X, %.1f frames '
+            '(expected %04X %04X, %d to %d frames)' % (bl, r['ax'], r['bx'], frames, ax, bx, lo, hi))
     # the defaults: no interlace, 800x600 at 60 Hz (line total 1056, VESA DMT)
     for mode in (0x101, 0x103, 0x105, 0x107, 0x111, 0x114, 0x117, 0x110, 0x116, 0x204, 0x205, 0x208):
         r = m.int10(0x4F02, bx=mode)

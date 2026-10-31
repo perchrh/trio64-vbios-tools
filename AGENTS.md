@@ -46,7 +46,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   (hang), see README "Omitted".
 - Fixes that change what a standard function returns, or need more ROM space than is free, stay as
   TSRs (S3ALIAS).
-- The 8x14 font is missing in the BIOS and that is accepted for now.
+- The 8x14 font is missing in the BIOS and that is accepted for now. The Trio64 ROM keeps its 8x14
+  font and 9x14 alternate table (S3's since 30 October 2026), to preserve the style of the era: do not
+  delete them for space. It also keeps DDC1 in VBE 4F15 (only VDIF was deleted).
 - A BIOS call of our ROMs leaves the index registers it touches as it found them, at least the
   sequencer index 3C4h, as S3's 2.04.07 and 1.03-08 do (S3TEST's 4F05 line checks it, fail bit 2).
   The data books do not require it; programs that set an index before an INT 10h call rely on it.
