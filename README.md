@@ -14,7 +14,7 @@ is for the Windows 9x desktop.
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
 | S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip: our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
-| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them | `VGALOG` (or `VGALOG /M`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
+| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file") | `VGALOG` (or `VGALOG /M`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
 | S3REGS32.EXE | The same snapshot from the Windows 9x desktop (Win32 console program), and `/W n` logs every register change for n seconds | `S3REGS32 label`, `S3REGS32 /W 60 label` |
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions (also AH=13h, CGA scroll, graphics XOR, fonts, the video save pointer table), every VESA mode, the VBE functions (also 4F04 masks, 4F0A, 4F10, 4F14, 4F15), datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
@@ -53,9 +53,15 @@ assemble code themselves too (`emu/tests.py --nasm`, `emu/mutants.py --nasm`; bo
 environment variable `NASM`). A relative path is made absolute. `make` warns when the assembler is
 not NASM 3.02.
 
-The .COM files land in `build/`, with `RUNALL.BAT` (from `runall.bat`): it runs S3TEST, S3COMPAT and
-`VSHOW /R`, all with `/V /S`, writes S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG and their .DBG files next to
-them, and beeps (`echo` of Ctrl-G) when done. `/S` skips the monitor warnings, so only start it with a
+The .COM files land in `build/`, with `RUNALL.BAT` (from `runall.bat`): it loads VGALOG in memory
+mode (`VGALOG /M`), takes an S3REGS snapshot ("before tests"), runs S3TEST, S3COMPAT and `VSHOW /R`, all
+with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.TXT), writes the last
+1024 INT 10h calls with `VGALOG /D`, and beeps (`echo` of Ctrl-G) when done. It leaves S3TEST.LOG,
+S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. VGALOG stays
+resident afterwards (`VGALOG /U` unloads it); while it is loaded, every INT 10h call takes a little
+longer, which shows only in the timing lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves
+behind before the next one: every .DBG and .TXT file in the current folder, VGALOG.BIN there, and
+S3REGS.TXT and VGALOG.BIN in C:\ (the .LOG files are overwritten by the next run). `/S` skips the monitor warnings, so only start it with a
 monitor that takes 91 kHz or refuses it (an LCD). `common/` holds the /V debug log code the test tools
 share.
 
@@ -196,6 +202,16 @@ and 13h CGA, AH=10h AL=00h-03h, AH=11h and AH=12h BL=10h/20h EGA, the DAC functi
 and AH=1Ah-1Ch VGA). The emulator tests check that every result line has a category, that mode lines
 have the right one, and that the summary counts the lines. Logs from before this change have no
 category column: compare from the sixth column.
+
+A test or step that the chip, its ROM, the memory size or an option leaves out is not silent: S3TEST
+and S3COMPAT print it with its name, `SKIP:` and the reason, and count these lines in the summary
+(`Skipped: N`). They are not results, so the PASS/FAIL counts and the summary by category leave them
+out. Examples: on the Trio64V2 with our ROM S3TEST skips nothing, and S3COMPAT names the 8x14 glyph
+checks (no 8x14 font in 2.04.07) and the Trio64UV+ register rules; on a Trio64V+ or Trio64 S3TEST
+names the Trio64V2-only lines (pedestal, refresh defaults, the VBE 2.0 lines) and, on a 1 MB card,
+the modes above 1 MB; on a chip without a ROM of ours, everything that needs one. VSHOW /A and /R name
+a mode that needs more memory than the card has with both sizes. The emulator tests check that the
+summary counts the SKIP lines.
 
 ### Test coverage
 
@@ -584,8 +600,9 @@ Fixes
   - Interrupts are off for the whole 4F15 operation, so a timer interrupt cannot stretch a clock
     pulse.
   - All three are the 2.04.11 code. POST calls the same delay once (14E5h); see the next item.
-  - Whether this card connects the DDC lines to the VGA connector is
-    not known: Windows 98 showed a generic monitor with the stock 2.04.11 (To do).
+  - The card connects the DDC lines to the VGA connector, and the DDC2 path works: with p21, Windows
+    98 identified a Dell 2021FP from its EDID read over DDC2 (31 October 2026) instead of showing a
+    generic Plug and Play monitor.
 - **POST delay before the graphics engine reset** (p20): POST turns RAM refresh off (CR88 bit 6, a
   register the datasheet calls valid only for the Trio64V2/GX), waits, resets the graphics engine
   (CR66 = 02h, then 00h) and turns refresh on again. The wait loads its count 0Ah into BX, but the
@@ -765,6 +782,11 @@ machine, so neither bit is set by the ROM. The Trio64V+ datasheet (SR15 bit 7, "
 
 ### Known remaining items
 
+- No picture on the multiQ MQ215 B-1 LCD (31 October 2026): it shows nothing with two other graphics
+  cards known to be good and on another machine too, so the monitor is faulty; the ROM levels from
+  p18 on are not the cause (the item was in To do from 30 October). Hardware runs use the Eizo and the
+  Dell 2021FP.
+
 - The 8x14 font is missing in the BIOS (S3COMPAT WARN 01 for AX=1130h BH=2 and mode 10h).
 Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/). It uses the same font as the S3 Trio64. 
 - An LFB is offered on the planar mode 104h (S3COMPAT WARN 20), as in stock and the reference.
@@ -783,19 +805,9 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 
 ### To do
 
-- No picture on the multiQ LCD (native 800x600) with the current ROM (noted 30 October 2026): nothing
-  during POST and, it seems, nothing afterwards either; the stock BIOS showed a picture on it before.
-  Test the stock BIOS on the multiQ first, to rule out the monitor and the cable; if it shows a
-  picture, flash p18, p19 and p20 in turn to find the level that lost it (p19 added CR23 = 00h before
-  CR26 and the DDC fixes, p20 shortened the POST wait before the graphics engine reset), and compare
-  S3REGS snapshots of mode 03h between the stock BIOS and the failing level.
 - Measure the booster with VIDSPEED in plain DOS: first with the stock BIOS, then with the latest ROM,
   and write both banked results here. VIDSPEED's banked mode (4F02 0113h) gets the booster (VGALOG:
   CR58 90h, CR59/CR5A 000Ah after the call).
-- DDC on the card (p19): run S3COMPAT with the Eizo connected; its 4F15 line shows whether the probe
-  now finds DDC2. If it still reports caps 0000, the board probably does not connect the serial port
-  lines to the VGA connector (pins 12 and 15); Windows 98 showed a generic monitor with the stock
-  2.04.11, which has the same DDC code.
 - POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
   (without /Q); no difference to p19 is expected.
 - Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so

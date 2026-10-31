@@ -821,6 +821,15 @@ def tagged(text, tool):
     return out
 
 
+def skips_counted(text, tool):
+    """The SKIP lines (tests and steps the chip, its ROM or the memory leave out) and the 'Skipped: N' of
+    the summary agree; returns the SKIP lines."""
+    lines = [l for l in text.split('\r\n') if '  SKIP: ' in l]
+    m = re.search(r'Skipped: (\d+)', text)
+    check(m and int(m.group(1)) == len(lines), '%s: summary %s, %d SKIP lines' % (tool, m and m.group(0), len(lines)))
+    return lines
+
+
 def t_s3test(c):
     com = c.tool('S3TEST.COM')
     v = '/V' if has_verbose() else ''
@@ -830,6 +839,7 @@ def t_s3test(c):
     out = r1.stdout.decode('latin1')
     check('Passed:' in out, 'no summary line')
     tl = tagged(out, 'S3TEST')
+    skips_counted(out, 'S3TEST')
     results = [l for cat, l in tl if l.endswith(('PASS', 'FAIL'))]
     for cat, l in tl:
         m = re.match(r'Mode ([0-9A-F]{4}) ', l)
@@ -947,6 +957,7 @@ def t_s3compat_vbe(c):
     c.save('S3CVBE', r)
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     lines = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
+    skips_counted(r.stdout.decode('latin1'), 'S3COMPAT')
     names = ('4F00 capabilities', '4F04 state masks', 'VBE invalid', 'VBE undefined', '4F0A table',
              '4F10 power', '4F15 DDC', '4F14 S3 OEM', 'DCLK VCO')
     tests = [l for l in lines if l.startswith(names) and re.search(r'  (PASS|FAIL [0-9A-F]+|WARN [0-9A-F]+|INFO)$', l)]
@@ -968,6 +979,7 @@ def t_s3compat_vga(c):
     check(r0.exit and r0.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r0.exit,))
     lines = r0.stdout.decode('latin1').split('\r\n')
     tl = tagged(r0.stdout.decode('latin1'), 'S3COMPAT')
+    skips_counted(r0.stdout.decode('latin1'), 'S3COMPAT')
     tests = [l for _, l in tl]
     for cat, l in tl:
         m = re.match(r'Mode ([0-9A-F]{2})h', l)
@@ -1025,6 +1037,7 @@ def t_s3compat_full(c):
     ge = [r'4F02 clear / D15 keep memory .*FAIL 0002$'] if m.ge_cmds else []
     check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
     tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
+    skips_counted(r.stdout.decode('latin1'), 'S3COMPAT')
     want = 230 if c.ours else 120       # another BIOS: fewer modes (17 in the Trio64 BIOS 1.4), no 4F14h
     check(len(tests) >= want and b'Time spent' in bytes(r.stdout), 'only %d result lines' % len(tests))
     bad = [l.strip() for l in tests if not l.endswith('PASS') and
@@ -1182,11 +1195,16 @@ def t_dos_exe(c):
 
 def t_vgalog_mem(c):
     """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped, nested BIOS calls with their
-    depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order."""
+    depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order, and with
+    no call yet it writes no file and says so."""
     com = c.tool('VGALOG.COM')
     m = c.machine()
     r = m.run_com(com, '/M', seg=0x2000)
     check(r.exit and r.exit[0] == 'tsr', 'VGALOG /M did not stay resident: %s' % (r.exit,))
+    r0 = m.run_com(com, '/D', seg=0x4000)           # no call yet: no file, a message instead
+    check(r0.exit == ('exit', 0) and 'VGALOG.BIN' not in r0.files
+          and b'No events registered, not writing output file' in r0.stdout,
+          '/D with no calls: exit %s, files %s, output %r' % (r0.exit, sorted(r0.files), r0.stdout[-80:]))
     calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=2)),
              (0x1130, dict(bx=0x0200)), (0x0003, {})]
     ret = {}

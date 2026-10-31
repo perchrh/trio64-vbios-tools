@@ -15,3 +15,4 @@ cd ..
 "%NASM%" -f bin -icommon\ -o build\S3REGS.COM s3regs\s3regs.asm
 "%NASM%" -f bin -icommon\ -o build\S3REGS32.EXE s3regs\s3regs32.asm
 copy runall.bat build\RUNALL.BAT
+copy clean.bat build\CLEAN.BAT

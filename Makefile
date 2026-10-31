@@ -26,10 +26,14 @@ DEFS += -DTROMVER="'$(TROMVER)'"
 endif
 
 all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-     build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT
+     build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT
 
-# runall.bat: S3TEST, S3COMPAT and VSHOW /R with /V and /S, their logs next to them (DOS line ends)
+# runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D (DOS
+# line ends); clean.bat deletes what a run leaves behind
 build/RUNALL.BAT: runall.bat | build
+	cp $< $@
+
+build/CLEAN.BAT: clean.bat | build
 	cp $< $@
 
 build:

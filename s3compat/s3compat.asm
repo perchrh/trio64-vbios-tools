@@ -20,6 +20,11 @@
 ;   When stdout is a file, every test line is written and committed (INT 21h AH=68h) before the next
 ;   test starts, so after a freeze the last line in the log is the test that hung.
 ;   Exit code 0 = no FAIL, 1 = at least one FAIL.
+;   Every test or step left out prints a line with its name, "SKIP:" and the reason, not counted as a
+;   result; the summary line counts them ("Skipped: N"): the SR1A and subsystem ID lines on chips other
+;   than the Trio64V2, the 8x14 glyph checks when the ROM has no 8x14 font (Trio64V2 2.04.07: the
+;   8x16 font is checked instead), the VRAM test with /Q, and once, before the VESA mode lines, the
+;   register rules of the other chips (registers this chip does not have).
 ;
 ; Result lines
 ;   <test name> ... <details>  PASS | FAIL xxxx | WARN xx | INFO
@@ -90,6 +95,12 @@ NCAT    equ 6
         mov byte [tcat],%1
         call tbegin
         db %2,0
+%endmacro
+%macro SKIPL 3                          ; category, line text, reason: a test or step this card does not get
+        mov byte [tcat],%1
+        call tskip
+        db %2,0
+        db %3,0
 %endmacro
 %macro TBK 1+                           ; title; the category is already in [tcat]
         call tbegin
@@ -240,6 +251,7 @@ start:  cld
         PS 13,10,'--- VESA BIOS ---',13,10
         call vesa_global
         PS 13,10,'--- VESA modes (every listed mode, banked and linear) ---',13,10
+        call rskips                     ; the register rules of other chips, named once
         call vesa_modes
         PS 13,10,'--- S3 SVGA modes via INT 10h AH=00 (same registers as the VESA set) ---',13,10
         call svga_modes
@@ -269,6 +281,9 @@ start:  cld
         call pdec
         PS '  Info: '
         movzx eax,word [ninfo]
+        call pdec
+        PS '  Skipped: '                ; tests and steps not run on this card (SKIP lines)
+        movzx eax,word [nskip]
         call pdec
         PS 13,10
         call catsum
@@ -422,8 +437,11 @@ post_tests:
         FAILB 2
 .ok:    call tend
         cmp byte [chip],CHIP_T64V2      ; SR1A exists on the Trio64V2 only
-        jne .x
-        call unlock
+        je .s1a
+        SKIPL C_S3,'SR1A bit 4 (FCTD) set at POST','SR1A is a Trio64V2 register'
+        SKIPL C_S3,'PCI subsystem ID: ROM 40h, CR81-84','CR81-CR84 are Trio64V2 registers'
+        jmp .x
+.s1a:   call unlock
         TB C_S3,'SR1A bit 4 (FCTD) set at POST'
         call tdots
         RS 0x1A
@@ -3397,7 +3415,11 @@ fonts:  mov ax,3
         jne .f4
         PS 'same as 8x16 (known, no 8x14 font)'
         WARNB 1
+        call tend
+        SKIPL C_EGA,'8x14 glyphs (AX=1101h, 1111h, 1122h)','no 8x14 font in this ROM: the 8x16 font is checked'
+        jmp .f4b
 .f4:    call tend
+.f4b:
         mov ax,0x13
         int 0x10
         TB C_EGA,'AX=1130 BH=1 INT43 in mode 13'
@@ -4827,6 +4849,24 @@ dschk:  call rdall
 ; WARN rather than FAIL for the two CR86/CR90 rules: they are new and not confirmed in general. On the
 ; card with the 2.04.07-p18 ROM, the modes that break them (012Eh, 010Fh, 0131h, 0134h: CR86 with End
 ; Horizontal Blank 00h; 012Ah: L1 FFh) show a clean picture (30 October 2026, README Known remaining items).
+; The register rules regchk leaves out on this chip (registers of other chips), as one SKIP line.
+rskips: cmp byte [chip],CHIP_NONE       ; no chip of the family: nothing is judged by chip anyway
+        je .n
+        cmp byte [chip],CHIP_T64VP
+        jae .vp
+        SKIPL C_S3,'VESA lines: rules of other chips','CR66 (V+ and later), CR83/CR86 (UV+), CR32/CR86/CR90 (V2)'
+        ret
+.vp:    cmp byte [chip],CHIP_T64VP
+        jne .v2
+        SKIPL C_S3,'VESA lines: rules of other chips','CR83/CR86 (Trio64UV+), CR32/CR86/CR90 (Trio64V2)'
+        ret
+.v2:    cmp byte [chip],CHIP_T64V2
+        jne .uv
+        SKIPL C_S3,'VESA lines: rules of other chips','CR83/CR86 (Trio64UV+ registers)'
+        ret
+.uv:    SKIPL C_S3,'VESA lines: rules of other chips','CR32/CR86/CR90 (Trio64V2 registers)'
+.n:     ret
+
 regchk: test byte [q_rs15],0x20          ; SR15 bit 5 left set (REG-1)
         jz .f1
         FAILB 0x1000
@@ -6662,8 +6702,10 @@ vesa_func:
 .r5:    call tend
         ; VRAM test
         cmp byte [quick],1
-        je .nv
-        call vram_test
+        jne .vt
+        SKIPL C_S3,'VRAM test','option /Q'
+        jmp .nv
+.vt:    call vram_test
 .nv:    call lfb_cross
         mov ax,3
         int 0x10
@@ -7586,6 +7628,40 @@ putc:   push di
 .x:     pop fs
         pop di
         ret
+; A test or step this card does not get (the chip, its ROM or an option decide; SKIPL): two zero-ended
+; strings follow the call, the line text and the reason. Prints "<cat> <text> .....  SKIP: <reason>"
+; (not a result line: no PASS/FAIL/WARN/INFO, not in the counts by category), counts [nskip], logs it
+; under /V as a D:SKIP record and writes the log. Keeps every register.
+tskip:  push bp
+        mov bp,sp
+        push si
+        push ax
+        mov si,[bp+2]
+        VS 'D:SKIP '
+        call vstrz
+        call vnl
+        call pcat
+.l:     lodsb
+        or al,al
+        jz .r
+        call putc
+        jmp .l
+.r:     call tdots
+        PS '  SKIP: '
+.m:     lodsb
+        or al,al
+        jz .e
+        call putc
+        jmp .m
+.e:     PS 13,10
+        mov [bp+2],si
+        inc word [nskip]
+        call flush
+        pop ax
+        pop si
+        pop bp
+        ret
+
 ps:     push bp
         mov bp,sp
         push si
@@ -7812,6 +7888,7 @@ npass   dw 0
 nfail   dw 0
 nwarn   dw 0
 ninfo   dw 0
+nskip   dw 0                            ; SKIP lines
 fails   dw 0
 warns   dw 0
 infoflag db 0
