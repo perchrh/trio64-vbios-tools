@@ -355,7 +355,7 @@ reset, 4F05 keeping the sequencer index (Phoenix left it at 04h) and S3's fonts 
 Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
 what 1.5-07 still gets wrong and the comparison of the base candidates.
 
-    make trom OUT=S3T64P1.BIN [VSIZE=64] [MCLK=55]
+    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (64 KB, upper half zeros, as the Trio64V2 ROM; TSIZE=32: 32 KB)
     make trom-test [ROM=S3T64P1.BIN]
     make emu-test ROM=S3T64P1.BIN CHIP=trio64 [LOGS=emu/tlogs]
     make tref-compare ROM=S3T64P1.BIN

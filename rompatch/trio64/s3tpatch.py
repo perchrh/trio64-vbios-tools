@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """s3tpatch.py - build the Trio64 ROM (1.5-07-p1) from the Phoenix S3 Trio64 BIOS 1.5-07.
 
-    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P1.BIN [--size 32|64] [--mclk MHZ] [--nasm nasm] [-q]
+    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P1.BIN [--size 64|32] [--mclk MHZ] [--nasm nasm] [-q]
     make trom OUT=S3T64P1.BIN [MCLK=55]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
@@ -17,7 +17,8 @@ Input
                the reference build.
 
 Output
-  32 KB (--size 64: 64 KB, the upper 32 KB zeros)
+  64 KB: the patched 32 KB, then 32 KB of zeros, as the Trio64V2 build (--size 32: the 32 KB alone, for
+  a 32 KB EEPROM)
 
 What is applied (docs/trio64-backport.md)
   tables  the refresh entries that run interlaced are removed where the mode has non-interlaced rates
@@ -470,8 +471,8 @@ def diagnose(nasm, output, img):
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the Phoenix S3 Trio64 BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='a Phoenix Trio64 BIOS 1.5-07: 32 KB, or a 64 KB image with it in the lower half')
-    ap.add_argument('-o', '--output', required=True, help='the result (32 KB, or 64 KB with --size 64)')
-    ap.add_argument('--size', type=int, choices=(32, 64), default=32, help='output size in KB (64: zeros above)')
+    ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the upper 32 KB zeros; 32 KB with --size 32)')
+    ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: zeros above the 32 KB)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most 60 (default: the build\'s own)')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '

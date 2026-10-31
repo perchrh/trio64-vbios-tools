@@ -1,10 +1,11 @@
 # The Trio64 ROM (1.5-07-p1)
 
 Our changes ported to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in `rompatch/trio64`.
-Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P, 1 MB EDO
-50 ns upgraded to 2 MB); not yet run on a card. The choice of base is below ("Base BIOS candidates").
+Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P E0A2AA,
+2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); not yet run
+on a card. The choice of base is below ("Base BIOS candidates").
 
-    make trom OUT=S3T64P1.BIN [VSIZE=64] [MCLK=55]   (rompatch/trio64/s3tpatch.py, 32 KB)
+    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with zeros above, TSIZE=32: 32 KB)
     make trom-test ROM=S3T64P1.BIN
     make emu-test ROM=S3T64P1.BIN CHIP=trio64
     make tref-compare ROM=S3T64P1.BIN
@@ -192,13 +193,40 @@ the patcher assumes; nothing was copied from it.
 | The 1600x1200 register block 0831h-0870h is used only by the removed mode | a word at 01C7h holds 0871h, the address right after that block ("might point to 0871h") | our code ends at 086Eh and 0871h is unchanged |
 | The 64 zero bytes at 3CE9h | an empty entry of the VGA parameter table | not used for code |
 
+## The DSP-3364P's memory
+
+The card carries four Mosel Vitelic V53C16256HK50 (SOJ-40): 256K x 16 **fast page mode** DRAM, 50 ns,
+2 MB in all; not EDO, as the card had been described. The datasheet (Mosel Vitelic V53C16256H,
+preliminary) gives for the -50 grade: RAS access tRAC 50 ns, column access tCAA 24 ns, fast page cycle
+tPC 28 ns min, read/write cycle tRC 90 ns min, RAS pulse tRAS 50 ns min, RAS precharge tRP 30 ns min,
+CAS pulse tCAS 14 ns min, CAS precharge tCP 7 ns min.
+
+The Trio64 counts its memory cycles in MCLKs (Trio32/Trio64 data book section 7): a page mode cycle
+takes 2 MCLKs, RAS stays low 3.5 or 4.5 MCLKs and precharges 2.5 or 3.5 MCLKs (CR68 bits 2 and 3,
+strapped on the board, never written by Phoenix), so a row cycle takes at least 6 MCLKs. With the
+fastest CR68 settings:
+
+| | -50 needs | 69.8 MHz (14.3 ns, the card's BIOS) | 60 MHz (16.7 ns) | 55 MHz (18.2 ns) |
+| --- | --- | --- | --- | --- |
+| Page cycle, 2 MCLKs | tPC 28 ns | 28.7 ns | 33.3 ns | 36.4 ns |
+| RAS low, 3.5 MCLKs | tRAS 50 ns | 50.1 ns | 58.3 ns | 63.6 ns |
+| RAS precharge, 2.5 MCLKs | tRP 30 ns | 35.8 ns | 41.7 ns | 45.5 ns |
+| Row cycle, 6 MCLKs | tRC 90 ns | **86 ns, too short** | 100 ns | 109 ns |
+
+At 69.8 MHz the parts work at the edge of their page cycle and RAS time, and the row cycle is too short
+unless CR68 selects 4.5 MCLKs RAS low or 3.5 MCLKs precharge (then 100 ns); the chip itself is above its
+60 MHz MCLK limit (MEM-1) either way. At 60 MHz every -50 timing holds with any CR68 setting: build the
+card's ROM with `MCLK=60`. S3REGS with the stock BIOS shows the board's choices: CR68 bits 3-0 (the
+timings) and CR36 bits 3-2 (11b fast page, 10b EDO: what the strapping tells the chip; with fast page
+Phoenix also tries 4 MB at POST and settles on the 2 MB found).
+
 ## Pending
 
 - The DSP-3364P's own BIOS (dumped 31 October 2026, table above) is an earlier 1.5-07 build that
   `s3tpatch.py` refuses (other code). It needs no support: the CP764 reference has the same card
   settings, apart from the memory clock, and newer DDC code (DDC1 and DDC2B). Build the card's ROM from
   the reference with `make trom OUT=S3T64P1.BIN MCLK=60` (the data book maximum; the card ran at 69.8
-  MHz with its 50 ns EDO) or `MCLK=55` (the CP764 build's own 54.9 MHz), and check the memory with
+  MHz) or `MCLK=55` (the CP764 build's own 54.9 MHz), and check the memory with
   S3COMPAT's VRAM test (without /Q). Take S3REGS before flashing, with the stock BIOS: SR10/SR11
   should read 22h/25h (69.8 MHz). The Trio64 has two clock PLLs only, DCLK (pixel clock) and MCLK
   (memory and graphics engine), and Phoenix's POST loads the pair at 3B5h/3B6h into SR11/SR10 (and

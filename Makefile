@@ -140,6 +140,7 @@ rom-test:
 #   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
 VREF ?= reference/vplus/1_03_08.bin
 VSIZE ?= 32
+TSIZE ?= 64
 vrom:
 	@test -n "$(OUT)" || { echo "vrom: set OUT, e.g. make vrom OUT=S3VPP1.BIN (VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
 	python3 rompatch/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(VSIZE) "$(VREF)" -o "$(OUT)" $(MCLKOPT)
@@ -153,14 +154,14 @@ vref-compare:
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
 # (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
-#   make trom OUT=S3T64P1.BIN [TREF=...] [VSIZE=64] [MCLK=55]   (32 KB; VSIZE=64: 64 KB, upper half zeros)
+#   make trom OUT=S3T64P1.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, upper half zeros; TSIZE=32: 32 KB)
 #   make trom-test [TREF=...] [ROM=S3T64P1.BIN]
 #   make tref-compare ROM=S3T64P1.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
 #   make emu-test ROM=S3T64P1.BIN CHIP=trio64 [LOGS=emu/tlogs]
 TREF ?= reference/trio64/1_5_07.bin
 trom:
 	@test -n "$(OUT)" || { echo "trom: set OUT, e.g. make trom OUT=S3T64P1.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
-	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(VSIZE) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK))
+	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(TSIZE) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK))
 
 trom-test:
 	python3 rompatch/trio64/test_s3tpatch.py --nasm "$(NASMBIN)" --ref "$(TREF)" --vref "$(VREF)" $(if $(ROM),--rom "$(ROM)")
