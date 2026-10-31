@@ -489,7 +489,7 @@ S3REGS.TXT format (S3REGS and S3REGS32 write the same):
     S3REGS 1.0 [label] DOS                    or  S3REGS32 1.0 [label] Win32
     MISC=EF FEAT=00 PEL=FF MODE=59 VBE=0101 TICK=00000032   (MODE and VBE only from DOS)
     SR00: 16 bytes SR00-SR0F                  SR10: SR10-SR1F
-    CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B shown as --, not read)
+    CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B, CRC5, CRCA, CRCB shown as --, not read)
     GR00: GR00-GR08
     PCI00: 16 dwords of the PCI configuration header of 5333:8901
     WATCH 120 s, ...                          (S3REGS32 /W only) then lines "+<ms> CR54 18->10"
@@ -498,7 +498,9 @@ S3REGS.TXT format (S3REGS and S3REGS32 write the same):
 S3REGS32 reads the ports directly, which Windows 9x allows a Win32 program for ports no virtual
 device traps; on Windows NT it ends with an exception. It keeps the 3C4h, 3CEh and 3D4h indexes,
 SR08, CR38, CR39 and CF8h as found, and never touches the attribute controller or the cursor colour
-stack (CR45, CR4A, CR4B). It is built by NASM alone: the PE header is written out in
+stack (CR45, CR4A, CR4B). On the Trio32/Trio64 CR80-CRFF are CR00-CR7F again (the chip decodes CRTC
+index bits 6-0 only), so CRC5, CRCA and CRCB are left out as well, and the watch ignores CRC6-CRCF
+as it ignores CR46-CR4F (#74). It is built by NASM alone: the PE header is written out in
 `s3regs/s3regs32.asm`. The emulator runs it on a 32-bit CPU with the same register model
 (`vgaemu.Machine.run_pe32`).
 

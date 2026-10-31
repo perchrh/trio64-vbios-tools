@@ -19,9 +19,11 @@
 ;   MISC, FEAT, PEL mask; SR00-SR1F (SR08 = 06h while reading, restored); CR00-CRFF (CR38 = 48h and
 ;   CR39 = A5h while reading, restored); GR00-GR08; PCI configuration 00h-3Fh of 5333:8901, 8811 or 8814 through
 ;   ports CF8h/CFCh (CF8h restored). CR45, CR4A and CR4B are not read (a read moves the hardware cursor
-;   colour stack) and the attribute controller is not touched. The 3C4h, 3CEh and 3D4h index registers
-;   are put back. Watch mode ignores CR46-CR4F (hardware cursor position and pattern address, they
-;   follow the mouse) and SR17 (the clock synthesizer test counter, which runs).
+;   colour stack), nor CRC5, CRCA and CRCB (the same registers on the Trio32/Trio64, which decode CRTC
+;   index bits 6-0 only, #74), and the attribute controller is not touched. The 3C4h, 3CEh and 3D4h
+;   index registers are put back. Watch mode ignores CR46-CR4F (hardware cursor position and pattern
+;   address, they follow the mouse), their mirrors CRC6-CRCF, and SR17 (the clock synthesizer test
+;   counter, which runs).
 ;   Windows 9x lets a Win32 program use the I/O ports unless a virtual device traps them; the S3
 ;   driver traps the VGA ports for DOS boxes, not for the desktop, so the desktop values are real.
 ;
@@ -328,11 +330,13 @@ readstate:
         mov [edi+8],al
         xor ebx,ebx                     ; CR00-FF -> +32
 .cr:    xor ah,ah
-        cmp bl,0x45
+        mov al,bl                       ; CR80-CRFF are CR00-CR7F on the Trio32/Trio64 (#74)
+        and al,0x7F
+        cmp al,0x45
         je .cs
-        cmp bl,0x4A
+        cmp al,0x4A
         je .cs
-        cmp bl,0x4B
+        cmp al,0x4B
         je .cs
         mov al,bl
         call rdcr
@@ -444,11 +448,13 @@ snapshot:
         stosb
 .c1:    mov al,' '
         stosb
-        cmp bl,0x45
+        mov al,bl                       ; CRC5, CRCA, CRCB as CR45, CR4A, CR4B (#74)
+        and al,0x7F
+        cmp al,0x45
         je .cd
-        cmp bl,0x4A
+        cmp al,0x4A
         je .cd
-        cmp bl,0x4B
+        cmp al,0x4B
         je .cd
         mov al,[stateA+32+ebx]
         call hex2
@@ -525,6 +531,10 @@ diff:   xor ebx,ebx
         cmp ebx,32+0x45                 ; cursor position, pattern address and colour stack
         jb .y
         cmp ebx,32+0x4F
+        jbe .n
+        cmp ebx,32+0xC5                 ; and their mirrors CRC5-CRCF on the Trio32/Trio64 (#74)
+        jb .y
+        cmp ebx,32+0xCF
         jbe .n
 .y:     mov al,'+'
         stosb
@@ -638,7 +648,7 @@ s_pci   db 'PCI00:',0
 s_na    db ' n/a',0
 s_snap  db 0
 s_watch db 'WATCH ',0
-s_watch2 db ' s, changes as +<ms> REG old->new (CR46-4F not compared):',13,10,0
+s_watch2 db ' s, changes as +<ms> REG old->new (CR46-4F, CRC6-CF not compared):',13,10,0
 s_end   db 'END OF WATCH',13,10,0
 s_ok    db 'S3REGS32 ',VERSION,': written to S3REGS.TXT',13,10,0
 s_ferr  db 'S3REGS32 ',VERSION,': cannot write S3REGS.TXT',13,10,0

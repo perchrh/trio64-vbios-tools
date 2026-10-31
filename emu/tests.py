@@ -1277,6 +1277,9 @@ def t_s3regs(c):
             'CR50: ' + ' '.join('%02X' % cr.get(0x50 + i, 0) for i in range(11))]
     check(all(w in '\n'.join(dos) for w in want), 'snapshot values (SR10/11, CR50-5A in 101h) not as the '
           'registers hold them: %s' % want)
+    for snap in (dos, win):                     # CRC5, CRCA, CRCB: CR45, CR4A, CR4B on a Trio64 (#74)
+        crc0 = [l for l in snap if l.startswith('CRC0:')][0].split()[1:]
+        check([crc0[i] for i in (5, 10, 11)] == ['--'] * 3, 'CRC5, CRCA, CRCB read: %s' % crc0)
 
     def hook(ms):
         if ms == 300:
@@ -1288,8 +1291,8 @@ def t_s3regs(c):
     ch = text[text.index('WATCH'):text.index('END OF WATCH')].split('\r\n')[1:-1]
     exp = ['+300 SR10 %02X->41' % sr.get(0x10, 0), '+300 SR11 %02X->28' % sr.get(0x11, 0),
            '+500 CR54 %02X->10' % cr.get(0x54, 0)]
-    if Machine.chip in ('trio64', 'trio32'):    # CR80-CRFF mirror CR00-CR7F there (#72): CRC7 is CR47
-        exp += ['+500 CRC7 %02X->05' % cr.get(0x47, 0), '+500 CRD4 %02X->10' % cr.get(0x54, 0)]
+    if Machine.chip in ('trio64', 'trio32'):    # CR80-CRFF mirror CR00-CR7F there: CRD4 is CR54; CRC7 (CR47,
+        exp += ['+500 CRD4 %02X->10' % cr.get(0x54, 0)]  # the cursor) is ignored like CR47 (#74)
     exp = [e for e in exp if e[10:12] != e[14:16]]  # a register that already held the value: no line
     check(ch == exp, 'watch lines: %s, expected %s' % (ch, exp))
     rh = m.run_pe32(exe, 'S3REGS32 /?')
