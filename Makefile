@@ -162,15 +162,15 @@ vref-compare:
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
 # (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
-#   make trom OUT=S3T64P2.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
-#   make trom OUT=S3T64P2.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
+#   make trom OUT=S3T64P3.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+#   make trom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
 #   make trom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
-#   make trom-test [TREF=...] [ROM=S3T64P2.BIN]
-#   make tref-compare ROM=S3T64P2.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
-#   make emu-test ROM=S3T64P2.BIN CHIP=trio64 [LOGS=emu/tlogs]
+#   make trom-test [TREF=...] [ROM=S3T64P3.BIN]
+#   make tref-compare ROM=S3T64P3.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
+#   make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
 TREF ?= reference/trio64/1_5_07.bin
 trom:
-	@test -n "$(OUT)" || { echo "trom: set OUT, e.g. make trom OUT=S3T64P2.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+	@test -n "$(OUT)" || { echo "trom: set OUT, e.g. make trom OUT=S3T64P3.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
 	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(TSIZE) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
 
 trom-test:

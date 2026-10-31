@@ -769,8 +769,8 @@ def t_t64_patches(c):
             chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
                 % (mode, ax, ['%04X' % h for h in high]))
     # the display FIFO M (CR54 bits 7-3, #75), from the bandwidth: 112 of the FIFO's 128 bytes drain in
-    # t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs, two entry cycles take 18 and each access 5, so
-    # M+1 = (t - 18) / 5 at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM
+    # t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs, two entry cycles and an access take 23 and each
+    # access 6 (p3, #82; p2 counted 5), so M = (t - 23) / 6 at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM
     # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 or 4 MB 103h, 105h and 114h have
     # it exactly, since Phoenix's own values there are higher (with 1 MB, a 32-bit memory bus, Phoenix's own
     # values are lower than the formula, which counts the 64-bit bus, and stay). The MCLK from the SR10/SR11
@@ -785,7 +785,7 @@ def t_t64_patches(c):
         dclk = 14318.18 * ((dm & 0x7F) + 2) / (((n & 0x1F) + 2) << ((n >> 5) & 3))
         bpp = ((cr.get(0x67, 0) >> 5) + 3) // 2
         t = 112 * mclk / (dclk * bpp)
-        lim = [max(0, int(x - 23) // 5) if x < 178 else 31 for x in (t - 0.5, t + 0.5)]
+        lim = [max(0, int(x - 23) // 6) if x < 31 * 6 + 23 else 31 for x in (t - 0.5, t + 0.5)]
         got = cr.get(0x54, 0) >> 3
         exact = mode in (0x103, 0x105, 0x114) and mclk < 56000 and Machine.vram >= 2
         chk(got <= lim[1] and (not exact or got >= lim[0]), '%03Xh: CR54 M = %d, expected %s %d (t = %.1f MCLKs, '
