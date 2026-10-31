@@ -626,6 +626,40 @@ Fixes
   it (fail bit 10h), the emulator test rom_patches too.
 - The card's POST flags (0xD1 = 05h) and CR80 POST value (00h).
 
+### VIDSPEED on the card: stock 2.04.11 against p21
+
+VIDSPEED in plain DOS on the Trio64V2 card (80486, 31 October 2026), once with the card's stock BIOS
+2.04.11 and once with 2.04.07-p21. The values are bytes per millisecond written with 32-bit stores
+(VIDSPEED's third line per mode), then read; the system RAM lines of both runs are equal, so the
+machine was the same.
+
+| Mode | Stock write | p21 write | Factor | Stock read | p21 read |
+| --- | --- | --- | --- | --- | --- |
+| 640x400x256 | 23135 | 87360 | 3.8 | 2585 | 7267 |
+| 640x480x256 | 23103 | 87360 | 3.8 | 2585 | 7257 |
+| 800x600x256 | 22514 | 86907 | 3.9 | 2467 | 7119 |
+| 1024x768x256 | 21178 | 86016 | 4.1 | 2385 | 6832 |
+| 1280x1024x256 | 20580 | 82626 | 4.0 | 2340 | 6717 |
+| 640x480x16bit | 22011 | 87360 | 4.0 | 2420 | 7035 |
+| 1024x768x16bit | 17805 | 81029 | 4.6 | 2285 | 6709 |
+| 800x600x24bit | 16541 | 76241 | 4.6 | 2226 | 6725 |
+| 320x200x256 (mode 13h) | 44043 | 53718 | 1.22 | 4476 | 4476 |
+| 640x480x16 (mode 12h) | 21991 | 26932 | 1.22 | 2580 | 2597 |
+| 80x25 text | 39384 | 51200 | 1.30 | 4096 | 4413 |
+
+- **Banked SVGA modes (the booster):** writes 3.8 to 4.6 times faster, reads 2.8 to 3 times. All of
+  them reach 76-87 MB/s, as fast as the linear frame buffer; S3TEST's banked throughput line measures
+  83 MB/s. With the stock BIOS the deeper modes were slower than the 8 bpp ones; with the booster they
+  are about equal. 16-bit stores gain 15-60 % (the booster takes them too); 8-bit stores stay at about
+  10 MB/s, the bus limit.
+- **VGA and text modes (no booster):** about 22 % more in mode 13h and the 16-colour modes, 30-35 % in
+  text: the memory clock, 59.96 MHz instead of 50.11 MHz (20 % more).
+- **Refresh lines:** 1280x1024 runs at 60.26 Hz (61.65 kHz) instead of the stock's interlaced 86.89 Hz
+  (44.47 kHz), and the 640x480 modes at 28.65 kHz (800 pixels per line) instead of 28.79-28.94 kHz: the
+  60 Hz defaults and the 800-pixel line. The 132-column text modes (VESA 109h/10Ah) at 28.09 kHz and
+  800x600 at 36.28 kHz instead of 28.00 and 36.17 kHz: 2.04.07 programs 40.09 MHz where 2.04.11 has
+  39.97 MHz (SR12/SR13 63h/6Eh against 61h/41h), 0.3 %; a difference of the base BIOS, not of a patch.
+
 ### Byte-level changes
 
 Offsets are in the 64 KB image (C000:offset when shadowed), in 2.04.07; everything from 0x8000 up is
@@ -805,9 +839,6 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 
 ### To do
 
-- Measure the booster with VIDSPEED in plain DOS: first with the stock BIOS, then with the latest ROM,
-  and write both banked results here. VIDSPEED's banked mode (4F02 0113h) gets the booster (VGALOG:
-  CR58 90h, CR59/CR5A 000Ah after the call).
 - POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
   (without /Q); no difference to p19 is expected.
 - Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
