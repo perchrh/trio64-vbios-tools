@@ -27,6 +27,7 @@ the "1.5-07 EDO" build). It refuses the Britek "VIEWTOP" build (other sign-on te
 | Booster with the Windows check | On after a banked 4F02 and at the window set with BH = 0 (4F05 and the window function both call Phoenix's window set at 5123h). The refusal mark is CR52 bit 3 (`tbon.asm` says why not CR6C or CR6D). Phoenix relocks the S3 registers after its calls and its unlock routine changes AX, so the code unlocks itself and leaves CR38/CR39 as found. |
 | S3's fonts | All five font tables of 1.03-08 (byte for byte those of 2.04.07, the Trio64V2 card's) replace Phoenix's: 8x8, 8x14, the 9x14 alternate table, 8x16 and the 9x16 alternate table, end to end from 5720h to 7F90h. S3's 9-dot alternate tables have 20 and 19 entries, Phoenix's 18 and 17, 63 bytes more in all: the 8x8 and 8x14 fonts and the 9x14 table keep their addresses, the 8x16 font moves from 6E30h to 6E4Dh and the 9x16 table from 7E30h to 7E4Dh, and Phoenix's eight references to these two (six mov bx/si and two words of the AX=1130h table at 315Ah; riplin names no others) are rewritten with byte assertions. The mode 13h scroll moved behind the fonts and its window path to 0130h (below). No hardware reason against the transplant: the BIOS copies the glyphs into plane 2 as on every VGA. |
 | ATC flip-flop reset | In the mode set hook (AH=00 table and 4F02's call). |
+| DDC1 and VDIF deleted | For space (decided 31 October 2026). VBE 4F15 keeps DDC2B, which Windows 95 Plug and Play uses (BL=00h, then BL=01h) and which monitors from about 1996 on speak: that detection and EDID read are byte for byte 1.5-07's. Gone: the DDC1 read (monitors that speak DDC1 alone, about 1994-1996, now report no EDID, and Windows shows a default monitor) and BL=02h, read VDIF (a format VESA withdrew; now AH=01h, failed). The installation check no longer watches the data line for 50 frames for a DDC1 monitor, so without a DDC monitor each 4F15 call returns at once instead of after about 0.73 s (51 frames in the emulator). Four sites with byte assertions (`DDC_SITES`; the last turns the dispatcher's dead VDIF call into a jump to its exit, so nothing refers to the freed code); the routines only DDC1 and VDIF used are zeroed, 376 bytes (`DDC_FREED`; riplin's disassembly shows no other caller). |
 | Sequencer index kept by 4F05 | Phoenix's window set (5123h) and get (5148h) read SR04 (chain 4) and left the 3C4h index at 04h. Both reads now go through `sr04` (`twin.asm`), which reads SR04 and writes the index back as found, for 4F05 and the window function, BH = 0 and 1. The data book does not require it (it defines the registers, not what a BIOS call leaves in an index); S3's own 2.04.07 and 1.03-08 leave the index as found, and S3TEST's 4F05 line expects that (fail bit 2). |
 | MCLK build option | `MCLK=` sets the single MCLK entry at 3B5h, at most 60 MHz (MEM-1); without it the build's own clock stays. |
 
@@ -57,8 +58,13 @@ SCR13W; the Trio64V+ build assembles it as before, byte-identical):
 | 4D70-4D81 (18) | the end of the first VESA list after its compaction | `twin.asm`: sr04 (4D70-4D7C) |
 | 4DD1-4DDF (15) | the end of the VESA mode map after its compaction | `twset.asm`: wsetp (all 15 bytes) |
 
-Free after the build: 7FE5-7FFE (26), 0620-0630 (17), 4EE1-4EED (13), 4D7D-4D81, 4E36-4E39, 0182-0183,
-0BCF, 0DF5, and about 40 bytes of sign-on padding (fewer in builds with a longer sign-on). Not free,
+Free after the build: 5386-549C (279) and 52E1-5341 (97), the deleted DDC1 and VDIF code; 7FE5-7FFE
+(26), 0620-0630 (17), 4EE1-4EED (13), 4D7D-4D81, 4E36-4E39, 0182-0183, 0BCF, 0DF5, and about 40 bytes of
+sign-on padding (fewer in builds with a longer sign-on). Further candidates, not taken (31 October 2026):
+the 8x14 font with its 9x14 table (3885 bytes; modes 0Fh/10h and 350-line text would use the 8x16 font
+as on the Trio64V2 ROM, which changes what those modes return), the S3 2xxh mode numbers (100-300 bytes
+in pieces; 1152x864 at 207h and 640x400x32 at 213h exist only there), 4F10 power management (71 bytes)
+and the refresh entries below 60 Hz. Not free,
 although zero: the 64 bytes at 3CE9h are an empty slot of the VGA parameter table, which programs read
 through the save pointer table.
 
@@ -67,7 +73,8 @@ through the save pointer table.
 `make trom-test`: the tables (no list starts with an interlaced entry, every kept entry unchanged), every
 other byte unchanged, another maker's timing bytes and MCLK kept, the MCLK option, the refusals.
 `make emu-test CHIP=trio64` with 2, 4 and 1 MB: `t64_patches` (defaults, removed modes, booster, Windows
-check, lock state, ATC flip-flop, sequencer index after 4F05 BH = 0 and 1, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
+check, lock state, ATC flip-flop, sequencer index after 4F05 BH = 0 and 1, S3's fonts in AX=1130h and
+plane 2, 4F15 answers without the DDC1 wait, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
 `make tref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07 with S3's fonts (`--fonts-only`); `make trom-test`
 checks the fonts against 1.03-08 byte for byte. S3COMPAT's VESA lines: every mode
 non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): 84.6 % of the code, every byte of
@@ -189,5 +196,7 @@ the patcher assumes; nothing was copied from it.
   69.8 MHz, above the data book's 60 MHz; build it with `MCLK=60` or lower and check the memory with
   S3COMPAT's VRAM test.
 - S3TEST and S3COMPAT logs from the card.
+- S3COMPAT's 4F15 line on the card with a DDC2 monitor: the EDID read through the kept DDC2B code (the
+  emulator has no monitor on the DDC lines).
 - S3REGS from the card after POST: CR6B against PCI BAR0 bits 31-24 and the memory found (CR36 bits
   7-5), for the CR6B question above (T64-MEM-6).

@@ -334,7 +334,9 @@ card yet.
 Trio64, as far as the 14 Trio64 images at hand show (no S3-built one among them). The result signs on as
 1.5-07-p1. Besides the 32-bit speed patches, the booster with the Windows check and the ATC flip-flop
 reset, 4F05 keeping the sequencer index (Phoenix left it at 04h) and S3's fonts (those of 1.03-08 and
-2.04.07, all five tables, in place of Phoenix's own design), it removes the interlaced refresh entries and the modes that exist only interlaced on the Trio64
+2.04.07, all five tables, in place of Phoenix's own design) and VBE 4F15 without DDC1 and VDIF (DDC2B
+kept, as Windows 95 Plug and Play uses it; 376 bytes freed, and no 0.73 s DDC1 wait without a DDC
+monitor), it removes the interlaced refresh entries and the modes that exist only interlaced on the Trio64
 (106h, 118h, 119h, 11Ah, 120h), so no mode defaults to an interlaced timing, and 800x600 defaults to 60
 Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
 what 1.5-07 still gets wrong and the comparison of the base candidates.

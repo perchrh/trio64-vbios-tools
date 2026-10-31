@@ -41,6 +41,7 @@ What is applied (docs/trio64-backport.md)
           tables are 63 bytes longer, so the 8x16 font and the 9x16 table move up (S3FONTS) and the eight
           references to them are rewritten (FONT_REFS); --fonts-only applies only these, the reference
           of make tref-compare
+  DDC     VBE 4F15 without DDC1 and VDIF (DDC_SITES, DDC_FREED): 376 bytes free, DDC2B kept
   MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 60 MHz (MEM-1); without it the
           build's own clock stays (54.9 MHz in the reference build)
   sign-on "1.5-07-p1", checksum byte 7FFF
@@ -67,7 +68,7 @@ LEVEL = 'p1'
 VERSION = '1.5-07'
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = '989fdfaca700141009f2620a7bb2d3afd5c4402d456ba7eebadce1dc838c78cf'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = 'b303d9a368640a6f117b2800a5c1c25a64681b33336b6fe0436ceddbb0cd01ea'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
     'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',
@@ -143,6 +144,20 @@ FONT_REFS = {0x1B29: 0x6E30, 0x1B39: 0x6E30, 0x2FBE: 0x6E30, 0x2FFD: 0x6E30, 0x3
              0x3164: 0x7E30, 0x477B: 0x7E30}
 FONT_REF_OP = {0x1B29: 0xBB, 0x1B39: 0xBB, 0x2FBE: 0xBE, 0x2FFD: 0xBE, 0x3119: 0xBE, 0x477B: 0xBE}
 FONT_TAB = (0x315A, '20 5f 20 57 20 5b 20 6d 30 6e 30 7e')
+# DDC1 and VDIF deleted from VBE 4F15 (decided 31 October 2026, for space; docs/trio64-backport.md): the
+# installation check no longer watches the data line for 50 frames for a DDC1 monitor, the EDID read
+# takes DDC2B only, BL=02h (read VDIF, a format VESA withdrew) fails with AH=01h. (offset, old, new):
+DDC_SITES = [
+    (0x529D, 'f6 c3 01 74 1e e8 48 f5 bb 06 ff e8 db 00 75 08 bb 07 00 e8 d3 00 74 0b e8 9a 01 eb 06',
+     'eb 21' + ' 00' * 27),                     # EDID read: no DDC2 -> its exit (52C0h), the DDC1 path gone
+    (0x5372, 'e8 0b 01 74 03 bb 05 01', 'eb 06' + ' 00' * 6),   # check: no DDC2 -> BX = 0000h at once
+    (0x5603, '80 fb 02 77 2e', '80 fb 01 77 2e'),   # 4F15: BL above 01h fails (AH = 01h)
+    (0x562A, 'e8 b4 fc 74 03 eb 05 90', 'eb 0a' + ' 00' * 6),   # its BL=02h branch, dead now: to the exit
+]
+# the routines only DDC1 and VDIF used, zeroed: VESADDCReadVDIF 52E1h, and DDC1FindHeader, WaitForVSync,
+# SetVSYNC, DDC1ReadByte, SendVSyncPulse, DDC1ReadData, TestIfDDC1 (5386h-549Ch; DDCSendBegin follows);
+# riplin's disassembly shows no caller outside them but the sites above
+DDC_FREED = [(0x52E1, 0x5342, '53 51 52 e8 5b 00'), (0x5386, 0x549D, 'ba c8 03 e8 95 00')]
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
 MCLK_MAX = 60.0                                 # MEM-1: 16.67 ns on the Trio32/Trio64
 
@@ -397,6 +412,13 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None):
         put(a, d[a:a + 3], call(a, lab['sr04']), 'VBE window %s: SR04 read with the sequencer index kept'
             % ('set' if k == 'wsr04' else 'get'))
     speed_sites(d, put, site, sym, lab, tags=False, skip=('wset', 'clr', 'int10'))
+    for a, old, new in DDC_SITES:
+        put(a, old, new, 'VBE 4F15: DDC1 and VDIF deleted')
+    for lo_, hi, sig in DDC_FREED:
+        if not sig_match(d, lo_, sig):
+            raise PatchError('%04X: not the DDC1/VDIF code (%s)' % (lo_, sig))
+        d[lo_:hi] = bytes(hi - lo_)
+        log.append('%04X-%04X  VBE 4F15: DDC1/VDIF code zeroed (%d bytes free)' % (lo_, hi - 1, hi - lo_))
     a = site['post52'] + 10
     put(a, 'b8 52 00', 'b8 52 80', 'POST: CR52 = 80h, 800x600 defaults to 60 Hz (VESA DMT) instead of 56 Hz')
     if mclk is not None:
