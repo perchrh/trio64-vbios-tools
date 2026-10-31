@@ -410,18 +410,30 @@ fixed in the tools (docs/trio64-backport.md, "On the card").
 
 `.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
 Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted runners it uses are free;
-changes that touch only `*.md`, `docs/` or `datasheets/` do not start a run, and a newer commit on the
-same branch cancels the running one.
+changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or `infozip/` do not start
+a run, and a newer commit on the same branch cancels the running one.
 
-Every run builds NASM 3.02 from its release source (cached between runs) and the tools with `make`;
-the .COM files are kept as the artifact `tools` for 14 days. It then builds the ROM from the S3
-reference BIOS 2.04.07 in `reference/v2/2_04_07.bin` (`make rom`, `make rom-test` with the pinned
-SHA-256) and runs `make emu-test` and `make ref-compare` on it, each even when an earlier one failed;
-then builds the Trio64V+ ROM from `reference/vplus/1_03_08.bin` (`make vrom`, `make vrom-test`) and
-runs `make emu-test CHIP=vplus` and `make vref-compare` on it, and the Trio64 ROM from
-`reference/trio64/1_5_07.bin` with `make trom`, `make trom-test`, `make emu-test CHIP=trio64` and
-`make tref-compare`. The emulator logs are kept as the
-artifact `emu-logs` (without .BIN files), the patched ROM images are not kept. The hardware logs remain the final word, as for the emulator tests run by hand.
+The tests run as parallel jobs, one matrix row per chip and memory size, each named after its chip
+(the emulator tests took 37 minutes one after the other in a single job):
+
+| Job | What it runs |
+| --- | --- |
+| Trio64V2 2 MB, patcher, EGA/CGA | `make rom`, `make rom-test`, `make emu-test` with 2 MB (without s3compat_full), `make ref-compare` |
+| Trio64V2 2 MB s3compat_full | the longest test alone |
+| Trio64V2 4 MB | the tests tagged `vram` with 4 MB (without s3compat_full) |
+| Trio64V2 4 MB s3compat_full | s3compat_full with 4 MB |
+| Trio64V+ 2 MB, patcher, EGA/CGA | `make vrom`, `make vrom-test`, `make emu-test CHIP=vplus` with 2 MB, `make vref-compare` |
+| Trio64V+ 4 and 1 MB | the `vram` tests with 4 and 1 MB |
+| Trio64 2 MB, patcher, EGA/CGA | `make trom`, `make trom-test`, `make emu-test CHIP=trio64` with 2 MB, `make tref-compare` |
+| Trio64 4 and 1 MB | the `vram` tests with 4 and 1 MB |
+| build-and-test | passes when every row passed (the check name branch rules can require) |
+
+Every job builds NASM 3.02 from its release source (cached between runs), the tools with `make` and
+its chip's ROM from `reference/` with the pinned SHA-256 checked; the .COM files are kept as the
+artifact `tools` for 14 days. The split uses `make emu-test VRAM=... EMUARGS=...` (tests.py `--tests`,
+`--skip`, `-t vram`), which works by hand too. Each job keeps its emulator logs as an artifact
+`emu-logs-<job>` (without .BIN files); the patched ROM images are not kept. The hardware logs remain
+the final word, as for the emulator tests run by hand.
 
 `.github/workflows/coverage.yml` runs `make coverage` (the 80 % goal, with the list of code no test
 reaches) on the same ROM, for pushes to main and by hand only: pull requests do not start it, as it runs

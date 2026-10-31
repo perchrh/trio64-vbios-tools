@@ -85,17 +85,20 @@ JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 CHIP ?= v2
 # the log folders of emu-test: $(LOGS) (2 MB), $(LOGS)4 (4 MB) and $(LOGS)1 (1 MB)
 LOGS ?= emu/logs
+# extra tests.py arguments for every run of emu-test, e.g. EMUARGS="--skip s3compat_full" (CI uses it to
+# split the tests over parallel jobs)
+EMUARGS ?=
 emu-test: all
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P15.BIN"; exit 2; }
 ifdef VRAM
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM) $(EMUARGS)
 else
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) $(EMUARGS)
 ifneq ($(CHIP),trio32)
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram $(EMUARGS)
 endif
 ifneq ($(filter vplus trio64 trio32,$(CHIP)),)
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)1 -j $(JOBS) --chip $(CHIP) --vram 1 -t vram
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)1 -j $(JOBS) --chip $(CHIP) --vram 1 -t vram $(EMUARGS)
 endif
 endif
 

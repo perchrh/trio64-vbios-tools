@@ -1,27 +1,28 @@
 # Build and test on GitHub Actions (README "Continuous integration").
 #
 # The repository is public, so the GitHub-hosted runners used here cost nothing. The workflow only
-# runs on pushes to main, on pull requests and by hand, skips changes that touch documentation alone,
-# and cancels a run when a newer commit of the same branch or pull request arrives.
+# runs on pushes to main, on pull requests and by hand, skips changes that touch documentation, data
+# books, standards or the bundled zip program alone, and cancels a run when a newer commit of the same
+# branch or pull request arrives.
 #
-# Every run: NASM 3.02 is built from its release source (cached), `make` builds every tool, the ROM is
-# built from the S3 reference BIOS 2.04.07 in reference/v2/2_04_07.bin (the Makefile default of IN and
-# REF) and checked against the pinned SHA-256 (make rom, make rom-test), then the emulator tests (2 and
-# 4 MB) and the EGA/CGA comparison with the reference run on that ROM; each of these runs once the ROM
-# is built, even when an earlier one failed. The Trio64V+ ROM (rompatch/vplus) is built the same way from
-# the S3 Trio64V+ BIOS 1.03-08 in reference/vplus/1_03_08.bin and goes through its patcher tests, the
-# emulator tests on the Trio64V+ model and the EGA/CGA comparison with 1.03-08, and the Trio64 ROM
-# (rompatch/trio64) from the Phoenix 1.5-07 in reference/trio64/1_5_07.bin the same way on the Trio64 model.
-# The patched ROM images are not kept. The coverage goal has
-# its own workflow, coverage.yml, which pull requests do not start.
+# The tests run as parallel jobs, one row of the matrix per chip and memory size (the emulator tests
+# took 37 minutes one after the other). Every job builds NASM 3.02 from its release source (cached),
+# the tools with `make`, and its chip's ROM from the reference image in reference/ (make rom, vrom or
+# trom), checked against the pinned SHA-256. The first job of each chip also runs the patcher tests and
+# the EGA/CGA comparison with the unpatched reference; the others run the emulator tests with 4 MB
+# (Trio64V2) or 4 and 1 MB (Trio64V+, Trio64) of video memory, the tests tagged `vram`. On the
+# Trio64V2 the longest test, s3compat_full, has a job of its own for each memory size. The last job,
+# build-and-test, passes when every row passed (the check name branch rules can require). The
+# patched ROM images are not kept. The coverage goal has its own workflow, coverage.yml, which pull
+# requests do not start.
 name: CI
 
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**', 'datasheets/**']
+    paths-ignore: ['**.md', '**.pdf', 'docs/**', 'datasheets/**', 'standards/**', 'infozip/**']
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', 'datasheets/**']
+    paths-ignore: ['**.md', '**.pdf', 'docs/**', 'datasheets/**', 'standards/**', 'infozip/**']
   workflow_dispatch:
 
 permissions:
@@ -35,9 +36,31 @@ env:
   NASM_VERSION: '3.02'
 
 jobs:
-  build-and-test:
+  test:
+    name: ${{ matrix.chip }} ${{ matrix.part }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # runs: one or more "VRAM|tests.py arguments" separated by ";"
+          - {chip: Trio64V2, part: '2 MB, patcher, EGA/CGA', model: v2, rom: rom, first: true,
+             runs: '2|--skip s3compat_full'}
+          - {chip: Trio64V2, part: '2 MB s3compat_full', model: v2, rom: rom,
+             runs: '2|--tests s3compat_full'}
+          - {chip: Trio64V2, part: '4 MB', model: v2, rom: rom,
+             runs: '4|-t vram --skip s3compat_full'}
+          - {chip: Trio64V2, part: '4 MB s3compat_full', model: v2, rom: rom,
+             runs: '4|--tests s3compat_full'}
+          - {chip: Trio64V+, part: '2 MB, patcher, EGA/CGA', model: vplus, rom: vrom, first: true,
+             runs: '2|'}
+          - {chip: Trio64V+, part: '4 and 1 MB', model: vplus, rom: vrom,
+             runs: '4|-t vram;1|-t vram'}
+          - {chip: Trio64, part: '2 MB, patcher, EGA/CGA', model: trio64, rom: trom, first: true,
+             runs: '2|'}
+          - {chip: Trio64, part: '4 and 1 MB', model: trio64, rom: trom,
+             runs: '4|-t vram;1|-t vram'}
     steps:
       - uses: actions/checkout@v5
 
@@ -69,6 +92,7 @@ jobs:
         run: make NASM=$HOME/nasm/nasm
 
       - name: Upload the tools
+        if: ${{ matrix.chip == 'Trio64V2' && matrix.first }}
         uses: actions/upload-artifact@v4
         with:
           name: tools
@@ -84,70 +108,62 @@ jobs:
       - name: Install the emulator test dependencies
         run: pip install '.[coverage]'
 
-      - name: Build the ROM from the reference BIOS
+      - name: ${{ matrix.chip }} ROM from its reference BIOS
         id: rom
-        run: make rom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/ROM.BIN"
+        run: make ${{ matrix.rom }} NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/ROM.BIN"
 
-      - name: ROM patcher tests
+      - name: ${{ matrix.chip }} ROM patcher tests
+        if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
+        run: make ${{ matrix.rom }}-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+
+      - name: ${{ matrix.chip }} emulator tests, ${{ matrix.part }}
         if: ${{ !cancelled() && steps.rom.outcome == 'success' }}
-        run: make rom-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+        env:
+          RUNS: ${{ matrix.runs }}
+        run: |
+          fail=0
+          IFS=';' read -ra list <<< "$RUNS"
+          for r in "${list[@]}"; do
+            vram="${r%%|*}"; args="${r#*|}"
+            echo "::group::${{ matrix.chip }} emulator tests with $vram MB ($args)"
+            make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN" CHIP=${{ matrix.model }} \
+              VRAM="$vram" EMUARGS="$args" LOGS="emu/ci-${{ matrix.model }}-${vram}" || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
 
-      - name: Emulator tests
-        if: ${{ !cancelled() && steps.rom.outcome == 'success' }}
-        run: make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+      - name: ${{ matrix.chip }} EGA/CGA against the unpatched reference
+        if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
+        run: |
+          case "${{ matrix.rom }}" in
+            rom) make ref-compare ROM="$RUNNER_TEMP/ROM.BIN" ;;
+            vrom) make vref-compare ROM="$RUNNER_TEMP/ROM.BIN" ;;
+            trom) make tref-compare ROM="$RUNNER_TEMP/ROM.BIN" ;;
+          esac
 
-      - name: EGA/CGA against the reference BIOS
-        if: ${{ !cancelled() && steps.rom.outcome == 'success' }}
-        run: make ref-compare ROM="$RUNNER_TEMP/ROM.BIN"
-
-      - name: Build the Trio64V+ ROM from 1.03-08
-        id: vrom
-        if: ${{ !cancelled() }}
-        run: make vrom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/VROM.BIN"
-
-      - name: Trio64V+ ROM patcher tests
-        if: ${{ !cancelled() && steps.vrom.outcome == 'success' }}
-        run: make vrom-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/VROM.BIN"
-
-      - name: Trio64V+ emulator tests
-        if: ${{ !cancelled() && steps.vrom.outcome == 'success' }}
-        run: make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/VROM.BIN" CHIP=vplus LOGS=emu/vlogs
-
-      - name: Trio64V+ EGA/CGA against 1.03-08
-        if: ${{ !cancelled() && steps.vrom.outcome == 'success' }}
-        run: make vref-compare ROM="$RUNNER_TEMP/VROM.BIN"
-
-      - name: Build the Trio64 ROM from Phoenix 1.5-07
-        id: trom
-        if: ${{ !cancelled() }}
-        run: make trom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/TROM.BIN"
-
-      - name: Trio64 ROM patcher tests
-        if: ${{ !cancelled() && steps.trom.outcome == 'success' }}
-        run: make trom-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/TROM.BIN"
-
-      - name: Trio64 emulator tests
-        if: ${{ !cancelled() && steps.trom.outcome == 'success' }}
-        run: make emu-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/TROM.BIN" CHIP=trio64 LOGS=emu/tlogs
-
-      - name: Trio64 EGA/CGA against 1.5-07
-        if: ${{ !cancelled() && steps.trom.outcome == 'success' }}
-        run: make tref-compare ROM="$RUNNER_TEMP/TROM.BIN"
+      - name: Name for the log artifact
+        id: art
+        if: always()
+        run: echo "name=emu-logs-$(echo '${{ matrix.chip }} ${{ matrix.part }}' | tr -c 'A-Za-z0-9+\n' '-')" >> "$GITHUB_OUTPUT"
 
       - name: Upload the emulator logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: emu-logs
+          name: ${{ steps.art.outputs.name }}
           path: |
-            emu/logs/
-            emu/logs4/
-            emu/vlogs/
-            emu/vlogs4/
-            emu/vlogs1/
-            emu/tlogs/
-            emu/tlogs4/
-            emu/tlogs1/
+            emu/ci-*/
             !emu/**/*.BIN
           retention-days: 14
           if-no-files-found: ignore
+
+  build-and-test:
+    name: build-and-test
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every chip and memory size passed
+        run: |
+          echo "matrix result: ${{ needs.test.result }}"
+          test "${{ needs.test.result }}" = success

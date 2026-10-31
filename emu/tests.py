@@ -2219,6 +2219,8 @@ def main():
                     help='record which ROM bytes the tests execute and read (all machines together) into FILE '
                          '(32 KB of code flags, then 32 KB of data flags, for emu/codemap.py)')
     ap.add_argument('--tests', default='', help='comma list: run these tests in this order (default all)')
+    ap.add_argument('--skip', default='', help='comma list: leave these tests out (CI runs the longest ones in a '
+                    'job of their own)')
     ap.add_argument('-x', action='store_true', help='stop at the first failure')
     ap.add_argument('--noop', default='', metavar='SPEC',
                     help='mutation test: INT 10h calls matching SPEC do nothing, e.g. "ah=06" or '
@@ -2280,7 +2282,8 @@ def main():
     if a.tests:
         byname = dict(TESTS)
         tests = [(t, byname[t]) for t in a.tests.split(',')]
-    tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))]
+    tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))
+             and n not in a.skip.split(',')]
     if not c.ours:
         print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped'
               + (' unless tagged vplus (our Trio64V+ ROM 1.03-08-pN)' if c.vours else
