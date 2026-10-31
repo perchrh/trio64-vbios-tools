@@ -106,9 +106,37 @@ files of their own, not in a public repository.
 9. **A traceability matrix.** Each specification item mapped to the test that checks it, so the
    clean side knows when it is done and the dirty side can see what is untested.
 
+## Scope, base and licence (31 October 2026)
+
+- **First version:** the standard VGA functions and the S3 mode set, without DDC (4F15), power
+  management (4F10) and VBE 2.0; VBE 1.2 at most.
+- **Free implementations to build on instead of writing everything new:**
+  - SeaVGABIOS (the `vgasrc` directory of SeaBIOS, LGPLv3): C compiled with `gcc -m16`, so real-mode
+    code that uses the 386's 32-bit registers, the kind of "32-bit" our ROMs use. It has the
+    standard VGA functions (`stdvga.c`, `vgabios.c`, `vgafb.c`) and chip modules (Cirrus, Bochs,
+    Geode, ATI) but no S3 module. An S3 Trio64 module written from the data book on top of it would
+    leave the clean-room effort to the S3 part.
+  - The Bochs/LGPL VGABios (LGPL 2.1 or later), the code SeaVGABIOS grew from.
+  - Code taken from either is used under its licence, not rewritten from a specification, so
+    the clean-room rules apply only to what we write ourselves.
+- **Fonts:**
+  - FreeDOS cpidos 3.0 (Henrique Peron, GPL 2 or later): code page 437 at 8x8, 8x14 and 8x16;
+    the 9-dot alternate glyphs we derive ourselves.
+  - The fonts SeaVGABIOS carries come from Joseph Gil's FNTCOL16 collection, whose individual
+    fonts it calls public domain; they look like IBM's VGA font, so their origin is less clear.
+- **Licence of the result:** LGPLv3 code and GPL-2-or-later fonts can both be used under GPL 3, so
+  the ROM would be GPL 3 (or later). Code under GPL 2 only (DOSEMU, if its licence says so) cannot
+  be combined with LGPLv3 or GPL 3 code: use it as a reference for facts only.
+- **More sources the clean side may read:**
+  - Michael Abrash's Graphics Programming Black Book (freely published by the author): the VGA
+    hardware (latches, write modes, Mode X), not the BIOS functions.
+  - Francois Gervais, "Programmation des cartes graphiques CGA, EGA, VGA" (Sybex): the BIOS
+    functions and registers.
+  - DOSEMU 1.0.1 source: its VGA emulation and video BIOS tables and formulas, as facts.
+
 ## Next steps (when started)
 
 - Create the separate specification repository with the skeleton of items 1-9.
 - Review the emulator tests for expectations taken from the reference ROMs, and move the clean
   ones to the new repository.
-- Choose the font source.
+- Decide the base (SeaVGABIOS or our own code) and the font source (above).
