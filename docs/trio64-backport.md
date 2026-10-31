@@ -47,6 +47,42 @@ mode set clear (Phoenix clears with the graphics engine), the base restore (Phoe
 CR6B and CR5A from CR6C bit 7 at every mode set), the PLL N = 0 fix (the N = 0 entries were the
 interlaced 1280x1024 ones, now removed), the Trio64V2 register fixes and VBE 2.0.
 
+## The MCLK of the BIOS images at hand (31 October 2026)
+
+The memory clock each of the 54 Trio-family images at hand loads at POST, from a run of its POST in the
+emulator (SR10/SR11 after POST; MCLK = 14.31818 MHz x (M+2) / ((N+2) x 2^R), the VCO before the 2^R
+divider). The five Vision864/968 images (external clock chip) and one Trio3D image that left SR10/SR11
+untouched are not listed. Asked after the white dots of p2 at 60 MHz (#82): is 42h 41h an unusual
+setting? It is the most common one, on Trio64 boards of four makers (Phoenix 1.5-06 for SPEA/Video
+Seven, Diamond Stealth 64 DRAM 2.02 to 2.09, ELSA Winner 1000 Trio 2.24.00, Hercules Graphite
+Terminator), on the Phoenix Trio64V+ 1.01-05 and 1.02-02 builds and on S3's Trio64V2 1.01.04 and
+Trio64UV+ 1.00-07. The Phoenix 1.5-07 builds load 54.9 to 55.5 MHz, apart from the DSP-3364P's own
+69.8 MHz. Two Phoenix Trio32 builds (1.3-08, 1.4-04) run their 60.14 MHz with the VCO at 120.3 MHz,
+below the data book's 135 MHz (PLL-1).
+
+| SR10 SR11 | MCLK | VCO | Images | Chips (PCI) |
+| --- | --- | --- | --- | --- |
+| 42 41 | 59.96 MHz | 239.8 MHz | 12 | Trio32/64/V+, Trio64UV+, Trio64V2 |
+| 41 3D | 75.17 MHz | 300.7 MHz | 10 | Trio3D, Trio3D/2X |
+| 41 28 | 50.11 MHz | 200.5 MHz | 4 | Trio64V2 |
+| 46 79 | 55.04 MHz | 220.1 MHz | 4 | Trio32/64/V+, Trio64V2 |
+| 42 38 | 51.90 MHz | 207.6 MHz | 3 | Trio32/64/V+ |
+| 42 48 | 66.22 MHz | 264.9 MHz | 3 | Trio3D/2X, Trio64UV+ |
+| 42 39 | 52.80 MHz | 211.2 MHz | 2 | Trio32/64/V+ |
+| 41 2C | 54.89 MHz | 219.5 MHz | 2 | Trio32/64/V+ |
+| 23 28 | 60.14 MHz | 120.3 MHz (below 135) | 2 | Trio32/64/V+ |
+| 22 25 | 69.80 MHz | 139.6 MHz | 2 | Trio32/64/V+ |
+| 41 2A | 52.50 MHz | 210.0 MHz | 1 | Trio32/64/V+ |
+| 41 2B | 53.69 MHz | 214.8 MHz | 1 | Trio32/64/V+ |
+| 40 1D | 55.48 MHz | 221.9 MHz | 1 | Trio32/64/V+ |
+| 42 3C | 55.48 MHz | 221.9 MHz | 1 | Trio32/64/V+ |
+| 42 3E | 57.27 MHz | 229.1 MHz | 1 | Trio32/64/V+ |
+| 41 2E | 57.27 MHz | 229.1 MHz | 1 | Trio32/64/V+ |
+| 61 63 | 60.26 MHz | 482.0 MHz | 1 | Trio3D/2X |
+| 45 74 | 60.34 MHz | 241.4 MHz | 1 | Trio32/64/V+ |
+| 44 6B | 65.03 MHz | 260.1 MHz | 1 | Trio64V2 |
+| 41 41 | 79.94 MHz | 319.8 MHz | 1 | Trio3D |
+
 ## Where the code went
 
 The removed entries and modes freed 384 bytes in nine places; with two zero runs the stock BIOS never
