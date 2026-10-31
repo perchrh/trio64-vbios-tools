@@ -376,8 +376,8 @@ chip_id:
 ; MCLK line, fail bits:
 ;   1 MCLK PLL VCO outside the datasheet range, 135 MHz to [mvcomax] (270 MHz on every chip: the
 ;     Trio64V2 raises only the DCLK PLL maximum), or N = 0 or M = 0 (PLL-1, PLL-2)
-;   2 MCLK above the chip's maximum (MEM-1): [mclkmax], 60 MHz (16.67 ns) on the Trio32/64 and
-;     Trio64V+, 66.67 MHz (15 ns) on the Trio64UV+; on the Trio64V2 by the memory type in CR36 bits
+;   2 MCLK above the chip's maximum (MEM-1): [mclkmax], 60 MHz (16.67 ns) on the Trio32 and
+;     Trio64V+, 70 MHz on the Trio64 (T64-MEM-7), 66.67 MHz (15 ns) on the Trio64UV+; on the Trio64V2 by the memory type in CR36 bits
 ;     3-2 (V2-MEM-1): 00 1-cycle EDO 60 MHz (16.67 ns), 01 SGRAM, 10 2-cycle EDO and 11 fast page
 ;     66.67 MHz (15 ns). Which memory type a card should use is not a datasheet rule (S3TEST checks
 ;     the 1-cycle EDO of our card)

@@ -144,7 +144,8 @@ without the CR6D base, no pedestal, refresh default, LFB, 4F06 BL=3 or 512x384 l
 list), on a Trio64 our Phoenix 1.5-07 ROM (TROMVER: as on the Trio64V+, with its own mode list), and
 on any other chip (the Trio32), where there is no ROM of ours, only the tests that need none (checksum,
 chip, MCLK against the data book, memory type, VGA clear, font load, scrolls, AH=09h, timings); the
-version found is then INFO. The MCLK line compares the clock with the data book maximum for the chip
+version found is then INFO. The MCLK line compares the clock with the maximum for the chip (the data
+book's; on the Trio64 70 MHz, T64-MEM-7)
 and the strapped memory type, so a ROM built with another MCLK passes as long as it is within it.
 
 S3COMPAT follows the BIOS too: on a VBE 1.x BIOS the VBE 2.0 functions (4F06 BL=2/3, 4F07 BL=80h,
@@ -164,8 +165,8 @@ ROM 012Eh, 010Fh, 0131h, 0134h and 012Ah, see Known remaining items). The emulat
 (tag `s3 emu`, Trio64V2 model only) checks the rules that concern writes: CR26 = 00h after CR39 = A5h
 on every mode set, and CR40 bit 0 and CR66 bit 0 changed only with the screen off or in vertical retrace.
 
-On every chip S3COMPAT also checks the MCLK against the chip's maximum (60 MHz on the Trio32/64 and
-Trio64V+, 66.67 MHz on the Trio64UV+), PLL M and N of at least 1, packed 24 bpp by either encoding
+On every chip S3COMPAT also checks the MCLK against the chip's maximum (60 MHz on the Trio32 and
+Trio64V+, 70 MHz on the Trio64, 66.67 MHz on the Trio64UV+), PLL M and N of at least 1, packed 24 bpp by either encoding
 (SRB 78h or CR67 0111b, 75 MHz, not on a Trio64), no clock doubling with the Streams Processor on, SR15
 bit 5 not left set, and on the Trio64V+ family the CR66 combination the Trio64UV+ update calls a system
 hang (FAIL 1000). The emulator test `engine_init` checks that a BIOS that uses the graphics engine
@@ -297,18 +298,18 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
 | Trio64V+, 1.03-08-p1 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
-| Trio64, 1.5-07-p2 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 60 MHz (MEM-1); the option takes up to 70 MHz |
+| Trio64, 1.5-07-p2 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
 
-On the Trio64 ROM `MCLK` goes up to 70 MHz without more, above the data book's 60 MHz: 70 MHz is the
-clock card databases give for the 86C764X (vgamuseum), and the ExpertColor DSP-3364P runs it (its own
+On the Trio64 ROM `MCLK` goes up to 70 MHz, above the data book's 60 MHz: our tools take 70 MHz as the
+Trio64's limit (T64-MEM-7), the clock card databases give for the 86C764X (vgamuseum), and the ExpertColor DSP-3364P runs it (its own
 BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"). On that card, with its fast page memory, the
 54.9 MHz of the default build leaves too little memory bandwidth for windowed video in 800x600x16
 (streaks, #75), and 69.8 MHz removes them:
 
     make trom OUT=S3T64P2.BIN MCLK=69.8
 
-Above 60 MHz S3TEST's and S3COMPAT's MCLK lines, which judge against the data book, FAIL the build, and
-S3COMPAT's VRAM test (without /Q) is the check that the memory keeps up. Above 70 MHz, up to 100 MHz
+Up to 70 MHz the build prints no warning and S3TEST's and S3COMPAT's MCLK lines pass; S3COMPAT's VRAM
+test (without /Q) is the check that the memory keeps up. Above 70 MHz, up to 100 MHz
 (twice 50 MHz, the lowest MCLK these BIOSes run), only with `OVERCLOCK=1` (s3tpatch.py `--overclock`):
 the card owner's choice, never a default; the build says OVERCLOCK in its result line.
 

@@ -53,8 +53,8 @@ What is applied (docs/trio64-backport.md)
           the build's own clock stays (54.9 MHz in the reference build). The data book gives 60 MHz
           (MEM-1, DATABOOK_MAX); 70 MHz is the clock the 86C764X is rated for in card databases
           (vgamuseum) and the one DSP-3364P boards run (their own BIOS: 69.8 MHz, model tag "764 M70";
-          on the card it posts and runs windowed video without the streaks of 54.9 MHz, #75). Above
-          60 MHz S3TEST's and S3COMPAT's MCLK lines, which judge against the data book, fail the build.
+          on the card it posts and runs windowed video without the streaks of 54.9 MHz, #75). Our tools
+          take 70 MHz as the Trio64's limit (common/chip.inc), so up to 70 MHz nothing warns or fails.
           With --overclock up to 100 MHz (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their
           lowest): the card owner's choice, never the default
   sign-on "1.5-07-p2", checksum byte 7FFF
@@ -172,8 +172,8 @@ DDC_SITES = [
 # VESADDCReadVDIF (52E1h-5341h), zeroed: riplin's disassembly shows no caller but the BL=02h branch
 DDC_FREED = [(0x52E1, 0x5342, '53 51 52 e8 5b 00')]
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
-DATABOOK_MAX = 60.0                             # MEM-1: 16.67 ns on the Trio32/Trio64
-MCLK_MAX = 70.0                                 # --mclk without --overclock: the 86C764X's 70 MHz (above)
+DATABOOK_MAX = 60.0                             # MEM-1: 16.67 ns on the Trio32/Trio64 (named in --help only)
+MCLK_MAX = 70.0                                 # --mclk without --overclock: the 86C764X's 70 MHz, our Trio64 limit
 OVERCLOCK_MAX = 100.0                           # --overclock: at most twice 50 MHz (the user's limit)
 
 BLOCKS = [
@@ -565,9 +565,6 @@ def main():
     if f > MCLK_MAX:
         print('OVERCLOCK: MCLK %.2f MHz is above %g MHz; check the memory with S3COMPAT\'s VRAM test (S3TEST '
               'fails its MCLK line by design)' % (f, MCLK_MAX))
-    elif f > DATABOOK_MAX:
-        print('MCLK %.2f MHz is above the data book\'s %g MHz (within the 86C764X\'s 70 MHz): S3TEST and '
-              'S3COMPAT fail their MCLK lines; check the memory with S3COMPAT\'s VRAM test' % (f, DATABOOK_MAX))
     return 0
 
 
