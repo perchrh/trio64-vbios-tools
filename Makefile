@@ -26,11 +26,16 @@ DEFS += -DTROMVER="'$(TROMVER)'"
 endif
 
 all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-     build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT
+     build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT build/ZIP.EXE
 
 # runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D, then
-# RUNALL.ZIP with PKZIP (DOS line ends); clean.bat deletes what a run leaves behind
+# RUNALL.ZIP with Info-ZIP's zip (DOS line ends); clean.bat deletes what a run leaves behind
 build/RUNALL.BAT: runall.bat | build
+	cp $< $@
+
+# Info-ZIP Zip 3.0, the 16-bit real-mode DOS build (ZIP16.EXE of the FreeDOS 1.3 package), for RUNALL.BAT;
+# its licence is infozip/LICENSE
+build/ZIP.EXE: infozip/ZIP.EXE | build
 	cp $< $@
 
 build/CLEAN.BAT: clean.bat | build

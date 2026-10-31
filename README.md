@@ -59,8 +59,9 @@ with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.T
 1024 INT 10h calls with `VGALOG /D`, and beeps (`echo` of Ctrl-G) when done. It leaves S3TEST.LOG,
 S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. It then copies
 C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root) as
-S3REGSR.TXT and VGALOGR.BIN, and packs the logs and these four files into RUNALL.ZIP with PKZIP, which
-must be on the PATH or in the same folder (it is not part of this repository). VGALOG stays
+S3REGSR.TXT and VGALOGR.BIN, and packs the logs and these four files into RUNALL.ZIP with Info-ZIP's
+`zip` (`build/ZIP.EXE`: Zip 3.0, the 16-bit DOS build from the FreeDOS 1.3 package, kept in `infozip/`
+with its licence, which allows passing the program on with that licence text). VGALOG stays
 resident afterwards (`VGALOG /U` unloads it); while it is loaded, every INT 10h call takes a little
 longer, which shows only in the timing lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves
 behind before the next one: the .DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and
