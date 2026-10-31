@@ -912,39 +912,32 @@ Documents the project does not have; what depends on them is marked where it is 
 - Trio64V2/DX & GX: only the preliminary book (changes from the Trio64V+) is at hand, no final edition.
 - An S3 document on the BIOS interface: the S3 OEM functions (4F14h) and the S3 mode numbers are known
   only from BIOS images (`docs/chip-rules.md`, "S3 OEM functions (4F14h)").
-- VESA standards the ROMs implement or the tools check against, not at hand yet ("VESA standards"
-  below): VBE/DDC 1.0 (or DDC 2.0, which contains it), DDC 1.0 to 3 for the DDC1 and DDC2B
-  signalling, VBE/PM 1.0 and DPMS 1.0, DMT 1.0 Rev. 0.7, GTF 1.0, VBE 1.2 and the Mode 6Ah standard.
+- The VESA standards in "VESA standards" below other than VBE 2.0 are not at hand yet.
 
 ### VESA standards
 
-At hand (the PDFs are kept outside the repository: VESA allows only VBE 2.0 to be posted online,
-unmodified; the others reserve all rights):
+The VESA standards our ROMs implement or the tools check against. VESA allows only VBE 2.0 to be
+posted online (unmodified), so the PDFs are kept outside the repository.
 
-| Standard | Relevance |
-| --- | --- |
-| VBE Core Functions 2.0, Rev. 1.1 (November 1994) | The main reference: 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE 2.0; S3TEST and S3COMPAT check against it. |
-| VBE Core Functions 3.0 (September 1998) | Later than our ROMs (VBE 2.0 and 1.2), so not required. Useful for programs that look for 3.0 fields, and for a later refresh rate choice: 4F02 with a CRTCInfoBlock (bit 11) and 4F0B (pixel clock), which would let a program pick the refresh rate. |
-| VBE/SCI 1.0, Rev. 2 (July 1997) | 4F15 BL=10h-16h: raw access to the DDC lines (SCL, SDA) through the BIOS. Not in our ROMs; relevant to DDC2 on the Trio64 (docs/trio64-backport.md, Pending): a BIOS that offers it lets a tool probe the board's DDC wiring through INT 10h. |
-| E-EDID Release A, Rev. 1 (February 2000; EDID 1.3) | The 128-byte EDID block 4F15 BL=01h reads: header, checksum, extension count. The BIOS only carries the bytes; the tools and a DDC check judge them by it. Its Enhanced DDC segment addressing is later than our ROMs. |
-| VBE/AF 1.0, Rev. 0.7 (August 1996) | A loadable 32-bit accelerator driver interface, not a ROM function: not relevant to the BIOS. |
+- VBE Core Functions 2.0, Rev. 1.1 (November 1994), at hand: 4F00-4F0A, the info blocks, the mode
+  numbers; the Trio64V2 ROM is VBE 2.0, and S3TEST and S3COMPAT check against it.
+- VBE 1.2 (October 1991, VS911022): the version the Trio64V+ and Trio64 ROMs report.
+- VBE/DDC 1.0 (February 1994), or DDC 2.0 (March 1996), which contains it: defines 4F15, which all
+  three ROMs have.
+- DDC 1.0 (August 1994), DDC 2.0 and DDC Version 3 (December 1997): the DDC1 and DDC2B signalling and
+  timing, needed for the DDC2 work.
+- VBE/PM 1.0 (February 1994) and DPMS 1.0 (August 1993): 4F10 power management and the sync states it
+  sets.
+- DMT 1.0, Rev. 0.7 (December 1996): the timing reference for the tools and the refresh tables. It
+  already contains the 1990-1993 monitor timing standards and guidelines, so those need no copies of
+  their own.
+- GTF 1.0 (December 1996): timings for modes DMT does not list, such as 1152x864 at 60 Hz.
+- Mode 6Ah standard (August 1989): 800x600 in 16 colours as mode 6Ah, which our ROMs offer and S3TEST
+  checks.
 
-Not at hand; those marked "needed" are what the ROMs implement or the tools judge:
-
-| Standard | Relevance |
-| --- | --- |
-| VBE/DDC 1.0 (February 1994), or DDC 2.0 (March 1996), which contains VBE/DDC and EDID 2.0 | Needed: function 4F15 (BL=00h capabilities, 01h read EDID), which all three ROMs have. |
-| DDC 1.0 (August 1994), DDC 2.0, DDC Version 3 (December 1997) | Needed for DDC work: the DDC1 (data clocked by VSYNC) and DDC2B (I2C) signalling and timing that 4F15 drives. |
-| VBE/PM 1.0 (February 1994) | Needed: function 4F10 (power states), in all three ROMs. |
-| DPMS 1.0 (August 1993) | Needed: the HSYNC and VSYNC states 4F10 sets (SR0D bits 7-4 on the Trio64). |
-| DMT 1.0, Rev. 0.7 (December 1996) | Needed: the timing reference of the tools and the ROMs' refresh tables, 640x350 to 1600x1200 at 60-85 Hz. It contains the 1990-1993 monitor timing standards and guidelines (800x600 at 56, 60 and 72 Hz, 1024x768 at 60 and 70 Hz), which need no copy of their own. |
-| GTF 1.0 (December 1996) | Useful: timings for modes DMT does not list (for example 1152x864 at 60 Hz), and for VBE 3.0 refresh control. |
-| VBE 1.2 (October 1991, VS911022) | Useful: the Trio64V+ and Trio64 ROMs report VBE 1.2; what a 1.2 BIOS must return (VBE 2.0 describes the differences only in part). |
-| Mode 6Ah standard (August 1989) | Useful: 800x600x16 as mode 6Ah, which the ROMs offer and S3TEST checks. |
-| EDID Version 3 (November 1997) | Covered by E-EDID Release A (EDID 1.3), at hand. |
-| VDIF 1.0 (August 1993) | Not needed: 4F15 BL=02h (read VDIF) was removed from the Trio64 ROM. |
-| VAFC 1.0, VMC, VL-Bus 1.0 and 2.0, VUMA, EVC, FPDI, VIAD, VBE/AI, VCI, SVPMI, 8514/A, VGA pass-through, display test procedures | Not needed: hardware connectors and buses, audio, flat panels, monitor measurement, or interfaces VBE 2.0 replaced (SVPMI by 4F0A). |
-
+Also at hand, but nothing our ROMs implement: VBE 3.0 (September 1998; refresh control through
+4F02 with a CRTCInfoBlock and 4F0B), VBE/SCI 1.0 (4F15 BL=10h-16h, raw DDC line access), E-EDID
+Release A (EDID 1.3, the data 4F15 carries) and VBE/AF 1.0 (a loadable accelerator driver).
 
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
 - S3 Trio64V2/DX and GX datasheet (preliminary): MCLK limits per memory type and DCLK limits, the
