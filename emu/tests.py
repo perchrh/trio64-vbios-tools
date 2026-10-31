@@ -69,6 +69,9 @@ Tests
   vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
                    registers in and out, SR10/SR11 and CR58-5A/6D after), /D writes them in call order,
                    the S3 locks are put back, /U unhooks, /D afterwards is refused
+  vgalog_trace     VGALOG /T: every OUT the BIOS makes in the mode sets AX=0003h and 4F02h 101h is in the
+                   trace in order with its value, behind the marker of its call; other calls not traced,
+                   INT 1 put back after each mode set, the trap flag clear on return
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
   s3regs           S3REGS.COM and S3REGS32.EXE (the Win32 one on a 32-bit CPU with the same register
                    model, vgaemu.run_pe32) write the same snapshot, keep indexes and locks, and
@@ -1290,6 +1293,92 @@ def t_vgalog_mem(c):
     return '%d calls, %d of them nested' % (n, len(nested))
 
 
+def t_vgalog_trace(c):
+    """VGALOG /T traces the port accesses of the mode sets: every OUT the BIOS makes during AX=0003h and
+    4F02h 101h is in the trace, in order and with its value (the model's own record of the OUTs as the
+    reference), behind a marker that names the call's record; the reads are there (kind 1), polling loops
+    take one event with repeats, other calls (AH=0Eh, 4F05h) are not traced, INT 1 is put back after each
+    mode set and /U unloads."""
+    com = c.tool('VGALOG.COM')
+    m = c.machine()
+    i1 = m.mem(4, 4)
+    r = m.run_com(com, '/T', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /T did not stay resident: %s' % (r.exit,))
+    check(b'port trace' in bytes(r.stdout), '/T install message: %r' % bytes(r.stdout)[-120:])
+
+    def want(port):
+        return 0x3B0 <= port <= 0x3DF or 0xCF8 <= port <= 0xCFF or port & 0x3FD == 0x2E8
+    seen = {}                           # call -> the BIOS's OUTs as (port, value, kind), not VGALOG's own
+    cur = [None]
+
+    def out(uc, port, size, val, ud):
+        if cur[0] is None or uc.reg_read(UC_X86_REG_CS) == 0x2000:
+            return
+        ev = seen.setdefault(cur[0], [])
+        if want(port):
+            ev.append((port, val & 0xFF, 0))
+        if size >= 2 and want(port + 1):
+            ev.append((port + 1, (val >> 8) & 0xFF, 2))
+    h = m.mu.hook_add(UC_HOOK_INSN, out, None, 1, 0, UC_X86_INS_OUT)
+    calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=1))]
+    for ax, kw in calls:
+        cur[0] = ax
+        res = m.int10(ax, **kw)
+        check(not res['flags'] & 0x100, 'AX=%04X returned with the trap flag set' % ax)
+        check(m.mem(4, 4) == i1, 'AX=%04X: INT 1 not put back after the call' % ax)
+    cur[0] = None
+    m.mu.hook_del(h)
+    rd = m.run_com(com, '/D', seg=0x4000)
+    check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
+    b = rd.files.get('VGALOG.BIN')
+    check(b is not None and b[:8] == b'VGALOGM1', 'VGALOG.BIN has no memory-mode header')
+    total, n = struct.unpack_from('<IH', b, 8)
+    recs = [b[16 + 32 * i:48 + 32 * i] for i in range(n)]
+    t = 16 + 32 * n
+    check(b[t:t + 8] == b'VGALOGT1', 'no trace part after the %d calls' % n)
+    ttot, tn = struct.unpack_from('<II', b, t + 8)
+    check(len(b) == t + 16 + 4 * tn and tn == ttot, 'trace part: %d events in total, %d in the file, %d bytes'
+          % (ttot, tn, len(b) - t - 16))
+    evs = [struct.unpack_from('<HBB', b, t + 16 + 4 * i) for i in range(tn)]
+    # split at the markers: call number -> events (repeats expanded)
+    bycall, num, reads, reps = {}, None, 0, 0
+    for port, val, k in evs:
+        if k & 3 == 3:
+            num = port
+            continue
+        check(num is not None, 'trace events before the first marker')
+        check(k >> 2 < 63, 'a repeat count saturated (%04X)' % port)
+        reps += k >> 2
+        if k & 3 == 1:
+            reads += 1 + (k >> 2)
+            continue
+        bycall.setdefault(num, []).extend([(port, val, k & 3)] * (1 + (k >> 2)))
+    marked = {struct.unpack_from('<H', x, 0)[0]: struct.unpack_from('<H', x, 2)[0] for x in recs}
+    top = {struct.unpack_from('<H', x, 2)[0]: struct.unpack_from('<H', x, 0)[0] for x in recs if x[23] == 0}
+    check(set(bycall) <= set(marked), 'markers name no logged call: %s' % sorted(set(bycall) - set(marked)))
+    traced = sorted('%04X' % marked[k] for k in bycall if marked[k] in (0x0E41, 0x4F05))
+    check(not traced, 'calls traced that are no mode set: %s' % traced)
+    for ax in (0x0003, 0x4F02):
+        # the call's own events and those of the calls the BIOS made from inside it, in program order
+        got, on = [], False
+        for port, val, k in evs:
+            if k & 3 == 3:
+                on = port == top[ax] or (on and port != top[ax] and marked.get(port) not in (0x0003, 0x4F02, 0x0E41, 0x4F05))
+                continue
+            if on and k & 3 != 1:
+                got.extend([(port, val, k & 3)] * (1 + (k >> 2)))
+        exp = seen.get(ax, [])
+        first = next((i for i, (a, e) in enumerate(zip(got, exp)) if a != e), None)
+        check(got == exp and exp, 'AX=%04X: %d OUT events traced, %d made by the BIOS; first difference at %s: '
+              '%s / %s' % (ax, len(got), len(exp), first, got[first] if first is not None and first < len(got) else '-',
+                           exp[first] if first is not None and first < len(exp) else '-'))
+    ru = m.run_com(com, '/U', seg=0x4000)
+    check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
+    c.save('VGALOGT', rd)
+    return '%d events: %d OUTs in 0003h, %d in 4F02h 101h, %d reads, %d repeats merged' % (
+        tn, len(seen.get(0x0003, [])), len(seen.get(0x4F02, [])), reads, reps)
+
+
 def t_s3regs(c):
     """S3REGS (DOS) and S3REGS32 (Win32, run on the same register model) write the same snapshot of SR, CR,
     GR and PCI, leave indexes and locks as found, and S3REGS32 /W logs register changes."""
@@ -1973,7 +2062,7 @@ def t_stores(c):
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vplus_patches', t_vplus_patches), ('t64_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
-         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('v2_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
@@ -1991,7 +2080,7 @@ TAGS = {
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch vplus t64 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
+    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch vplus t64 emu',
     'vplus_patches': 'rom vbe patch vplus emu vram', 't64_patches': 'rom vbe patch t64 emu vram',
