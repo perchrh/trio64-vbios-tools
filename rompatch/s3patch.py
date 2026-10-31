@@ -358,12 +358,47 @@ MCLK_MIN = 40.0     # no data book minimum; a guard against typing errors (2.04.
 FREF = 14.31818
 
 
-def mclk_pll(target, fmax, fmin=MCLK_MIN):
-    """The MCLK PLL setting closest to target MHz, at most fmax: (M, N/R byte, MHz, VCO MHz). The MCLK
-    PLL has R 0-3 in SR10 bits 6-5 (bit 7 reserved, V2-PLL-3), M 1-127, N 1-31 (PLL-2) and its VCO in
-    135-270 MHz (PLL-1; the Trio64V2 raises only the DCLK PLL maximum). Ties: the smaller N, then R."""
+# MCLK PLL pairs (SR10 N/R byte, SR11 M byte, images) that the Trio32/Trio64/Trio64V+ BIOS images at hand
+# (PCI 5333:8811: Phoenix, Diamond, ELSA, Hercules, Number Nine, Octek, S3) load at POST, from the survey
+# in docs/trio64-backport.md ("The MCLK of the BIOS images at hand"). Left out: Diamond's 40h 1Dh (N = 0,
+# PLL-2) and the Trio32's 23h 28h (VCO 120.3 MHz, below 135 MHz, PLL-1).
+KNOWN_MCLK_8811 = [
+    (0x42, 0x41, 9),        # 59.96 MHz: Phoenix 1.5-06 and Trio64V+ 1.01-05/1.02-02, Diamond, ELSA, Hercules
+    (0x46, 0x79, 3),        # 55.04 MHz: Phoenix 1.3-08 and 1.5-07 builds
+    (0x42, 0x38, 3),        # 51.90 MHz: Phoenix 1.3-08 and 1.4-04 (Trio32, Trio64)
+    (0x41, 0x2C, 2),        # 54.89 MHz: Phoenix 1.5-07 CP764 (our reference), Diamond Stealth64 Video
+    (0x42, 0x39, 2),        # 52.80 MHz: Phoenix 1.4-04 (DSP3332P), S3 1.03-08 (Trio64V+)
+    (0x22, 0x25, 2),        # 69.80 MHz: Phoenix 1.5-07 "764 M70" (the DSP-3364P)
+    (0x41, 0x2A, 1),        # 52.50 MHz: Phoenix 1.5-07 VIEWTOP
+    (0x41, 0x2B, 1),        # 53.69 MHz: Phoenix 1.5-04 (miroCRYSTAL)
+    (0x42, 0x3C, 1),        # 55.48 MHz: Phoenix 1.5-07
+    (0x41, 0x2E, 1),        # 57.27 MHz: Phoenix Trio64V+ 1.01-05 (Octek)
+    (0x42, 0x3E, 1),        # 57.27 MHz: Number Nine
+    (0x45, 0x74, 1),        # 60.34 MHz: ELSA 1.02.00
+]
+KNOWN_TOLERANCE = 0.5       # MHz: a known pair this close to the request is taken instead of the computed one
+
+
+def mclk_pll(target, fmax, fmin=MCLK_MIN, known=()):
+    """The MCLK PLL setting for target MHz, at most fmax: (M, N/R byte, MHz, VCO MHz, source). With known
+    (a list like KNOWN_MCLK_8811), a pair other BIOSes of the chip use is taken when it is within
+    KNOWN_TOLERANCE MHz of target and inside the limits: the closest, then the one more images use.
+    Otherwise the closest setting the PLL allows: R 0-3 in SR10 bits 6-5 (bit 7 reserved, V2-PLL-3),
+    M 1-127, N 1-31 (PLL-2) and its VCO in 135-270 MHz (PLL-1; the Trio64V2 raises only the DCLK PLL
+    maximum). Ties: the smaller N, then R."""
     if not fmin <= target <= fmax:
         raise PatchError('MCLK %.2f MHz: outside %.2f-%.2f MHz' % (target, fmin, fmax))
+    cand = []
+    for nr, m, uses in known:
+        n, r = nr & 0x1F, (nr >> 5) & 3
+        vco = FREF * (m + 2) / (n + 2)
+        f = vco / (1 << r)
+        if not nr & 0x80 and 1 <= n and 1 <= m <= 127 and 135 <= vco <= 270 and fmin <= f <= fmax + 1e-9 \
+                and abs(f - target) <= KNOWN_TOLERANCE:
+            cand.append(((round(abs(f - target), 3), -uses), m, nr, f, vco, uses))
+    if cand:
+        k, m, nr, f, vco, uses = min(cand)
+        return m, nr, f, vco, 'the pair of %d BIOS image%s at hand' % (uses, 's' if uses > 1 else '')
     best = None
     for r in range(4):
         for n in range(1, 32):
@@ -376,14 +411,15 @@ def mclk_pll(target, fmax, fmin=MCLK_MIN):
                         best = (key, m, (r << 5) | n, f, vco)
     if best is None:
         raise PatchError('MCLK %.2f MHz: no PLL setting in range' % target)
-    return best[1:]
+    return best[1:] + ('computed',)
 
 
-def mclk_put(d, put, entries, memtype, mhz, fmax):
-    """Set the MCLK entry of memtype to mhz (s3patch and s3vpatch). Returns the log text."""
-    m, nr, f, vco = mclk_pll(mhz, fmax)
+def mclk_put(d, put, entries, memtype, mhz, fmax, known=()):
+    """Set the MCLK entry of memtype to mhz (all three patchers; known: see mclk_pll). Returns the MHz."""
+    m, nr, f, vco, src = mclk_pll(mhz, fmax, known=known)
     a = entries[memtype]
-    put(a, d[a:a + 2], bytes([m, nr]), 'MCLK for %s (build option): %.2f MHz, VCO %.1f MHz' % (memtype, f, vco))
+    put(a, d[a:a + 2], bytes([m, nr]), 'MCLK for %s (build option): %.2f MHz, VCO %.1f MHz, PLL %02Xh %02Xh (%s)'
+        % (memtype, f, vco, nr, m, src))
     return f
 
 

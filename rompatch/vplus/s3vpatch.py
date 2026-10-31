@@ -189,7 +189,8 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     put(a, d[a:a + 3], call(a, lab['h4f02']), 'VBE 4F02: mode set via the hook, then the booster unless Windows runs')
     speed_sites(d, put, site, sym, lab, tags=False)
     if mclk is not None:
-        mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype])
+        mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
+                 known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first
 
     # 3. sign-on and checksum
     s = m.start(1)

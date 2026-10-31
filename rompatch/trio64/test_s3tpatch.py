@@ -31,8 +31,9 @@ Tests
   size32         --size 32 gives the same lower 32 KB alone
   mclk           --mclk 50, 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change nothing
                  else but the checksum and the FIFO code's 112 x MCLK; 69.8 and 70 MHz are valid, 71 and 39 MHz refused (70 MHz, the
-                 86C764X's rating); with --overclock 85 and 100 MHz are valid, 101 MHz and --overclock
-                 without --mclk refused
+                 86C764X's rating); 57, 53 and 70 MHz take the pair other Trio64-family BIOSes use
+                 (41h 2Eh 57.27, 42h 39h 52.80, 22h 25h 69.80; s3patch.KNOWN_MCLK_8811); with --overclock 85
+                 and 100 MHz are valid, 101 MHz and --overclock without --mclk refused
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte changed
                  in the code (1000h-7EFFh), a wrong checksum, the Trio64V+ BIOS 1.03-08
 Exit code 0 when every test passed.
@@ -237,6 +238,10 @@ def main():
              if rc == 0 and out else 0)
         if abs(f - float(mhz)) >= 0.5 or f > 70:
             bad.append('%s MHz: %s %.2f MHz' % (mhz, err, f))
+    for mhz, pair in (('57', '2e 41'), ('53', '39 42'), ('70', '25 22')):   # a pair other BIOSes use first
+        rc, out, err = run(tmp, ref, ['--mclk', mhz])
+        if rc or not out or out[0x3B5:0x3B7] != bytes.fromhex(pair):
+            bad.append('%s MHz: %s, expected the known pair %s' % (mhz, err or out[0x3B5:0x3B7].hex(' '), pair))
     for mhz in ('71', '39'):
         rc, out, err = run(tmp, ref, ['--mclk', mhz])
         if rc != 1 or out is not None:
@@ -251,7 +256,7 @@ def main():
         rc, out, err = run(tmp, ref, args)
         if rc != 1 or out is not None:
             bad.append('%s not refused' % ' '.join(args))
-    result('mclk', not bad, '; '.join(bad) or '50, 55, 60, 69.8 and 70 MHz valid at 3B5h, 71 and 39 MHz refused; '
+    result('mclk', not bad, '; '.join(bad) or '50, 55, 60, 69.8 and 70 MHz valid at 3B5h, 57, 53 and 70 MHz the known pairs, 71 and 39 MHz refused; '
            'with --overclock 85 and 100 MHz valid, 101 MHz refused')
     code = bytearray(ref)
     code[0x3000] ^= 1

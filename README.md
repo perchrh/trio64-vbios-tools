@@ -311,6 +311,12 @@ BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"). On that card, with its 
 
     make trom OUT=S3T64P3.BIN MCLK=69.8
 
+On the Trio64 and Trio64V+ ROMs `MCLK` takes the PLL pair other Trio32/Trio64/Trio64V+ BIOSes use when
+one lies within 0.5 MHz of the request (`s3patch.KNOWN_MCLK_8811`, from the survey in
+docs/trio64-backport.md: 42h 41h for 59.96 MHz in 9 images, 46h 79h for 55.04 MHz, 22h 25h for 69.80
+MHz and others), and computes the closest setting only when none does; the build log names the pair and
+where it came from. So `MCLK=70` builds 69.80 MHz, the card's own setting, and `MCLK=53` 52.80 MHz.
+
 Up to 70 MHz the build prints no warning and S3TEST's and S3COMPAT's MCLK lines pass; S3COMPAT's VRAM
 test (without /Q) is the check that the memory keeps up. Above 70 MHz, up to 100 MHz
 (twice 50 MHz, the lowest MCLK these BIOSes run), only with `OVERCLOCK=1` (s3tpatch.py `--overclock`):
