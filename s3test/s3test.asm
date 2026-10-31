@@ -61,7 +61,7 @@
 ;                    default to 60 Hz
 ;   Each mode in modelist: the mode set returns 004Fh, the measured refresh is within 1.5 Hz of
 ;                    the expected value, the total line length is the expected one, the pedestal is
-;                    still off, and depending on the mode type:
+;                    still off (SR1A bit 5, on the Trio64V2 only, #79), and depending on the mode type:
 ;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and
 ;                                      CR59/CR5A back to the real base (CR59 at POST) and 00 after
 ;                                      the booster
@@ -632,7 +632,9 @@ memsize:
 ; Set [m_mode] (AH=00 for VGA modes, 4F02 for VESA), measure the refresh rate and read
 ; the line length from CR00, CR01 and CR5D, and CR58, CR59, CR5A, CR6D, CR90 and SR1A. Expect status
 ; 004Fh, refresh within 15 (1.5 Hz) of [m_hz], a line of exactly [m_line] pixels at [m_xres] (when
-; [m_line] is not 0), SR1A bit 5 clear, plus the checks selected by [m_flags] (see the file header).
+; [m_line] is not 0), SR1A bit 5 clear on the Trio64V2 (SR1A is its pedestal register; on the Trio64
+; Phoenix's POST copies the MCLK N/R byte there, so bit 5 follows the clock's divider, #79), plus the
+; checks selected by [m_flags] (see the file header).
 t_mode: VS 'D:TEST mode '
         push ax
         mov ax,[m_mode]
@@ -750,8 +752,11 @@ t_mode: VS 'D:TEST mode '
         neg ax
 .p:     cmp ax,15               ; +-1.5 Hz
         ja .fail
+        cmp byte [chip],CHIP_T64V2      ; SR1A: the Trio64V2's pedestal register only (#79)
+        jne .ped
         test byte [r1a],0x20    ; pedestal off
         jnz .fail
+.ped:
         mov ax,[m_line]         ; line length, exact
         or ax,ax
         jz .lk
