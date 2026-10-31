@@ -446,7 +446,8 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False):
     a = site['post52'] + 10
     put(a, 'b8 52 00', 'b8 52 80', 'POST: CR52 = 80h, 800x600 defaults to 60 Hz (VESA DMT) instead of 56 Hz')
     if mclk is not None:
-        mclk_put(d, put, MCLK_ENTRY, 'any', mclk, OVERCLOCK_MAX if overclock else MCLK_MAX)
+        mclk_put(d, put, MCLK_ENTRY, 'any', mclk, OVERCLOCK_MAX if overclock else MCLK_MAX,
+                 known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first
     k = round(112 * 1000 * mclk_of(d))             # 112 x MCLK kHz for the FIFO code, from the final 3B5h pair
     a = lab['kmclk']
     put(a, d[a:a + 4], struct.pack('<I', k), 'FIFO code: 112 x MCLK = %d (MCLK %.2f MHz)' % (k, mclk_of(d)))
