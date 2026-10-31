@@ -295,6 +295,17 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 | | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
 | Trio64, 1.5-07-p1 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 60 MHz (MEM-1) |
 
+The Trio64 ROM also takes an overclock, for a card whose maker ran its memory faster than the data book
+allows (the ExpertColor DSP-3364P's own BIOS runs 69.8 MHz):
+
+    make trom OUT=S3T64OC.BIN MCLK=69.8 OVERCLOCK=1
+
+`OVERCLOCK=1` (s3tpatch.py `--overclock`) lets `MCLK` go above 60 MHz, up to 100 MHz (twice 50 MHz, the
+lowest MCLK these BIOSes run); 69.8 gives the DSP-3364P BIOS's own PLL bytes (25h 22h). The build says
+OVERCLOCK in its result line. It is the card owner's choice and never a default: the chip and the
+memory are run outside their data books, S3TEST's MCLK line fails such a build by design, and
+S3COMPAT's VRAM test (without /Q) is the check that the memory keeps up.
+
 The Trio64V+ feature list names 50 MHz for EDO and 1-cycle EDO; the timing table allows 60 MHz, which
 S3COMPAT checks (MEM-1), and 1.03-08 itself runs 52.79 MHz. Below 40 MHz the option refuses (the data
 books give no minimum; it guards against typing errors). Without `MCLK` the build is the tested one and

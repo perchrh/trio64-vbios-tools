@@ -36,6 +36,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   card's strapping decides. The default build's MCLK is 59.96 MHz, the 1-cycle EDO maximum; do not
   raise it. Other clocks come only from the build option (`MCLK=`, `MEMTYPE=`), which sets one entry of
   the BIOS's MCLK table within the data book limit for that memory type (README "MCLK build option").
+  The Trio64 ROM alone also builds an overclock on request (`MCLK=... OVERCLOCK=1`, s3tpatch.py
+  `--overclock`): above the data book's 60 MHz, at most 100 MHz (twice 50 MHz), for a card whose maker
+  ran its memory faster (the DSP-3364P's own BIOS: 69.8 MHz). It is the card owner's choice, never a
+  default, and S3TEST's MCLK line fails such a build.
 - Blank pedestal off (SR1A bit 5 = 0): the deepest black is wanted.
 - Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in the lower
   32 KB; the upper 32 KB is zeros.
