@@ -290,7 +290,8 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   MCLKs are 50.1 ns.
 - S3COMPAT again on the card with the fixed tools (#72, #73): no FAIL expected.
 - Video playback streaks under Windows 98 (#75): the Windows display settings, S3REGS32 on the
-  desktop and /W during playback, and the same video with the card's own BIOS, with p1 built with
+  desktop and /W during playback, VGALOG /M loaded before Windows (not in a DOS box, whose calls
+  are the only ones it sees then) for the driver's mode set at the start, and the same video with the card's own BIOS, with p1 built with
   `MCLK=60`, and with less display load; then the fix (display FIFO share per mode by the data
   book's rule, section 7.4, or the MCLK).
 - The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
