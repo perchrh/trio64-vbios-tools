@@ -155,7 +155,8 @@ vref-compare:
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
 # (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
 #   make trom OUT=S3T64P1.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
-#   make trom OUT=S3T64OC.BIN MCLK=69.8 OVERCLOCK=1   (above the data book's 60 MHz, at most 100 MHz)
+#   make trom OUT=S3T64P1.BIN MCLK=69.8   (up to 70 MHz; the data book gives 60 MHz)
+#   make trom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
 #   make trom-test [TREF=...] [ROM=S3T64P1.BIN]
 #   make tref-compare ROM=S3T64P1.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
 #   make emu-test ROM=S3T64P1.BIN CHIP=trio64 [LOGS=emu/tlogs]
