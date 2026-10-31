@@ -44,11 +44,14 @@ What is applied (docs/trio64-backport.md)
           references to them are rewritten (FONT_REFS); --fonts-only applies only these, the reference
           of make tref-compare
   DDC     VBE 4F15 without VDIF (DDC_SITES, DDC_FREED): 97 bytes free, DDC1 and DDC2B kept
-  MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 60 MHz (MEM-1); without it the
-          build's own clock stays (54.9 MHz in the reference build). With --overclock up to 100 MHz
-          (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their lowest), above the data book limit,
-          for a card whose maker ran its memory faster (the DSP-3364P's own BIOS: 69.8 MHz); the card
-          owner's choice, never the default, and S3TEST's MCLK line fails such a build
+  MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 70 MHz (MCLK_MAX); without it
+          the build's own clock stays (54.9 MHz in the reference build). The data book gives 60 MHz
+          (MEM-1, DATABOOK_MAX); 70 MHz is the clock the 86C764X is rated for in card databases
+          (vgamuseum) and the one DSP-3364P boards run (their own BIOS: 69.8 MHz, model tag "764 M70";
+          on the card it posts and runs windowed video without the streaks of 54.9 MHz, #75). Above
+          60 MHz S3TEST's and S3COMPAT's MCLK lines, which judge against the data book, fail the build.
+          With --overclock up to 100 MHz (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their
+          lowest): the card owner's choice, never the default
   sign-on "1.5-07-p1", checksum byte 7FFF
 
 Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in
@@ -160,7 +163,8 @@ DDC_SITES = [
 # VESADDCReadVDIF (52E1h-5341h), zeroed: riplin's disassembly shows no caller but the BL=02h branch
 DDC_FREED = [(0x52E1, 0x5342, '53 51 52 e8 5b 00')]
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
-MCLK_MAX = 60.0                                 # MEM-1: 16.67 ns on the Trio32/Trio64
+DATABOOK_MAX = 60.0                             # MEM-1: 16.67 ns on the Trio32/Trio64
+MCLK_MAX = 70.0                                 # --mclk without --overclock: the 86C764X's 70 MHz (above)
 OVERCLOCK_MAX = 100.0                           # --overclock: at most twice 50 MHz (the user's limit)
 
 BLOCKS = [
@@ -484,9 +488,10 @@ def main():
     ap.add_argument('input', help='a Phoenix Trio64 BIOS 1.5-07: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the 32 KB twice; 32 KB with --size 32)')
     ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: the 32 KB twice)')
-    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most 60 (default: the build\'s own)')
-    ap.add_argument('--overclock', action='store_true', help='allow --mclk above the data book\'s 60 MHz, up to '
-                    '%g MHz: an overclock, the card owner\'s choice' % OVERCLOCK_MAX)
+    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most %g (default: the '
+                    'build\'s own; the data book gives %g)' % (MCLK_MAX, DATABOOK_MAX))
+    ap.add_argument('--overclock', action='store_true', help='allow --mclk above %g MHz, up to %g MHz: an overclock, '
+                    'the card owner\'s choice' % (MCLK_MAX, OVERCLOCK_MAX))
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '
                     '(default reference/vplus/1_03_08.bin)')
@@ -540,8 +545,11 @@ def main():
              if a.mclk is not None else ''))
     f = mclk_of(img)
     if f > MCLK_MAX:
-        print('OVERCLOCK: MCLK %.2f MHz is above the Trio64 data book limit of %g MHz; check the memory with '
-              'S3COMPAT\'s VRAM test (S3TEST fails its MCLK line by design)' % (f, MCLK_MAX))
+        print('OVERCLOCK: MCLK %.2f MHz is above %g MHz; check the memory with S3COMPAT\'s VRAM test (S3TEST '
+              'fails its MCLK line by design)' % (f, MCLK_MAX))
+    elif f > DATABOOK_MAX:
+        print('MCLK %.2f MHz is above the data book\'s %g MHz (within the 86C764X\'s 70 MHz): S3TEST and '
+              'S3COMPAT fail their MCLK lines; check the memory with S3COMPAT\'s VRAM test' % (f, DATABOOK_MAX))
     return 0
 
 
