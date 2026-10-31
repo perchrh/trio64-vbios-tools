@@ -244,8 +244,29 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
 - **Timings:** mode set 03h 1.3 ms, 4F05 26.8 us, but 4F02 101h with the clear 157 ms against 39 ms on
   the Trio64V2 card: Phoenix's graphics engine clear of the 2 MB is four times slower than the
   32-bit CPU clear of 2.04.07-p11. A candidate for a later level (see Pending).
-- **4F15:** caps 0000 (no DDC answer); the board is from 1994, before DDC, and may not connect the
-  lines.
+- **4F15:** caps 0000 (no DDC answer); the board is from 1994, when DDC was new, and may not connect
+  the lines (Pending).
+- **VIDSPEED** (31 October 2026, chip marked 86C764GSpnp rev A): 32-bit writes 86.9 MB/s in 640x480x8,
+  as on the Trio64V2 card (87.4 MB/s: the CPU and bus are the limit there), but less as the display
+  takes more of the memory: 73.6 MB/s in 1024x768x8 (Trio64V2 86.0), 53.1 in 1280x1024x8 (82.6),
+  44.4 in 1024x768x15 (81.0), 36.8 in 800x600x32. The DSP-3364P has fast page memory at 54.9 MHz,
+  64 bits per page cycle of 2 MCLKs, about 220 MB/s, of which 1024x768x15 at 65 MHz takes 130 MB/s for
+  the display; the Trio64V2's 1-cycle EDO has twice the bandwidth. The standard VGA modes (planar 20
+  MB/s against 26.5, text 34 against 51) are the chip and its memory, not the ROM. The 132-column
+  text modes are the slowest (17 MB/s in 132x25); Phoenix's FIFO values for 109h/10Ah are a candidate
+  for a look. VIDSPEED's "264x25" and "160x50" are its own names for 132x25 and 80x50, and its kHz
+  figure is the visible lines times the refresh rate: 132x43 has 344 lines here (8x8 font) and 387 on
+  the Trio64V2 (8x9 font of 2.04.07).
+- **VGALOG** during VIDSPEED: 298 calls, all with CF clear and every VBE call 004Fh; the other
+  chipsets' probes (FE00h, 7000h, BF03h, 6F00h, 5F00h) came back unchanged, as they should. MCLK
+  54.9 MHz in every record. Phoenix's VBE modes run with CR58 = 10h and CR59/CR5A = 000Ah: linear
+  addressing on, with its 64 KB window at A0000h, Phoenix's banking scheme. Not in Phoenix's mode
+  list, so not measured: 106h (1280x1024x4) and 10Dh-10Fh (320x200 high and true colour).
+- **S3REGS before and after Windows 98:** the driver keeps the ROM's MCLK (SR10/SR11 41h 2Ch). It
+  leaves SR12/SR13 at its last pixel clock (42h 2Bh, 40.3 MHz, 800x600 at 60 Hz; unused in mode 03h,
+  which takes the fixed 28.322 MHz clock), the hardware cursor registers CR47-CR4F changed, and CR5C
+  41h instead of 43h (GOP bit 1, one of the DDC lines in S3's design, below). The dump read the
+  cursor colour stack through CRC5, CRCA and CRCB, a tool bug fixed since (#74).
 
 ## Pending
 
@@ -265,4 +286,17 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
 - The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
   with the 32-bit CPU clear on the Trio64V2). The 2.04.07 `clear32.asm` (35 bytes) would fit the free
   space; Phoenix's clear routine (121Eh) and its callers need a look first.
-- DDC on this board: whether its DDC lines are connected at all (4F15 gave caps 0000).
+- DDC2 on this board (asked for 31 October 2026). 1.5-07's DDC1 and DDC2B code is in the ROM, byte
+  for byte as Phoenix wrote it, so no new code is needed if the board is wired the way that code
+  expects, which is S3's design for the Trio64 (data book 10.3, 10.4; the chip has no DDC pins of its
+  own, the serial port came with the Trio64V+): the General Output Port (CR5C, an external latch on
+  GD7-0 strobed by STWR) drives the lines, bit 0 SDA and bit 1 SCL (54CCh), and the General Input
+  Port (port 3C8h with CR55 bit 2 = 1, an external buffer strobed by STRD) reads SDA in bit 0 (54E6h,
+  CR55 set at 528Fh). On the card 4F15 BL=00h found neither DDC1 nor DDC2B (caps 0000). Steps:
+  (1) look at the board for the GOP latch and the GIP buffer (74-series chips on the GD lines next to
+  the Trio64) and for traces to pins 12 (SDA) and 15 (SCL) of the VGA connector; (2) a probe in
+  S3COMPAT /V that sets CR55 bit 2, writes CR5C bits 1-0 = 00b, 01b, 10b, 11b and logs the raw 3C8h
+  values as D: records: a missing buffer gives the DAC write index or a floating bus whatever is
+  written, a wired SDA follows bit 0. If the board wires other GOP or GIP bits, the two routines take
+  a byte patch each; a DDC2 of our own would have about 210 bytes free (97 at 52E1h in one piece). If
+  pins 12 and 15 are not connected, no ROM can help.
