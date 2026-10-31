@@ -42,7 +42,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   default, and S3TEST's MCLK line fails such a build.
 - Blank pedestal off (SR1A bit 5 = 0): the deepest black is wanted.
 - Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in the lower
-  32 KB; the upper 32 KB is zeros.
+  32 KB. In the 64 KB image of the Trio64V2 ROM the upper 32 KB is zeros (its card maps the lower
+  half); the 64 KB images of the Trio64 and Trio64V+ ROMs carry the 32 KB twice, because a board may
+  map either half of its EEPROM (the DSP-3364P maps the upper one, #78).
 - Base every change on the reference image plus explicit patches with byte assertions, so a build
   fails when the bytes under a patch are not what the patch expects. Addresses go into
   `rompatch/bios.inc` (the patcher reads it too), patch sites and their original bytes into

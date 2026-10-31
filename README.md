@@ -340,7 +340,7 @@ divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus
 details, what 1.03-08 itself still gets wrong, and the per-call costs.
 
 
-    make vrom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with zeros above, for a 64 KB EEPROM)
+    make vrom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
     make vrom-test [ROM=S3VPP1.BIN]
     make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
     make vref-compare ROM=S3VPP1.BIN
@@ -366,7 +366,13 @@ reset, 4F05 keeping the sequencer index (Phoenix left it at 04h) and S3's fonts 
 Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
 what 1.5-07 still gets wrong and the comparison of the base candidates.
 
-    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (64 KB, upper half zeros, as the Trio64V2 ROM; TSIZE=32: 32 KB)
+    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+
+The 64 KB images of the Trio64 and Trio64V+ ROMs carry the 32 KB twice, so a board finds the BIOS
+whichever half of its 64 KB EEPROM it maps. The ExpertColor DSP-3364P maps the upper half: with zeros
+there (the layout of the Trio64V2 ROM, whose card maps the lower half) the card stayed dark at POST
+while the PC booted (#78, 31 October 2026). Square brackets in these lines mark options: type
+`VSIZE=64`, not `[VSIZE=64]`.
     make trom-test [ROM=S3T64P1.BIN]
     make emu-test ROM=S3T64P1.BIN CHIP=trio64 [LOGS=emu/tlogs]
     make tref-compare ROM=S3T64P1.BIN

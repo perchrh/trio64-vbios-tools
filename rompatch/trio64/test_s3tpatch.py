@@ -9,7 +9,7 @@ compare with byte by byte.
 
 Tests
   build          1.5-07 gives the tested build: the SHA-256 pinned in s3tpatch.py (NASM 3.02) over the
-                 lower 32 KB, sign-on 1.5-07-p1, 64 KB with the upper 32 KB zeros (the default), the
+                 lower 32 KB, sign-on 1.5-07-p1, 64 KB with the 32 KB twice (the default, #78), the
                  lower 32 KB byte-identical to --rom when given (a 32 or 64 KB image)
   checksums      the 32 KB sum to 00 (byte 7FFFh makes it so) and have the 55AAh header with 32 KB size
   tables         every mode's refresh list starts with a non-interlaced entry, the five interlaced-only
@@ -116,7 +116,7 @@ def main():
 
     rc, img, err = run(tmp, ref)
     want = 'Version %s-%s' % (s3tpatch.VERSION, s3tpatch.LEVEL)
-    ok = rc == 0 and img is not None and len(img) == 0x10000 and img[0x8000:] == bytes(0x8000)
+    ok = rc == 0 and img is not None and len(img) == 0x10000 and img[0x8000:] == img[:0x8000]
     lo = img[:0x8000] if img else b''
     sha = hashlib.sha256(lo).hexdigest() if img else ''
     ok = ok and sha == s3tpatch.RESULT_SHA and want.encode() in img[:0x100]

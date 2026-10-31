@@ -17,8 +17,9 @@ Input
                the reference build.
 
 Output
-  64 KB: the patched 32 KB, then 32 KB of zeros, as the Trio64V2 build (--size 32: the 32 KB alone, for
-  a 32 KB EEPROM)
+  64 KB: the patched 32 KB twice, so that a board which maps the upper half of its 64 KB EEPROM finds
+  the BIOS as well as one that maps the lower half (the ExpertColor DSP-3364P maps the upper half: with
+  zeros there the card stayed dark at POST, #78); --size 32: the 32 KB alone, for a 32 KB EEPROM
 
 What is applied (docs/trio64-backport.md)
   tables  the refresh entries that run interlaced are removed where the mode has non-interlaced rates
@@ -438,8 +439,8 @@ def verify(img, size):
         errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
     if sum(img[:0x8000]) & 0xFF:
         errs.append('the 32 KB checksum is not 00')
-    if img[0x8000:] != bytes(len(img) - 0x8000):
-        errs.append('upper 32 KB is not all zeros')
+    if len(img) > 0x8000 and img[0x8000:] != img[:0x8000]:
+        errs.append('upper 32 KB is not a copy of the lower 32 KB')
     if img[0:3] != b'\x55\xAA\x40':
         errs.append('ROM header 55AAh with 32 KB size missing')
     try:
@@ -481,8 +482,8 @@ def mclk_of(img):
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the Phoenix S3 Trio64 BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='a Phoenix Trio64 BIOS 1.5-07: 32 KB, or a 64 KB image with it in the lower half')
-    ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the upper 32 KB zeros; 32 KB with --size 32)')
-    ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: zeros above the 32 KB)')
+    ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the 32 KB twice; 32 KB with --size 32)')
+    ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: the 32 KB twice)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most 60 (default: the build\'s own)')
     ap.add_argument('--overclock', action='store_true', help='allow --mclk above the data book\'s 60 MHz, up to '
                     '%g MHz: an overclock, the card owner\'s choice' % OVERCLOCK_MAX)
@@ -507,13 +508,13 @@ def main():
             d[0x7FFF] = 0
             d[0x7FFF] = (-sum(d)) & 0xFF
             with open(a.output, 'wb') as f:
-                f.write(bytes(d) + bytes(0x8000 if a.size == 64 else 0))
+                f.write(bytes(d) * (2 if a.size == 64 else 1))
             print('%s: %s with S3\'s fonts only (the tref-compare reference)' % (a.output, VERSION))
             return 0
         if a.overclock and a.mclk is None:
             raise PatchError('--overclock needs --mclk')
         new_lo, log = patch(lo, a.nasm, a.mclk, fonts, a.overclock)
-        img = new_lo + bytes(0x8000 if a.size == 64 else 0)
+        img = new_lo * (2 if a.size == 64 else 1)
         errs = verify(img, a.size)
         known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()

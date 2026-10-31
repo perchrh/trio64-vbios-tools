@@ -5,7 +5,7 @@ Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-336
 2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); first run
 on that card on 31 October 2026 ("On the card" below). The choice of base is below ("Base BIOS candidates").
 
-    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with zeros above, TSIZE=32: 32 KB)
+    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with the 32 KB twice, TSIZE=32: 32 KB)
     make trom-test ROM=S3T64P1.BIN
     make emu-test ROM=S3T64P1.BIN CHIP=trio64
     make tref-compare ROM=S3T64P1.BIN
