@@ -1,10 +1,11 @@
 # Trio64V2/DX VBIOS test tools
 
 DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX card
-(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901). 
+(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901), and later for its Trio64V+ and Trio64
+relatives.
 
-The new ROM image itself is not in this repository. The modifications done to the reference bios are in `rompatch/`
-as well as the patcher that builds the new ROM image from the reference BIOS.
+The patched ROM images are not in this repository: `rompatch/` holds the changes to the reference
+BIOSes and the patchers that build the images from them.
 
 All tools need a 386 or later and run in plain DOS (no EMM386 needed), except S3REGS32.EXE, which
 is for the Windows 9x desktop.
@@ -29,9 +30,9 @@ of range) and takes no harm; an old fixed-frequency or low-end CRT can be damage
 above its range, so do not run these tools with one. The `/H` help of each tool says so, and
 `VSHOW /I` shows it once on the screen before the mode list.
 
-All tools share one version number and S3TEST checks for one ROM version; both are set in
-`common/version.inc` (`VERSION`, `ROMVER`) and can be overridden for a build, for example
-`make clean && make VERSION=0.9 ROMVER=2.04.07-p18`.
+All tools share one version number, and S3TEST checks for one ROM level per chip; all are set in
+`common/version.inc` (`VERSION`; `ROMVER`, `VROMVER`, `TROMVER`) and can be overridden for a build, for
+example `make clean && make VERSION=0.9 ROMVER=2.04.07-p18`.
 
 ## Building
 
@@ -98,7 +99,7 @@ runs them one after the other, `python3 emu/tests.py -j N` sets the number. The 
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
 the working copy without being committed.
 
-They take about three minutes. The patches are checked by S3TEST, which the `s3test` emulator test runs
+The patches are checked by S3TEST, which the `s3test` emulator test runs
 and which also runs on the card: run against the stock image it fails 25 lines (signature, MCLK,
 pedestal, 60 Hz defaults, refresh and line length of the patched timings, booster and LFB base,
 4F01/4F03/4F06, CR50, flip-flop). `rom_patches` adds only what S3TEST cannot check: the sign-on and
@@ -116,7 +117,7 @@ never touches.
 
 `s3compat_full` runs the whole S3COMPAT on the model; only the lines that judge video memory through
 the banks, the LFB or planar windows above 64 KB are left to the card. In the model, read mode 1
-(colour compare), the GR03 rotate and logic functions, the DAC state register and the PIC are now
+(colour compare), the GR03 rotate and logic functions, the DAC state register and the PIC are
 modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
 
 ### Other Trio64-family BIOSes
@@ -126,8 +127,7 @@ revision, CR2D-CR2F, the PCI subsystem ID (Trio64V2 only) and the width of the P
 bits on the Trio64V2 only) and the memory type strapped in CR36 bits 3-2 (EDO, 10b, on the Trio64
 and Trio32, fast page on the Trio64 with 4 MB; `--vram 4` is refused for the Trio32). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
 system memory (UMA), which neither the tools nor the model know about, so only its register rules are
-judged. The tools
-find the chip themselves (`common/chip.inc`) and judge the clocks by that chip's datasheet limits.
+judged. The tools find the chip themselves (`common/chip.inc`) and judge the clocks by that chip's datasheet limits.
 With a ROM that is not our patched BIOS (no `2.04.07-pN` sign-on) the tests tagged `patch` (version,
 rom_patches, stores, s3test, s3alias) are skipped, and the others take their expected values from the
 standards or from the registers the BIOS set, not from our BIOS:
@@ -233,7 +233,8 @@ count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2
 86.6 % (15135 of 17487 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
 (`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
-1.5-07-p1 (`CHIP=trio64`) is at 85.2 % (13341 of 15650 bytes), its new code all run.
+(`CHIP=trio64`) was at 85.2 % (13341 of 15650 bytes) at 1.5-07-p1, its new code all run; the FIFO code
+of p2 and p3 came after that measurement.
 
 ### EGA/CGA against the reference BIOS
 
@@ -259,8 +260,8 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
 of `REF` for `make rom-test` and `make ref-compare`; `IN=...` or `REF=...` selects another copy. The
-result is 64 KB: the patched 32 KB twice, as in the Trio64 and Trio64V+ ROMs (#78; p15 to p21 were built
-with 32 KB of zeros above). Only 2.04.07 is accepted. Every patch site is
+result is 64 KB: the patched 32 KB twice, as in the Trio64 and Trio64V+ ROMs (#78, "Trio64 ROM"; p15 to
+p21 were first built with 32 KB of zeros above). Only 2.04.07 is accepted. Every patch site is
 compared with the original code first (the replaced routines in full), and the result is checked
 before it is written: the lower half sums to 00 and declares 32 KB, the upper half is a copy of it, every
 DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 of the lower 32 KB is the one
@@ -305,11 +306,13 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 
 On the Trio64 ROM `MCLK` goes up to 70 MHz, above the data book's 60 MHz: our tools take 70 MHz as the
 Trio64's limit (T64-MEM-7), the clock card databases give for the 86C764X (vgamuseum), and the ExpertColor DSP-3364P runs it (its own
-BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"). On that card, with its fast page memory, the
-54.9 MHz of the default build leaves too little memory bandwidth for windowed video in 800x600x16
-(streaks, #75), and 69.8 MHz removes them:
+BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"):
 
     make trom OUT=S3T64P3.BIN MCLK=69.8
+
+The display FIFO M follows the build's clock (since p2, #75; docs/trio64-backport.md): windowed video on
+that card, which streaked at 54.9 MHz with Phoenix's values, was clean with p2 at 55 and 69.8 MHz; the
+card run of p3 at 60 MHz is open (#82).
 
 On the Trio64 and Trio64V+ ROMs `MCLK` takes the PLL pair other Trio32/Trio64/Trio64V+ BIOSes use when
 one lies within 0.5 MHz of the request (`s3patch.KNOWN_MCLK_8811`, from the survey in
@@ -317,8 +320,7 @@ docs/trio64-backport.md: 42h 41h for 59.96 MHz in 9 images, 46h 79h for 55.04 MH
 MHz and others), and computes the closest setting only when none does; the build log names the pair and
 where it came from. So `MCLK=70` builds 69.80 MHz, the card's own setting, and `MCLK=53` 52.80 MHz.
 
-Up to 70 MHz the build prints no warning and S3TEST's and S3COMPAT's MCLK lines pass; S3COMPAT's VRAM
-test (without /Q) is the check that the memory keeps up. Above 70 MHz, up to 100 MHz
+Up to 70 MHz the build prints no warning and S3TEST's and S3COMPAT's MCLK lines pass. Above 70 MHz, up to 100 MHz
 (twice 50 MHz, the lowest MCLK these BIOSes run), only with `OVERCLOCK=1` (s3tpatch.py `--overclock`):
 the card owner's choice, never a default; the build says OVERCLOCK in its result line.
 
@@ -355,11 +357,12 @@ reset. The result signs on as 1.03-08-p1. The VCO fix is not possible on the Tri
 divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus-backport.md` has the
 details, what 1.03-08 itself still gets wrong, and the per-call costs.
 
-
     make vrom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
     make vrom-test [ROM=S3VPP1.BIN]
     make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
     make vref-compare ROM=S3VPP1.BIN
+
+Square brackets in these lines mark options: type `VSIZE=64`, not `[VSIZE=64]`.
 
 `s3vpatch.py` works as `s3patch.py`: byte assertions at every patch site (the shared speed patches use
 the same signatures and the same .asm files, assembled with the 1.03-08 addresses of
@@ -382,35 +385,27 @@ at 54.9 MHz) and S3's fonts (those of 1.03-08 and
 2.04.07, all five tables, in place of Phoenix's own design) and VBE 4F15 without VDIF (97 bytes freed; DDC1 and DDC2B kept), it removes the interlaced refresh entries and the modes that exist only interlaced on the Trio64
 (106h, 118h, 119h, 11Ah, 120h), so no mode defaults to an interlaced timing, and 800x600 defaults to 60
 Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
-what 1.5-07 still gets wrong and the comparison of the base candidates.
-
-The ROM is for the **S3 86C764X** (Trio64), the chip of the ExpertColor DSP-3364P (marked 86C764GSpnp),
-rated for a 70 MHz MCLK (vgamuseum; the card's own BIOS runs 69.8 MHz). PCI device lists name two
-chips under 5333:8811: "86C764 Trio64 (Integrated '864, DAC and clock chip, 208pin) Rev. 01" and
-"86C764X Trio64 PnP". The 86C764X is the later one, with Plug and Play for PCI; the earlier **86C764**
-(86C764-P on PCI cards, also made for the VL-Bus) likely accepts only the data book's 60 MHz (not
-verified: no 86C764 card at hand). On an 86C764 keep the default build (54.9 MHz) or build with
-`MCLK=60` at most. The tools do not tell the two apart (the same PCI ID), so S3TEST's and S3COMPAT's
-MCLK lines accept up to 70 MHz on both.
+what 1.5-07 still gets wrong and the comparison of the base candidates. The ROM is for the **S3
+86C764X** (Trio64 PnP, rated for a 70 MHz MCLK); on the earlier 86C764 build it with `MCLK=60` at most
+(docs/trio64-backport.md says why).
 
     make trom OUT=S3T64P3.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+    make trom-test [ROM=S3T64P3.BIN]
+    make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
+    make tref-compare ROM=S3T64P3.BIN
 
 The 64 KB images of all three ROMs (Trio64, Trio64V+ and Trio64V2) carry the 32 KB twice, so a board
 finds the BIOS whichever half of its 64 KB EEPROM it maps; the PCI ROM header declares one 32 KB image,
 the last, so firmware that reads the ROM through PCI ignores the copy. The ExpertColor DSP-3364P maps the upper half: with zeros
 there (the layout of the Trio64V2 ROM, whose card maps the lower half) the card stayed dark at POST
-while the PC booted (#78, 31 October 2026). Square brackets in these lines mark options: type
-`VSIZE=64`, not `[VSIZE=64]`.
-    make trom-test [ROM=S3T64P3.BIN]
-    make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
-    make tref-compare ROM=S3T64P3.BIN
+while the PC booted (#78, 31 October 2026).
 
 `s3tpatch.py` checks the 1.5-07 code (1000h-7EFFh, the same in every 1.5-07 build) and the layout of
 its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that card's memory clock and
 timing bytes. The emulator test `t64_patches` checks the ROM's changes, `stores` its 32-bit stores, and
 S3TEST runs its Trio64 set. On the ExpertColor DSP-3364P (31 October 2026): S3TEST 26 PASS, 0 FAIL,
-banked writes at 81.7 MB/s with the booster; S3COMPAT's 49 FAILs there were test bugs (#72, #73),
-fixed in the tools (docs/trio64-backport.md, "On the card").
+banked writes at 81.7 MB/s with the booster; S3COMPAT's 49 FAILs there were test bugs, fixed in the
+tools (#72, #73; docs/trio64-backport.md, "On the card").
 
 ## Continuous integration
 
@@ -462,9 +457,7 @@ same with or without /V. The debug file contains:
   first memory mismatches with address, expected and read value
 
 The file is committed before every mode set and VBE call (except 4F05), so after a freeze its last
-lines show the call that hung. The INT 10h hook passes the 32-bit registers through unchanged (until
-30 October 2026 it handed back the timer reading in EAX bits 31-16, which made S3TEST's p21 check fail
-under /V only). Expect a debug file of 1-2 MB for S3COMPAT and a longer run.
+lines show the call that hung. The INT 10h hook passes the 32-bit registers through unchanged. Expect a debug file of 1-2 MB for S3COMPAT and a longer run.
 The line format is described at the top of `common/vdebug.inc`.
 
 ## Windows 9x driver test
@@ -581,7 +574,7 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
 ## Features and changes compared to the reference BIOS 2.04.07
 
 The ROM is the S3 Trio64V2/DX reference BIOS 2.04.07 with the changes below in the lower 32 KB; the
-upper 32 KB is a copy of it (the ROM header declares 32 KB; until p21 it was zeros, #78). The lower half checksums to 0. Every change keeps
+upper 32 KB is a copy of it ("ROM patcher"). The lower half checksums to 0. Every change keeps
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
@@ -887,12 +880,11 @@ machine, so neither bit is set by the ROM. The Trio64V+ datasheet (SR15 bit 7, "
 ### Known remaining items
 
 - No picture on the multiQ MQ215 B-1 LCD (31 October 2026): it shows nothing with two other graphics
-  cards known to be good and on another machine too, so the monitor is faulty; the ROM levels from
-  p18 on are not the cause (the item was in To do from 30 October). Hardware runs use the Eizo and the
-  Dell 2021FP.
-
-- The 8x14 font is missing in the BIOS (S3COMPAT WARN 01 for AX=1130h BH=2 and mode 10h).
-Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/). It uses the same font as the S3 Trio64. 
+  cards known to be good and on another machine too, so the monitor is faulty, not the ROM. Hardware
+  runs use the Eizo and the Dell 2021FP.
+- The 8x14 font is missing in the BIOS (S3COMPAT WARN 01 for AX=1130h BH=2 and mode 10h). A TSR
+  supplies it: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix8x14/), with the
+  same font as the S3 Trio64.
 - An LFB is offered on the planar mode 104h (S3COMPAT WARN 20), as in stock and the reference.
 - Mode 106h runs at 108 MHz, above the datasheet single-clock limit (S3COMPAT WARN 02).
 - S3COMPAT WARN 80 in 012Eh, 010Fh, 0131h and 0134h: End Horizontal Blank is 00h, so CR86 = 00h cannot
