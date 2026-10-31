@@ -1195,7 +1195,8 @@ def t_dos_exe(c):
     r = m.run_exe(exe, '', seg=0x1000)
     check(bytes(r.stdout) == b'MZ OK\r\n', 'output %r (relocation or AH=09h)' % bytes(r.stdout))
     check(r.exit == ('tsr', 0, 0x60), 'ended with %s, expected the hook to turn AH=4Ch into AH=31h' % (r.exit,))
-    check(m.mem(0x1000 * 16 - 16, 1) == b'Z', 'no MCB in front of the PSP')
+    check(m.mem(0x1000 * 16 - 16, 3) == b'M\x00\x10' and m.mem((0x1000 + 0x60) * 16, 1) == b'Z',
+          'no MCB in front of the PSP, or the resident block not shrunk to 60h paragraphs with a free block after')
     seg = struct.unpack('<H', m.mem(0x86, 2))[0]
     check(seg == 0x1010, 'INT 21h vector %04X, expected the hook in the program (1010)' % seg)
     return 'MZ program ran, hooked INT 21h, stayed resident'
@@ -1204,7 +1205,8 @@ def t_dos_exe(c):
 def t_vgalog_mem(c):
     """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped, nested BIOS calls with their
     depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order, and with
-    no call yet it writes no file and says so."""
+    no call yet it writes no file and says so. With another INT 10h hook after it (Windows in a DOS box)
+    /D and the install check still find it, /U refuses."""
     com = c.tool('VGALOG.COM')
     m = c.machine()
     r = m.run_com(com, '/M', seg=0x2000)
@@ -1242,6 +1244,20 @@ def t_vgalog_mem(c):
     check(struct.unpack_from('<H', r101, 14)[0] == 0x004F and r101[26:31] == after,
           '4F02 101h record: AX out, SR10/11 or CR58/59/5A wrong: %s (registers %s)' % (r101.hex(), after.hex()))
     check(m.r['crtc'].get(0x38) != 0x48 or m.r['seq'].get(8) != 0x06, 'S3 registers left unlocked')
+    # Another program hooks INT 10h after VGALOG, as Windows 9x does in a DOS box: /D and the install
+    # check find the resident copy through the MCB chain, /U (only as the last hook) refuses
+    vec = m.mem(0x40, 4)
+    m.mu.mem_write(0x0600, b'\xEA' + vec)              # 0060:0000 jmp far to VGALOG
+    m.mu.mem_write(0x40, struct.pack('<HH', 0, 0x0060))
+    rw = m.run_com(com, '/D', seg=0x4000)
+    bw = rw.files.get('VGALOG.BIN')
+    check(rw.exit == ('exit', 0) and bw is not None and bw[:8] == b'VGALOGM1',
+          '/D behind another INT 10h hook: exit %s, output %r' % (rw.exit, bytes(rw.stdout)[-100:]))
+    rt = m.run_com(com, '/M', seg=0x4000)
+    check(rt.exit == ('exit', 1), 'second /M behind another hook not refused: %s' % (rt.exit,))
+    rn = m.run_com(com, '/U', seg=0x4000)
+    check(rn.exit == ('exit', 1), '/U behind another INT 10h hook not refused: %s' % (rn.exit,))
+    m.mu.mem_write(0x40, vec)
     ru = m.run_com(com, '/U', seg=0x4000)
     check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
     rd2 = m.run_com(com, '/D', seg=0x4000)

@@ -259,9 +259,23 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   the Trio64V2 (8x9 font of 2.04.07).
 - **VGALOG** during VIDSPEED: 298 calls, all with CF clear and every VBE call 004Fh; the other
   chipsets' probes (FE00h, 7000h, BF03h, 6F00h, 5F00h) came back unchanged, as they should. MCLK
-  54.9 MHz in every record. Phoenix's VBE modes run with CR58 = 10h and CR59/CR5A = 000Ah: linear
-  addressing on, with its 64 KB window at A0000h, Phoenix's banking scheme. Not in Phoenix's mode
-  list, so not measured: 106h (1280x1024x4) and 10Dh-10Fh (320x200 high and true colour).
+  54.9 MHz in every record. The banked VBE modes run with CR58 = 10h and CR59/CR5A = 000Ah: linear
+  addressing on with a 64 KB window at A0000h, the booster (#47) switched on at the end of 4F02. Not
+  in Phoenix's mode list, so not measured: 106h (1280x1024x4) and 10Dh-10Fh (320x200 high and true
+  colour).
+- **Windows 98:** the desktop, DXDIAG and the user interface work; video playback (AVI and MPEG,
+  windowed and full screen) shows horizontal streaks over the whole screen, most likely display FIFO
+  underruns: p1's MCLK (54.9 MHz) gives the memory 21 % less bandwidth than the card's own 69.8 MHz,
+  while its 60 Hz defaults ask more of it than the card BIOS's 56 Hz and interlaced ones, with the
+  same FIFO values (#75, Pending). S3REGS32 during playback: the desktop is 800x600x16 (CR67 = 50h,
+  40.27 MHz) with the BIOS's FIFO values of mode 114h (CR54 = 98h, M = 19; CR60 = FFh), so the driver
+  sets its modes through our BIOS; the MCLK stays at 54.9 MHz. Full screen, the player switches to
+  640x480x16 (25.18 MHz, CR54 = 58h, M = 11), and the streaks are gone; windowed, at 800x600x16, they
+  show. The display FIFO (16 entries of 8 bytes) must outlast an M period: by the data book's count
+  (an entry cycle of up to 9 MCLKs, M page cycles of 2 MCLKs, then the entry cycle of the refill)
+  800x600x16 drains 82 of its 128 bytes at 54.9 MHz; if the CPU and engine accesses miss the page,
+  each of the M + 1 cycles can take an entry cycle, and the FIFO runs dry at M = 19 (277 bytes), but
+  not in 640x480x16 at M = 11 (107 bytes).
 - **S3REGS before and after Windows 98:** the driver keeps the ROM's MCLK (SR10/SR11 41h 2Ch). It
   leaves SR12/SR13 at its last pixel clock (42h 2Bh, 40.3 MHz, 800x600 at 60 Hz; unused in mode 03h,
   which takes the fixed 28.322 MHz clock), the hardware cursor registers CR47-CR4F changed, and CR5C
@@ -283,6 +297,11 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   3.5 or 4.5 MCLKs, RAS precharge 2.5 or 3.5 MCLKs, a CAS/OE stretch of 0-6.5 ns; at 69.8 MHz 3.5
   MCLKs are 50.1 ns.
 - S3COMPAT again on the card with the fixed tools (#72, #73): no FAIL expected.
+- Video playback streaks under Windows 98 (#75): windowed at 800x600x16 only (above). Next: the same
+  video with the card's own BIOS, with `MCLK=60` and with the overclock `MCLK=69.8 OVERCLOCK=1`, and
+  VGALOG /M loaded before Windows for the driver's mode set at the start; then the fix: a smaller M
+  (CR54) for the modes whose display takes most of the bandwidth (data book section 7.4), or the
+  MCLK.
 - The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
   with the 32-bit CPU clear on the Trio64V2). The 2.04.07 `clear32.asm` (35 bytes) would fit the free
   space; Phoenix's clear routine (121Eh) and its callers need a look first.

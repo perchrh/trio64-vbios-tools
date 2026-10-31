@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """s3tpatch.py - build the Trio64 ROM (1.5-07-p1) from the Phoenix S3 Trio64 BIOS 1.5-07.
 
-    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P1.BIN [--size 64|32] [--mclk MHZ] [--nasm nasm] [-q]
-    make trom OUT=S3T64P1.BIN [MCLK=55]
+    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P1.BIN [--size 64|32] [--mclk MHZ [--overclock]] [--nasm nasm] [-q]
+    make trom OUT=S3T64P1.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
 assembler driver and the shared patch code of s3patch.py.
@@ -44,7 +44,10 @@ What is applied (docs/trio64-backport.md)
           of make tref-compare
   DDC     VBE 4F15 without VDIF (DDC_SITES, DDC_FREED): 97 bytes free, DDC1 and DDC2B kept
   MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 60 MHz (MEM-1); without it the
-          build's own clock stays (54.9 MHz in the reference build)
+          build's own clock stays (54.9 MHz in the reference build). With --overclock up to 100 MHz
+          (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their lowest), above the data book limit,
+          for a card whose maker ran its memory faster (the DSP-3364P's own BIOS: 69.8 MHz); the card
+          owner's choice, never the default, and S3TEST's MCLK line fails such a build
   sign-on "1.5-07-p1", checksum byte 7FFF
 
 Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in
@@ -157,6 +160,7 @@ DDC_SITES = [
 DDC_FREED = [(0x52E1, 0x5342, '53 51 52 e8 5b 00')]
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
 MCLK_MAX = 60.0                                 # MEM-1: 16.67 ns on the Trio32/Trio64
+OVERCLOCK_MAX = 100.0                           # --overclock: at most twice 50 MHz (the user's limit)
 
 BLOCKS = [
     ('tlock.asm', 'TLOCK', 0x0871 - 0x0831, ('wcheck', 'unlk')),
@@ -313,7 +317,7 @@ def put_fonts(d, src, log):
                    'AX=1130h table' if a not in FONT_REF_OP else 'mov %s' % ('bx' if FONT_REF_OP[a] == 0xBB else 'si')))
 
 
-def patch(lo, nasm='nasm', mclk=None, fonts=None):
+def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False):
     """lo: the 32 KB 1.5-07 image, fonts: the 1.03-08 image (default FONT_SRC). Returns (new 32 KB,
     log lines)."""
     d = bytearray(lo)
@@ -419,7 +423,7 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None):
     a = site['post52'] + 10
     put(a, 'b8 52 00', 'b8 52 80', 'POST: CR52 = 80h, 800x600 defaults to 60 Hz (VESA DMT) instead of 56 Hz')
     if mclk is not None:
-        mclk_put(d, put, MCLK_ENTRY, 'any', mclk, MCLK_MAX)
+        mclk_put(d, put, MCLK_ENTRY, 'any', mclk, OVERCLOCK_MAX if overclock else MCLK_MAX)
 
     # 4. checksum
     d[0x7FFF] = 0
@@ -468,12 +472,20 @@ def diagnose(nasm, output, img):
     return out
 
 
+def mclk_of(img):
+    """The MCLK in MHz of the PLL pair at 3B5h (M, then N and R)."""
+    m, nr = img[0x3B5], img[0x3B6]
+    return 14.31818 * (m + 2) / ((nr & 0x1F) + 2) / (1 << ((nr >> 5) & 3))
+
+
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the Phoenix S3 Trio64 BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='a Phoenix Trio64 BIOS 1.5-07: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the upper 32 KB zeros; 32 KB with --size 32)')
     ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: zeros above the 32 KB)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most 60 (default: the build\'s own)')
+    ap.add_argument('--overclock', action='store_true', help='allow --mclk above the data book\'s 60 MHz, up to '
+                    '%g MHz: an overclock, the card owner\'s choice' % OVERCLOCK_MAX)
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '
                     '(default reference/vplus/1_03_08.bin)')
@@ -498,7 +510,9 @@ def main():
                 f.write(bytes(d) + bytes(0x8000 if a.size == 64 else 0))
             print('%s: %s with S3\'s fonts only (the tref-compare reference)' % (a.output, VERSION))
             return 0
-        new_lo, log = patch(lo, a.nasm, a.mclk, fonts)
+        if a.overclock and a.mclk is None:
+            raise PatchError('--overclock needs --mclk')
+        new_lo, log = patch(lo, a.nasm, a.mclk, fonts, a.overclock)
         img = new_lo + bytes(0x8000 if a.size == 64 else 0)
         errs = verify(img, a.size)
         known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None
@@ -523,6 +537,10 @@ def main():
              ', identical to the tested build' if known or out_sha == RESULT_SHA else
              ', MCLK build option: the code is the tested build, the MCLK is yours to check on the card'
              if a.mclk is not None else ''))
+    f = mclk_of(img)
+    if f > MCLK_MAX:
+        print('OVERCLOCK: MCLK %.2f MHz is above the Trio64 data book limit of %g MHz; check the memory with '
+              'S3COMPAT\'s VRAM test (S3TEST fails its MCLK line by design)' % (f, MCLK_MAX))
     return 0
 
 

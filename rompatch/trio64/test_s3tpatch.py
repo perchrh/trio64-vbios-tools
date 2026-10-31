@@ -27,7 +27,8 @@ Tests
   input_64k      a 64 KB image with 1.5-07 in the lower half gives the same result, whatever its upper half
   size32         --size 32 gives the same lower 32 KB alone
   mclk           --mclk 50, 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change nothing
-                 else but the checksum; 61 MHz and 39 MHz are refused (MEM-1: 60 MHz on the Trio64)
+                 else but the checksum; 61 MHz and 39 MHz are refused (MEM-1: 60 MHz on the Trio64); with
+                 --overclock 69.8 and 100 MHz are valid, 101 MHz and --overclock without --mclk refused
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte changed
                  in the code (1000h-7EFFh), a wrong checksum, the Trio64V+ BIOS 1.03-08
 Exit code 0 when every test passed.
@@ -222,7 +223,18 @@ def main():
         rc, out, err = run(tmp, ref, ['--mclk', mhz])
         if rc != 1 or out is not None:
             bad.append('%s MHz not refused' % mhz)
-    result('mclk', not bad, '; '.join(bad) or '50, 55, 60 MHz valid at 3B5h, 61 and 39 MHz refused')
+    for mhz in ('69.8', '100'):                     # the overclock: up to twice 50 MHz, with --overclock only
+        rc, out, err = run(tmp, ref, ['--mclk', mhz, '--overclock'])
+        f = (14.31818 * (out[0x3B5] + 2) / ((out[0x3B6] & 0x1F) + 2) / (1 << ((out[0x3B6] >> 5) & 3))
+             if rc == 0 and out else 0)
+        if abs(f - float(mhz)) >= 1 or f > 100:      # 100 MHz: 99.43, the nearest PLL step below
+            bad.append('%s MHz with --overclock: %s %.2f MHz' % (mhz, err, f))
+    for args in (['--mclk', '101', '--overclock'], ['--overclock']):
+        rc, out, err = run(tmp, ref, args)
+        if rc != 1 or out is not None:
+            bad.append('%s not refused' % ' '.join(args))
+    result('mclk', not bad, '; '.join(bad) or '50, 55, 60 MHz valid at 3B5h, 61 and 39 MHz refused; with '
+           '--overclock 69.8 and 100 MHz valid, 101 MHz refused')
     code = bytearray(ref)
     code[0x3000] ^= 1
     cases = [('already patched', img), ('code byte changed', fixsum(code)),
