@@ -934,6 +934,11 @@ Documents the project does not have; what depends on them is marked where it is 
   ("Not taken" sections, Sources), but no chip rule is written for them, and nothing from those BIOSes
   is taken where it depends on the chip.
 - Trio64V2/DX & GX: only the preliminary book (changes from the Trio64V+) is at hand, no final edition.
+- Vision864 and Vision964 data books: the Trio64 is an integrated Vision864, Diamond's Stealth 64 DRAM
+  BIOSes for the Trio64 name it in their VBE OEM string, and the Vision968 booklet at hand
+  (`datasheets/86c968-vision968-...pdf`, `docs/chip-rules.md` "Related chip") describes only the
+  changes from the Vision964. The Vision864 book would show the display FIFO and memory arbitration of
+  the Trio64's ancestor in full.
 - An S3 document on the BIOS interface: the S3 OEM functions (4F14h) and the S3 mode numbers are known
   only from BIOS images (`docs/chip-rules.md`, "S3 OEM functions (4F14h)").
 - VESA standards our ROMs implement, not at hand yet:

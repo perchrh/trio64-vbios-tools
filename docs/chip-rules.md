@@ -40,6 +40,7 @@ must do, written from the datasheets alone.
 | V2 | S3 Trio64V2/DX & GX Graphics/Video Accelerators (preliminary, changes from the Trio64V+) |
 | UV+ | S3 Trio64UV+ UMA Graphics/Video Accelerator, DB024-A, March 1996, with the update ER010-B (May 1996) |
 | XFree86 | XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c` |
+| V968 | S3 Vision968 Multimedia Accelerator, DB016-A, April 1995 (`86c968-vision968-...pdf`, a scan without text, 95 pages): the changes from the Vision964 only. Not a Trio64-family chip; used for comparison, never as the source of a rule ("Related chip: the Vision968") |
 
 The datasheets are in `datasheets/`. `357_86c732-86c764_trio32_64.pdf` was compared with the
 March 1995 book on 28 October 2026: it is another scan of the same book (images only, no text; the
@@ -172,6 +173,37 @@ failed or unknown subfunction):
 
 A program or driver may check the query's version (OEM-1) and expect this behaviour, so a BIOS for this
 card keeps it unchanged (README "Not taken: the S3 OEM functions (4F14h) of later BIOSes").
+
+## Related chip: the Vision968 (comparison, not rules)
+
+The Vision968 is S3's VRAM workstation chip of 1995, with an external RAMDAC and clock chip (PCI
+5333:88F0). Its booklet (V968) describes only the changes from the Vision964. The Trio64 is an
+integrated Vision864 ("Integrated '864, DAC and clock chip" in PCI device lists), so the Vision864/964
+books stay the closer relatives (README "Missing documents"). What V968 says that bears on our rules:
+
+- **MCLK limits** (V968 table 4-3): cycle time at least 16.7 ns (60 MHz) for fast page and standard
+  EDO memory, 20 ns (50 MHz) for 1-cycle EDO, and at most 25 ns (MCLK at least 40 MHz). The same
+  60 MHz as MEM-1 in S3's books of that year; T64-MEM-7 goes beyond it for the 86C764X on other
+  evidence. A lowest MCLK appears in none of the Trio64-family books; the patchers' 40 MHz floor,
+  chosen against typing errors, matches this one.
+- **Display FIFO M** (V968 3.2, CR54): 6 bits on the Vision968 (bit 2 is the high bit; "This doubles
+  the amount of memory bandwidth that can be allocated for Graphics Engine/CPU access"), 5 bits on the
+  Vision964, and used only in VGA modes: with VRAM the display reads through the serial port in the
+  enhanced modes. On the DRAM chips (Vision864, Trio64) M applies in the enhanced modes too, which is
+  where #75 needed it (T64-MEM-1).
+- **Memory cycles** (V968 figures 3-3 to 3-6): fast page and EDO read/modify/write with a RAS precharge
+  of 2.5 MCLKs, the row address about 2 MCLKs before the first CAS, then 2 MCLKs per column access;
+  1-cycle EDO takes 1 MCLK per column, plus a dummy cycle after the last read. This is the cost model
+  of the FIFO M formula (2 MCLKs per page cycle, 6-9 per entry cycle) and why 1-cycle EDO has about
+  twice the bandwidth of fast page memory at the same MCLK.
+- **1-cycle EDO limits** (V968 3.9): CR36 bits 3-2 = 00b selects it; "line draws, image transfers,
+  linear addressing and pixel formatter operation are not supported with 1 cycle EDO. 2 cycle EDO
+  operation will automatically be used with these functions", as VP-MEM-1 says for the Trio64V+.
+- **Chip identification** (V968 3.1, 2.3): CR2D = 88h, CR2E = F0h (the PCI device ID), CR2F = the
+  revision, CR30 = E1h, as on the Trio64 family (T64-ID-1, VP-ID-1). (Section 3.1 says CR2E = B0h,
+  the register description and table 2-1 F0h and 88F0h.)
+- **2 MCLK CPU writes** (V968 SRA bit 7, linear addressing): 2 or 3 MCLKs per CPU write. Like the
+  Trio64V+'s 2-MCLK write option, not a Trio64 register.
 
 ## Datasheet errors and gaps
 
