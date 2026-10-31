@@ -26,11 +26,16 @@ DEFS += -DTROMVER="'$(TROMVER)'"
 endif
 
 all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-     build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT
+     build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT build/ZIP.EXE
 
-# runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D (DOS
-# line ends); clean.bat deletes what a run leaves behind
+# runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D, then
+# RUNALL.ZIP with Info-ZIP's zip (DOS line ends); clean.bat deletes what a run leaves behind
 build/RUNALL.BAT: runall.bat | build
+	cp $< $@
+
+# Info-ZIP Zip 3.0, the 16-bit real-mode DOS build (ZIP16.EXE of the FreeDOS 1.3 package), for RUNALL.BAT;
+# its licence is infozip/LICENSE
+build/ZIP.EXE: infozip/ZIP.EXE | build
 	cp $< $@
 
 build/CLEAN.BAT: clean.bat | build
@@ -122,7 +127,7 @@ clean:
 MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 
 # ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
-#   make rom OUT=S3V2P21.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (upper 32 KB: zeros)
+#   make rom OUT=S3V2P21.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
 #   make rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 rom:
 	@test -n "$(IN)" -a -n "$(OUT)" || { echo "rom: set OUT, e.g. make rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
@@ -134,7 +139,7 @@ rom-test:
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
 # reference/vplus/1_03_08.bin (VREF), docs/vplus-backport.md
-#   make vrom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, upper half zeros)
+#   make vrom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
 #   make vrom-test [VREF=...] [ROM=S3VPP1.BIN]
 #   make vref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
@@ -154,14 +159,15 @@ vref-compare:
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
 # (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
-#   make trom OUT=S3T64P1.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, upper half zeros; TSIZE=32: 32 KB)
-#   make trom OUT=S3T64OC.BIN MCLK=69.8 OVERCLOCK=1   (above the data book's 60 MHz, at most 100 MHz)
-#   make trom-test [TREF=...] [ROM=S3T64P1.BIN]
-#   make tref-compare ROM=S3T64P1.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
-#   make emu-test ROM=S3T64P1.BIN CHIP=trio64 [LOGS=emu/tlogs]
+#   make trom OUT=S3T64P2.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+#   make trom OUT=S3T64P2.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
+#   make trom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
+#   make trom-test [TREF=...] [ROM=S3T64P2.BIN]
+#   make tref-compare ROM=S3T64P2.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
+#   make emu-test ROM=S3T64P2.BIN CHIP=trio64 [LOGS=emu/tlogs]
 TREF ?= reference/trio64/1_5_07.bin
 trom:
-	@test -n "$(OUT)" || { echo "trom: set OUT, e.g. make trom OUT=S3T64P1.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+	@test -n "$(OUT)" || { echo "trom: set OUT, e.g. make trom OUT=S3T64P2.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
 	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(TSIZE) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
 
 trom-test:

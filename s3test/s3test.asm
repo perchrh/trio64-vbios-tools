@@ -44,14 +44,15 @@
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
 ;                    "2.04.07-p21") on a Trio64V2, VROMVER ("1.03-08-p1") on a Trio64V+, TROMVER
-;                    ("1.5-07-p1") on a Trio64; the version found is printed, also for other BIOS versions
+;                    ("1.5-07-p2") on a Trio64; the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
 ;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
 ;                    PCI 8901 rev 06 Trio64V2/DX/GX on the test card)
 ;   MCLK             SR10/SR11 after POST: a valid PLL setting (M, N at least 1, SR10 bit 7 clear, VCO
-;                    135-270 MHz) at or below the data book maximum for the chip and the strapped memory
-;                    type (Trio64V2: 60 MHz 1-cycle EDO, 66.67 MHz the others; Trio32/64/V+ 60 MHz;
+;                    135-270 MHz) at or below the maximum for the chip (the data book's; 70 MHz on the Trio64,
+;                    T64-MEM-7) and the strapped memory
+;                    type (Trio64V2: 60 MHz 1-cycle EDO, 66.67 MHz the others; Trio32/V+ 60 MHz;
 ;                    UV+ 66.67 MHz). The line shows the kHz and the limit; the default build of our
 ;                    Trio64V2 ROM sets 59.96 MHz, a build with MCLK=... another value
 ;   Memory type      INFO, not counted: CR36 bits 3-2 as strapped on the card (the BIOS keeps them;
@@ -61,7 +62,7 @@
 ;                    default to 60 Hz
 ;   Each mode in modelist: the mode set returns 004Fh, the measured refresh is within 1.5 Hz of
 ;                    the expected value, the total line length is the expected one, the pedestal is
-;                    still off, and depending on the mode type:
+;                    still off (SR1A bit 5, on the Trio64V2 only, #79), and depending on the mode type:
 ;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and
 ;                                      CR59/CR5A back to the real base (CR59 at POST) and 00 after
 ;                                      the booster
@@ -453,7 +454,7 @@ t_chip: call unlock
 ; f = 14.31818 MHz x (M+2) / ((N+2) x 2^R). PASS when M and N are at least 1, SR10 bit 7 is 0, the VCO
 ; (f before the divider) is in 135 MHz to [mvcomax] (PLL-1, PLL-2) and f is at most the data book
 ; maximum for the chip and the memory type the card is strapped for (CR36 bits 3-2): [mclkmax] (MEM-1:
-; 60 MHz on the Trio32/64 and Trio64V+, 66.67 MHz on the Trio64UV+), on the Trio64V2 60 MHz for 1-cycle
+; 60 MHz on the Trio32 and Trio64V+, 70 MHz on the Trio64 (T64-MEM-7), 66.67 MHz on the Trio64UV+), on the Trio64V2 60 MHz for 1-cycle
 ; EDO and 66.67 MHz for the others (V2-MEM-1). Not a fixed value: the ROM can be built for another
 ; MCLK (README "MCLK build option"); the default build sets 59.96 MHz (Trio64V2, 1-cycle EDO).
 ; Memory type: CR36 bits 3-2, set by the card's strapping and kept by the BIOS; INFO, not counted.
@@ -632,7 +633,9 @@ memsize:
 ; Set [m_mode] (AH=00 for VGA modes, 4F02 for VESA), measure the refresh rate and read
 ; the line length from CR00, CR01 and CR5D, and CR58, CR59, CR5A, CR6D, CR90 and SR1A. Expect status
 ; 004Fh, refresh within 15 (1.5 Hz) of [m_hz], a line of exactly [m_line] pixels at [m_xres] (when
-; [m_line] is not 0), SR1A bit 5 clear, plus the checks selected by [m_flags] (see the file header).
+; [m_line] is not 0), SR1A bit 5 clear on the Trio64V2 (SR1A is its pedestal register; on the Trio64
+; Phoenix's POST copies the MCLK N/R byte there, so bit 5 follows the clock's divider, #79), plus the
+; checks selected by [m_flags] (see the file header).
 t_mode: VS 'D:TEST mode '
         push ax
         mov ax,[m_mode]
@@ -750,8 +753,11 @@ t_mode: VS 'D:TEST mode '
         neg ax
 .p:     cmp ax,15               ; +-1.5 Hz
         ja .fail
+        cmp byte [chip],CHIP_T64V2      ; SR1A: the Trio64V2's pedestal register only (#79)
+        jne .ped
         test byte [r1a],0x20    ; pedestal off
         jnz .fail
+.ped:
         mov ax,[m_line]         ; line length, exact
         or ax,ax
         jz .lk
@@ -2700,7 +2706,7 @@ s_pci   db ', PCI $'
 s_rev   db ' rev $'
 s_na    db 'n/a$'
 s_info  db '  INFO',13,10,'$'
-s_mclk  db 'S3   MCLK SR10 SR11 kHz/data book max .... $'
+s_mclk  db 'S3   MCLK SR10 SR11 kHz/chip max ......... $'
 s_khz   db ' kHz$'
 s_edo   db 'S3   CR36 memory type (strapping) ........ $'
 memnames dw s_m00,s_m01,s_m10,s_m11      ; CR36 bits 3-2: Trio64V+ and Trio64V2 (01b SGRAM on the V2/GX)

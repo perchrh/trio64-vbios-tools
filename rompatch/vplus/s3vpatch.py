@@ -14,7 +14,8 @@ Input
                64 KB image with it in the lower half (the upper half of the input is not used)
 
 Output
-  32 KB (--size 64: 64 KB, the upper 32 KB zeros, for a 64 KB EEPROM)
+  32 KB (--size 64: 64 KB, the 32 KB twice, for a 64 KB EEPROM whichever half the board maps; a board
+  that maps the upper half finds nothing in zeros, #78)
 
 What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
   code   assembled with nasm at the addresses in vplus/bios.inc:
@@ -219,8 +220,8 @@ def verify(img, size):
         errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
     if sum(img[:0x8000]) & 0xFF:
         errs.append('the 32 KB checksum is not 00')
-    if img[0x8000:] != bytes(len(img) - 0x8000):
-        errs.append('upper 32 KB is not all zeros')
+    if len(img) > 0x8000 and img[0x8000:] != img[:0x8000]:
+        errs.append('upper 32 KB is not a copy of the lower 32 KB')
     if img[0:3] != b'\x55\xAA\x40':
         errs.append('ROM header 55AAh with 32 KB size missing')
     sym = s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
@@ -251,7 +252,7 @@ def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 Trio64V+ BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the Trio64V+ BIOS 1.03-08: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (32 KB, or 64 KB with --size 64)')
-    ap.add_argument('--size', type=int, choices=(32, 64), default=32, help='output size in KB (64: zeros above)')
+    ap.add_argument('--size', type=int, choices=(32, 64), default=32, help='output size in KB (64: the 32 KB twice)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype, at most 60 '
                     '(default: as 1.03-08, 52.79 for 1-cycle EDO, 59.96 for fast page/2-cycle EDO)')
     ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',
@@ -265,7 +266,7 @@ def main():
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]
         new_lo, log = patch(lo, a.nasm, a.mclk, a.memtype)
-        img = new_lo + bytes(0x8000 if a.size == 64 else 0)
+        img = new_lo * (2 if a.size == 64 else 1)
         errs = verify(img, a.size)
         known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()

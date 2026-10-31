@@ -63,7 +63,10 @@ files of their own, not in a public repository.
 
 ## What we have
 
-- `docs/chip-rules.md`: 91 rules from the data books (clock limits, memory timing, register
+- `docs/bios-rules.md`: 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
+  area, the published tables) from public sources, with the open questions still to settle in the
+  emulator: the start of item 1 below.
+- `docs/chip-rules.md`: 92 rules from the data books (clock limits, memory timing, register
   meanings), each with its source.
 - S3TEST and S3COMPAT: checks against the IBM VGA tables, the VBE 2.0 specification, VESA DMT and
   the data book, written to the AGENTS.md rule that expected values come from independent sources.
@@ -106,9 +109,56 @@ files of their own, not in a public repository.
 9. **A traceability matrix.** Each specification item mapped to the test that checks it, so the
    clean side knows when it is done and the dirty side can see what is untested.
 
+## Scope, base and licence (31 October 2026)
+
+- **First version:** the standard VGA functions and the S3 mode set, without DDC (4F15), power
+  management (4F10) and VBE 2.0; VBE 1.2 at most.
+- **Free implementations to build on instead of writing everything new:**
+  - SeaVGABIOS (the `vgasrc` directory of SeaBIOS, LGPLv3): C compiled with `gcc -m16`, so real-mode
+    code that uses the 386's 32-bit registers, the kind of "32-bit" our ROMs use. It has the
+    standard VGA functions (`stdvga.c`, `vgabios.c`, `vgafb.c`) and chip modules (Cirrus, Bochs,
+    Geode, ATI) but no S3 module. An S3 Trio64 module written from the data book on top of it would
+    leave the clean-room effort to the S3 part.
+  - **Size:** SeaVGABIOS with VBE does not fit 32 KB, so it must be slimmed down before we can use
+    it. Built on 31 October 2026 from `perchrh/seabios_fork` (gcc 13.3, `CONFIG_VGA_PCI=y`):
+
+    | Build | Size |
+    | --- | --- |
+    | Plain VGA without VBE (`VGA_STANDARD_VGA`, `VGA_VBE=n`) | 32768 bytes (32322 used) |
+    | Plain VGA with VBE | 35840 bytes |
+    | QEMU Bochs VBE (`VGA_BOCHS`) | 39424 bytes |
+    | QEMU Cirrus (`VGA_CIRRUS`) | 39424 bytes |
+
+    Our ROMs have 32 KB (the lower half of the 64 KB image), and an S3 module with the mode set,
+    the clock synthesis and the VBE mode list comes on top. Candidates for slimming:
+    - the code of the other chips, already left out by the build options;
+    - SeaVGABIOS's own fonts, if the ROM takes the FreeDOS cpidos ones (about 9 KB for 8x8, 8x14 and
+      8x16);
+    - the extra stack (`VGA_ALLOCATE_EXTRA_STACK`);
+    - 32-bit code that gcc makes larger than hand-written 16-bit code.
+
+    The plain VGA build also runs POST and modes 03h, 12h and 13h in our emulator.
+  - The Bochs/LGPL VGABios (LGPL 2.1 or later), the code SeaVGABIOS grew from.
+  - Code taken from either is used under its licence, not rewritten from a specification, so
+    the clean-room rules apply only to what we write ourselves.
+- **Fonts:**
+  - FreeDOS cpidos 3.0 (Henrique Peron, GPL 2 or later): code page 437 at 8x8, 8x14 and 8x16;
+    the 9-dot alternate glyphs we derive ourselves.
+  - The fonts SeaVGABIOS carries come from Joseph Gil's FNTCOL16 collection, whose individual
+    fonts it calls public domain; they look like IBM's VGA font, so their origin is less clear.
+- **Licence of the result:** LGPLv3 code and GPL-2-or-later fonts can both be used under GPL 3, so
+  the ROM would be GPL 3 (or later). Code under GPL 2 only (DOSEMU, if its licence says so) cannot
+  be combined with LGPLv3 or GPL 3 code: use it as a reference for facts only.
+- **More sources the clean side may read:**
+  - Michael Abrash's Graphics Programming Black Book (freely published by the author): the VGA
+    hardware (latches, write modes, Mode X), not the BIOS functions.
+  - Francois Gervais, "Programmation des cartes graphiques CGA, EGA, VGA" (Sybex): the BIOS
+    functions and registers.
+  - DOSEMU 1.0.1 source: its VGA emulation and video BIOS tables and formulas, as facts.
+
 ## Next steps (when started)
 
 - Create the separate specification repository with the skeleton of items 1-9.
 - Review the emulator tests for expectations taken from the reference ROMs, and move the clean
   ones to the new repository.
-- Choose the font source.
+- Decide the base (SeaVGABIOS or our own code) and the font source (above).

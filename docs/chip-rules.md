@@ -40,6 +40,7 @@ must do, written from the datasheets alone.
 | V2 | S3 Trio64V2/DX & GX Graphics/Video Accelerators (preliminary, changes from the Trio64V+) |
 | UV+ | S3 Trio64UV+ UMA Graphics/Video Accelerator, DB024-A, March 1996, with the update ER010-B (May 1996) |
 | XFree86 | XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c` |
+| V968 | S3 Vision968 Multimedia Accelerator, DB016-A, April 1995 (`86c968-vision968-...pdf`, a scan without text, 95 pages): the changes from the Vision964 only. Not a Trio64-family chip; used for comparison, never as the source of a rule ("Related chip: the Vision968") |
 
 The datasheets are in `datasheets/`. `357_86c732-86c764_trio32_64.pdf` was compared with the
 March 1995 book on 28 October 2026: it is another scan of the same book (images only, no text; the
@@ -86,7 +87,7 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 
 | ID | Chips | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- | --- |
-| MEM-1 | T32, T64, V+, UV+ | MCLK cycle at least 16.67 ns (60 MHz) on the Trio32/64 and Trio64V+, 15 ns (66.67 MHz) on the Trio64UV+. The V+ feature list gives 50 MHz for EDO and 1-cycle EDO memory | T32/64 and V+ table 4-6, UV+ table 6-7, V+ section 1 | must (cycle time) | S3COMPAT POST fail 2 |
+| MEM-1 | T32, T64, V+, UV+ | MCLK cycle at least 16.67 ns (60 MHz) on the Trio32/64 and Trio64V+, 15 ns (66.67 MHz) on the Trio64UV+ (for the Trio64 our tools take 70 MHz, T64-MEM-7). The V+ feature list gives 50 MHz for EDO and 1-cycle EDO memory | T32/64 and V+ table 4-6, UV+ table 6-7, V+ section 1 | must (cycle time) | S3COMPAT POST fail 2 |
 | VP-MEM-1 | V+ | 1-cycle EDO (CR36 bits 3-2 = 00b): CPU (linear addressing) accesses use 2-cycle EDO automatically | V+ 7.4 | information | not checked |
 | VP-MEM-2 | V+ | SR15 bit 7 (2-MCLK memory writes, with SRA bit 7) "can allow 2 MCLK operation for MCLK frequencies between 55 and 57 MHz" | V+ SR15 | limit | not checked (README: data errors at 59.96 MHz on the V2 card) |
 | T64-MEM-1 | T32, T64 | The display FIFO "must never underrun" (the display is corrupted). CR54 bits 7-3 (M) = number of 8-byte memory cycles for other uses than FIFO filling - 1, to be maximised without an underrun; the fill bandwidth is 120 MB/s with 1 MB, 240 MB/s with 2 or 4 MB (Trio64: 32 or 64 bits by 16 positions). "The M and N parameters [CR54, CR60] should only be changed with the screen turned off" (SR01 bit 5 = 1). Added 28 October 2026 | T32/64 7.4, CR54, CR60 | must (underrun), should (screen off) | not checked |
@@ -94,6 +95,7 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 | T64-MEM-3 | T64 | EDO memory only for 1 or 2 MB; "fast page mode memory is required for 4-MByte configurations", and SRA bit 6 (pin 50 is RAS1) must be 1 for 4 MB of fast page memory. Pin 50 is RAS1 only with CR36 bit 2 = 1 (fast page) and SRA bit 6 = 1, and selects the upper 2 MB; with EDO (CR36 bit 2 = 0) it is OE1, and with fast page and SRA bit 6 = 0 a second OE0, so one 2 MB board takes either memory type. The Trio64 should not be strapped for a 32-bit PD bus with more than 1 MB, "as this will prevent correct memory size detection by the BIOS". Added 28 October 2026; pin 50 added 30 October 2026 | T32/64 7.1, table 3-1 (RAS1, OE1), SRA | must | not checked on a card; the emulator straps a 4 MB Trio64 as fast page (`emu/vgaemu.py`) |
 | T64-MEM-5 | T32, T64 | CR36 bits 3-2 (strapped): 10b EDO, 11b fast page, 00b and 01b reserved. CR36 bits 7-5, the memory size: 000b 4 MB (Trio64 only), 100b 2 MB, 110b 1 MB, 111b 0.5 MB (Trio32 only), the others reserved. The Trio32 takes 0.5, 1 or 2 MB on a 32-bit PD bus (16 bits for 0.5 MB), fast page or EDO, its pin 50 always RAS1 for the second MB; the Trio64 1, 2 or 4 MB (T64-MEM-3). "The S3 BIOS determines this value directly and writes it to CR36 bits 7-5 after reset", so the strapping of bits 7-5 does not matter with an S3 BIOS. Added 30 October 2026 | T32/64 CR36, 5 (strapping), 7.1, table 7-1 | must | S3TEST memory type INFO (bits 3-2); the emulator models (`emu/vgaemu.py`, no 4 MB Trio32); the size code is not judged |
 | T64-MEM-6 | T64 | CR6B bit 7 sets the PD bus width: 0 (strapped by PD23 "or by programming") fixes it at 32 bits, with which the Trio64 "can only support 1 MByte"; 1 makes it follow CR36 bits 7-5 (32 bits with 1 MB, 64 bits with 2 or 4 MB). CR6B bits 1-0 stretch the active time of the memory control signals (table 4-9 note 3). The CR6B register description calls the whole register "reserved for use by the S3 BIOS" (see "Datasheet errors and gaps"). Added 30 October 2026 | T32/64 7.1, 6.2, table 4-9 | must (as sections 6.2 and 7.1 read) | not checked; to read on a card: CR6B, CR36 and PCI BAR0 after POST (S3REGS) |
+| T64-MEM-7 | T64 | MCLK at most 70 MHz on the Trio64 (86C764): the data book gives 60 MHz (MEM-1), but the 86C764X is rated for 70 MHz and the ExpertColor DSP-3364P runs 69.8 MHz with its own BIOS (PLL 25h 22h, model tag "764 M70"), and on that card windowed video is clean at 69.8 MHz (#75). Our decision of 31 October 2026: the tools take 70 MHz as the Trio64's limit, the Trio32 keeps 60 MHz. The limit is the 86C764X's ("Trio64 PnP" in PCI device lists, the later chip); the earlier 86C764 (Rev. 01, 86C764-P on PCI cards, also for the VL-Bus) likely accepts only 60 MHz (not verified), and the tools cannot tell the two apart (PCI ID 5333:8811 for both) | vgamuseum (86C764X), the DSP-3364P's BIOS | must | S3COMPAT POST fail 2, S3TEST MCLK |
 | T64-MEM-4 | T32, T64 | SRA bit 7 (2-MCLK CPU writes) improves performance with an MCLK below 57 MHz; between 55 and 57 MHz SR15 bit 7 should also be 1 if linear addressing is used (the same rule as VP-MEM-2). Added 28 October 2026 | T32/64 SRA | limit | not checked |
 | V2-MEM-1 | V2 | MCLK maximum 66 MHz (15 ns) for fast page, 60 MHz (16.67 ns) for 1-cycle EDO; SGRAM (GX) at 66 MHz. The book gives no separate value for 2-cycle EDO: the tools use the fast page cycle time | V2 3.1, 3.1.2, table 5-7 | must | S3COMPAT POST fail 2 |
 | V2-MEM-2 | V2 | CR36 bits 3-2 (strapped): 00 1-cycle EDO, 01 SGRAM, 10 2-cycle EDO, 11 fast page | V2 4.1 | must | S3COMPAT POST (selects the V2-MEM-1 limit) |
@@ -171,6 +173,37 @@ failed or unknown subfunction):
 
 A program or driver may check the query's version (OEM-1) and expect this behaviour, so a BIOS for this
 card keeps it unchanged (README "Not taken: the S3 OEM functions (4F14h) of later BIOSes").
+
+## Related chip: the Vision968 (comparison, not rules)
+
+The Vision968 is S3's VRAM workstation chip of 1995, with an external RAMDAC and clock chip (PCI
+5333:88F0). Its booklet (V968) describes only the changes from the Vision964. The Trio64 is an
+integrated Vision864 ("Integrated '864, DAC and clock chip" in PCI device lists), so the Vision864/964
+books stay the closer relatives (README "Missing documents"). What V968 says that bears on our rules:
+
+- **MCLK limits** (V968 table 4-3): cycle time at least 16.7 ns (60 MHz) for fast page and standard
+  EDO memory, 20 ns (50 MHz) for 1-cycle EDO, and at most 25 ns (MCLK at least 40 MHz). The same
+  60 MHz as MEM-1 in S3's books of that year; T64-MEM-7 goes beyond it for the 86C764X on other
+  evidence. A lowest MCLK appears in none of the Trio64-family books; the patchers' 40 MHz floor,
+  chosen against typing errors, matches this one.
+- **Display FIFO M** (V968 3.2, CR54): 6 bits on the Vision968 (bit 2 is the high bit; "This doubles
+  the amount of memory bandwidth that can be allocated for Graphics Engine/CPU access"), 5 bits on the
+  Vision964, and used only in VGA modes: with VRAM the display reads through the serial port in the
+  enhanced modes. On the DRAM chips (Vision864, Trio64) M applies in the enhanced modes too, which is
+  where #75 needed it (T64-MEM-1).
+- **Memory cycles** (V968 figures 3-3 to 3-6): fast page and EDO read/modify/write with a RAS precharge
+  of 2.5 MCLKs, the row address about 2 MCLKs before the first CAS, then 2 MCLKs per column access;
+  1-cycle EDO takes 1 MCLK per column, plus a dummy cycle after the last read. This is the cost model
+  of the FIFO M formula (2 MCLKs per page cycle, 6-9 per entry cycle) and why 1-cycle EDO has about
+  twice the bandwidth of fast page memory at the same MCLK.
+- **1-cycle EDO limits** (V968 3.9): CR36 bits 3-2 = 00b selects it; "line draws, image transfers,
+  linear addressing and pixel formatter operation are not supported with 1 cycle EDO. 2 cycle EDO
+  operation will automatically be used with these functions", as VP-MEM-1 says for the Trio64V+.
+- **Chip identification** (V968 3.1, 2.3): CR2D = 88h, CR2E = F0h (the PCI device ID), CR2F = the
+  revision, CR30 = E1h, as on the Trio64 family (T64-ID-1, VP-ID-1). (Section 3.1 says CR2E = B0h,
+  the register description and table 2-1 F0h and 88F0h.)
+- **2 MCLK CPU writes** (V968 SRA bit 7, linear addressing): 2 or 3 MCLKs per CPU write. Like the
+  Trio64V+'s 2-MCLK write option, not a Trio64 register.
 
 ## Datasheet errors and gaps
 

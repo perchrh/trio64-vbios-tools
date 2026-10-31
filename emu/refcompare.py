@@ -23,14 +23,16 @@ from vgaemu import Machine
 from unicorn.x86_const import *
 ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
 ap.add_argument('--ref', required=True, help='the unpatched base: S3 reference BIOS 2.04.07, or 1.03-08 with --chip vplus (32 KB)')
-ap.add_argument('--upper', help='image whose upper half goes with the reference (default: zeros, as in the ROM)')
+ap.add_argument('--upper', help='image whose upper half goes with the reference (default: as in the ROM: a copy of '
+                'the reference when the ROM carries its 32 KB twice, else zeros)')
 ap.add_argument('--rom', required=True, help='the ROM to compare (64 KB, or 32 KB for the Trio64V+)')
 ap.add_argument('--chip', choices=('v2', 'vplus', 'uvplus', 'trio64', 'trio32'), default='v2',
                 help='the chip the model is (vgaemu.CHIPS, default v2)')
 a = ap.parse_args()
 Machine.chip = a.chip
-ref=open(a.ref,'rb').read(); up=open(a.upper,'rb').read()[0x8000:] if a.upper else bytes(0x8000)
-A=Machine(ref[:0x8000]+up); A.post(); B=Machine(open(a.rom,'rb').read()); B.post()
+ref=open(a.ref,'rb').read(); rom=open(a.rom,'rb').read()
+up=open(a.upper,'rb').read()[0x8000:] if a.upper else ref[:0x8000] if rom[0x8000:0x10000]==rom[:0x8000] else bytes(0x8000)
+A=Machine(ref[:0x8000]+up); A.post(); B=Machine(rom); B.post()
 R32=(UC_X86_REG_EAX,UC_X86_REG_EBX,UC_X86_REG_ECX,UC_X86_REG_EDX,UC_X86_REG_ESI,UC_X86_REG_EDI)
 def std(m):
     r=m.r
