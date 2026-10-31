@@ -210,7 +210,7 @@ count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2
 86.6 % (15135 of 17487 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
 (`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
-1.5-07-p1 (`CHIP=trio64`) is at 84.6 % (13330 of 15752 bytes), its new code all run.
+1.5-07-p1 (`CHIP=trio64`) is at 86.6 % (13281 of 15340 bytes), its new code all run.
 
 ### EGA/CGA against the reference BIOS
 

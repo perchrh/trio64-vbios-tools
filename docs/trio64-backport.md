@@ -77,7 +77,7 @@ check, lock state, ATC flip-flop, sequencer index after 4F05 BH = 0 and 1, S3's 
 plane 2, 4F15 answers without the DDC1 wait, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
 `make tref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07 with S3's fonts (`--fonts-only`); `make trom-test`
 checks the fonts against 1.03-08 byte for byte. S3COMPAT's VESA lines: every mode
-non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): 84.6 % of the code, every byte of
+non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): 86.6 % of the code, every byte of
 the new code among it.
 
 ## Left as in 1.5-07
