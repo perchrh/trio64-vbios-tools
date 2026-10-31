@@ -46,6 +46,16 @@ routines and data while writing the specification.
 A caveat: no one can prove that an AI agent never saw Phoenix or S3 BIOS code in its training. The
 separate session and the similarity check reduce that risk; they do not remove it.
 
+## Public documents for the clean side
+
+The clean side may read the public standards and the data book: the IBM VGA references, the Trio64
+data book, and the VESA standards listed in README "VESA standards": at hand VBE 2.0 (the target),
+VBE 3.0, VBE/SCI 1.0 and E-EDID (EDID 1.3); still to get VBE/DDC 1.0 (or DDC 2.0), DDC 1.0 to 3,
+VBE/PM 1.0, DPMS 1.0, DMT 1.0 Rev. 0.7, GTF 1.0, VBE 1.2 and the Mode 6Ah standard. The timing
+values of the ROM can then come from DMT and GTF instead of from Phoenix's tables. VESA allows only
+VBE 2.0 to be posted online, so the others go to the clean side as files of their own, not in a
+public repository.
+
 ## What we have
 
 - `docs/chip-rules.md`: 91 rules from the data books (clock limits, memory timing, register
