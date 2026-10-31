@@ -60,8 +60,8 @@ with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.T
 S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. VGALOG stays
 resident afterwards (`VGALOG /U` unloads it); while it is loaded, every INT 10h call takes a little
 longer, which shows only in the timing lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves
-behind before the next one: every .DBG and .TXT file in the current folder, VGALOG.BIN there, and
-S3REGS.TXT and VGALOG.BIN in C:\ (the .LOG files are overwritten by the next run). `/S` skips the monitor warnings, so only start it with a
+behind before the next one: the .DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and
+VGALOG.BIN in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only start it with a
 monitor that takes 91 kHz or refuses it (an LCD). `common/` holds the /V debug log code the test tools
 share.
 
