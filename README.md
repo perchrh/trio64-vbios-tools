@@ -659,6 +659,13 @@ machine was the same.
   60 Hz defaults and the 800-pixel line. The 132-column text modes (VESA 109h/10Ah) at 28.09 kHz and
   800x600 at 36.28 kHz instead of 28.00 and 36.17 kHz: 2.04.07 programs 40.09 MHz where 2.04.11 has
   39.97 MHz (SR12/SR13 63h/6Eh against 61h/41h), 0.3 %; a difference of the base BIOS, not of a patch.
+- **VGALOG /M during the p21 run** (all 330 INT 10h calls): after every banked 4F02 of a packed mode
+  CR58 = 90h and CR59/CR5A = 000Ah (the booster on), after the planar modes 102h, 104h and 106h CR58 =
+  83h and E000h (off), and every return to mode 03h puts E000h back. VIDSPEED never calls 4F05: it
+  switches banks without INT 10h, so it gets the booster only because p18 switches it on at the end
+  of 4F02 (with p16 and p17, which waited for the first 4F05 or window function call, it would not).
+  The other calls (VIDSPEED's DESQview and chipset probes, 4F01 of every listed mode, the BIOS's own
+  AX=1130h inside the mode sets) return as they should.
 
 ### Byte-level changes
 
