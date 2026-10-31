@@ -998,6 +998,9 @@ Linux tools that run a card's video BIOS to log or replay its mode sets (the emu
 this for our ROMs).
 
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
+- `docs/bios-rules.md`: 323 behaviour rules for the standard video BIOS (INT 10h AH=00h-1Ch, the BIOS
+  data area, the published tables), each with its public source (Ferraro, RBIL, VGADOC, IBM via
+  VGATEST) and the test that checks it; open questions and source disagreements per section.
 - S3 Trio64V2/DX and GX datasheet (preliminary): MCLK limits per memory type and DCLK limits, the
   DCLK VCO maximum of 340 MHz, the 3-bit DCLK R divider (SR12 bit 7), CR36 memory types, CR87 1-cycle
   linear addressing, CR90/CR91 FIFO, the PCI subsystem ID (section 3.8), SR1A, CR23/CR26, CR32, CR40,

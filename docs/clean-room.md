@@ -63,6 +63,9 @@ files of their own, not in a public repository.
 
 ## What we have
 
+- `docs/bios-rules.md`: 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
+  area, the published tables) from public sources, with the open questions still to settle in the
+  emulator: the start of item 1 below.
 - `docs/chip-rules.md`: 91 rules from the data books (clock limits, memory timing, register
   meanings), each with its source.
 - S3TEST and S3COMPAT: checks against the IBM VGA tables, the VBE 2.0 specification, VESA DMT and
