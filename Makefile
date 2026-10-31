@@ -134,7 +134,7 @@ rom-test:
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
 # reference/vplus/1_03_08.bin (VREF), docs/vplus-backport.md
-#   make vrom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, upper half zeros)
+#   make vrom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
 #   make vrom-test [VREF=...] [ROM=S3VPP1.BIN]
 #   make vref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
@@ -154,7 +154,7 @@ vref-compare:
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
 # (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
-#   make trom OUT=S3T64P1.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, upper half zeros; TSIZE=32: 32 KB)
+#   make trom OUT=S3T64P1.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
 #   make trom OUT=S3T64OC.BIN MCLK=69.8 OVERCLOCK=1   (above the data book's 60 MHz, at most 100 MHz)
 #   make trom-test [TREF=...] [ROM=S3T64P1.BIN]
 #   make tref-compare ROM=S3T64P1.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)

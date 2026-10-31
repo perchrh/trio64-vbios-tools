@@ -511,7 +511,7 @@ def t_vplus_patches(c):
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
     chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
     if len(rom) > 0x8000:
-        chk(rom[0x8000:] == bytes(len(rom) - 0x8000), 'the upper 32 KB is not all zeros')
+        chk(rom[0x8000:] == rom[:0x8000], 'the upper 32 KB is not a copy of the lower 32 KB (#78)')
     cr = m.r['crtc']
     base = (cr.get(0x59, 0), cr.get(0x5A, 0))           # the PCI base, 1.03-08 keeps bits 31-24 in CR6B
     chk(base[0] and not base[1] and cr.get(0x6B) == base[0], 'POST: CR59/5A %02X%02X, CR6B %02X'
