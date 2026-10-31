@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""s3tpatch.py - build the Trio64 ROM (1.5-07-p2) from the Phoenix S3 Trio64 BIOS 1.5-07.
+"""s3tpatch.py - build the Trio64 ROM (1.5-07-p3) from the Phoenix S3 Trio64 BIOS 1.5-07.
 
-    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P2.BIN [--size 64|32] [--mclk MHZ [--overclock]] [--nasm nasm] [-q]
-    make trom OUT=S3T64P2.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
+    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P3.BIN [--size 64|32] [--mclk MHZ [--overclock]] [--nasm nasm] [-q]
+    make trom OUT=S3T64P3.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
 assembler driver and the shared patch code of s3patch.py.
@@ -40,7 +40,7 @@ What is applied (docs/trio64-backport.md)
           planar scrolls, AH=09h text, VGA mode set clear)
   FIFO    (p2, #75) tfifo.asm (in the VDIF code's place) and tfifo2.asm (in the sign-on padding
           00AEh-00E3h): at the mode set's CR67 write (site cr67) the display FIFO M (CR54 bits 7-3) is
-          lowered in the packed modes to what the memory bandwidth allows, (t - 18) / 5 - 1 with
+          lowered in the packed modes to what the memory bandwidth allows, (t - 23) / 6 (p3, #82; p2: / 5) with
           t = 112 x MCLK / (DCLK x bytes per pixel); 112 x MCLK in kHz is written into the code (kmclk)
           from the final MCLK pair at 3B5h, so --mclk builds follow
   fonts   S3's fonts from the Trio64V+ BIOS 1.03-08 (--fonts, default reference/vplus/1_03_08.bin; the
@@ -60,7 +60,7 @@ What is applied (docs/trio64-backport.md)
           --mclk 60 at most
           With --overclock up to 100 MHz (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their
           lowest): the card owner's choice, never the default
-  sign-on "1.5-07-p2", checksum byte 7FFF
+  sign-on "1.5-07-p3", checksum byte 7FFF
 
 Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in
 1.5-07-p1 with the booster check and the sequencer index kept), the 32-bit S3/VESA
@@ -80,11 +80,11 @@ sys.path.insert(0, SHARED)
 import s3patch  # noqa: E402
 from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, mclk_put  # noqa: E402
 
-LEVEL = 'p2'
 VERSION = '1.5-07'
+LEVEL = s3patch.rom_level('TROMVER', VERSION)   # the sign-on level: common/version.inc TROMVER
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = '9fb6d41111f2cef8b81f4078ba98d0573f777e5d5190306de514f961fd175538'  # 1.5-07-p2 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = 'f6eb2bf00ea05abae16946c7f3493fdf747a5124bd1b80e3361876b68445904e'  # 1.5-07-p3 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
     'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',
@@ -93,7 +93,7 @@ BLOCK_SHA = {
     'p13move.asm': '2a4ce99637fc0ce5', 'p13bfill.asm': 'e420891842c6096f',
     'p13bfa.asm': 'bef577de13494d8c', 'twin.asm': 'b6e0009a74fd8ca0',
     'twset.asm': '63d4c435841f7207', 'scr13w.asm': '8ddf861c37d1cfd3',
-    'tfifo2.asm': '7c549eb5b8240e35',
+    'tfifo2.asm': 'ea0850f2e6745701',
     'tfifo.asm': '456df5ae06ba71d8',
 }
 

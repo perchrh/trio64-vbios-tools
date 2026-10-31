@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """test_s3tpatch.py - checksum and table tests for the Trio64 ROM patcher s3tpatch.py (needs python3 and nasm).
 
-    python3 rompatch/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P2.BIN] [--nasm nasm]
-    make trom-test [TREF=...] [ROM=S3T64P2.BIN]
+    python3 rompatch/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P3.BIN] [--nasm nasm]
+    make trom-test [TREF=...] [ROM=S3T64P3.BIN]
 
 --ref is the 32 KB Phoenix S3 Trio64 BIOS 1.5-07 (default reference/trio64/1_5_07.bin), --rom a build to
 compare with byte by byte.
 
 Tests
   build          1.5-07 gives the tested build: the SHA-256 pinned in s3tpatch.py (NASM 3.02) over the
-                 lower 32 KB, sign-on 1.5-07-p2, 64 KB with the 32 KB twice (the default, #78), the
+                 lower 32 KB, sign-on 1.5-07-p3, 64 KB with the 32 KB twice (the default, #78), the
                  lower 32 KB byte-identical to --rom when given (a 32 or 64 KB image)
   checksums      the 32 KB sum to 00 (byte 7FFFh makes it so) and have the 55AAh header with 32 KB size
   tables         every mode's refresh list starts with a non-interlaced entry, the five interlaced-only

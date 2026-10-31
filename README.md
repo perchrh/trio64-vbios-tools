@@ -58,8 +58,10 @@ mode (`VGALOG /M`), takes an S3REGS snapshot ("before tests"), runs S3TEST, S3CO
 with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.TXT), writes the last
 1024 INT 10h calls with `VGALOG /D`, and beeps (`echo` of Ctrl-G) when done. It leaves S3TEST.LOG,
 S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. It then copies
-C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root) as
-S3REGSR.TXT and VGALOGR.BIN, and packs the logs and these four files into RUNALL.ZIP with Info-ZIP's
+C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root, when they
+exist) as S3REGSR.TXT and VGALOGR.BIN, deletes an old RUNALL.ZIP (Info-ZIP updates an existing archive and
+stops at one it cannot read: "missing end signature"), and packs the logs, the .DBG files and these four
+files into a new RUNALL.ZIP (a file that is missing is a warning only) with Info-ZIP's
 `zip` (`build/ZIP.EXE`: Zip 3.0, the 16-bit DOS build from the FreeDOS 1.3 package, kept in `infozip/`
 with its licence, which allows passing the program on with that licence text). VGALOG stays
 resident afterwards (`VGALOG /U` unloads it); while it is loaded, every INT 10h call takes a little
@@ -299,7 +301,7 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
 | Trio64V+, 1.03-08-p1 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
-| Trio64, 1.5-07-p2 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
+| Trio64, 1.5-07-p3 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
 
 On the Trio64 ROM `MCLK` goes up to 70 MHz, above the data book's 60 MHz: our tools take 70 MHz as the
 Trio64's limit (T64-MEM-7), the clock card databases give for the 86C764X (vgamuseum), and the ExpertColor DSP-3364P runs it (its own
@@ -307,7 +309,7 @@ BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"). On that card, with its 
 54.9 MHz of the default build leaves too little memory bandwidth for windowed video in 800x600x16
 (streaks, #75), and 69.8 MHz removes them:
 
-    make trom OUT=S3T64P2.BIN MCLK=69.8
+    make trom OUT=S3T64P3.BIN MCLK=69.8
 
 Up to 70 MHz the build prints no warning and S3TEST's and S3COMPAT's MCLK lines pass; S3COMPAT's VRAM
 test (without /Q) is the check that the memory keeps up. Above 70 MHz, up to 100 MHz
@@ -367,7 +369,7 @@ card yet.
 `rompatch/trio64/` ports the same changes to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in
 `reference/trio64/1_5_07.bin` (the CP764 build): the reference BIOS S3 gave the card makers for the
 Trio64, as far as the 14 Trio64 images at hand show (no S3-built one among them). The result signs on as
-1.5-07-p2. Besides the 32-bit speed patches, the booster with the Windows check and the ATC flip-flop
+1.5-07-p3. Besides the 32-bit speed patches, the booster with the Windows check and the ATC flip-flop
 reset, 4F05 keeping the sequencer index (Phoenix left it at 04h), the display FIFO M (CR54) computed at
 each mode set from the memory bandwidth (p2, #75: Phoenix's values let the FIFO run dry in windowed video
 at 54.9 MHz) and S3's fonts (those of 1.03-08 and
@@ -385,7 +387,7 @@ verified: no 86C764 card at hand). On an 86C764 keep the default build (54.9 MHz
 `MCLK=60` at most. The tools do not tell the two apart (the same PCI ID), so S3TEST's and S3COMPAT's
 MCLK lines accept up to 70 MHz on both.
 
-    make trom OUT=S3T64P2.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+    make trom OUT=S3T64P3.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
 
 The 64 KB images of all three ROMs (Trio64, Trio64V+ and Trio64V2) carry the 32 KB twice, so a board
 finds the BIOS whichever half of its 64 KB EEPROM it maps; the PCI ROM header declares one 32 KB image,
@@ -393,9 +395,9 @@ the last, so firmware that reads the ROM through PCI ignores the copy. The Exper
 there (the layout of the Trio64V2 ROM, whose card maps the lower half) the card stayed dark at POST
 while the PC booted (#78, 31 October 2026). Square brackets in these lines mark options: type
 `VSIZE=64`, not `[VSIZE=64]`.
-    make trom-test [ROM=S3T64P2.BIN]
-    make emu-test ROM=S3T64P2.BIN CHIP=trio64 [LOGS=emu/tlogs]
-    make tref-compare ROM=S3T64P2.BIN
+    make trom-test [ROM=S3T64P3.BIN]
+    make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
+    make tref-compare ROM=S3T64P3.BIN
 
 `s3tpatch.py` checks the 1.5-07 code (1000h-7EFFh, the same in every 1.5-07 build) and the layout of
 its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that card's memory clock and
@@ -408,18 +410,30 @@ fixed in the tools (docs/trio64-backport.md, "On the card").
 
 `.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
 Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted runners it uses are free;
-changes that touch only `*.md`, `docs/` or `datasheets/` do not start a run, and a newer commit on the
-same branch cancels the running one.
+changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or `infozip/` do not start
+a run, and a newer commit on the same branch cancels the running one.
 
-Every run builds NASM 3.02 from its release source (cached between runs) and the tools with `make`;
-the .COM files are kept as the artifact `tools` for 14 days. It then builds the ROM from the S3
-reference BIOS 2.04.07 in `reference/v2/2_04_07.bin` (`make rom`, `make rom-test` with the pinned
-SHA-256) and runs `make emu-test` and `make ref-compare` on it, each even when an earlier one failed;
-then builds the Trio64V+ ROM from `reference/vplus/1_03_08.bin` (`make vrom`, `make vrom-test`) and
-runs `make emu-test CHIP=vplus` and `make vref-compare` on it, and the Trio64 ROM from
-`reference/trio64/1_5_07.bin` with `make trom`, `make trom-test`, `make emu-test CHIP=trio64` and
-`make tref-compare`. The emulator logs are kept as the
-artifact `emu-logs` (without .BIN files), the patched ROM images are not kept. The hardware logs remain the final word, as for the emulator tests run by hand.
+The tests run as parallel jobs, one matrix row per chip and memory size, each named after its chip
+(the emulator tests took 37 minutes one after the other in a single job):
+
+| Job | What it runs |
+| --- | --- |
+| Trio64V2 2 MB, patcher, EGA/CGA | `make rom`, `make rom-test`, `make emu-test` with 2 MB (without s3compat_full), `make ref-compare` |
+| Trio64V2 2 MB s3compat_full | the longest test alone |
+| Trio64V2 4 MB | the tests tagged `vram` with 4 MB (without s3compat_full) |
+| Trio64V2 4 MB s3compat_full | s3compat_full with 4 MB |
+| Trio64V+ 2 MB, patcher, EGA/CGA | `make vrom`, `make vrom-test`, `make emu-test CHIP=vplus` with 2 MB, `make vref-compare` |
+| Trio64V+ 4 and 1 MB | the `vram` tests with 4 and 1 MB |
+| Trio64 2 MB, patcher, EGA/CGA | `make trom`, `make trom-test`, `make emu-test CHIP=trio64` with 2 MB, `make tref-compare` |
+| Trio64 4 and 1 MB | the `vram` tests with 4 and 1 MB |
+| build-and-test | passes when every row passed (the check name branch rules can require) |
+
+Every job builds NASM 3.02 from its release source (cached between runs), the tools with `make` and
+its chip's ROM from `reference/` with the pinned SHA-256 checked; the .COM files are kept as the
+artifact `tools` for 14 days. The split uses `make emu-test VRAM=... EMUARGS=...` (tests.py `--tests`,
+`--skip`, `-t vram`), which works by hand too. Each job keeps its emulator logs as an artifact
+`emu-logs-<job>` (without .BIN files); the patched ROM images are not kept. The hardware logs remain
+the final word, as for the emulator tests run by hand.
 
 `.github/workflows/coverage.yml` runs `make coverage` (the 80 % goal, with the list of code no test
 reaches) on the same ROM, for pushes to main and by hand only: pull requests do not start it, as it runs

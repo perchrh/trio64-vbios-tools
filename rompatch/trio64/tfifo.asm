@@ -11,11 +11,13 @@
 ;
 ;   t   = 112 x MCLK / (DCLK x bytes per pixel)    MCLKs in which the display drains 112 of the
 ;                                                  FIFO's 128 bytes (16 entries of 8 bytes)
-;   M+1 = (t - 18) / 5                             two entry cycles of up to 9 MCLKs, then 5 MCLKs per
-;                                                  access (the data book: 2 per page cycle, 6-9 per
-;                                                  entry cycle; the DSP-3364P streaked at M = 19 with
-;                                                  54.9 MHz and not at 69.8 MHz, which puts the mean
-;                                                  cost at 3.5 to 4.7 MCLKs)
+;   M   = (t - 23) / 6                             two entry cycles of up to 9 MCLKs and one more access,
+;                                                  then 6 MCLKs per access (the data book: 2 per page
+;                                                  cycle, 6-9 per entry cycle; the DSP-3364P streaked at
+;                                                  M = 19 with 54.9 MHz and not at 69.8 MHz, which puts
+;                                                  the mean cost at 3.5 to 4.7 MCLKs; p2 counted 5, and
+;                                                  at 60 MHz windowed video showed white dots with its
+;                                                  M = 12 in 800x600x16, so p3 counts 6, #82)
 ;
 ; DCLK = 14.31818 MHz x (M+2) / ((N+2) x 2^R) from SR13 (M) and SR12 (N bits 4-0, R bits 6-5). Bytes per
 ; pixel = (CR67 bits 7-5 + 3) / 2: 1 (0xh, 1xh: 8 bpp), 2 (3xh 15 bpp, 5xh 16 bpp), 3 (7xh), 4 (Dxh 32 bpp).
