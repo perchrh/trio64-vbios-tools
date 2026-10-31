@@ -628,8 +628,9 @@ def t_t64_patches(c):
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
     S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2),
     4F15 without VDIF, the window function, the sequencer
-    index kept by the window set and get (4F05 BH=0 and 1), and the 32-bit
-    registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh. Only on the Trio64 model."""
+    index kept by the window set and get (4F05 BH=0 and 1), the 32-bit
+    registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh, and the display FIFO M
+    (CR54) within the memory bandwidth in the packed modes (p2). Only on the Trio64 model."""
     if not c.tours:
         raise Skip('not our Trio64 ROM (1.5-07-pN)')
     if Machine.chip != 'trio64':
@@ -771,8 +772,31 @@ def t_t64_patches(c):
             high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
             chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
                 % (mode, ax, ['%04X' % h for h in high]))
+    # the display FIFO M (CR54 bits 7-3, #75), from the bandwidth: 112 of the FIFO's 128 bytes drain in
+    # t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs, two entry cycles take 18 and each access 5, so
+    # M+1 = (t - 18) / 5 at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM
+    # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 or 4 MB 103h, 105h and 114h have
+    # it exactly, since Phoenix's own values there are higher (with 1 MB, a 32-bit memory bus, Phoenix's own
+    # values are lower than the formula, which counts the 64-bit bus, and stay). The MCLK from the SR10/SR11
+    # the POST loads.
+    seq = m.r['seq']
+    mn, mm = (seq[0x10], seq[0x11]) if 0x10 in seq and 0x11 in seq else (rom[0x3B6], rom[0x3B5])
+    mclk = 14318.18 * ((mm & 0x7F) + 2) / (((mn & 0x1F) + 2) << ((mn >> 5) & 3))
+    for mode in (0x101, 0x103, 0x105, 0x107, 0x110, 0x111, 0x112, 0x113, 0x114, 0x115, 0x116, 0x117):
+        if m.int10(0x4F02, bx=mode)['ax'] != 0x004F:
+            continue
+        n, dm = seq.get(0x12, 0), seq.get(0x13, 0)
+        dclk = 14318.18 * ((dm & 0x7F) + 2) / (((n & 0x1F) + 2) << ((n >> 5) & 3))
+        bpp = ((cr.get(0x67, 0) >> 5) + 3) // 2
+        t = 112 * mclk / (dclk * bpp)
+        lim = [max(0, int(x - 23) // 5) if x < 178 else 31 for x in (t - 0.5, t + 0.5)]
+        got = cr.get(0x54, 0) >> 3
+        exact = mode in (0x103, 0x105, 0x114) and mclk < 56000 and Machine.vram >= 2
+        chk(got <= lim[1] and (not exact or got >= lim[0]), '%03Xh: CR54 M = %d, expected %s %d (t = %.1f MCLKs, '
+            'MCLK %.2f MHz, DCLK %.2f MHz, %d bytes per pixel)' % (mode, got, 'about' if exact else 'at most',
+                                                                   lim[1], t, mclk / 1000, dclk / 1000, bpp))
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return 'defaults, removed modes, booster, Windows check, lock, ATC flip-flop, 32-bit registers'
+    return 'defaults, removed modes, booster, Windows check, lock, ATC flip-flop, 32-bit registers, FIFO M'
 
 
 # S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)

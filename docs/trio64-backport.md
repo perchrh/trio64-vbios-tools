@@ -1,14 +1,14 @@
-# The Trio64 ROM (1.5-07-p1)
+# The Trio64 ROM (1.5-07-p2)
 
 Our changes ported to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in `rompatch/trio64`.
 Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P E0A2AA,
 2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); first run
 on that card on 31 October 2026 ("On the card" below). The choice of base is below ("Base BIOS candidates").
 
-    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with the 32 KB twice, TSIZE=32: 32 KB)
-    make trom-test ROM=S3T64P1.BIN
-    make emu-test ROM=S3T64P1.BIN CHIP=trio64
-    make tref-compare ROM=S3T64P1.BIN
+    make trom OUT=S3T64P2.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with the 32 KB twice, TSIZE=32: 32 KB)
+    make trom-test ROM=S3T64P2.BIN
+    make emu-test ROM=S3T64P2.BIN CHIP=trio64
+    make tref-compare ROM=S3T64P2.BIN
 
 Base: `reference/trio64/1_5_07.bin`, the CP764 build of Phoenix 1.5-07 (08/19/96, MCLK 54.9 MHz,
 SHA-256 6a28c6b2...). Every 1.5-07 build at hand has the same code from 1000h to 7EFFh; the patcher
@@ -17,7 +17,7 @@ too and keeps its memory clock and timing bytes (checked with `expertcolor.BIN`,
 the "1.5-07 EDO" build). It refuses the Britek "VIEWTOP" build (other sign-on text) and `86c764x2.bin`
 (a "V2680" tag at 7FF0h, where code goes).
 
-## What 1.5-07-p1 carries
+## What 1.5-07-p2 carries
 
 | Change | How |
 | --- | --- |
@@ -30,7 +30,8 @@ the "1.5-07 EDO" build). It refuses the Britek "VIEWTOP" build (other sign-on te
 | ATC flip-flop reset | In the mode set hook (AH=00 table and 4F02's call). |
 | VDIF deleted | For space (31 October 2026). VBE 4F15 BL=02h, read VDIF (a format VESA withdrew), now fails with AH=01h at once; 1.5-07 first spent the 50-frame DDC1 watch on it. Its routine (52E1h-5341h, 97 bytes) is zeroed (`DDC_FREED`), and two sites with byte assertions (`DDC_SITES`) end BL=02h at the dispatcher, so nothing refers to the freed code. DDC1 and DDC2B stay byte for byte as in 1.5-07: Windows 95 Plug and Play (BL=00h, then BL=01h) reads the EDID of DDC2B monitors and of the era's monitors that speak DDC1 alone. DDC1 was deleted too for a few hours on 31 October 2026 and put back the same day; its detection is what makes 4F15 take about 0.73 s without a DDC monitor. |
 | Sequencer index kept by 4F05 | Phoenix's window set (5123h) and get (5148h) read SR04 (chain 4) and left the 3C4h index at 04h. Both reads now go through `sr04` (`twin.asm`), which reads SR04 and writes the index back as found, for 4F05 and the window function, BH = 0 and 1. The data book does not require it (it defines the registers, not what a BIOS call leaves in an index); S3's own 2.04.07 and 1.03-08 leave the index as found, and S3TEST's 4F05 line expects that (fail bit 2). |
-| MCLK build option | `MCLK=` sets the single MCLK entry at 3B5h, at most 60 MHz (MEM-1); without it the build's own clock stays. |
+| MCLK build option | `MCLK=` sets the single MCLK entry at 3B5h, up to 70 MHz (the data book gives 60 MHz, MEM-1; above 70 MHz only with `OVERCLOCK=1`); without it the build's own clock stays. |
+| Display FIFO M from the bandwidth (p2, #75) | Phoenix writes CR54 (M, bits 7-3) from its mode table, values chosen for its interlaced defaults and a faster MCLK; with the 60 Hz defaults and 54.9 MHz the FIFO ran dry in windowed video at 800x600x16 (M = 19). `fifo` (`tfifo.asm` in the 97 bytes of the deleted VDIF code, `tfifo2.asm` in the sign-on padding 00AEh-00E3h) runs in the mode set where Phoenix writes CR67 (DCLK, CR3A and CR54 are set by then, the screen still off) and in the packed modes (CR3A bit 4) lowers M to (t - 18) / 5 - 1, t = 112 x MCLK / (DCLK x bytes per pixel): the MCLKs in which the display drains 112 of the FIFO's 128 bytes, less two entry cycles of 9 MCLKs, at 5 MCLKs per access (the data book: 2 per page cycle, 6-9 per entry cycle; the card streaked at M = 19 with 54.9 MHz and not at 69.8 MHz, which puts the mean between 3.5 and 4.7). It never raises M. 112 x MCLK in kHz is a constant in the code that the patcher writes from the build's MCLK pair, so `MCLK=` builds follow. At 54.9 MHz in the emulator: 103h 31 to 25, 105h 31 to 14, 107h 26 to 6, 113h/114h 19 to 10, 115h 4 to 3, 116h/117h 5 to 4; 101h, 110h-112h and the VGA modes unchanged. |
 
 Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in 1.5-07-p1 with the booster check and the sequencer index kept), the 32-bit S3/VESA
 mode set clear (Phoenix clears with the graphics engine), the base restore (Phoenix writes CR59 from
@@ -58,9 +59,12 @@ SCR13W; the Trio64V+ build assembles it as before, byte-identical):
 | 0EAC-0EB9 (14) | the old font loop after the font jump | `p13bfa.asm` |
 | 4D70-4D81 (18) | the end of the first VESA list after its compaction | `twin.asm`: sr04 (4D70-4D7C) |
 | 4DD1-4DDF (15) | the end of the VESA mode map after its compaction | `twset.asm`: wsetp (all 15 bytes) |
+| 52E1-5341 (97) | the VDIF code of 4F15, deleted for space | `tfifo.asm`: fifo, the FIFO M computation (all 97 bytes, p2) |
+| 00AE-00E3 (54) | zero padding after the first sign-on block (the p2 sign-on ends at 00ABh) | `tfifo2.asm`: fifo2, its second part (00AE-00DE, p2) |
 
-Free after the build: 52E1-5341 (97), the deleted VDIF code; 7FE5-7FFE (26), 0620-0630 (17), 4EE1-4EED (13), 4D7D-4D81, 4E36-4E39, 0182-0183, 0BCF, 0DF5, and about 40 bytes of
-sign-on padding (fewer in builds with a longer sign-on), about 210 bytes in all. Kept by decision (31
+Free after the build (p2): 7FE5-7FFE (26), 0620-0630 (17), 4EE1-4EED (13), 00DF-00E3, 4D7D-4D81,
+4E36-4E39, 0182-0183, 0BCF, 0DF5, about 75 bytes in all; the FIFO code took the 97 bytes of the VDIF code
+and the sign-on padding. Kept by decision (31
 October 2026): the 8x14 font with its 9x14 table (3885 bytes), to preserve the style of the era, and DDC1.
 Further candidates, not taken: the S3 2xxh mode numbers (100-300 bytes in pieces; 1152x864 at 207h and
 640x400x32 at 213h exist only there), 4F10 power management (71 bytes) and the refresh entries below
@@ -287,7 +291,7 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
 - The DSP-3364P's own BIOS (dumped 31 October 2026, table above) is an earlier 1.5-07 build that
   `s3tpatch.py` refuses (other code). It needs no support: the CP764 reference has the same card
   settings, apart from the memory clock, and newer DDC code (DDC1 and DDC2B). Build the card's ROM from
-  the reference with `make trom OUT=S3T64P1.BIN MCLK=60` (the data book maximum; the card ran at 69.8
+  the reference with `make trom OUT=S3T64P2.BIN MCLK=60` (the data book maximum; the card ran at 69.8
   MHz) or `MCLK=55` (the CP764 build's own 54.9 MHz), and check the memory with
   S3COMPAT's VRAM test (without /Q). Take S3REGS before flashing, with the stock BIOS: SR10/SR11
   should read 22h/25h (69.8 MHz). The Trio64 has two clock PLLs only, DCLK (pixel clock) and MCLK
@@ -297,11 +301,10 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   3.5 or 4.5 MCLKs, RAS precharge 2.5 or 3.5 MCLKs, a CAS/OE stretch of 0-6.5 ns; at 69.8 MHz 3.5
   MCLKs are 50.1 ns.
 - S3COMPAT again on the card with the fixed tools (#72, #73): no FAIL expected.
-- Video playback streaks under Windows 98 (#75): windowed at 800x600x16 only (above). Next: the same
-  video with the card's own BIOS, with `MCLK=60` and with the overclock `MCLK=69.8 OVERCLOCK=1`, and
-  VGALOG /M loaded before Windows for the driver's mode set at the start; then the fix: a smaller M
-  (CR54) for the modes whose display takes most of the bandwidth (data book section 7.4), or the
-  MCLK.
+- Video playback streaks under Windows 98 (#75): windowed at 800x600x16 only (above), gone at
+  69.8 MHz (T64DUP70). p2 computes M from the bandwidth (table above); to check on the card with the
+  default build (54.9 MHz): windowed video at 800x600x16, VIDSPEED, and S3REGS32 /W for CR54 (expected
+  50h, M = 10, in 114h).
 - The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
   with the 32-bit CPU clear on the Trio64V2). The 2.04.07 `clear32.asm` (35 bytes) would fit the free
   space; Phoenix's clear routine (121Eh) and its callers need a look first.
@@ -317,5 +320,5 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   S3COMPAT /V that sets CR55 bit 2, writes CR5C bits 1-0 = 00b, 01b, 10b, 11b and logs the raw 3C8h
   values as D: records: a missing buffer gives the DAC write index or a floating bus whatever is
   written, a wired SDA follows bit 0. If the board wires other GOP or GIP bits, the two routines take
-  a byte patch each; a DDC2 of our own would have about 210 bytes free (97 at 52E1h in one piece). If
+  a byte patch each; a DDC2 of our own would have about 75 bytes free since p2 (the FIFO code took the 97 at 52E1h). If
   pins 12 and 15 are not connected, no ROM can help.

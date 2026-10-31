@@ -44,7 +44,7 @@
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
 ;                    "2.04.07-p21") on a Trio64V2, VROMVER ("1.03-08-p1") on a Trio64V+, TROMVER
-;                    ("1.5-07-p1") on a Trio64; the version found is printed, also for other BIOS versions
+;                    ("1.5-07-p2") on a Trio64; the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
 ;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,

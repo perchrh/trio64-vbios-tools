@@ -18,5 +18,5 @@
 %define VROMVER '1.03-08-p1'
 %endif
 %ifndef TROMVER
-%define TROMVER '1.5-07-p1'
+%define TROMVER '1.5-07-p2'
 %endif

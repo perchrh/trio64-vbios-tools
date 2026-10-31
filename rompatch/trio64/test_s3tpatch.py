@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """test_s3tpatch.py - checksum and table tests for the Trio64 ROM patcher s3tpatch.py (needs python3 and nasm).
 
-    python3 rompatch/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P1.BIN] [--nasm nasm]
-    make trom-test [TREF=...] [ROM=S3T64P1.BIN]
+    python3 rompatch/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P2.BIN] [--nasm nasm]
+    make trom-test [TREF=...] [ROM=S3T64P2.BIN]
 
 --ref is the 32 KB Phoenix S3 Trio64 BIOS 1.5-07 (default reference/trio64/1_5_07.bin), --rom a build to
 compare with byte by byte.
 
 Tests
   build          1.5-07 gives the tested build: the SHA-256 pinned in s3tpatch.py (NASM 3.02) over the
-                 lower 32 KB, sign-on 1.5-07-p1, 64 KB with the 32 KB twice (the default, #78), the
+                 lower 32 KB, sign-on 1.5-07-p2, 64 KB with the 32 KB twice (the default, #78), the
                  lower 32 KB byte-identical to --rom when given (a 32 or 64 KB image)
   checksums      the 32 KB sum to 00 (byte 7FFFh makes it so) and have the 55AAh header with 32 KB size
   tables         every mode's refresh list starts with a non-interlaced entry, the five interlaced-only
@@ -19,7 +19,10 @@ Tests
   fonts          all five font tables are those of 1.03-08 (--vref) byte for byte, end to end from 5720h
                  to 7F90h, and the eight references to the moved 8x16 font and 9x16 table point at their
                  new places; --fonts-only changes only the fonts, those references and the checksum byte
-  ddc            the 4F15 sites carry their new bytes and the VDIF code (DDC_FREED) is zero
+  ddc            the 4F15 sites carry their new bytes and the VDIF code (DDC_FREED) is gone, tfifo.asm in
+                 its place
+  fifo           the mode set's CR67 site calls the FIFO code (p2, #75), whose constant is 112 x MCLK in kHz
+                 of the build's MCLK PLL pair at 3B5h
   unchanged      outside the tables, the fonts, the patch sites (DDC ones too), the code blocks, the
                  zeroed VDIF code, the sign-on and the checksum every byte is as in 1.5-07
   oem_build      a 1.5-07 build with other memory timing bytes in its refresh entries and another MCLK
@@ -27,7 +30,7 @@ Tests
   input_64k      a 64 KB image with 1.5-07 in the lower half gives the same result, whatever its upper half
   size32         --size 32 gives the same lower 32 KB alone
   mclk           --mclk 50, 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change nothing
-                 else but the checksum; 69.8 and 70 MHz are valid, 71 and 39 MHz refused (70 MHz, the
+                 else but the checksum and the FIFO code's 112 x MCLK; 69.8 and 70 MHz are valid, 71 and 39 MHz refused (70 MHz, the
                  86C764X's rating); with --overclock 85 and 100 MHz are valid, 101 MHz and --overclock
                  without --mclk refused
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte changed
@@ -168,13 +171,18 @@ def main():
     for a_, _, new in s3tpatch.DDC_SITES:
         if img[a_:a_ + len(new.split())] != bytes.fromhex(new):
             errs.append('site %04X' % a_)
-    for lo, hi, _ in s3tpatch.DDC_FREED:
-        if img[lo:hi] != bytes(hi - lo):
-            errs.append('%04X-%04X not zero' % (lo, hi - 1))
-    result('ddc', not errs, '; '.join(errs) or '4F15 sites patched, %d bytes of VDIF code zero'
-           % sum(hi - lo for lo, hi, _ in s3tpatch.DDC_FREED))
-    # every changed byte belongs to the tables, the fonts, a site, a block, the sign-on or the checksum
     sym = s3tpatch.s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
+    for lo, hi, sig in s3tpatch.DDC_FREED:          # the VDIF code is gone; the FIFO code (p2) fills its place
+        if s3tpatch.sig_match(img, lo, sig) or lo != sym['TFIFO']:
+            errs.append('%04X-%04X still the VDIF code, or not where tfifo.asm goes' % (lo, hi - 1))
+    result('ddc', not errs, '; '.join(errs) or '4F15 sites patched, the %d bytes of VDIF code replaced by tfifo.asm'
+           % sum(hi - lo for lo, hi, _ in s3tpatch.DDC_FREED))
+    # the FIFO code's MCLK constant (kmclk): 112 x MCLK in kHz, from the build's PLL pair at 3B5h
+    kpos = lambda b: b.find(struct.pack('<I', round(112000 * s3tpatch.mclk_of(b))), sym['TFIFO'], sym['TFIFO'] + 97)
+    result('fifo', kpos(img) > 0 and img[s3tpatch.SITES['cr67']] == 0xE8,
+           'CR67 site calls the FIFO code, 112 x MCLK = %d at %04X' % (round(112000 * s3tpatch.mclk_of(img)), kpos(img))
+           if kpos(img) > 0 else 'no 112 x MCLK constant in the FIFO code')
+    # every changed byte belongs to the tables, the fonts, a site, a block, the sign-on or the checksum
     allowed = set(range(*s3tpatch.LISTS)) | set(range(s3tpatch.MTAB, 0x0631)) | set(range(s3tpatch.VLIST, 0x4DE0))
     allowed |= set(range(*s3tpatch.FONTS))
     for a_, old, _ in s3tpatch.DDC_SITES:
@@ -217,9 +225,12 @@ def main():
         m, nr = out[0x3B5], out[0x3B6]
         vco = 14.31818 * (m + 2) / ((nr & 0x1F) + 2)
         f = vco / (1 << ((nr >> 5) & 3))
-        diff = [i for i in range(0x8000) if out[i] != img[i] and i not in (0x3B5, 0x3B6, 0x7FFF)]
-        if not (1 <= nr & 0x1F and not nr & 0x80 and 135 <= vco <= 270 and abs(f - float(mhz)) < 0.5) or diff:
-            bad.append('%s MHz: %02X %02X (%.2f MHz), %d other bytes differ' % (mhz, m, nr, f, len(diff)))
+        k = kpos(out)                               # the FIFO code's 112 x MCLK follows the new clock
+        diff = [i for i in range(0x8000) if out[i] != img[i] and i not in (0x3B5, 0x3B6, 0x7FFF)
+                and not k <= i < k + 4]
+        if not (1 <= nr & 0x1F and not nr & 0x80 and 135 <= vco <= 270 and abs(f - float(mhz)) < 0.5) or diff or k < 0:
+            bad.append('%s MHz: %02X %02X (%.2f MHz), %d other bytes differ%s' % (mhz, m, nr, f, len(diff),
+                       ', 112 x MCLK not in the FIFO code' if k < 0 else ''))
     for mhz in ('69.8', '70'):                      # up to 70 MHz without --overclock
         rc, out, err = run(tmp, ref, ['--mclk', mhz])
         f = (14.31818 * (out[0x3B5] + 2) / ((out[0x3B6] & 0x1F) + 2) / (1 << ((out[0x3B6] >> 5) & 3))
