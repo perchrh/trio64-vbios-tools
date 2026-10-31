@@ -6,4 +6,8 @@ VSHOW /R /V /S > VSHOW.LOG
 s3regs after tests
 vgalog /D
 
+copy c:\s3regs.txt s3regsr.txt
+copy c:\vgalog.bin vgalogr.bin
+pkzip runall.zip *.log s3regs.txt vgalog.bin s3regsr.txt vgalogr.bin
+
 echo 

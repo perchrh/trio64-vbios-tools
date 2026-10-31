@@ -57,11 +57,14 @@ The .COM files land in `build/`, with `RUNALL.BAT` (from `runall.bat`): it loads
 mode (`VGALOG /M`), takes an S3REGS snapshot ("before tests"), runs S3TEST, S3COMPAT and `VSHOW /R`, all
 with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.TXT), writes the last
 1024 INT 10h calls with `VGALOG /D`, and beeps (`echo` of Ctrl-G) when done. It leaves S3TEST.LOG,
-S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. VGALOG stays
+S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. It then copies
+C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root) as
+S3REGSR.TXT and VGALOGR.BIN, and packs the logs and these four files into RUNALL.ZIP with PKZIP, which
+must be on the PATH or in the same folder (it is not part of this repository). VGALOG stays
 resident afterwards (`VGALOG /U` unloads it); while it is loaded, every INT 10h call takes a little
 longer, which shows only in the timing lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves
 behind before the next one: the .DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and
-VGALOG.BIN in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only start it with a
+VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only start it with a
 monitor that takes 91 kHz or refuses it (an LCD). `common/` holds the /V debug log code the test tools
 share.
 
