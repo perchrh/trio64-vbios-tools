@@ -964,10 +964,13 @@ Secondary references on VBE (also kept outside the repository; VESA's and the pu
   books of Ferraro and Wilton, which would be worth having.
 - Toby Opferman, "How To Use Super VGA (VESA 1.x Non-Linear)": banking through 4F05 and the window
   granularity as an application does it; nothing a BIOS or the tools need beyond the VBE text.
-- VESA.TXT, an INT 10h AX=4Fxxh summary in the format of Ralf Brown's Interrupt List (probably from
-  Finn Thoegersen's VGADOC): VBE 1.0 to 2.0 and 4F10 (VBE/PM: BL=00h capabilities, 01h set, 02h get
-  the power state, the BH bits), with the VBE standard numbers (1.0 VS891001, 1.1 VS900602, 1.2
-  VS911022). A quick reference until VBE/PM itself is at hand; it has errors (4F0A takes BL=00h and
+- VGADOC 4b by Finn Thoegersen (1991-95), freeware: nine of its files are in `standards/thoegersen/`
+  with its licence (`standards/README.md`). VGABIOS.TXT is a reference for the standard INT 10h
+  functions, VGAREGS.TXT, EGAREGS.TXT and CGA.TXT for the registers, S3.TXT for the S3 chips up to
+  the Trio64 (registers, IDs, S3 INT 10h functions, board mode lists), PCI.TXT for the PCI BIOS.
+  Its VESA.TXT summarizes VBE 1.0 to 2.0 and 4F10 (VBE/PM: BL=00h capabilities, 01h set, 02h get the
+  power state, the BH bits) with the VBE standard numbers (1.0 VS891001, 1.1 VS900602, 1.2
+  VS911022): a quick reference until VBE/PM itself is at hand. It has errors (4F0A takes BL=00h and
   returns one table, not BX = function), so the standards decide.
 
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.

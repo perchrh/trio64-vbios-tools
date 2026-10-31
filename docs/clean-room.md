@@ -53,7 +53,9 @@ standards that one of our BIOSes implements (README "VESA standards"): VBE 2.0 a
 1.0 (4F15) with the DDC1 and DDC2B signalling of DDC 1.0 to 3, VBE/PM 1.0 (4F10) with DPMS 1.0, DMT
 1.0 Rev. 0.7 and GTF 1.0 for the timings, and the Mode 6Ah standard; of the secondary references in
 README "VESA standards", the first VBE (VS891001) and Haakenson's article on the changes from VBE
-1.2 to 2.0, which describe behaviour our BIOSes have; VBE 1.2 is at hand as a retyped text. Nothing beyond what our BIOSes
+1.2 to 2.0, which describe behaviour our BIOSes have; VBE 1.2 is at hand as a retyped text. VGADOC
+(`standards/thoegersen/`, freeware whose licence allows any use of its information) describes the
+standard INT 10h functions, the VGA, EGA and CGA registers and the S3 registers. Nothing beyond what our BIOSes
 do concerns the clean-room implementation: VBE 3.0, VBE/SCI, VBE/AF and the EDID structure stay out
 of its specification. The timing values of the ROM can then come from DMT and GTF instead of from
 Phoenix's tables. VESA allows only VBE 2.0 to be posted online, so the others go to the clean side as
