@@ -34,3 +34,6 @@
 %define BFILL    0x0D79     ; bfill0/bfill (p13bfill.asm): a CRTC table of a removed interlaced entry
 %define P13B     0x0DDD     ; wmove (p13move.asm): a CRTC table of a removed interlaced entry
 %define TWIN     0x4D70     ; sr04 (twin.asm): the end of the first VESA list after its compaction
+%define TFIFO    0x52E1     ; fifo (tfifo.asm): the deleted VDIF code of 4F15, all 97 bytes (p2)
+%define TFIFO2   0x00AE     ; fifo2 (tfifo2.asm): the zero padding after the first sign-on block, up to
+                            ; 00E3h (the p2 sign-on ends at 00ABh)

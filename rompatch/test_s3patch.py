@@ -9,10 +9,11 @@ REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN (optional) the 64 
 repository.
 
 Tests
-  build          the reference gives the tested build: SHA-256 515bf9fe... (NASM 3.02), sign-on 2.04.07-p21,
-                 byte-identical to --rom when given
+  build          the reference gives the tested build: SHA-256 of the lower 32 KB 283b9a0b... (NASM 3.02),
+                 sign-on 2.04.07-p21, byte-identical to --rom when given (a 64 KB --rom with zeros above,
+                 as p15-p21 were built, compares by its lower 32 KB)
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
-                 32 KB size, the upper 32 KB is zeros
+                 32 KB size, the upper 32 KB is a copy of the lower (#78)
   vco            every DCLK refresh entry runs its VCO in 170-340 MHz
   pllcodes       every DCLK refresh entry has M 1-127, N 1-31 and an R code the datasheet defines (SR12
                  bits 7-5: with bit 7 set only 100b), docs/chip-rules.md PLL-2 and V2-PLL-3
@@ -64,8 +65,8 @@ def image_checks(img):
         errs.append('lower checksum %02X' % (sum(img[:0x8000]) & 0xFF))
     if img[0x7FFF] != (-sum(img[:0x7FFF])) & 0xFF:
         errs.append('byte 7FFF')
-    if img[0x8000:] != bytes(0x8000):
-        errs.append('upper half not zeros')
+    if img[0x8000:] != img[:0x8000]:
+        errs.append('upper half not a copy of the lower')
     if img[:3] != b'\x55\xAA\x40':
         errs.append('55AA header with 32 KB size')
     return errs
@@ -127,18 +128,19 @@ def main():
     tmp = tempfile.mkdtemp(prefix='t_s3patch_')
 
     rc, img, err = run(tmp, ref)
-    sha = hashlib.sha256(img).hexdigest() if img else ''
+    sha = hashlib.sha256(img[:0x8000]).hexdigest() if img else ''
     ok = rc == 0 and sha == s3patch.RESULT_SHA and b'Version 2.04.07-%s\r\n' % s3patch.LEVEL.encode() in img[:0x100]
     info = 'SHA-256 %s' % sha[:16] if ok else (err or 'SHA-256 %s' % sha)
     if ok and a.rom:
-        same = open(a.rom, 'rb').read() == img
+        rom = open(a.rom, 'rb').read()
+        same = rom == img or (len(rom) == 0x10000 and rom[:0x8000] == img[:0x8000] and rom[0x8000:] == bytes(0x8000))
         ok, info = same, info + (', identical to ' if same else ', differs from ') + os.path.basename(a.rom)
     result('build', ok, info)
     if not img:
         print('%d failed' % len(failed))
         return 1
     errs = image_checks(img)
-    result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper 32 KB zeros' % img[0x7FFF])
+    result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper 32 KB a copy' % img[0x7FFF])
     bad = vco_out(img)
     result('vco', not bad, ', '.join('%04X' % e for e in bad) or 'all entries in 170-340 MHz')
     bad = pll_bad(img)

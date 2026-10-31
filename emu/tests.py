@@ -19,7 +19,7 @@ Tests
                    rompatch/vplus/s3vpatch.py builds (1.03-08-p1), and our Trio64V+ ROM carries it
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
-                   half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
+                   half and the upper 32 KB a copy of it (#78; p15-p21 were built with zeros there) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the booster (p18: on after a banked 4F02, real base in CR6D; p16: on
                    after the window function by far call in AH=00 mode 59h; p17: off under Windows
                    enhanced mode, INT 2Fh AX=1600h asked once per mode set), the
@@ -64,11 +64,16 @@ Tests
                    above the single-clock limit, the CR86 and CR90/CR91 rules in 012Eh, 010Fh, 0131h,
                    0134h and 012Ah, which are clean on the card) and the lines that judge video memory through banks,
                    the LFB or planar windows above 64 KB, which the model does not have
-  vgalog           VGALOG installs, logs 32 bytes per call and returns the BIOS results with the
-                   caller's interrupt flag; second install refused, /H, /U closes the file and unhooks
+  vgalog           VGALOG installs, writes the file header with the chip and ROM block (CR2D-CR30, CR36,
+                   ROM size, SR10/SR11, the ROM version) and logs 32 bytes per call, returns the BIOS
+                   results with the caller's interrupt flag; second install refused, /H, /U closes the
+                   file and unhooks; /M and /T files carry the same block
   vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
                    registers in and out, SR10/SR11 and CR58-5A/6D after), /D writes them in call order,
                    the S3 locks are put back, /U unhooks, /D afterwards is refused
+  vgalog_trace     VGALOG /T: every OUT the BIOS makes in the mode sets AX=0003h and 4F02h 101h is in the
+                   trace in order with its value, behind the marker of its call; other calls not traced,
+                   INT 1 put back after each mode set, the trap flag clear on return
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
   s3regs           S3REGS.COM and S3REGS32.EXE (the Win32 one on a 32-bit CPU with the same register
                    model, vgaemu.run_pe32) write the same snapshot, keep indexes and locks, and
@@ -126,7 +131,7 @@ Tests
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, REGNAMES  # noqa: E402
+from vgaemu import Machine, REGNAMES, CHIPS  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -381,7 +386,8 @@ def t_rom_patches(c):
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
     chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
     if len(rom) >= 0x10000:
-        chk(rom[0x8000:0x10000] == bytes(0x8000), 'the upper 32 KB is not all zeros (since p15)')
+        chk(rom[0x8000:0x10000] in (rom[:0x8000], bytes(0x8000)), 'the upper 32 KB is neither a copy of the lower '
+            '32 KB (#78) nor zeros (p15-p21 as built before)')
     cr = m.r['crtc']
     base = (cr.get(0x59, 0), cr.get(0x5A, 0))           # the PCI base the BIOS found at POST
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
@@ -511,7 +517,7 @@ def t_vplus_patches(c):
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
     chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
     if len(rom) > 0x8000:
-        chk(rom[0x8000:] == bytes(len(rom) - 0x8000), 'the upper 32 KB is not all zeros')
+        chk(rom[0x8000:] == rom[:0x8000], 'the upper 32 KB is not a copy of the lower 32 KB (#78)')
     cr = m.r['crtc']
     base = (cr.get(0x59, 0), cr.get(0x5A, 0))           # the PCI base, 1.03-08 keeps bits 31-24 in CR6B
     chk(base[0] and not base[1] and cr.get(0x6B) == base[0], 'POST: CR59/5A %02X%02X, CR6B %02X'
@@ -628,8 +634,9 @@ def t_t64_patches(c):
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
     S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2),
     4F15 without VDIF, the window function, the sequencer
-    index kept by the window set and get (4F05 BH=0 and 1), and the 32-bit
-    registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh. Only on the Trio64 model."""
+    index kept by the window set and get (4F05 BH=0 and 1), the 32-bit
+    registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh, and the display FIFO M
+    (CR54) within the memory bandwidth in the packed modes (p2). Only on the Trio64 model."""
     if not c.tours:
         raise Skip('not our Trio64 ROM (1.5-07-pN)')
     if Machine.chip != 'trio64':
@@ -771,8 +778,31 @@ def t_t64_patches(c):
             high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
             chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
                 % (mode, ax, ['%04X' % h for h in high]))
+    # the display FIFO M (CR54 bits 7-3, #75), from the bandwidth: 112 of the FIFO's 128 bytes drain in
+    # t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs, two entry cycles take 18 and each access 5, so
+    # M+1 = (t - 18) / 5 at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM
+    # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 or 4 MB 103h, 105h and 114h have
+    # it exactly, since Phoenix's own values there are higher (with 1 MB, a 32-bit memory bus, Phoenix's own
+    # values are lower than the formula, which counts the 64-bit bus, and stay). The MCLK from the SR10/SR11
+    # the POST loads.
+    seq = m.r['seq']
+    mn, mm = (seq[0x10], seq[0x11]) if 0x10 in seq and 0x11 in seq else (rom[0x3B6], rom[0x3B5])
+    mclk = 14318.18 * ((mm & 0x7F) + 2) / (((mn & 0x1F) + 2) << ((mn >> 5) & 3))
+    for mode in (0x101, 0x103, 0x105, 0x107, 0x110, 0x111, 0x112, 0x113, 0x114, 0x115, 0x116, 0x117):
+        if m.int10(0x4F02, bx=mode)['ax'] != 0x004F:
+            continue
+        n, dm = seq.get(0x12, 0), seq.get(0x13, 0)
+        dclk = 14318.18 * ((dm & 0x7F) + 2) / (((n & 0x1F) + 2) << ((n >> 5) & 3))
+        bpp = ((cr.get(0x67, 0) >> 5) + 3) // 2
+        t = 112 * mclk / (dclk * bpp)
+        lim = [max(0, int(x - 23) // 5) if x < 178 else 31 for x in (t - 0.5, t + 0.5)]
+        got = cr.get(0x54, 0) >> 3
+        exact = mode in (0x103, 0x105, 0x114) and mclk < 56000 and Machine.vram >= 2
+        chk(got <= lim[1] and (not exact or got >= lim[0]), '%03Xh: CR54 M = %d, expected %s %d (t = %.1f MCLKs, '
+            'MCLK %.2f MHz, DCLK %.2f MHz, %d bytes per pixel)' % (mode, got, 'about' if exact else 'at most',
+                                                                   lim[1], t, mclk / 1000, dclk / 1000, bpp))
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return 'defaults, removed modes, booster, Windows check, lock, ATC flip-flop, 32-bit registers'
+    return 'defaults, removed modes, booster, Windows check, lock, ATC flip-flop, 32-bit registers, FIFO M'
 
 
 # S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)
@@ -1056,6 +1086,21 @@ def t_s3compat_full(c):
     return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
 
 
+def vgalog_info(c, m, blk, what):
+    """The chip and ROM block VGALOG writes (32 bytes): CR2D-CR30 and CR36 as the model's chip reports
+    them, the ROM size byte, SR10/SR11 as the POST left them, and the word after "Vers" in the ROM's
+    first 256 bytes."""
+    ids = CHIPS[Machine.chip]['ids'][:4]
+    cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
+    if Machine.chip in ('trio64', 'trio32'):
+        cr36 |= 0x0C if Machine.vram == 4 else 0x08
+    v = re.search(rb'Vers\S*\s+([^\s(]{1,15})', c.rom[:0x100])
+    want = bytes(ids) + bytes([cr36, c.rom[2], m.r['seq'].get(0x10, 0), m.r['seq'].get(0x11, 0)]) + \
+        (v.group(1) if v else b'').ljust(16, b'\0') + bytes(8)
+    check(blk == want, '%s: chip and ROM block %s, expected %s' % (what, blk.hex(' '), want.hex(' ')))
+    return (v.group(1) if v else b'').decode()
+
+
 def t_vgalog(c):
     if not os.path.exists(os.path.join(SRC, 'vgalog', 'vgalog.asm')):
         raise Skip('no vgalog/ in this tree')
@@ -1065,6 +1110,9 @@ def t_vgalog(c):
     check(r.exit and r.exit[0] == 'tsr', 'VGALOG did not stay resident: %s' % (r.exit,))
     log = r.files.get('VGALOG.BIN')
     check(log is not None, 'VGALOG.BIN not created')
+    check(log[:16] == b'VGALOGF1' + bytes(8), 'no file-mode header: %r' % bytes(log[:16]))
+    ver = vgalog_info(c, m, bytes(log[16:48]), 'file mode')
+    del log[:48]                                # the records follow
     m.com = r                                   # keep collecting the resident copy's DOS writes
     m.stdout_is_file = True
     m.psp = 0x2000
@@ -1077,7 +1125,7 @@ def t_vgalog(c):
             check(res['ax'] == want, 'AX=%04X returned AX=%04X' % (ax, res['ax']))
     m.com = None
     c.save('VGALOG', ri)
-    check(len(log) == 3 * 32, 'VGALOG.BIN has %d bytes, expected 96 (3 logged calls)' % len(log))
+    check(len(log) == 3 * 32, 'VGALOG.BIN has %d bytes after the header, expected 96 (3 logged calls)' % len(log))
     recs = [log[i:i + 16] for i in range(0, len(log), 16)]
     check([x[0] for x in recs] == [ord('B'), ord('A')] * 3, 'records not B/A pairs')
     rh = m.run_com(com, '/H', seg=0x4000)
@@ -1229,10 +1277,12 @@ def t_vgalog_mem(c):
     rd = m.run_com(com, '/D', seg=0x4000)
     check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
     b = rd.files.get('VGALOG.BIN')
-    check(b is not None and b[:8] == b'VGALOGM1', 'VGALOG.BIN has no memory-mode header')
-    total, n = struct.unpack_from('<IH', b, 8)
-    recs = [b[16 + 32 * i:48 + 32 * i] for i in range(n)]
-    check(len(b) == 16 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    check(b is not None and b[:8] == b'VGALOGM2', 'VGALOG.BIN has no memory-mode header')
+    total, n, flags = struct.unpack_from('<IHH', b, 8)
+    check(flags == 0, 'header flags %04X without /T' % flags)
+    vgalog_info(c, m, bytes(b[16:48]), '/M')
+    recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
+    check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
     top = [struct.unpack_from('<H', x, 2)[0] for x in recs if x[23] == 0]
     check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
           % ['%04X' % a for a in top])
@@ -1251,7 +1301,7 @@ def t_vgalog_mem(c):
     m.mu.mem_write(0x40, struct.pack('<HH', 0, 0x0060))
     rw = m.run_com(com, '/D', seg=0x4000)
     bw = rw.files.get('VGALOG.BIN')
-    check(rw.exit == ('exit', 0) and bw is not None and bw[:8] == b'VGALOGM1',
+    check(rw.exit == ('exit', 0) and bw is not None and bw[:8] == b'VGALOGM2',
           '/D behind another INT 10h hook: exit %s, output %r' % (rw.exit, bytes(rw.stdout)[-100:]))
     rt = m.run_com(com, '/M', seg=0x4000)
     check(rt.exit == ('exit', 1), 'second /M behind another hook not refused: %s' % (rt.exit,))
@@ -1264,6 +1314,94 @@ def t_vgalog_mem(c):
     check(rd2.exit == ('exit', 1), '/D after /U not refused')
     c.save('VGALOGM', rd)
     return '%d calls, %d of them nested' % (n, len(nested))
+
+
+def t_vgalog_trace(c):
+    """VGALOG /T traces the port accesses of the mode sets: every OUT the BIOS makes during AX=0003h and
+    4F02h 101h is in the trace, in order and with its value (the model's own record of the OUTs as the
+    reference), behind a marker that names the call's record; the reads are there (kind 1), polling loops
+    take one event with repeats, other calls (AH=0Eh, 4F05h) are not traced, INT 1 is put back after each
+    mode set and /U unloads."""
+    com = c.tool('VGALOG.COM')
+    m = c.machine()
+    i1 = m.mem(4, 4)
+    r = m.run_com(com, '/T', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /T did not stay resident: %s' % (r.exit,))
+    check(b'port trace' in bytes(r.stdout), '/T install message: %r' % bytes(r.stdout)[-120:])
+
+    def want(port):
+        return 0x3B0 <= port <= 0x3DF or 0xCF8 <= port <= 0xCFF or port & 0x3FD == 0x2E8
+    seen = {}                           # call -> the BIOS's OUTs as (port, value, kind), not VGALOG's own
+    cur = [None]
+
+    def out(uc, port, size, val, ud):
+        if cur[0] is None or uc.reg_read(UC_X86_REG_CS) == 0x2000:
+            return
+        ev = seen.setdefault(cur[0], [])
+        if want(port):
+            ev.append((port, val & 0xFF, 0))
+        if size >= 2 and want(port + 1):
+            ev.append((port + 1, (val >> 8) & 0xFF, 2))
+    h = m.mu.hook_add(UC_HOOK_INSN, out, None, 1, 0, UC_X86_INS_OUT)
+    calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=1))]
+    for ax, kw in calls:
+        cur[0] = ax
+        res = m.int10(ax, **kw)
+        check(not res['flags'] & 0x100, 'AX=%04X returned with the trap flag set' % ax)
+        check(m.mem(4, 4) == i1, 'AX=%04X: INT 1 not put back after the call' % ax)
+    cur[0] = None
+    m.mu.hook_del(h)
+    rd = m.run_com(com, '/D', seg=0x4000)
+    check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
+    b = rd.files.get('VGALOG.BIN')
+    check(b is not None and b[:8] == b'VGALOGM2', 'VGALOG.BIN has no memory-mode header')
+    total, n, flags = struct.unpack_from('<IHH', b, 8)
+    check(flags == 1, 'header flags %04X with /T, expected 0001 (trace part follows)' % flags)
+    vgalog_info(c, m, bytes(b[16:48]), '/T')
+    recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
+    t = 48 + 32 * n
+    check(b[t:t + 8] == b'VGALOGT1', 'no trace part after the %d calls' % n)
+    ttot, tn = struct.unpack_from('<II', b, t + 8)
+    check(len(b) == t + 16 + 4 * tn and tn == ttot, 'trace part: %d events in total, %d in the file, %d bytes'
+          % (ttot, tn, len(b) - t - 16))
+    evs = [struct.unpack_from('<HBB', b, t + 16 + 4 * i) for i in range(tn)]
+    # split at the markers: call number -> events (repeats expanded)
+    bycall, num, reads, reps = {}, None, 0, 0
+    for port, val, k in evs:
+        if k & 3 == 3:
+            num = port
+            continue
+        check(num is not None, 'trace events before the first marker')
+        check(k >> 2 < 63, 'a repeat count saturated (%04X)' % port)
+        reps += k >> 2
+        if k & 3 == 1:
+            reads += 1 + (k >> 2)
+            continue
+        bycall.setdefault(num, []).extend([(port, val, k & 3)] * (1 + (k >> 2)))
+    marked = {struct.unpack_from('<H', x, 0)[0]: struct.unpack_from('<H', x, 2)[0] for x in recs}
+    top = {struct.unpack_from('<H', x, 2)[0]: struct.unpack_from('<H', x, 0)[0] for x in recs if x[23] == 0}
+    check(set(bycall) <= set(marked), 'markers name no logged call: %s' % sorted(set(bycall) - set(marked)))
+    traced = sorted('%04X' % marked[k] for k in bycall if marked[k] in (0x0E41, 0x4F05))
+    check(not traced, 'calls traced that are no mode set: %s' % traced)
+    for ax in (0x0003, 0x4F02):
+        # the call's own events and those of the calls the BIOS made from inside it, in program order
+        got, on = [], False
+        for port, val, k in evs:
+            if k & 3 == 3:
+                on = port == top[ax] or (on and port != top[ax] and marked.get(port) not in (0x0003, 0x4F02, 0x0E41, 0x4F05))
+                continue
+            if on and k & 3 != 1:
+                got.extend([(port, val, k & 3)] * (1 + (k >> 2)))
+        exp = seen.get(ax, [])
+        first = next((i for i, (a, e) in enumerate(zip(got, exp)) if a != e), None)
+        check(got == exp and exp, 'AX=%04X: %d OUT events traced, %d made by the BIOS; first difference at %s: '
+              '%s / %s' % (ax, len(got), len(exp), first, got[first] if first is not None and first < len(got) else '-',
+                           exp[first] if first is not None and first < len(exp) else '-'))
+    ru = m.run_com(com, '/U', seg=0x4000)
+    check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
+    c.save('VGALOGT', rd)
+    return '%d events: %d OUTs in 0003h, %d in 4F02h 101h, %d reads, %d repeats merged' % (
+        tn, len(seen.get(0x0003, [])), len(seen.get(0x4F02, [])), reads, reps)
 
 
 def t_s3regs(c):
@@ -1949,7 +2087,7 @@ def t_stores(c):
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vplus_patches', t_vplus_patches), ('t64_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
-         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('s3alias', t_s3alias),
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('v2_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
@@ -1967,7 +2105,7 @@ TAGS = {
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch vplus t64 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
+    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch vplus t64 emu',
     'vplus_patches': 'rom vbe patch vplus emu vram', 't64_patches': 'rom vbe patch t64 emu vram',

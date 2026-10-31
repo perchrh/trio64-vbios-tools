@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""s3tpatch.py - build the Trio64 ROM (1.5-07-p1) from the Phoenix S3 Trio64 BIOS 1.5-07.
+"""s3tpatch.py - build the Trio64 ROM (1.5-07-p2) from the Phoenix S3 Trio64 BIOS 1.5-07.
 
-    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P1.BIN [--size 64|32] [--mclk MHZ [--overclock]] [--nasm nasm] [-q]
-    make trom OUT=S3T64P1.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
+    python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P2.BIN [--size 64|32] [--mclk MHZ [--overclock]] [--nasm nasm] [-q]
+    make trom OUT=S3T64P2.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
 assembler driver and the shared patch code of s3patch.py.
@@ -17,8 +17,9 @@ Input
                the reference build.
 
 Output
-  64 KB: the patched 32 KB, then 32 KB of zeros, as the Trio64V2 build (--size 32: the 32 KB alone, for
-  a 32 KB EEPROM)
+  64 KB: the patched 32 KB twice, so that a board which maps the upper half of its 64 KB EEPROM finds
+  the BIOS as well as one that maps the lower half (the ExpertColor DSP-3364P maps the upper half: with
+  zeros there the card stayed dark at POST, #78); --size 32: the 32 KB alone, for a 32 KB EEPROM
 
 What is applied (docs/trio64-backport.md)
   tables  the refresh entries that run interlaced are removed where the mode has non-interlaced rates
@@ -37,18 +38,29 @@ What is applied (docs/trio64-backport.md)
           font32.asm, scr13.asm with scr13w.asm (its window path, a block of its own here), p13fill.asm,
           p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (32-bit font load, mode 13h scroll, text and
           planar scrolls, AH=09h text, VGA mode set clear)
+  FIFO    (p2, #75) tfifo.asm (in the VDIF code's place) and tfifo2.asm (in the sign-on padding
+          00AEh-00E3h): at the mode set's CR67 write (site cr67) the display FIFO M (CR54 bits 7-3) is
+          lowered in the packed modes to what the memory bandwidth allows, (t - 18) / 5 - 1 with
+          t = 112 x MCLK / (DCLK x bytes per pixel); 112 x MCLK in kHz is written into the code (kmclk)
+          from the final MCLK pair at 3B5h, so --mclk builds follow
   fonts   S3's fonts from the Trio64V+ BIOS 1.03-08 (--fonts, default reference/vplus/1_03_08.bin; the
           same bytes as in 2.04.07) in place of Phoenix's, all five tables whole: S3's 9-dot alternate
           tables are 63 bytes longer, so the 8x16 font and the 9x16 table move up (S3FONTS) and the eight
           references to them are rewritten (FONT_REFS); --fonts-only applies only these, the reference
           of make tref-compare
   DDC     VBE 4F15 without VDIF (DDC_SITES, DDC_FREED): 97 bytes free, DDC1 and DDC2B kept
-  MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 60 MHz (MEM-1); without it the
-          build's own clock stays (54.9 MHz in the reference build). With --overclock up to 100 MHz
-          (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their lowest), above the data book limit,
-          for a card whose maker ran its memory faster (the DSP-3364P's own BIOS: 69.8 MHz); the card
-          owner's choice, never the default, and S3TEST's MCLK line fails such a build
-  sign-on "1.5-07-p1", checksum byte 7FFF
+  MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 70 MHz (MCLK_MAX); without it
+          the build's own clock stays (54.9 MHz in the reference build). The data book gives 60 MHz
+          (MEM-1, DATABOOK_MAX); 70 MHz is the clock the 86C764X is rated for in card databases
+          (vgamuseum) and the one DSP-3364P boards run (their own BIOS: 69.8 MHz, model tag "764 M70";
+          on the card it posts and runs windowed video without the streaks of 54.9 MHz, #75). Our tools
+          take 70 MHz as the Trio64's limit (common/chip.inc), so up to 70 MHz nothing warns or fails.
+          That limit is the 86C764X's (Trio64 PnP), the chip this ROM is for; the earlier 86C764
+          (86C764-P, also VL-Bus) likely accepts only 60 MHz (not verified): on it keep the default or
+          --mclk 60 at most
+          With --overclock up to 100 MHz (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their
+          lowest): the card owner's choice, never the default
+  sign-on "1.5-07-p2", checksum byte 7FFF
 
 Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in
 1.5-07-p1 with the booster check and the sequencer index kept), the 32-bit S3/VESA
@@ -68,11 +80,11 @@ sys.path.insert(0, SHARED)
 import s3patch  # noqa: E402
 from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, mclk_put  # noqa: E402
 
-LEVEL = 'p1'
+LEVEL = 'p2'
 VERSION = '1.5-07'
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = '6611b3d86d32275bb0580658ae1ee62dc5baa86adefdbb27a0d03c8eef25e76d'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = '9fb6d41111f2cef8b81f4078ba98d0573f777e5d5190306de514f961fd175538'  # 1.5-07-p2 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
     'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',
@@ -81,6 +93,8 @@ BLOCK_SHA = {
     'p13move.asm': '2a4ce99637fc0ce5', 'p13bfill.asm': 'e420891842c6096f',
     'p13bfa.asm': 'bef577de13494d8c', 'twin.asm': 'b6e0009a74fd8ca0',
     'twset.asm': '63d4c435841f7207', 'scr13w.asm': '8ddf861c37d1cfd3',
+    'tfifo2.asm': '7c549eb5b8240e35',
+    'tfifo.asm': '456df5ae06ba71d8',
 }
 
 # ---------------------------------------------------------------- the 1.5-07 tables (first 4 KB and 4D28h)
@@ -104,17 +118,19 @@ DROPPED = [(0x0831, 0x0871), (0x0D79, 0x0D92), (0x0DDD, 0x0DF6), (0x4E2E, 0x4E3A
 # entries; its 00h at 7F51h, and its last glyph's blank rows before that, look like free space but are
 # not; S3's fonts take 7F52h-7F90h of it), the padding after the second sign-on block from 0130h (the
 # card makers' second blocks end at 011Dh to 012Ch; the first block's padding takes the longer sign-on)
-UNUSED = [(0x7F52, 0x7FFF), (0x0130, 0x0184)]
+UNUSED = [(0x7F52, 0x7FFF), (0x0130, 0x0184), (0x00AE, 0x00E4)]
 ALT916 = (0x7E30, 0x7F51)                        # the 9x16 alternate font table and its 00h
 
 SITES = dict(modetab=0x568C, m4f02=0x4C12, int10=0x56C6, post52=0x0E97, mclk=0x0354,
              vclr=0x1D88, font=0x0EA9, scr=0x237C, txfull=0x2046, txwmov=0x2055, txwfil=0x2067,
-             plfull=0x22AD, plwin=0x22F8, ah09a=0x26D4, ah09b=0x26D8, wsr04=0x5134, gsr04=0x5163)
+             plfull=0x22AD, plwin=0x22F8, ah09a=0x26D4, ah09b=0x26D8, wsr04=0x5134, gsr04=0x5163,
+             cr67=0x0503)
 SHARED_SIG = ('vclr', 'font', 'scr', 'txfull', 'txwmov', 'txwfil', 'plfull', 'plwin', 'ah09a', 'ah09b')
 SIG = dict({k: s3patch.SIG[k] for k in SHARED_SIG},
     m4f02='60 2e 8e 1e ?? ?? e8 ?? ?? 61 c3',           # 4F02: pusha / mov ds,[cs:SEG_BDA] / call MODESET / popa / ret
     int10='fb fc 80 fc 0e 74 ?? 80 fc 0c 74 ?? 80 fc 0d 74 ?? 50 53 51 52 56 57 55 06 1e 8b ec 2e 8e 1e ?? ??',
     post52='e8 ?? ?? e8 ?? ?? b8 41 00 ef b8 52 00 ef e8 ?? ?? c3',   # POST: CR41 = 00h, CR52 = 00h
+    cr67='b0 67 26 8a 65 0b ef 80 fc d0',             # mode set: CR67 from the mode table entry (ES:DI+0Bh)
     wsr04='e8 ?? ?? f6 c4 08',                          # window set: call RDREG (SR04) / test ah,08h
     gsr04='e8 ?? ?? 33 d2',                             # window get: call RDREG (SR04) / xor dx,dx
     mclk='be b5 03 b8 1b 00 ef b0 1a 2e 8a 64 01 ef b0 10 2e 8a 64 01 ef fe c0 2e 8a 24 ef',  # POST MCLK from 3B5h
@@ -159,7 +175,8 @@ DDC_SITES = [
 # VESADDCReadVDIF (52E1h-5341h), zeroed: riplin's disassembly shows no caller but the BL=02h branch
 DDC_FREED = [(0x52E1, 0x5342, '53 51 52 e8 5b 00')]
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
-MCLK_MAX = 60.0                                 # MEM-1: 16.67 ns on the Trio32/Trio64
+DATABOOK_MAX = 60.0                             # MEM-1: 16.67 ns on the Trio32/Trio64 (named in --help only)
+MCLK_MAX = 70.0                                 # --mclk without --overclock: the 86C764X's 70 MHz, our Trio64 limit
 OVERCLOCK_MAX = 100.0                           # --overclock: at most twice 50 MHz (the user's limit)
 
 BLOCKS = [
@@ -177,6 +194,8 @@ BLOCKS = [
     ('p13bfill.asm', 'BFILL', 0x0D92 - 0x0D79, ('bfill0', 'bfill')),
     ('p13bfa.asm', 'P13C', 14, ('bfilla',)),                      # dead: the old font loop
     ('twin.asm', 'TWIN', 0x4D82 - 0x4D70, ('sr04',)),
+    ('tfifo.asm', 'TFIFO', 0x5342 - 0x52E1, ('fifo', 'kmclk')),      # in the VDIF code zeroed before
+    ('tfifo2.asm', 'TFIFO2', 0x00E4 - 0x00AE, ('fifo2',)),          # in the sign-on padding
 ]
 
 
@@ -344,7 +363,7 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False):
     sym = s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
     site = SITES
     for k, off in site.items():
-        if k in SIG and not sig_match(d, off, SIG[k]):
+        if k in SIG and not sig_match(d, off - (2 if k == 'cr67' else 0), SIG[k]):
             raise PatchError('%s: original code not found at %04X' % (k, off))
     for k, sig in SYMSIG:
         if not sig_match(d, sym[k], sig):
@@ -391,6 +410,12 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False):
 
     put_fonts(d, open(FONT_SRC, 'rb').read() if fonts is None else fonts, log)
 
+    for lo_, hi, sig in DDC_FREED:                  # the VDIF code: zeroed first, tfifo.asm goes there
+        if not sig_match(d, lo_, sig):
+            raise PatchError('%04X: not the VDIF code (%s)' % (lo_, sig))
+        d[lo_:hi] = bytes(hi - lo_)
+        log.append('%04X-%04X  VBE 4F15: VDIF code zeroed (%d bytes free)' % (lo_, hi - 1, hi - lo_))
+
     # 2. code, each block into space that is zero now
     blocks, lab = s3patch.assemble(sym, nasm, (HERE, SHARED), BLOCKS)
     patch.blocks = blocks
@@ -415,15 +440,16 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False):
     speed_sites(d, put, site, sym, lab, tags=False, skip=('wset', 'clr', 'int10'))
     for a, old, new in DDC_SITES:
         put(a, old, new, 'VBE 4F15: VDIF deleted')
-    for lo_, hi, sig in DDC_FREED:
-        if not sig_match(d, lo_, sig):
-            raise PatchError('%04X: not the VDIF code (%s)' % (lo_, sig))
-        d[lo_:hi] = bytes(hi - lo_)
-        log.append('%04X-%04X  VBE 4F15: VDIF code zeroed (%d bytes free)' % (lo_, hi - 1, hi - lo_))
+    a = site['cr67']
+    put(a, '26 8a 65 0b ef', call(a, lab['fifo']) + b'\x90\x90',
+        'mode set: CR67, then the display FIFO M (CR54) lowered to what the memory bandwidth allows')
     a = site['post52'] + 10
     put(a, 'b8 52 00', 'b8 52 80', 'POST: CR52 = 80h, 800x600 defaults to 60 Hz (VESA DMT) instead of 56 Hz')
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, 'any', mclk, OVERCLOCK_MAX if overclock else MCLK_MAX)
+    k = round(112 * 1000 * mclk_of(d))             # 112 x MCLK kHz for the FIFO code, from the final 3B5h pair
+    a = lab['kmclk']
+    put(a, d[a:a + 4], struct.pack('<I', k), 'FIFO code: 112 x MCLK = %d (MCLK %.2f MHz)' % (k, mclk_of(d)))
 
     # 4. checksum
     d[0x7FFF] = 0
@@ -438,8 +464,8 @@ def verify(img, size):
         errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
     if sum(img[:0x8000]) & 0xFF:
         errs.append('the 32 KB checksum is not 00')
-    if img[0x8000:] != bytes(len(img) - 0x8000):
-        errs.append('upper 32 KB is not all zeros')
+    if len(img) > 0x8000 and img[0x8000:] != img[:0x8000]:
+        errs.append('upper 32 KB is not a copy of the lower 32 KB')
     if img[0:3] != b'\x55\xAA\x40':
         errs.append('ROM header 55AAh with 32 KB size missing')
     try:
@@ -481,11 +507,12 @@ def mclk_of(img):
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the Phoenix S3 Trio64 BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='a Phoenix Trio64 BIOS 1.5-07: 32 KB, or a 64 KB image with it in the lower half')
-    ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the upper 32 KB zeros; 32 KB with --size 32)')
-    ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: zeros above the 32 KB)')
-    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most 60 (default: the build\'s own)')
-    ap.add_argument('--overclock', action='store_true', help='allow --mclk above the data book\'s 60 MHz, up to '
-                    '%g MHz: an overclock, the card owner\'s choice' % OVERCLOCK_MAX)
+    ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the 32 KB twice; 32 KB with --size 32)')
+    ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: the 32 KB twice)')
+    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most %g (default: the '
+                    'build\'s own; the data book gives %g)' % (MCLK_MAX, DATABOOK_MAX))
+    ap.add_argument('--overclock', action='store_true', help='allow --mclk above %g MHz, up to %g MHz: an overclock, '
+                    'the card owner\'s choice' % (MCLK_MAX, OVERCLOCK_MAX))
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '
                     '(default reference/vplus/1_03_08.bin)')
@@ -507,13 +534,13 @@ def main():
             d[0x7FFF] = 0
             d[0x7FFF] = (-sum(d)) & 0xFF
             with open(a.output, 'wb') as f:
-                f.write(bytes(d) + bytes(0x8000 if a.size == 64 else 0))
+                f.write(bytes(d) * (2 if a.size == 64 else 1))
             print('%s: %s with S3\'s fonts only (the tref-compare reference)' % (a.output, VERSION))
             return 0
         if a.overclock and a.mclk is None:
             raise PatchError('--overclock needs --mclk')
         new_lo, log = patch(lo, a.nasm, a.mclk, fonts, a.overclock)
-        img = new_lo + bytes(0x8000 if a.size == 64 else 0)
+        img = new_lo * (2 if a.size == 64 else 1)
         errs = verify(img, a.size)
         known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()
@@ -539,8 +566,8 @@ def main():
              if a.mclk is not None else ''))
     f = mclk_of(img)
     if f > MCLK_MAX:
-        print('OVERCLOCK: MCLK %.2f MHz is above the Trio64 data book limit of %g MHz; check the memory with '
-              'S3COMPAT\'s VRAM test (S3TEST fails its MCLK line by design)' % (f, MCLK_MAX))
+        print('OVERCLOCK: MCLK %.2f MHz is above %g MHz; check the memory with S3COMPAT\'s VRAM test (S3TEST '
+              'fails its MCLK line by design)' % (f, MCLK_MAX))
     return 0
 
 

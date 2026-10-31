@@ -18,7 +18,7 @@ Tests
                  as in 1.03-08 (the DCLK tables among them: no VCO fix on the Trio64V+)
   input_64k      a 64 KB image with 1.03-08 in the lower half gives the same result, whatever its upper
                  half holds
-  size64         --size 64 gives the same 32 KB followed by 32 KB of zeros
+  size64         --size 64 gives the same 32 KB twice (#78)
   mclk           --mclk 50, 55 and 60 (1-cycle EDO) and 60 (fast page) give a valid MCLK PLL pair within
                  0.5 MHz in that memory type's entry and change nothing else but the checksum; 61 MHz and
                  39 MHz are refused (MEM-1: 60 MHz on the Trio64V+)
@@ -146,7 +146,7 @@ def main():
     rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
     rc, big, err = run(tmp, ref, ['--size', '64'])
-    result('size64', rc == 0 and big == img + bytes(0x8000), err or '64 KB, upper 32 KB zeros')
+    result('size64', rc == 0 and big == img + img, err or '64 KB, the 32 KB twice')
 
     bad = mclk_cases(tmp, ref, img, s3vpatch.MCLK_ENTRY, run)
     result('mclk', not bad, '; '.join(bad) or '50, 55, 60 MHz edo1 and the fpm maximum valid, out-of-range values refused')
