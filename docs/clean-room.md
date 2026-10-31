@@ -119,6 +119,25 @@ files of their own, not in a public repository.
     standard VGA functions (`stdvga.c`, `vgabios.c`, `vgafb.c`) and chip modules (Cirrus, Bochs,
     Geode, ATI) but no S3 module. An S3 Trio64 module written from the data book on top of it would
     leave the clean-room effort to the S3 part.
+  - **Size:** SeaVGABIOS with VBE does not fit 32 KB, so it must be slimmed down before we can use
+    it. Built on 31 October 2026 from `perchrh/seabios_fork` (gcc 13.3, `CONFIG_VGA_PCI=y`):
+
+    | Build | Size |
+    | --- | --- |
+    | Plain VGA without VBE (`VGA_STANDARD_VGA`, `VGA_VBE=n`) | 32768 bytes (32322 used) |
+    | Plain VGA with VBE | 35840 bytes |
+    | QEMU Bochs VBE (`VGA_BOCHS`) | 39424 bytes |
+    | QEMU Cirrus (`VGA_CIRRUS`) | 39424 bytes |
+
+    Our ROMs have 32 KB (the lower half of the 64 KB image), and an S3 module with the mode set,
+    the clock synthesis and the VBE mode list comes on top. Candidates for slimming:
+    - the code of the other chips, already left out by the build options;
+    - SeaVGABIOS's own fonts, if the ROM takes the FreeDOS cpidos ones (about 9 KB for 8x8, 8x14 and
+      8x16);
+    - the extra stack (`VGA_ALLOCATE_EXTRA_STACK`);
+    - 32-bit code that gcc makes larger than hand-written 16-bit code.
+
+    The plain VGA build also runs POST and modes 03h, 12h and 13h in our emulator.
   - The Bochs/LGPL VGABios (LGPL 2.1 or later), the code SeaVGABIOS grew from.
   - Code taken from either is used under its licence, not rewritten from a specification, so
     the clean-room rules apply only to what we write ourselves.
