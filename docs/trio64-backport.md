@@ -113,6 +113,7 @@ S3's own Trio64V+ BIOS 1.03-08.
 | `1-30.bin` (miroCRYSTAL, uploaded 30 October 2026) | Phoenix 1.5-04 | 16 of 23 | 243 bytes (7F0Ch) | 53.7 MHz | as 1.4-04, plus 1600x1200 interlaced (WARN 50) and 4F02 setting 118h-11Ah with 2 MB (errors) |
 | `5-52.bin` (V7-Mirage P-64 5.52, SPEA/Video Seven, uploaded twice) | Phoenix 1.5-06 | 16 of 23 | 195 bytes (7F3Ch) | 59.96 MHz | as 1.5-04 |
 | `expertcolor.BIN` (the name suggests the DSP-3364P) | Phoenix 1.5-07, "764 M70" | 16 of 23 | 179 bytes (7F4Ch) | 69.8 MHz | as 1.5-04, plus MCLK above the data book maximum of 60 MHz (FAIL 2) |
+| `trio64_expertcolor_dsp3364p.bin` (dumped from the DSP-3364P itself, 86C764-P E0A2AA, 2 MB EDO 50 ns, uploaded 31 October 2026) | Phoenix 1.5-07 of 11/16/95, "764 M70" (SHA-256 1056fcee...) | not checked (refused, see below) | 557 bytes (7DD2h) | 69.8 MHz | an earlier 1.5-07 build: its 4F15 has DDC1 only (BL=00h/01h, no DDC2B, no VDIF), 384 bytes less code, so everything from about 528Ah (the VBE/DDC code, the fonts) lies 384 bytes lower and the words that point there differ. Its first 4 KB are those of the CP764 build apart from 52 bytes: the model tag and dates, the 8x8 font pointer at 01B1h, the header word at 003Ch (no code reads it), and the MCLK at 3B5h (25h/22h, 69.8 MHz); the per-mode memory timing bytes are the same |
 | `dataexpertcp764.BIN` = `W27E257 CP764 V1.5-0 7.BIN` (uploaded) | Phoenix 1.5-07 | 16 of 23 | 179 bytes | 54.9 MHz | the 1.5-07 code; 24 bytes differ from `expertcolor.BIN` |
 | `Britek BP-S341 (S3 Trio64).BIN` (uploaded) | Phoenix 1.5-07 as "VIEWTOP Graphics BIOS", "S3 Trio64X (764X)" | 16 of 23 | 164 bytes | 52.5 MHz | the 1.5-07 code |
 | `86c764xtrio64.BIN`, `86c764ptrio64.BIN`, `86c764x2.bin` | Phoenix 1.5-07 (one "EDO") | 16 of 23 | 179 bytes | 55.0-55.5 MHz | the 1.5-07 code with other memory timing bytes |
@@ -193,9 +194,12 @@ the patcher assumes; nothing was copied from it.
 
 ## Pending
 
-- Dump the DSP-3364P's BIOS (and S3REGS) and patch that dump: if it is `expertcolor.BIN`, its MCLK is
-  69.8 MHz, above the data book's 60 MHz; build it with `MCLK=60` or lower and check the memory with
-  S3COMPAT's VRAM test.
+- The DSP-3364P's own BIOS (dumped 31 October 2026, table above) is an earlier 1.5-07 build that
+  `s3tpatch.py` refuses (other code). It needs no support: the CP764 reference has the same card
+  settings, apart from the memory clock, and newer DDC code (DDC1 and DDC2B). Build the card's ROM from
+  the reference with `make trom OUT=S3T64P1.BIN MCLK=60` (the data book maximum; the card ran at 69.8
+  MHz with its 50 ns EDO) or `MCLK=55` (the CP764 build's own 54.9 MHz), and check the memory with
+  S3COMPAT's VRAM test (without /Q). Take S3REGS before flashing, with the stock BIOS.
 - S3TEST and S3COMPAT logs from the card.
 - S3COMPAT's 4F15 line on the card with a DDC2 monitor: the EDID read through the DDC code (the
   emulator has no monitor on the DDC lines).
