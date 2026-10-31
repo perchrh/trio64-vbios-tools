@@ -257,11 +257,12 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
 of `REF` for `make rom-test` and `make ref-compare`; `IN=...` or `REF=...` selects another copy. The
-result is 64 KB: the patched BIOS, then 32 KB of zeros. Only 2.04.07 is accepted. Every patch site is
+result is 64 KB: the patched 32 KB twice, as in the Trio64 and Trio64V+ ROMs (#78; p15 to p21 were built
+with 32 KB of zeros above). Only 2.04.07 is accepted. Every patch site is
 compared with the original code first (the replaced routines in full), and the result is checked
-before it is written: the lower half sums to 00 and declares 32 KB, the upper half is zeros, every
-DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 is the one of the build
-that passed every emulator test (515bf9fe...).
+before it is written: the lower half sums to 00 and declares 32 KB, the upper half is a copy of it, every
+DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 of the lower 32 KB is the one
+of the build that passed every emulator test (283b9a0b...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
@@ -274,7 +275,7 @@ for a comparison; do not flash it. Build with 3.02 instead, for example
     make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P21.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
-00 with the right byte at 7FFFh, the upper half zeros, the VCO range, every refresh entry with M 1-127,
+00 with the right byte at 7FFFh, the upper half a copy, the VCO range, every refresh entry with M 1-127,
 N 1-31 and a defined R code (pllcodes), the free bytes still 00, a 64 KB
 input giving the same result whatever its upper half holds, `--no-vco-fix`, and the inputs that must
 be refused (already patched, three patch sites changed, a wrong checksum, and with
@@ -386,8 +387,9 @@ MCLK lines accept up to 70 MHz on both.
 
     make trom OUT=S3T64P2.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
 
-The 64 KB images of the Trio64 and Trio64V+ ROMs carry the 32 KB twice, so a board finds the BIOS
-whichever half of its 64 KB EEPROM it maps. The ExpertColor DSP-3364P maps the upper half: with zeros
+The 64 KB images of all three ROMs (Trio64, Trio64V+ and Trio64V2) carry the 32 KB twice, so a board
+finds the BIOS whichever half of its 64 KB EEPROM it maps; the PCI ROM header declares one 32 KB image,
+the last, so firmware that reads the ROM through PCI ignores the copy. The ExpertColor DSP-3364P maps the upper half: with zeros
 there (the layout of the Trio64V2 ROM, whose card maps the lower half) the card stayed dark at POST
 while the PC booted (#78, 31 October 2026). Square brackets in these lines mark options: type
 `VSIZE=64`, not `[VSIZE=64]`.
@@ -559,7 +561,7 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
 ## Features and changes compared to the reference BIOS 2.04.07
 
 The ROM is the S3 Trio64V2/DX reference BIOS 2.04.07 with the changes below in the lower 32 KB; the
-upper 32 KB is zeros (the ROM header declares 32 KB). The lower half checksums to 0. Every change keeps
+upper 32 KB is a copy of it (the ROM header declares 32 KB; until p21 it was zeros, #78). The lower half checksums to 0. Every change keeps
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About

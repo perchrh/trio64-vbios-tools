@@ -12,8 +12,11 @@ Input
                lower half (the upper half of the input is not used)
 
 Output
-  64 KB: the patched BIOS in the lower 32 KB, zeros in the upper 32 KB (since p15; p14 and earlier carried
-  the card's Trio64V+ BIOS 1.03-08 there)
+  64 KB: the patched 32 KB twice, so that a board which maps the upper half of its 64 KB EEPROM finds
+  the BIOS as well as one that maps the lower half, as the Trio64 and Trio64V+ ROMs do (#78). The
+  Gainward GW503A maps the lower half. The PCI ROM header declares one 32 KB image, the last one, so
+  firmware that reads the ROM through PCI ignores the copy. (p15 to p21 had zeros in the upper half,
+  p14 and earlier the card's Trio64V+ BIOS 1.03-08.)
 
 What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level changes")
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
@@ -55,15 +58,18 @@ What is applied (README of trio64-vbios-tools, "VBIOS changes" and "Byte-level c
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
-and declares 32 KB, the upper 32 KB is zeros, every DCLK VCO in 170-340 MHz (unless --no-vco-fix), and
-with the known reference image the SHA-256 of the build that passed the emulator tests.
+and declares 32 KB, the upper 32 KB is a copy of it, every DCLK VCO in 170-340 MHz (unless --no-vco-fix),
+and with the known reference image the SHA-256 (of the lower 32 KB) of the build that passed the
+emulator tests.
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
 LEVEL = 'p21'
 VERSION = '2.04.07'
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = '515bf9fe7f663b695991d6bd08be4ef9c1a3c6088b44ab82bbf43613504baaf4'  # 2.04.07-p21 (NASM 3.02), emulator tests passed
+RESULT_SHA = '283b9a0b9bc40d7e38d14e7f11db0579b98765863fc5d732bc034ddcd28c1c4a'  # 2.04.07-p21 (NASM 3.02), emulator tests passed;
+# the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (until the upper half became a copy,
+# #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
 # the result differs, these name the blocks another assembler encoded differently (NASM 2.16.01 puts
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
@@ -564,8 +570,8 @@ def verify(img, vcofix):
         errs.append('image is %d bytes, not 65536' % len(img))
     if sum(img[:0x8000]) & 0xFF:
         errs.append('lower 32 KB checksum is not 00')
-    if img[0x8000:] != bytes(0x8000):
-        errs.append('upper 32 KB is not all zeros')
+    if img[0x8000:] != img[:0x8000]:
+        errs.append('upper 32 KB is not a copy of the lower 32 KB')
     if img[0:2] != b'\x55\xAA' or img[2] != 0x40:
         errs.append('ROM header 55AAh with 32 KB size missing')
     if vcofix:
@@ -619,10 +625,10 @@ def main():
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]                       # a 64 KB input: only its lower half is used
         new_lo, log = patch(lo, a.nasm, not a.no_vco_fix, a.mclk, a.memtype)
-        img = new_lo + bytes(0x8000)            # the upper 32 KB: zeros
+        img = new_lo * 2                        # the 32 KB twice (#78)
         errs = verify(img, not a.no_vco_fix)
         known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA and a.mclk is None
-        out_sha = hashlib.sha256(img).hexdigest()
+        out_sha = hashlib.sha256(new_lo).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 %s, expected %s)' % (out_sha, RESULT_SHA))
             errs += diagnose(a.nasm, a.output, img)
@@ -638,7 +644,7 @@ def main():
         print('base %s%s' % (VERSION, ' (the known reference image)' if ref else ''))
         for line in log:
             print('  ' + line)
-    print('%s: %s-%s, checksum %02X (the lower 32 KB sums to 00, the upper 32 KB is zeros), SHA-256 %s%s'
+    print('%s: %s-%s, 64 KB (the 32 KB twice), checksum %02X (the 32 KB sum to 00), SHA-256 of the 32 KB %s%s'
           % (a.output, VERSION, LEVEL, img[0x7FFF], out_sha,
              ', identical to the tested build' if known or out_sha == RESULT_SHA else
              ', MCLK build option: the code is the tested build, the MCLK is yours to check on the card'

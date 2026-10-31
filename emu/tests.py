@@ -19,7 +19,7 @@ Tests
                    rompatch/vplus/s3vpatch.py builds (1.03-08-p1), and our Trio64V+ ROM carries it
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
-                   half and the zero upper 32 KB (p15) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
+                   half and the upper 32 KB a copy of it (#78; p15-p21 were built with zeros there) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the booster (p18: on after a banked 4F02, real base in CR6D; p16: on
                    after the window function by far call in AH=00 mode 59h; p17: off under Windows
                    enhanced mode, INT 2Fh AX=1600h asked once per mode set), the
@@ -384,7 +384,8 @@ def t_rom_patches(c):
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
     chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
     if len(rom) >= 0x10000:
-        chk(rom[0x8000:0x10000] == bytes(0x8000), 'the upper 32 KB is not all zeros (since p15)')
+        chk(rom[0x8000:0x10000] in (rom[:0x8000], bytes(0x8000)), 'the upper 32 KB is neither a copy of the lower '
+            '32 KB (#78) nor zeros (p15-p21 as built before)')
     cr = m.r['crtc']
     base = (cr.get(0x59, 0), cr.get(0x5A, 0))           # the PCI base the BIOS found at POST
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)

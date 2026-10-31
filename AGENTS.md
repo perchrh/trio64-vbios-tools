@@ -7,8 +7,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 - Hardware: Gainward S3 Trio64V2/DX (86C775), 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901.
 - The ROM is a 64 KB image. The lower 32 KB is the S3 reference BIOS 2.04.07 with our patches
-  (currently -p21); the upper 32 KB is zeros (from p15; up to p14 it was the card's Trio64V+ BIOS
-  1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
+  (currently -p21); the upper 32 KB is a copy of it (#78; p15 to p21 were built with zeros there, up to
+  p14 it was the card's Trio64V+ BIOS 1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
 - The patched ROM images are kept outside this repository. `rompatch/` holds the ROM code (nasm) and
   `s3patch.py`, which builds the current level from the S3 reference 2.04.07 alone
   with byte assertions; only the latest level is built. A new level replaces the pinned SHA-256
@@ -45,9 +45,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   (`MCLK=... OVERCLOCK=1`, s3tpatch.py `--overclock`): the card owner's choice, never a default.
 - Blank pedestal off (SR1A bit 5 = 0): the deepest black is wanted.
 - Every ROM version carries a -pN suffix in the sign-on string and a correct checksum in the lower
-  32 KB. In the 64 KB image of the Trio64V2 ROM the upper 32 KB is zeros (its card maps the lower
-  half); the 64 KB images of the Trio64 and Trio64V+ ROMs carry the 32 KB twice, because a board may
-  map either half of its EEPROM (the DSP-3364P maps the upper one, #78).
+  32 KB. The 64 KB images of all three ROMs carry the 32 KB twice, because a board may map either half
+  of its EEPROM (the DSP-3364P maps the upper one, #78; the Trio64V2 card the lower one).
 - Base every change on the reference image plus explicit patches with byte assertions, so a build
   fails when the bytes under a patch are not what the patch expects. Addresses go into
   `rompatch/bios.inc` (the patcher reads it too), patch sites and their original bytes into
