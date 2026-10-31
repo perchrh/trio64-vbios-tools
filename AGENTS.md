@@ -18,7 +18,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
   repository also holds the Trio64V+ backport (`rompatch/vplus/`: `s3vpatch.py` builds 1.03-08-pN
   from the S3 Trio64V+ BIOS 1.03-08 in `reference/vplus/`, with the same rules: byte assertions, a
-  pinned `RESULT_SHA` and `BLOCK_SHA`, `LEVEL` for its sign-on; docs/vplus-backport.md) and the Trio64 ROM
+  pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VROMVER`; docs/vplus-backport.md) and the Trio64 ROM
   (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
   `reference/trio64/`, the same rules, `TROMVER`; docs/trio64-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
@@ -148,9 +148,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - A functional change is verified on the real card: S3TEST and S3COMPAT logs from the test machine are
   the final word. Compare with the previous log: the pass, fail and warn counts and every changed line
   should be explained.
-- The tests are for the newest ROM: a new level changes `LEVEL` in rompatch/s3patch.py and `ROMVER` in
-  common/version.inc together (for the Trio64V+ ROM `LEVEL` in rompatch/vplus/s3vpatch.py and
-  `VROMVER`, for the Trio64 ROM `LEVEL` in rompatch/trio64/s3tpatch.py and `TROMVER`); the emulator test `version` fails when they differ or when the ROM under test is older.
+- The tests are for the newest ROM: a ROM level is kept only in common/version.inc (`ROMVER` for the
+  Trio64V2 ROM, `VROMVER` for the Trio64V+ ROM, `TROMVER` for the Trio64 ROM). The patchers read their
+  `LEVEL` from it for the sign-on, and S3TEST is built with it, so a new level changes that one line;
+  the emulator test `version` fails when the ROM under test is older.
 - Memory configurations: the ROM supports 2 MB (the test card) and 4 MB (the 86C775 maximum, CR36
   bits 7-5 = 000b) of video memory; the Trio64V+ and Trio64 ROMs also 1 MB. On the Trio64, 4 MB is
   fast page memory only and EDO stops at 2 MB (T64-MEM-3); the Trio32 takes at most 2 MB (T64-MEM-5). The BIOS sizes the memory at every

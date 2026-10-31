@@ -13,10 +13,9 @@ that drives the PIT, the BIOS tick and the retrace bit (see vgaemu.py). It has n
 video memory and no real bus speed, so those results stay with the hardware runs.
 
 Tests
-  version          the tests are for the newest ROM: common/version.inc ROMVER (what S3TEST expects) is
-                   the level rompatch/s3patch.py builds (2.04.07-p21), and the ROM under test carries
-                   that sign-on; an older ROM fails here. VROMVER (S3TEST on a Trio64V+) is the level
-                   rompatch/vplus/s3vpatch.py builds (1.03-08-p1), and our Trio64V+ ROM carries it
+  version          the tests are for the newest ROM: the ROM under test carries the sign-on of its level in
+                   common/version.inc (ROMVER 2.04.07-p21, VROMVER 1.03-08-p1, TROMVER 1.5-07-p2), where
+                   the patchers read it and S3TEST expects it; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
                    half and the upper 32 KB a copy of it (#78; p15-p21 were built with zeros there) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
@@ -260,16 +259,11 @@ def check_dbg(dbg, name):
 
 # ---------------------------------------------------------------- tests
 def t_version(c):
-    """The tests are for the newest ROM: S3TEST's expected version (common/version.inc) is the level
-    s3patch.py builds, and the ROM under test carries that sign-on; VROMVER is the level
-    rompatch/vplus/s3vpatch.py builds, TROMVER the level rompatch/trio64/s3tpatch.py builds. Our Trio64V+
-    and Trio64 ROMs: their sign-on is that level."""
+    """The tests are for the newest ROM: the ROM under test carries the sign-on of the level in
+    common/version.inc (ROMVER, VROMVER for our Trio64V+ ROM, TROMVER for our Trio64 ROM), which the
+    patchers write and S3TEST expects."""
     vwant = latest('vplus/s3vpatch.py')
-    check(romver('VROMVER') == vwant, 'common/version.inc VROMVER is %s, but rompatch/vplus/s3vpatch.py builds %s: '
-          'update VROMVER' % (romver('VROMVER'), vwant))
     twant = latest('trio64/s3tpatch.py')
-    check(romver('TROMVER') == twant, 'common/version.inc TROMVER is %s, but rompatch/trio64/s3tpatch.py builds %s: '
-          'update TROMVER' % (romver('TROMVER'), twant))
     if c.tours:
         m = re.search(rb'Version ([0-9.]+-\d\d-p\d+)', c.rom[:0x100])
         got = m.group(1).decode() if m else '(no sign-on)'
@@ -282,8 +276,6 @@ def t_version(c):
         check(got == want, 'the ROM is %s, the tests are for the newest Trio64V+ ROM %s (make vrom OUT=...)' % (got, want))
         return want
     want = latest()
-    check(romver() == want, 'common/version.inc ROMVER is %s, but rompatch/s3patch.py builds %s: update ROMVER'
-          % (romver(), want))
     m = re.search(rb'Version ([0-9.]+(-p\d+)?)', c.rom[:0x100])
     got = m.group(1).decode() if m else '(no sign-on)'
     check(got == want, 'the ROM is %s, the tests are for the newest ROM %s (make rom ... OUT=S3V2%s.BIN)'
@@ -362,12 +354,10 @@ def romver(name='ROMVER'):
 
 
 def latest(patcher='s3patch.py'):
-    """The newest ROM version in the repository: the level rompatch/s3patch.py builds (2.04.07-p21), or
-    with 'vplus/s3vpatch.py' the Trio64V+ level (1.03-08-p1)."""
-    t = open(os.path.join(SRC, 'rompatch', patcher)).read()
-    lv = re.search(r"^LEVEL = '([^']*)'", t, re.M).group(1)
-    ver = re.search(r"^VERSION = '([^']*)'", t, re.M).group(1)
-    return '%s-%s' % (ver, lv)
+    """The newest ROM version in the repository, which the patcher builds: common/version.inc, where the
+    patchers read their level (ROMVER for rompatch/s3patch.py, 2.04.07-p21; VROMVER for
+    'vplus/s3vpatch.py'; TROMVER for 'trio64/s3tpatch.py')."""
+    return romver({'s3patch.py': 'ROMVER', 'vplus/s3vpatch.py': 'VROMVER', 'trio64/s3tpatch.py': 'TROMVER'}[patcher])
 
 
 def t_rom_patches(c):

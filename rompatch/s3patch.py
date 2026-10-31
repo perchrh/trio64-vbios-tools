@@ -64,8 +64,21 @@ emulator tests.
 """
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
-LEVEL = 'p21'
+
+
+def rom_level(name, version):
+    """The level (pN) of one of our ROMs from common/version.inc, the one place the ROM levels are kept:
+    `%define NAME 'VERSION-pN'` with NAME = ROMVER (Trio64V2), VROMVER (Trio64V+) or TROMVER (Trio64).
+    The patchers write it into the sign-on; S3TEST, built from the same file, expects it."""
+    inc = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'common', 'version.inc')
+    m = re.search(r"^%%define %s '%s-(p\d+)'" % (name, re.escape(version)), open(inc).read(), re.M)
+    if not m:
+        raise SystemExit('%s: no line %%define %s \'%s-pN\'' % (inc, name, version))
+    return m.group(1)
+
+
 VERSION = '2.04.07'
+LEVEL = rom_level('ROMVER', VERSION)            # the sign-on level: common/version.inc ROMVER
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
 RESULT_SHA = '283b9a0b9bc40d7e38d14e7f11db0579b98765863fc5d732bc034ddcd28c1c4a'  # 2.04.07-p21 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (until the upper half became a copy,
