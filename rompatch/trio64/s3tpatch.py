@@ -55,6 +55,9 @@ What is applied (docs/trio64-backport.md)
           (vgamuseum) and the one DSP-3364P boards run (their own BIOS: 69.8 MHz, model tag "764 M70";
           on the card it posts and runs windowed video without the streaks of 54.9 MHz, #75). Our tools
           take 70 MHz as the Trio64's limit (common/chip.inc), so up to 70 MHz nothing warns or fails.
+          That limit is the 86C764X's (Trio64 PnP), the chip this ROM is for; the earlier 86C764
+          (86C764-P, also VL-Bus) likely accepts only 60 MHz (not verified): on it keep the default or
+          --mclk 60 at most
           With --overclock up to 100 MHz (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their
           lowest): the card owner's choice, never the default
   sign-on "1.5-07-p2", checksum byte 7FFF

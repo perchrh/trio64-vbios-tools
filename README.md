@@ -375,6 +375,15 @@ at 54.9 MHz) and S3's fonts (those of 1.03-08 and
 Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
 what 1.5-07 still gets wrong and the comparison of the base candidates.
 
+The ROM is for the **S3 86C764X** (Trio64), the chip of the ExpertColor DSP-3364P (marked 86C764GSpnp),
+rated for a 70 MHz MCLK (vgamuseum; the card's own BIOS runs 69.8 MHz). PCI device lists name two
+chips under 5333:8811: "86C764 Trio64 (Integrated '864, DAC and clock chip, 208pin) Rev. 01" and
+"86C764X Trio64 PnP". The 86C764X is the later one, with Plug and Play for PCI; the earlier **86C764**
+(86C764-P on PCI cards, also made for the VL-Bus) likely accepts only the data book's 60 MHz (not
+verified: no 86C764 card at hand). On an 86C764 keep the default build (54.9 MHz) or build with
+`MCLK=60` at most. The tools do not tell the two apart (the same PCI ID), so S3TEST's and S3COMPAT's
+MCLK lines accept up to 70 MHz on both.
+
     make trom OUT=S3T64P2.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
 
 The 64 KB images of the Trio64 and Trio64V+ ROMs carry the 32 KB twice, so a board finds the BIOS

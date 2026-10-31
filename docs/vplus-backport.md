@@ -148,7 +148,7 @@ The cards at hand (30 October 2026); their stock BIOSes are to be dumped before 
 | STB (1995), H0A3CC | Trio64V+ 86C765 | 2 MB | EKSUSA765PCI | 1.03-08-p1 applies to the chip; the STB stock BIOS may be an STB build of another S3 version |
 | Gainward VGA-GW503 (1996) | Trio64V+ | 2 MB EDO (the board maximum) | ICUVGA-GW503 | the likely source of 1.03-08 (the GW503A dump carries it in its upper half) |
 | Hercules Terminator 64 | Trio64V+ | 2 MB | ICUVGA-GW503C | probably the same board family: the FCC ID has the grantee code and board name (ICU, GW503) of the Gainward cards |
-| ExpertColor DSP-3364P (1994), E0A2AA | Trio64 86C764-P | 1 MB EDO 50 ns, upgraded to 2 MB | LUT-DSP3364P | none: a Trio64, not a Trio64V+. Do not flash 1.03-08-p1 on it. The tools run on it; S3TEST runs only the tests that need no ROM of ours |
+| ExpertColor DSP-3364P (1994), E0A2AA | Trio64 86C764X | 1 MB EDO 50 ns, upgraded to 2 MB | LUT-DSP3364P | none: a Trio64, not a Trio64V+. Do not flash 1.03-08-p1 on it. The tools run on it; S3TEST runs only the tests that need no ROM of ours |
 | Gainward Genesis EV | Trio64V2/DX | 2 MB EDO | ICUVGA-GW503A | the Trio64V2 ROM (2.04.07-pN): the test card |
 
 On the Trio64 the data book allows EDO only with 1 or 2 MB (fast page memory for 4 MB, T64-MEM-3).

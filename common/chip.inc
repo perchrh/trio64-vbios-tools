@@ -30,7 +30,8 @@
 ;   [mclkmax]  highest MCLK: 60 MHz (16.67 ns cycle) on the Trio32 and Trio64V+ (clock tables 4-6),
 ;              70 MHz on the Trio64: the data book gives 60 MHz, but the 86C764X is rated for 70 MHz
 ;              (vgamuseum) and the ExpertColor DSP-3364P runs 69.8 MHz with its own BIOS; our limit for
-;              the Trio64 since 31 October 2026 (T64-MEM-7),
+;              the Trio64 since 31 October 2026 (T64-MEM-7; the 86C764X's limit, the earlier 86C764
+;              likely accepts 60 MHz only, and the two have the same PCI ID),
 ;              66.67 MHz (15 ns) on the Trio64UV+ (table 6-7); on the Trio64V2 the memory type decides
 ;              (60 MHz 1-cycle EDO, else 66.67 MHz, V2-MEM-1), this field holds the higher one (MEM-1)
 ; The Trio64UV+ book lists only its changes from the Trio64V+: its PLL and colour mode limits are the

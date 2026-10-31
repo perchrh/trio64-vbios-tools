@@ -38,7 +38,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   the BIOS's MCLK table within the data book limit for that memory type (README "MCLK build option").
   The Trio64 ROM's option takes up to 70 MHz, above the data book's 60 MHz: the 86C764X's rated
   clock (vgamuseum), which DSP-3364P boards run (their own BIOS: 69.8 MHz; at 54.9 MHz windowed video
-  streaks there, #75). For the Trio64 our tools take 70 MHz as the chip's limit (chip.inc, T64-MEM-7):
+  streaks there, #75). Our Trio64 ROM is for the 86C764X (Trio64 PnP); the earlier 86C764 (86C764-P,
+  also VL-Bus) likely accepts only 60 MHz (not verified), so builds for it stay at the default or `MCLK=60`. For the Trio64 our tools take 70 MHz as the
+  chip's limit (chip.inc, T64-MEM-7):
   S3TEST's and S3COMPAT's MCLK lines and the patcher accept up to 70 MHz without a warning. Above 70 MHz, at most 100 MHz (twice 50 MHz), only as an overclock on request
   (`MCLK=... OVERCLOCK=1`, s3tpatch.py `--overclock`): the card owner's choice, never a default.
 - Blank pedestal off (SR1A bit 5 = 0): the deepest black is wanted.

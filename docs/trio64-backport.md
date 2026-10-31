@@ -1,9 +1,18 @@
 # The Trio64 ROM (1.5-07-p2)
 
 Our changes ported to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in `rompatch/trio64`.
-Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P E0A2AA,
-2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); first run
+Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (S3 86C764X, marked
+86C764GSpnp rev A, E0A2AA; 2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); first run
 on that card on 31 October 2026 ("On the card" below). The choice of base is below ("Base BIOS candidates").
+
+The ROM is for the **S3 86C764X** (Trio64), the chip of the ExpertColor DSP-3364P (marked 86C764GSpnp),
+rated for a 70 MHz MCLK (vgamuseum; the card's own BIOS runs 69.8 MHz). PCI device lists name two
+chips under 5333:8811: "86C764 Trio64 (Integrated '864, DAC and clock chip, 208pin) Rev. 01" and
+"86C764X Trio64 PnP". The 86C764X is the later one, with Plug and Play for PCI; the earlier **86C764**
+(86C764-P on PCI cards, also made for the VL-Bus) likely accepts only the data book's 60 MHz (not
+verified: no 86C764 card at hand). On an 86C764 keep the default build (54.9 MHz) or build with
+`MCLK=60` at most. The tools do not tell the two apart (the same PCI ID), so S3TEST's and S3COMPAT's
+MCLK lines accept up to 70 MHz on both.
 
     make trom OUT=S3T64P2.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with the 32 KB twice, TSIZE=32: 32 KB)
     make trom-test ROM=S3T64P2.BIN
@@ -118,7 +127,7 @@ S3's own Trio64V+ BIOS 1.03-08.
 | `1-30.bin` (miroCRYSTAL, uploaded 30 October 2026) | Phoenix 1.5-04 | 16 of 23 | 243 bytes (7F0Ch) | 53.7 MHz | as 1.4-04, plus 1600x1200 interlaced (WARN 50) and 4F02 setting 118h-11Ah with 2 MB (errors) |
 | `5-52.bin` (V7-Mirage P-64 5.52, SPEA/Video Seven, uploaded twice) | Phoenix 1.5-06 | 16 of 23 | 195 bytes (7F3Ch) | 59.96 MHz | as 1.5-04 |
 | `expertcolor.BIN` (the name suggests the DSP-3364P) | Phoenix 1.5-07, "764 M70" | 16 of 23 | 179 bytes (7F4Ch) | 69.8 MHz | as 1.5-04, plus MCLK above the data book maximum of 60 MHz (FAIL 2 then; within the 70 MHz the tools take since T64-MEM-7) |
-| `trio64_expertcolor_dsp3364p.bin` (dumped from the DSP-3364P itself, 86C764-P E0A2AA, 2 MB EDO 50 ns, uploaded 31 October 2026) | Phoenix 1.5-07 of 11/16/95, "764 M70" (SHA-256 1056fcee...) | not checked (refused, see below) | 557 bytes (7DD2h) | 69.8 MHz | an earlier 1.5-07 build: its 4F15 has DDC1 only (BL=00h/01h, no DDC2B, no VDIF), 384 bytes less code, so everything from about 528Ah (the VBE/DDC code, the fonts) lies 384 bytes lower and the words that point there differ. Its first 4 KB are those of the CP764 build apart from 52 bytes: the model tag and dates, the 8x8 font pointer at 01B1h, the header word at 003Ch (no code reads it), and the MCLK at 3B5h (25h/22h, 69.8 MHz); the per-mode memory timing bytes are the same |
+| `trio64_expertcolor_dsp3364p.bin` (dumped from the DSP-3364P itself, 86C764X, 2 MB EDO 50 ns, uploaded 31 October 2026) | Phoenix 1.5-07 of 11/16/95, "764 M70" (SHA-256 1056fcee...) | not checked (refused, see below) | 557 bytes (7DD2h) | 69.8 MHz | an earlier 1.5-07 build: its 4F15 has DDC1 only (BL=00h/01h, no DDC2B, no VDIF), 384 bytes less code, so everything from about 528Ah (the VBE/DDC code, the fonts) lies 384 bytes lower and the words that point there differ. Its first 4 KB are those of the CP764 build apart from 52 bytes: the model tag and dates, the 8x8 font pointer at 01B1h, the header word at 003Ch (no code reads it), and the MCLK at 3B5h (25h/22h, 69.8 MHz); the per-mode memory timing bytes are the same |
 | `dataexpertcp764.BIN` = `W27E257 CP764 V1.5-0 7.BIN` (uploaded) | Phoenix 1.5-07 | 16 of 23 | 179 bytes | 54.9 MHz | the 1.5-07 code; 24 bytes differ from `expertcolor.BIN` |
 | `Britek BP-S341 (S3 Trio64).BIN` (uploaded) | Phoenix 1.5-07 as "VIEWTOP Graphics BIOS", "S3 Trio64X (764X)" | 16 of 23 | 164 bytes | 52.5 MHz | the 1.5-07 code |
 | `86c764xtrio64.BIN`, `86c764ptrio64.BIN`, `86c764x2.bin` | Phoenix 1.5-07 (one "EDO") | 16 of 23 | 179 bytes | 55.0-55.5 MHz | the 1.5-07 code with other memory timing bytes |
@@ -250,7 +259,7 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
   32-bit CPU clear of 2.04.07-p11. A candidate for a later level (see Pending).
 - **4F15:** caps 0000 (no DDC answer); the board is from 1994, when DDC was new, and may not connect
   the lines (Pending).
-- **VIDSPEED** (31 October 2026, chip marked 86C764GSpnp rev A): 32-bit writes 86.9 MB/s in 640x480x8,
+- **VIDSPEED** (31 October 2026, the 86C764X marked 86C764GSpnp rev A): 32-bit writes 86.9 MB/s in 640x480x8,
   as on the Trio64V2 card (87.4 MB/s: the CPU and bus are the limit there), but less as the display
   takes more of the memory: 73.6 MB/s in 1024x768x8 (Trio64V2 86.0), 53.1 in 1280x1024x8 (82.6),
   44.4 in 1024x768x15 (81.0), 36.8 in 800x600x32. The DSP-3364P has fast page memory at 54.9 MHz,
