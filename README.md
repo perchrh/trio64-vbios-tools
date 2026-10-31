@@ -985,6 +985,13 @@ Secondary references:
 - Toby Opferman, ["How To Use Super VGA (VESA 1.x Non-Linear)"](https://web.archive.org/web/20120328134352/http://www.opferman.net/Text/svga.txt):
   banking through 4F05 and the window granularity as an application does it; a check of how
   programs use 4F01 and 4F05, nothing more.
+- OSDev wiki, ["VESA Video Modes"](https://wiki.osdev.org/VESA_Video_Modes): an application
+  programmer's guide to VBE 3.0 (finding a mode by its 4F01 fields, BytesPerScanLine, the pixel
+  format fields, the VGA-compatible bit 5, LFB modes with bit 14). A check of what programs look at
+  in 4F01, not a source for the BIOS side. One statement in it is wrong for our ROMs: it gives the
+  reserved byte at ModeInfoBlock offset 1Eh as 0 in VBE 1.0-2.0 and 1 in 3.0, but VBE 1.2 says it is
+  always 1, VBE 2.0 lists it with 1, and our three ROMs return 1 (emulator, 31 October 2026). Its
+  links to further tutorials (DJGPP's VESA guide, monstersoft's introduction) add nothing for us.
 
 Looked at and not used: the list of chipsets with VBE 2.0/3.0 (xerxys.info), and vbespy and vbetool,
 Linux tools that run a card's video BIOS to log or replay its mode sets (the emulator in `emu/` does
