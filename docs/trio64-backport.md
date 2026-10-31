@@ -199,7 +199,13 @@ the patcher assumes; nothing was copied from it.
   settings, apart from the memory clock, and newer DDC code (DDC1 and DDC2B). Build the card's ROM from
   the reference with `make trom OUT=S3T64P1.BIN MCLK=60` (the data book maximum; the card ran at 69.8
   MHz with its 50 ns EDO) or `MCLK=55` (the CP764 build's own 54.9 MHz), and check the memory with
-  S3COMPAT's VRAM test (without /Q). Take S3REGS before flashing, with the stock BIOS.
+  S3COMPAT's VRAM test (without /Q). Take S3REGS before flashing, with the stock BIOS: SR10/SR11
+  should read 22h/25h (69.8 MHz). The Trio64 has two clock PLLs only, DCLK (pixel clock) and MCLK
+  (memory and graphics engine), and Phoenix's POST loads the pair at 3B5h/3B6h into SR11/SR10 (and
+  the N/R byte into SR1A, with SR1B = 00h; neither is in the Trio32/Trio64 data book). The memory's
+  own speed (50 ns) is in CR68 bits 3-0, strapped on the board and never written by Phoenix: RAS low
+  3.5 or 4.5 MCLKs, RAS precharge 2.5 or 3.5 MCLKs, a CAS/OE stretch of 0-6.5 ns; at 69.8 MHz 3.5
+  MCLKs are 50.1 ns.
 - S3TEST and S3COMPAT logs from the card.
 - S3COMPAT's 4F15 line on the card with a DDC2 monitor: the EDID read through the DDC code (the
   emulator has no monitor on the DDC lines).
