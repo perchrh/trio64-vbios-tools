@@ -169,3 +169,11 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   apart from real findings; the hardware logs decide. Add a test to
   `emu/tests.py` for new behaviour the model can judge.
 - Deliver changes as a pull request against main.
+- A bug that has ever been on the main branch (in a ROM, a tool, the patchers or the tests) gets a
+  GitHub issue before it is fixed, as issues #47-#69 do: what is wrong, the cause, the effect of the
+  fix, and how it is tested. Labels: the type (`fix`; `speed` and `picture` for improvements), every
+  chip whose ROM or tool has the bug (`Trio64V2`, `Trio64V+`, `Trio64`), and the level that fixes it
+  (`p22`, `1.03-08-p2`, `1.5-07-p2`, ...). The fixing commit and pull request name the issue
+  (`Fixes #N`). Close it once the fix is verified on a card, and say in a comment which chips are
+  still checked in the emulator only. A bug that never reached main (made and fixed on an unmerged
+  branch) needs no issue.
