@@ -1,5 +1,5 @@
 ; Trio64 patch p1: the Windows check of the booster (Phoenix 1.5-07), with its refusal mark in CR52 bit 3
-; (tbon.asm says why there).
+; (tbon.asm says why there), and the unlock that keeps the lock state (unlk; relk is in tbon.asm).
 bits 16
 %include "bios.inc"
 org TLOCK
@@ -33,4 +33,19 @@ wcheck:
         ret
 .ok:    pop     ax
         clc
+        ret
+
+; ---------------- unlock as found ----------------
+; unlk: In: DX = CRTC. Out: BL = CR38, BH = CR39 as found, both unlocked. Keeps the others but AX.
+; relk (tbon.asm) puts them back.
+unlk:   mov     al, 0x38
+        call    RDREG
+        mov     bl, ah
+        mov     al, 0x39
+        call    RDREG
+        mov     bh, ah
+        mov     ax, 0x4838
+        out     dx, ax
+        mov     ax, 0xA539
+        out     dx, ax
         ret

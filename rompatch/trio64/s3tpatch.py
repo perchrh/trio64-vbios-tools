@@ -30,15 +30,17 @@ What is applied (docs/trio64-backport.md)
   POST    CR52 = 80h instead of 00h: the 800x600 modes default to 60 Hz instead of 56 Hz (VESA DMT, as
           the Trio64V2 ROM)
   code    assembled with nasm at the addresses in trio64/bios.inc: tbon.asm and tlock.asm (booster with
-          the Windows check), thook.asm (mode set hook: Windows mark cleared, ATC flip-flop reset), tglue.asm (the
-          entries from 4F02 and the window set), twin.asm (the window set and get read SR04 with the
-          sequencer index kept); shared with the other builds (rompatch/): font32.asm,
-          scr13.asm, p13fill.asm, p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (32-bit font load,
-          mode 13h scroll, text and planar scrolls, AH=09h text, VGA mode set clear)
+          the Windows check), thook.asm (mode set hook: Windows mark cleared, ATC flip-flop reset),
+          tglue.asm and twset.asm (the entries from 4F02 and the window set), twin.asm (the window set
+          and get read SR04 with the sequencer index kept); shared with the other builds (rompatch/):
+          font32.asm, scr13.asm with scr13w.asm (its window path, a block of its own here), p13fill.asm,
+          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (32-bit font load, mode 13h scroll, text and
+          planar scrolls, AH=09h text, VGA mode set clear)
   fonts   S3's fonts from the Trio64V+ BIOS 1.03-08 (--fonts, default reference/vplus/1_03_08.bin; the
-          same bytes as in 2.04.07) in place of Phoenix's: 8x8, 8x14 and 8x16 whole, the 9-dot alternate
-          tables without two entries each (Phoenix's room, S3FONTS); --fonts-only applies only these,
-          the reference of make tref-compare
+          same bytes as in 2.04.07) in place of Phoenix's, all five tables whole: S3's 9-dot alternate
+          tables are 63 bytes longer, so the 8x16 font and the 9x16 table move up (S3FONTS) and the eight
+          references to them are rewritten (FONT_REFS); --fonts-only applies only these, the reference
+          of make tref-compare
   MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 60 MHz (MEM-1); without it the
           build's own clock stays (54.9 MHz in the reference build)
   sign-on "1.5-07-p1", checksum byte 7FFF
@@ -65,14 +67,15 @@ LEVEL = 'p1'
 VERSION = '1.5-07'
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = '0d657bcf19c3af9e205288917e543677a46a057c2f5b87243e0b1119f2de4325'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = '989fdfaca700141009f2620a7bb2d3afd5c4402d456ba7eebadce1dc838c78cf'  # 1.5-07-p1 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
-    'tlock.asm': 'eca8b7f0a47c3e60', 'tbon.asm': '863b6862dfad0947',
-    'thook.asm': 'fe2efef3f3bc43c4', 'tglue.asm': 'e73f5978fa2f4043',
-    'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '1445892a7cc60234',
+    'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
+    'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',
+    'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '6bf14a59c964b8d3',
     'p13fill.asm': '466a65fde38ca9a1', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '2a4ce99637fc0ce5', 'p13bfill.asm': 'e420891842c6096f',
     'p13bfa.asm': 'bef577de13494d8c', 'twin.asm': 'b6e0009a74fd8ca0',
+    'twset.asm': '63d4c435841f7207', 'scr13w.asm': '8ddf861c37d1cfd3',
 }
 
 # ---------------------------------------------------------------- the 1.5-07 tables (first 4 KB and 4D28h)
@@ -94,9 +97,9 @@ REMOVE = {0x6E: 0x0106, 0x78: 0x0118, 0x79: 0x0119, 0x7A: 0x011A, 0x7C: 0x0120} 
 DROPPED = [(0x0831, 0x0871), (0x0D79, 0x0D92), (0x0DDD, 0x0DF6), (0x4E2E, 0x4E3A), (0x4EBE, 0x4EEE)]
 # zero runs the build has from the start: the image end after the 9x16 alternate font table (7E30h, 17-byte
 # entries; its 00h at 7F51h, and its last glyph's blank rows before that, look like free space but are
-# not), the padding after the second sign-on block (the first block's padding takes the longer sign-on, and
-# the card makers' first blocks differ in length)
-UNUSED = [(0x7F52, 0x7FFF), (0x0140, 0x0184)]
+# not; S3's fonts take 7F52h-7F90h of it), the padding after the second sign-on block from 0130h (the
+# card makers' second blocks end at 011Dh to 012Ch; the first block's padding takes the longer sign-on)
+UNUSED = [(0x7F52, 0x7FFF), (0x0130, 0x0184)]
 ALT916 = (0x7E30, 0x7F51)                        # the 9x16 alternate font table and its 00h
 
 SITES = dict(modetab=0x568C, m4f02=0x4C12, int10=0x56C6, post52=0x0E97, mclk=0x0354,
@@ -118,33 +121,43 @@ SYMSIG = [('GETCRTC', '50 ba cc 03 ec ba b4 03 a8 01 74 03 ba d4 03 58 c3'),
           ('WSET', '52 53 b8 4f 01 80 ff 00 75 18 8b da ba c4 03 b0 04 e8 ?? ?? f6 c4 08 75 03 c1 e3 02 e8'),
           ('GWIN', '53 b8 4f 01 80 ff 01 75 24 e8 ?? ?? b0 6a e8 ?? ?? 8a dc 80 e3 7f ba c4 03 b0 04 e8 ?? ?? 33 d2')]
 # S3's fonts, taken from the Trio64V+ BIOS 1.03-08 (the same bytes as in 2.04.07, on the Trio64V2 card):
-# (name, offset in 1.03-08, length, SHA-256 there, Phoenix's table of the same kind, its room). The 8x8,
-# 8x14 and 8x16 fonts have Phoenix's sizes and replace its tables in place, so no address changes. S3's
-# 9-dot alternate tables have 20 and 19 entries, Phoenix's room 18 and 17: the entries in ALT_DROP are
-# left out (their alternate glyphs differ least from the 8-dot ones: '-' by 1 pixel and '+-' in 9x14,
-# '1/4' by 1 pixel and the yen sign in 9x16), and those glyphs show their 8-dot shape in 9-dot modes.
+# (name, offset in 1.03-08, length, SHA-256 there, address here). They replace Phoenix's fonts, which
+# take 5720h-7F51h, and lie end to end from 5720h to 7F90h: S3's 9-dot alternate tables have 20 and 19
+# entries, Phoenix's 18 and 17, so the 9x14 table grows into the 8x16 font's place and the 8x16 font
+# and the 9x16 table move up by 29 and 63 bytes, into the zeros after the 9x16 table (UNUSED, checked).
+# The 8x8 and 8x14 fonts and the 9x14 table keep their addresses.
 FONT_SRC = os.path.join(os.path.dirname(SHARED), 'reference', 'vplus', '1_03_08.bin')
 S3FONTS = [
-    ('8x8', 0x526C, 0x0800, '75c79a7e7fa423dda67ec6d6d76cec86b63f85677726368750c75b0920ddf319', 0x5720, 0x0800),
-    ('8x14', 0x5A6C, 0x0E00, '657ca6588b6bf729f0ed71a3d3c781a465bd30cdfb11eb5fc7e27594c0717ea1', 0x5F20, 0x0E00),
-    ('9x14 alternate', 0x686C, 301, 'eeca821495071577f416370bb31f075aff1344d2170a1696901e708b8ac61b17', 0x6D20, 0x6E2F - 0x6D20),
-    ('8x16', 0x6998, 0x1000, 'a8bad6fd78475a6bc2a05438c19207a9bb8c0f4f4099f60384e158cdc3eba580', 0x6E30, 0x1000),
-    ('9x16 alternate', 0x7998, 324, 'ebaabb3ef79a22c92935d68766b4543b3851289921b7806a0e82345635c8e224', 0x7E30, 0x7F52 - 0x7E30),
+    ('8x8', 0x526C, 0x0800, '75c79a7e7fa423dda67ec6d6d76cec86b63f85677726368750c75b0920ddf319', 0x5720),
+    ('8x14', 0x5A6C, 0x0E00, '657ca6588b6bf729f0ed71a3d3c781a465bd30cdfb11eb5fc7e27594c0717ea1', 0x5F20),
+    ('9x14 alternate', 0x686C, 301, 'eeca821495071577f416370bb31f075aff1344d2170a1696901e708b8ac61b17', 0x6D20),
+    ('8x16', 0x6998, 0x1000, 'a8bad6fd78475a6bc2a05438c19207a9bb8c0f4f4099f60384e158cdc3eba580', 0x6E4D),
+    ('9x16 alternate', 0x7998, 324, 'ebaabb3ef79a22c92935d68766b4543b3851289921b7806a0e82345635c8e224', 0x7E4D),
 ]
-ALT_DROP = {'9x14 alternate': (0x2D, 0xF1), '9x16 alternate': (0x9D, 0xAC)}
+FONTS = (0x5720, 0x7F91)                        # where S3's fonts lie, end to end
+PHX_FONTS = (0x5720, 0x7F52)                    # Phoenix's fonts (the code area's, CODE_SHA; then ALT916)
+# Phoenix's references to the two tables that move (riplin's disassembly names these and no others; a
+# scan for the words finds no others in the code): mov bx/si with the address, and the AX=1130h
+# table at 315Ah (8x14, 8x8, 8x8 upper, 9x14, 8x16, 9x16)
+FONT_REFS = {0x1B29: 0x6E30, 0x1B39: 0x6E30, 0x2FBE: 0x6E30, 0x2FFD: 0x6E30, 0x3119: 0x6E30, 0x3162: 0x6E30,
+             0x3164: 0x7E30, 0x477B: 0x7E30}
+FONT_REF_OP = {0x1B29: 0xBB, 0x1B39: 0xBB, 0x2FBE: 0xBE, 0x2FFD: 0xBE, 0x3119: 0xBE, 0x477B: 0xBE}
+FONT_TAB = (0x315A, '20 5f 20 57 20 5b 20 6d 30 6e 30 7e')
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
 MCLK_MAX = 60.0                                 # MEM-1: 16.67 ns on the Trio32/Trio64
 
 BLOCKS = [
-    ('tlock.asm', 'TLOCK', 0x0871 - 0x0831, ('wcheck',)),
-    ('tbon.asm', 'TBON', 0x0BD0 - 0x0B4C, ('bon', 'unlk', 'relk')),  # calls wcheck
-    ('thook.asm', 'THOOK', 0x0184 - 0x0140, ('hook',)),           # calls unlk, relk
-    ('tglue.asm', 'TGLUE', 0x0871 - 0x085A, ('h4f02', 'wsetp')),  # calls hook, bon
+    ('tlock.asm', 'TLOCK', 0x0871 - 0x0831, ('wcheck', 'unlk')),
+    ('tbon.asm', 'TBON', 0x0BA6 - 0x0B4C, ('bon', 'relk')),      # calls wcheck, unlk
+    ('thook.asm', 'THOOK', 0x0BD0 - 0x0BA6, ('hook',)),           # calls unlk, relk
+    ('tglue.asm', 'TGLUE', 0x0DF6 - 0x0DEF, ('h4f02',)),          # calls hook, bon
+    ('twset.asm', 'TWSET', 0x4DE0 - 0x4DD1, ('wsetp',)),          # calls bon
     ('font32.asm', 'FONT32', 0x0631 - 0x0604, ('font',)),
-    ('scr13.asm', 'SCR13', 0x7FFF - 0x7F52, ('scr13',)),
+    ('scr13w.asm', 'SCR13W', 0x0184 - 0x0130, ('scr13w',)),
+    ('scr13.asm', 'SCR13', 0x7FFF - 0x7F91, ('scr13',)),          # jumps to scr13w
     ('p13fill.asm', 'P13A', 0x4EEE - 0x4EBE, ('wfillt', 'wfill')),
     ('p13df.asm', 'DFDN', 0x4E3A - 0x4E2E, ('dfdn',)),
-    ('p13move.asm', 'P13B', 0x0DF6 - 0x0DDD, ('wmove',)),
+    ('p13move.asm', 'P13B', 0x0DEF - 0x0DDD, ('wmove',)),
     ('p13bfill.asm', 'BFILL', 0x0D92 - 0x0D79, ('bfill0', 'bfill')),
     ('p13bfa.asm', 'P13C', 14, ('bfilla',)),                      # dead: the old font loop
     ('twin.asm', 'TWIN', 0x4D82 - 0x4D70, ('sr04',)),
@@ -257,41 +270,35 @@ def edit_tables(d, log):
     return free + DROPPED
 
 
-def s3_fonts(src):
-    """S3's font tables from the 1.03-08 image src, the alternate tables trimmed to Phoenix's room:
-    [(name, Phoenix offset, bytes)]."""
-    out = []
-    for name, so, ln, sha, po, room in S3FONTS:
-        t = bytes(src[so:so + ln])
-        if hashlib.sha256(t).hexdigest() != sha:
-            raise PatchError('font source: the %s font at %04X is not that of 1.03-08' % (name, so))
-        if name in ALT_DROP:
-            h = 15 if '14' in name else 17
-            ent = [t[i:i + h] for i in range(0, ln - 1, h)]
-            keep = [e for e in ent if e[0] not in ALT_DROP[name]]
-            if len(ent) - len(keep) != len(ALT_DROP[name]):
-                raise PatchError('font source: the %s table lacks one of %s' % (name, ALT_DROP[name]))
-            t = b''.join(keep) + b'\x00'
-        if len(t) != room:
-            raise PatchError('font %s: %d bytes for a room of %d' % (name, len(t), room))
-        out.append((name, po, t))
-    return out
-
-
 def put_fonts(d, src, log):
-    """Replace Phoenix's fonts in d by S3's from src (1.03-08). Phoenix's tables are the code area's
-    (CODE_SHA); its alternate tables are checked to end where S3's trimmed ones end."""
-    for name, po, t in s3_fonts(src):
-        if name in ALT_DROP:
-            h = 15 if '14' in name else 17
-            a = po
-            while d[a]:
-                a += h
-            if a != po + len(t) - 1:
-                raise PatchError('Phoenix %s table at %04X ends at %04X, expected %04X' % (name, po, a, po + len(t) - 1))
-        d[po:po + len(t)] = t
-        log.append('%04X-%04X  %s font: S3\'s (1.03-08)%s' % (po, po + len(t) - 1, name,
-                   ', without %s' % ' and '.join('%02Xh' % c for c in ALT_DROP[name]) if name in ALT_DROP else ''))
+    """Replace Phoenix's fonts in d by S3's from src (1.03-08) and point Phoenix's references to the
+    moved tables (FONT_REFS) at their new places; every table and reference is checked first."""
+    new = {}
+    for name, so, ln, sha, at in S3FONTS:
+        if hashlib.sha256(bytes(src[so:so + ln])).hexdigest() != sha:
+            raise PatchError('font source: the %s font at %04X is not that of 1.03-08' % (name, so))
+    if bytes(d[FONT_TAB[0]:FONT_TAB[0] + 12]) != bytes.fromhex(FONT_TAB[1]):
+        raise PatchError('the AX=1130h font table at %04X is not 1.5-07\'s' % FONT_TAB[0])
+    for a, old in FONT_REFS.items():
+        if struct.unpack_from('<H', d, a)[0] != old or (a in FONT_REF_OP and d[a - 1] != FONT_REF_OP[a]):
+            raise PatchError('font reference %04X: expected %02X %04X' % (a, FONT_REF_OP.get(a, 0), old))
+    if bytes(d[PHX_FONTS[1]:FONTS[1]]) != bytes(FONTS[1] - PHX_FONTS[1]):
+        raise PatchError('%04X-%04X, where the fonts grow, is not free' % (PHX_FONTS[1], FONTS[1] - 1))
+    d[FONTS[0]:FONTS[1]] = bytes(FONTS[1] - FONTS[0])
+    end = FONTS[0]
+    for name, so, ln, sha, at in S3FONTS:
+        if at != end:
+            raise PatchError('font %s at %04X, expected %04X (end to end)' % (name, at, end))
+        d[at:at + ln] = src[so:so + ln]
+        end = at + ln
+        log.append('%04X-%04X  %s font: S3\'s (1.03-08)' % (at, end - 1, name))
+    if end != FONTS[1]:
+        raise PatchError('the fonts end at %04X, expected %04X' % (end, FONTS[1]))
+    moved = {0x6E30: [x[4] for x in S3FONTS if x[0] == '8x16'][0], 0x7E30: [x[4] for x in S3FONTS if x[0] == '9x16 alternate'][0]}
+    for a, old in sorted(FONT_REFS.items()):
+        struct.pack_into('<H', d, a, moved[old])
+        log.append('%04X  %04X -> %04X  font reference (%s)' % (a, old, moved[old],
+                   'AX=1130h table' if a not in FONT_REF_OP else 'mov %s' % ('bx' if FONT_REF_OP[a] == 0xBB else 'si')))
 
 
 def patch(lo, nasm='nasm', mclk=None, fonts=None):

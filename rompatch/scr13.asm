@@ -1,7 +1,8 @@
 ; 32-bit mode 13h scroll (p12, EAX kept since p21 of 2.04.07): jumped to from the 'scr' site
 ; (s3patch.SIG). Shared by the Trio64V+ build (rompatch/vplus) and the Trio64 build (rompatch/trio64),
 ; assembled at SCR13 of their bios.inc, with SEG_SCR, SCR_FULL and SCR_WIN from there; 2.04.07 has its
-; copy in p12ext.asm.
+; copy in p12ext.asm. The window path is in scr13w.inc; with SCR13W in bios.inc (Trio64) it is a block
+; of its own (scr13w.asm) at that address.
 bits 16
 cpu 386
 %include "bios.inc"
@@ -14,7 +15,11 @@ scr13:  cmp byte [bp+0x1],0x07
         je .orig
         push eax
         cmp cx,[0x44A]
+%ifdef SCR13W
+        jne near SCR13W         ; the window path, a block of its own (scr13w.asm)
+%else
         jne .win
+%endif
         mov bx,ax               ; full width: one block move and one fill
         mov al,cl
         mul dh
@@ -39,43 +44,10 @@ scr13:  cmp byte [bp+0x1],0x07
         pop eax
         add sp,4
         ret
-.win:   shl bx,3                ; window: line by line
-        shl cx,1                ; dwords per line
-        mov al,[0x485]
-        mul dh
-        push dx
-        mov dx,ax
-        mov ax,0xA000
-        mov ds,ax
-        mov es,ax
-        or dx,dx
-        jz .f
-.ml:    mov ax,cx
-        rep movsd
-        mov cx,ax
-        add si,bx
-        add di,bx
-        dec dx
-        jnz .ml
-.f:     pop dx
-        mov ds,[cs:SEG_SCR]
-        mov al,[0x485]
-        mul dl
-        mov dx,ax
-        mov al,[bp+0x3]
-        mov ah,al
-        mov si,ax
-        shl eax,16
-        mov ax,si
-        mov si,cx
-.fl:    mov cx,si
-        rep stosd
-        add di,bx
-        dec dx
-        jnz .fl
-        pop eax
-        add sp,4
-        ret
+%ifndef SCR13W
+.win:
+%include "scr13w.inc"
+%endif
 .orig:  cmp cx,[0x44A]
         jne .ow
         jmp SCR_FULL

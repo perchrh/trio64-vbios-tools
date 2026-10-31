@@ -626,7 +626,7 @@ def t_t64_patches(c):
     """Our Trio64 ROM (1.5-07-pN, rompatch/trio64): the ROM file, the refresh defaults (no mode runs
     interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
-    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h), the window function, the sequencer
+    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2), the window function, the sequencer
     index kept by the window set and get (4F05 BH=0 and 1), and the 32-bit
     registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh. Only on the Trio64 model."""
     if not c.tours:
@@ -656,13 +656,25 @@ def t_t64_patches(c):
             cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x52, 0x6A, 0x38, 0x39))
     chk(base[0] and not base[1] and cr.get(0x52, 0) == 0x80, 'POST: CR59/5A %02X%02X, CR52 %02X (expected 80h)'
         % (base[0], base[1], cr.get(0x52, 0)))
-    # S3's fonts (1.03-08, the same as 2.04.07): AX=1130h returns Phoenix's addresses, now with S3's glyphs
+    # S3's fonts (1.03-08, the same as 2.04.07), all five tables whole: AX=1130h finds each, the moved 8x16
+    # font and 9x16 table too
     vref = os.path.join(os.path.dirname(HERE), 'reference', 'vplus', '1_03_08.bin')
     if os.path.exists(vref):
         v = open(vref, 'rb').read()
-        for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000)):
+        for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000),
+                           (5, 0x686C, 301), (7, 0x7998, 324)):
             r = m.int10(0x1130, bx=bh << 8)
             chk(m.mem(r['es'] * 16 + r['bp'], ln) == v[so:so + ln], 'AX=1130h BH=%d: not S3\'s font' % bh)
+        # the mode set and AX=1114h load them into plane 2 through the moved addresses: S3's 8x16 glyphs,
+        # and in the 9-dot modes 03h and 07h all 19 of S3's 9x16 alternate glyphs on top
+        alt = {v[0x7998 + i * 17]: v[0x7998 + i * 17 + 1:0x7998 + i * 17 + 17] for i in range(19)}
+        for ax, nalt in ((0x0003, 19), (0x0007, 19), (0x1114, 0)):
+            m.int10(ax)
+            g = [bytes(m.planes[2][c * 32:c * 32 + 16]) for c in range(256)]
+            plain = [c for c in range(256) if c not in alt and g[c] != v[0x6998 + c * 16:0x6998 + c * 16 + 16]]
+            got = sum(g[c] == alt[c] for c in alt)
+            chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not S3\'s 8x16, %d of 19 alternate glyphs '
+                '(expected %d)' % (ax, len(plain), got, nalt))
     # the defaults: no interlace, 800x600 at 60 Hz (line total 1056, VESA DMT)
     for mode in (0x101, 0x103, 0x105, 0x107, 0x111, 0x114, 0x117, 0x110, 0x116, 0x204, 0x205, 0x208):
         r = m.int10(0x4F02, bx=mode)
