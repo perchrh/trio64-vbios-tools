@@ -8,8 +8,9 @@
 compare with byte by byte.
 
 Tests
-  build          1.5-07 gives the tested build: the SHA-256 pinned in s3tpatch.py (NASM 3.02), sign-on
-                 1.5-07-p1, 32 KB, byte-identical to --rom when given
+  build          1.5-07 gives the tested build: the SHA-256 pinned in s3tpatch.py (NASM 3.02) over the
+                 lower 32 KB, sign-on 1.5-07-p1, 64 KB with the upper 32 KB zeros (the default), the
+                 lower 32 KB byte-identical to --rom when given (a 32 or 64 KB image)
   checksums      the 32 KB sum to 00 (byte 7FFFh makes it so) and have the 55AAh header with 32 KB size
   tables         every mode's refresh list starts with a non-interlaced entry, the five interlaced-only
                  modes are gone from the mode table, the VESA lists and the mode map, every kept entry is
@@ -24,7 +25,7 @@ Tests
   oem_build      a 1.5-07 build with other memory timing bytes in its refresh entries and another MCLK
                  (as the card makers' builds differ) is patched too and keeps them
   input_64k      a 64 KB image with 1.5-07 in the lower half gives the same result, whatever its upper half
-  size64         --size 64 gives the same 32 KB followed by 32 KB of zeros
+  size32         --size 32 gives the same lower 32 KB alone
   mclk           --mclk 50, 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change nothing
                  else but the checksum; 61 MHz and 39 MHz are refused (MEM-1: 60 MHz on the Trio64)
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte changed
@@ -113,12 +114,14 @@ def main():
     tmp = tempfile.mkdtemp(prefix='t_s3tpatch_')
 
     rc, img, err = run(tmp, ref)
-    sha = hashlib.sha256(img).hexdigest() if img else ''
     want = 'Version %s-%s' % (s3tpatch.VERSION, s3tpatch.LEVEL)
-    ok = rc == 0 and len(img) == 0x8000 and sha == s3tpatch.RESULT_SHA and want.encode() in img[:0x100]
+    ok = rc == 0 and img is not None and len(img) == 0x10000 and img[0x8000:] == bytes(0x8000)
+    lo = img[:0x8000] if img else b''
+    sha = hashlib.sha256(lo).hexdigest() if img else ''
+    ok = ok and sha == s3tpatch.RESULT_SHA and want.encode() in img[:0x100]
     info = 'SHA-256 %s' % sha[:16] if ok else (err or 'SHA-256 %s' % sha)
     if ok and a.rom:
-        same = open(a.rom, 'rb').read()[:0x8000] == img
+        same = open(a.rom, 'rb').read()[:0x8000] == lo
         ok, info = same, info + (', identical to ' if same else ', differs from ') + os.path.basename(a.rom)
     result('build', ok, info)
     if not img:
@@ -201,8 +204,8 @@ def main():
     result('oem_build', ok, err or 'other timing bytes and MCLK kept')
     rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
-    rc, big, err = run(tmp, ref, ['--size', '64'])
-    result('size64', rc == 0 and big == img + bytes(0x8000), err or '64 KB, upper 32 KB zeros')
+    rc, small, err = run(tmp, ref, ['--size', '32'])
+    result('size32', rc == 0 and small == img[:0x8000], err or '32 KB, the same lower half')
     bad = []
     for mhz in ('50', '55', '60'):
         rc, out, err = run(tmp, ref, ['--mclk', mhz])

@@ -23,8 +23,10 @@
 ;   Every test or step left out prints a line with its name, "SKIP:" and the reason, not counted as a
 ;   result; the summary line counts them ("Skipped: N"): the SR1A and subsystem ID lines on chips other
 ;   than the Trio64V2, the 8x14 glyph checks when the ROM has no 8x14 font (Trio64V2 2.04.07: the
-;   8x16 font is checked instead), the VRAM test with /Q, and once, before the VESA mode lines, the
-;   register rules of the other chips (registers this chip does not have).
+;   8x16 font is checked instead), the VRAM test with /Q, once before the VGA mode lines the CR90 bit 7
+;   check on chips other than the Trio64V2 (#72), once before the VESA mode lines the register rules of
+;   the other chips (registers this chip does not have), and the banked window/LFB cross check when 4F01
+;   offers 101h no LFB (VBE 1.x, #73).
 ;
 ; Result lines
 ;   <test name> ... <details>  PASS | FAIL xxxx | WARN xx | INFO
@@ -243,6 +245,7 @@ start:  cld
         call post_tests
         mov byte [pass],1
         PS 13,10,'--- VGA BIOS modes vs IBM reference tables (VGATEST, IBM parameter table) ---',13,10
+        call vskips                     ; the CR90 check of the VGA lines: Trio64V2 only (#72)
         call vga_pass
         call modex_all
         PS 13,10,'--- VGA BIOS functions ---',13,10
@@ -861,7 +864,7 @@ prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131
 ;   1  MISC, FEAT, SR, CRTC, ATC or GR register differs from IBM (all 62, detail lines show which)
 ;   2  AH=1Bh state block differs from IBM (bit 4 of +2Dh ignored), or AH=0Fh mode/columns/page wrong
 ;   4  an S3 extension is still on (vgaext: clock select, CR31, CR58, CR67, CR51, CR43, CR5D, CR5E,
-;      CR69, CR90 bit 7, SR15, SR18)
+;      CR69, CR90 bit 7 (Trio64V2 only, a SKIP line on the other chips, #72), SR15, SR18)
 ;   8  measured refresh more than 1.5 Hz from the reference (70 Hz, 60 Hz for 11h/12h)
 ;   10 memory test of the mode's video memory failed
 ;   20 default DAC not loaded as IBM does: 256-colour table (13h), CGA palette (04h-06h, 0Dh, 0Eh),
@@ -4849,6 +4852,15 @@ dschk:  call rdall
 ; WARN rather than FAIL for the two CR86/CR90 rules: they are new and not confirmed in general. On the
 ; card with the 2.04.07-p18 ROM, the modes that break them (012Eh, 010Fh, 0131h, 0134h: CR86 with End
 ; Horizontal Blank 00h; 012Ah: L1 FFh) show a clean picture (30 October 2026, README Known remaining items).
+; The VGA mode lines' CR90 bit 7 check (vgaext) runs on the Trio64V2 only (#72): one SKIP line on the
+; other chips of the family. Keeps every register.
+vskips: cmp byte [chip],CHIP_T64V2
+        je .n
+        cmp byte [chip],CHIP_NONE
+        je .n
+        SKIPL C_VGA,'VGA lines: CR90 bit 7 (FIFO L1) off','CR90 is a Trio64V2 register'
+.n:     ret
+
 ; The register rules regchk leaves out on this chip (registers of other chips), as one SKIP line.
 rskips: cmp byte [chip],CHIP_NONE       ; no chip of the family: nothing is judged by chip anyway
         je .n
@@ -6896,13 +6908,24 @@ vram_test:
 .ok:    call tend
         ret
 
-; banked write at bank 5 visible through the LFB, LFB write at the end visible through banks
+; banked write at bank 5 visible through the LFB, LFB write at the end visible through banks. A SKIP
+; line when 4F01 offers 101h no linear frame buffer (ModeAttributes bit 7; VBE 1.x BIOSes, #73)
 
 ; The banked window and the LFB must be the same memory: write at bank 5 and read through the LFB,
 ; write the last 256 bytes through the LFB and read through the last bank. Fail bits 1 and 2;
 ; WARN 01 when INT 15h AH=87h is not available.
 lfb_cross:
-        TB C_VBE,'Banked window and LFB same memory'
+        mov ax,0x4F01                   ; an LFB for 101h at all (#73)?
+        mov cx,0x101
+        mov di,mibuf
+        int 0x10
+        cmp ax,0x004F
+        jne .nolfb
+        test byte [mibuf],0x80
+        jnz .go
+.nolfb: SKIPL C_VBE,'Banked window and LFB same memory','no linear frame buffer in 101h (4F01)'
+        ret
+.go:    TB C_VBE,'Banked window and LFB same memory'
         call tdots
         mov bx,0x101
         call setm
@@ -7157,11 +7180,16 @@ cmpsnap:                                ; SI list, BX actual, DI expected, CX n,
         loop .l
         ret
 
-extchk: ; SI list (type,idx,mask,exp) FF-terminated, DX fail bit
+extchk: ; SI list (type,idx,mask,exp) FF-terminated, DX fail bit. The CR90 entry only on the Trio64V2
+        ; (#72): no other chip has CR90; the Trio64 decodes CRTC index bits 6-0, so CR90 reads as CR10
 .l:     mov al,[si]
         cmp al,0xFF
         je .d
-        mov ah,[si+1]
+        cmp word [si],0x9003            ; type 3 (CRTC), index 90h
+        jne .r
+        cmp byte [chip],CHIP_T64V2
+        jne .n
+.r:     mov ah,[si+1]
         call readreg
         and al,[si+2]
         cmp al,[si+3]

@@ -18,7 +18,8 @@
 ;   MISC (3CCh), FEAT (3CAh), PEL mask (3C6h), BIOS video mode (0040:0049), VBE mode (4F03h), BIOS tick
 ;   SR00-SR1F   with SR08 = 06h for the extended ones, SR08 restored
 ;   CR00-CRFF   with CR38 = 48h and CR39 = A5h, both restored; CR45, CR4A and CR4B are not read (a read
-;               moves the hardware cursor colour stack) and show as "--"
+;               moves the hardware cursor colour stack) and show as "--", as do CRC5, CRCA and CRCB (the
+;               same registers on the Trio32/Trio64, which decode CRTC index bits 6-0 only, #74)
 ;   GR00-GR08   PCI configuration 00h-3Fh of device 5333:8901 (PCI BIOS)
 ;   The attribute controller is not read: reading AR00-0F needs the palette address source bit
 ;   cleared, which blanks the screen, and it touches the 3C0h flip-flop a driver may be using.
@@ -222,11 +223,13 @@ snapshot:
         stosb
 .cr1:   mov al,' '
         stosb
-        cmp bl,0x45
+        mov al,bl                       ; CR80-CRFF are CR00-CR7F on the Trio32/Trio64 (#74)
+        and al,0x7F
+        cmp al,0x45
         je .skp
-        cmp bl,0x4A
+        cmp al,0x4A
         je .skp
-        cmp bl,0x4B
+        cmp al,0x4B
         je .skp
         mov al,bl
         call rdcr

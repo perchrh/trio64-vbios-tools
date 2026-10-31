@@ -1,10 +1,11 @@
 # The Trio64 ROM (1.5-07-p1)
 
 Our changes ported to the Trio64 (86C764) on the Phoenix S3 Trio64 BIOS 1.5-07, in `rompatch/trio64`.
-Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P, 1 MB EDO
-50 ns upgraded to 2 MB); not yet run on a card. The choice of base is below ("Base BIOS candidates").
+Built and checked in the emulator on 30 October 2026 for the ExpertColor DSP-3364P (86C764-P E0A2AA,
+2 MB of fast page memory, four Mosel Vitelic V53C16256HK50; "The DSP-3364P's memory" below); first run
+on that card on 31 October 2026 ("On the card" below). The choice of base is below ("Base BIOS candidates").
 
-    make trom OUT=S3T64P1.BIN [VSIZE=64] [MCLK=55]   (rompatch/trio64/s3tpatch.py, 32 KB)
+    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (rompatch/trio64/s3tpatch.py; 64 KB with zeros above, TSIZE=32: 32 KB)
     make trom-test ROM=S3T64P1.BIN
     make emu-test ROM=S3T64P1.BIN CHIP=trio64
     make tref-compare ROM=S3T64P1.BIN
@@ -113,6 +114,7 @@ S3's own Trio64V+ BIOS 1.03-08.
 | `1-30.bin` (miroCRYSTAL, uploaded 30 October 2026) | Phoenix 1.5-04 | 16 of 23 | 243 bytes (7F0Ch) | 53.7 MHz | as 1.4-04, plus 1600x1200 interlaced (WARN 50) and 4F02 setting 118h-11Ah with 2 MB (errors) |
 | `5-52.bin` (V7-Mirage P-64 5.52, SPEA/Video Seven, uploaded twice) | Phoenix 1.5-06 | 16 of 23 | 195 bytes (7F3Ch) | 59.96 MHz | as 1.5-04 |
 | `expertcolor.BIN` (the name suggests the DSP-3364P) | Phoenix 1.5-07, "764 M70" | 16 of 23 | 179 bytes (7F4Ch) | 69.8 MHz | as 1.5-04, plus MCLK above the data book maximum of 60 MHz (FAIL 2) |
+| `trio64_expertcolor_dsp3364p.bin` (dumped from the DSP-3364P itself, 86C764-P E0A2AA, 2 MB EDO 50 ns, uploaded 31 October 2026) | Phoenix 1.5-07 of 11/16/95, "764 M70" (SHA-256 1056fcee...) | not checked (refused, see below) | 557 bytes (7DD2h) | 69.8 MHz | an earlier 1.5-07 build: its 4F15 has DDC1 only (BL=00h/01h, no DDC2B, no VDIF), 384 bytes less code, so everything from about 528Ah (the VBE/DDC code, the fonts) lies 384 bytes lower and the words that point there differ. Its first 4 KB are those of the CP764 build apart from 52 bytes: the model tag and dates, the 8x8 font pointer at 01B1h, the header word at 003Ch (no code reads it), and the MCLK at 3B5h (25h/22h, 69.8 MHz); the per-mode memory timing bytes are the same |
 | `dataexpertcp764.BIN` = `W27E257 CP764 V1.5-0 7.BIN` (uploaded) | Phoenix 1.5-07 | 16 of 23 | 179 bytes | 54.9 MHz | the 1.5-07 code; 24 bytes differ from `expertcolor.BIN` |
 | `Britek BP-S341 (S3 Trio64).BIN` (uploaded) | Phoenix 1.5-07 as "VIEWTOP Graphics BIOS", "S3 Trio64X (764X)" | 16 of 23 | 164 bytes | 52.5 MHz | the 1.5-07 code |
 | `86c764xtrio64.BIN`, `86c764ptrio64.BIN`, `86c764x2.bin` | Phoenix 1.5-07 (one "EDO") | 16 of 23 | 179 bytes | 55.0-55.5 MHz | the 1.5-07 code with other memory timing bytes |
@@ -191,13 +193,110 @@ the patcher assumes; nothing was copied from it.
 | The 1600x1200 register block 0831h-0870h is used only by the removed mode | a word at 01C7h holds 0871h, the address right after that block ("might point to 0871h") | our code ends at 086Eh and 0871h is unchanged |
 | The 64 zero bytes at 3CE9h | an empty entry of the VGA parameter table | not used for code |
 
+## The DSP-3364P's memory
+
+The card carries four Mosel Vitelic V53C16256HK50 (SOJ-40): 256K x 16 **fast page mode** DRAM, 50 ns,
+2 MB in all; not EDO, as the card had been described. The datasheet (Mosel Vitelic V53C16256H,
+preliminary) gives for the -50 grade: RAS access tRAC 50 ns, column access tCAA 24 ns, fast page cycle
+tPC 28 ns min, read/write cycle tRC 90 ns min, RAS pulse tRAS 50 ns min, RAS precharge tRP 30 ns min,
+CAS pulse tCAS 14 ns min, CAS precharge tCP 7 ns min.
+
+The Trio64 counts its memory cycles in MCLKs (Trio32/Trio64 data book section 7): a page mode cycle
+takes 2 MCLKs, RAS stays low 3.5 or 4.5 MCLKs and precharges 2.5 or 3.5 MCLKs (CR68 bits 2 and 3,
+strapped on the board, never written by Phoenix), so a row cycle takes at least 6 MCLKs. With the
+fastest CR68 settings:
+
+| | -50 needs | 69.8 MHz (14.3 ns, the card's BIOS) | 60 MHz (16.7 ns) | 55 MHz (18.2 ns) |
+| --- | --- | --- | --- | --- |
+| Page cycle, 2 MCLKs | tPC 28 ns | 28.7 ns | 33.3 ns | 36.4 ns |
+| RAS low, 3.5 MCLKs | tRAS 50 ns | 50.1 ns | 58.3 ns | 63.6 ns |
+| RAS precharge, 2.5 MCLKs | tRP 30 ns | 35.8 ns | 41.7 ns | 45.5 ns |
+| Row cycle, 6 MCLKs | tRC 90 ns | **86 ns, too short** | 100 ns | 109 ns |
+
+At 69.8 MHz the parts work at the edge of their page cycle and RAS time, and the row cycle is too short
+unless CR68 selects 4.5 MCLKs RAS low or 3.5 MCLKs precharge (then 100 ns); the chip itself is above its
+60 MHz MCLK limit (MEM-1) either way. At 60 MHz every -50 timing holds with any CR68 setting: build the
+card's ROM with `MCLK=60`. S3REGS with the stock BIOS shows the board's choices: CR68 bits 3-0 (the
+timings) and CR36 bits 3-2 (11b fast page, 10b EDO: what the strapping tells the chip; with fast page
+Phoenix also tries 4 MB at POST and settles on the 2 MB found).
+
+## On the card (31 October 2026)
+
+The default build (1.5-07-p1, MCLK 54.9 MHz, 64 KB image) on the ExpertColor DSP-3364P: a picture at
+POST, Windows detects the card, the text font looks right (the glyphs are byte for byte the Trio64V2
+card's; S3COMPAT's 8x8 upper half check passes, which Phoenix's own font failed). The picture looked
+softer than on the Trio64V2 card: the analog output of the board, not the ROM.
+
+- **S3TEST:** 26 PASS, 0 FAIL. Banked write throughput 81.7 MB/s (the booster on a Trio64, as on the
+  Trio64V2 card); every mode at its 60 Hz class rate, non-interlaced; the sequencer index kept by 4F05.
+- **S3COMPAT:** 88 PASS, 48 + 1 FAIL, all test bugs, fixed in the tools: the 48 VGA lines failed with
+  `CR90=80(00)` (the CR90 check is the Trio64V2's, #72) and the LFB cross check ran without an LFB
+  (#73). The VRAM test passed at 54.9 MHz.
+- **VSHOW /R:** every listed mode; **VGALOG:** 7303 calls, none with an error.
+- **S3REGS:** CR36 = 8Eh (fast page, 2 MB, as the V53C16256HK50), CR68 = 8Dh (RAS low 3.5 MCLKs,
+  precharge 2.5 MCLKs, the fastest strapping: at the stock 69.8 MHz the row cycle was 86 ns against
+  the chips' 90 ns), CR6B = E0h with BAR0 E0000000h (bit 7 set, so the PD bus width question of
+  T64-MEM-6 does not arise on this machine), CR52 = 80h (800x600 at 60 Hz).
+- **CRTC index aliasing:** CR80-CRFF read back as CR00-CR7F (CR90 = CR10, CRA0 = CR20, ...): the
+  Trio64 decodes index bits 6-0 only. A write meant for CR80 and up lands in CR00-CR7F, so code for
+  the later chips (the Trio64V2's CR90 FIFO fix, CR86) must never run on a Trio64. The emulator's
+  Trio64 and Trio32 models alias the same way since 31 October 2026.
+- **Timings:** mode set 03h 1.3 ms, 4F05 26.8 us, but 4F02 101h with the clear 157 ms against 39 ms on
+  the Trio64V2 card: Phoenix's graphics engine clear of the 2 MB is four times slower than the
+  32-bit CPU clear of 2.04.07-p11. A candidate for a later level (see Pending).
+- **4F15:** caps 0000 (no DDC answer); the board is from 1994, when DDC was new, and may not connect
+  the lines (Pending).
+- **VIDSPEED** (31 October 2026, chip marked 86C764GSpnp rev A): 32-bit writes 86.9 MB/s in 640x480x8,
+  as on the Trio64V2 card (87.4 MB/s: the CPU and bus are the limit there), but less as the display
+  takes more of the memory: 73.6 MB/s in 1024x768x8 (Trio64V2 86.0), 53.1 in 1280x1024x8 (82.6),
+  44.4 in 1024x768x15 (81.0), 36.8 in 800x600x32. The DSP-3364P has fast page memory at 54.9 MHz,
+  64 bits per page cycle of 2 MCLKs, about 220 MB/s, of which 1024x768x15 at 65 MHz takes 130 MB/s for
+  the display; the Trio64V2's 1-cycle EDO has twice the bandwidth. The standard VGA modes (planar 20
+  MB/s against 26.5, text 34 against 51) are the chip and its memory, not the ROM. The 132-column
+  text modes are the slowest (17 MB/s in 132x25); Phoenix's FIFO values for 109h/10Ah are a candidate
+  for a look. VIDSPEED's "264x25" and "160x50" are its own names for 132x25 and 80x50, and its kHz
+  figure is the visible lines times the refresh rate: 132x43 has 344 lines here (8x8 font) and 387 on
+  the Trio64V2 (8x9 font of 2.04.07).
+- **VGALOG** during VIDSPEED: 298 calls, all with CF clear and every VBE call 004Fh; the other
+  chipsets' probes (FE00h, 7000h, BF03h, 6F00h, 5F00h) came back unchanged, as they should. MCLK
+  54.9 MHz in every record. Phoenix's VBE modes run with CR58 = 10h and CR59/CR5A = 000Ah: linear
+  addressing on, with its 64 KB window at A0000h, Phoenix's banking scheme. Not in Phoenix's mode
+  list, so not measured: 106h (1280x1024x4) and 10Dh-10Fh (320x200 high and true colour).
+- **S3REGS before and after Windows 98:** the driver keeps the ROM's MCLK (SR10/SR11 41h 2Ch). It
+  leaves SR12/SR13 at its last pixel clock (42h 2Bh, 40.3 MHz, 800x600 at 60 Hz; unused in mode 03h,
+  which takes the fixed 28.322 MHz clock), the hardware cursor registers CR47-CR4F changed, and CR5C
+  41h instead of 43h (GOP bit 1, one of the DDC lines in S3's design, below). The dump read the
+  cursor colour stack through CRC5, CRCA and CRCB, a tool bug fixed since (#74).
+
 ## Pending
 
-- Dump the DSP-3364P's BIOS (and S3REGS) and patch that dump: if it is `expertcolor.BIN`, its MCLK is
-  69.8 MHz, above the data book's 60 MHz; build it with `MCLK=60` or lower and check the memory with
-  S3COMPAT's VRAM test.
-- S3TEST and S3COMPAT logs from the card.
-- S3COMPAT's 4F15 line on the card with a DDC2 monitor: the EDID read through the DDC code (the
-  emulator has no monitor on the DDC lines).
-- S3REGS from the card after POST: CR6B against PCI BAR0 bits 31-24 and the memory found (CR36 bits
-  7-5), for the CR6B question above (T64-MEM-6).
+- The DSP-3364P's own BIOS (dumped 31 October 2026, table above) is an earlier 1.5-07 build that
+  `s3tpatch.py` refuses (other code). It needs no support: the CP764 reference has the same card
+  settings, apart from the memory clock, and newer DDC code (DDC1 and DDC2B). Build the card's ROM from
+  the reference with `make trom OUT=S3T64P1.BIN MCLK=60` (the data book maximum; the card ran at 69.8
+  MHz) or `MCLK=55` (the CP764 build's own 54.9 MHz), and check the memory with
+  S3COMPAT's VRAM test (without /Q). Take S3REGS before flashing, with the stock BIOS: SR10/SR11
+  should read 22h/25h (69.8 MHz). The Trio64 has two clock PLLs only, DCLK (pixel clock) and MCLK
+  (memory and graphics engine), and Phoenix's POST loads the pair at 3B5h/3B6h into SR11/SR10 (and
+  the N/R byte into SR1A, with SR1B = 00h; neither is in the Trio32/Trio64 data book). The memory's
+  own speed (50 ns) is in CR68 bits 3-0, strapped on the board and never written by Phoenix: RAS low
+  3.5 or 4.5 MCLKs, RAS precharge 2.5 or 3.5 MCLKs, a CAS/OE stretch of 0-6.5 ns; at 69.8 MHz 3.5
+  MCLKs are 50.1 ns.
+- S3COMPAT again on the card with the fixed tools (#72, #73): no FAIL expected.
+- The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
+  with the 32-bit CPU clear on the Trio64V2). The 2.04.07 `clear32.asm` (35 bytes) would fit the free
+  space; Phoenix's clear routine (121Eh) and its callers need a look first.
+- DDC2 on this board (asked for 31 October 2026). 1.5-07's DDC1 and DDC2B code is in the ROM, byte
+  for byte as Phoenix wrote it, so no new code is needed if the board is wired the way that code
+  expects, which is S3's design for the Trio64 (data book 10.3, 10.4; the chip has no DDC pins of its
+  own, the serial port came with the Trio64V+): the General Output Port (CR5C, an external latch on
+  GD7-0 strobed by STWR) drives the lines, bit 0 SDA and bit 1 SCL (54CCh), and the General Input
+  Port (port 3C8h with CR55 bit 2 = 1, an external buffer strobed by STRD) reads SDA in bit 0 (54E6h,
+  CR55 set at 528Fh). On the card 4F15 BL=00h found neither DDC1 nor DDC2B (caps 0000). Steps:
+  (1) look at the board for the GOP latch and the GIP buffer (74-series chips on the GD lines next to
+  the Trio64) and for traces to pins 12 (SDA) and 15 (SCL) of the VGA connector; (2) a probe in
+  S3COMPAT /V that sets CR55 bit 2, writes CR5C bits 1-0 = 00b, 01b, 10b, 11b and logs the raw 3C8h
+  values as D: records: a missing buffer gives the DAC write index or a floating bus whatever is
+  written, a wired SDA follows bit 0. If the board wires other GOP or GIP bits, the two routines take
+  a byte patch each; a DDC2 of our own would have about 210 bytes free (97 at 52E1h in one piece). If
+  pins 12 and 15 are not connected, no ROM can help.

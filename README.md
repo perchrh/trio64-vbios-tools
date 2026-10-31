@@ -355,7 +355,7 @@ reset, 4F05 keeping the sequencer index (Phoenix left it at 04h) and S3's fonts 
 Hz; the freed table space holds the new code. `docs/trio64-backport.md` has the details, the space map,
 what 1.5-07 still gets wrong and the comparison of the base candidates.
 
-    make trom OUT=S3T64P1.BIN [VSIZE=64] [MCLK=55]
+    make trom OUT=S3T64P1.BIN [TSIZE=32] [MCLK=55]   (64 KB, upper half zeros, as the Trio64V2 ROM; TSIZE=32: 32 KB)
     make trom-test [ROM=S3T64P1.BIN]
     make emu-test ROM=S3T64P1.BIN CHIP=trio64 [LOGS=emu/tlogs]
     make tref-compare ROM=S3T64P1.BIN
@@ -363,7 +363,9 @@ what 1.5-07 still gets wrong and the comparison of the base candidates.
 `s3tpatch.py` checks the 1.5-07 code (1000h-7EFFh, the same in every 1.5-07 build) and the layout of
 its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that card's memory clock and
 timing bytes. The emulator test `t64_patches` checks the ROM's changes, `stores` its 32-bit stores, and
-S3TEST runs its Trio64 set. Not tried on a card yet.
+S3TEST runs its Trio64 set. On the ExpertColor DSP-3364P (31 October 2026): S3TEST 26 PASS, 0 FAIL,
+banked writes at 81.7 MB/s with the booster; S3COMPAT's 49 FAILs there were test bugs (#72, #73),
+fixed in the tools (docs/trio64-backport.md, "On the card").
 
 ## Continuous integration
 
@@ -487,7 +489,7 @@ S3REGS.TXT format (S3REGS and S3REGS32 write the same):
     S3REGS 1.0 [label] DOS                    or  S3REGS32 1.0 [label] Win32
     MISC=EF FEAT=00 PEL=FF MODE=59 VBE=0101 TICK=00000032   (MODE and VBE only from DOS)
     SR00: 16 bytes SR00-SR0F                  SR10: SR10-SR1F
-    CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B shown as --, not read)
+    CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B, CRC5, CRCA, CRCB shown as --, not read)
     GR00: GR00-GR08
     PCI00: 16 dwords of the PCI configuration header of 5333:8901
     WATCH 120 s, ...                          (S3REGS32 /W only) then lines "+<ms> CR54 18->10"
@@ -496,7 +498,9 @@ S3REGS.TXT format (S3REGS and S3REGS32 write the same):
 S3REGS32 reads the ports directly, which Windows 9x allows a Win32 program for ports no virtual
 device traps; on Windows NT it ends with an exception. It keeps the 3C4h, 3CEh and 3D4h indexes,
 SR08, CR38, CR39 and CF8h as found, and never touches the attribute controller or the cursor colour
-stack (CR45, CR4A, CR4B). It is built by NASM alone: the PE header is written out in
+stack (CR45, CR4A, CR4B). On the Trio32/Trio64 CR80-CRFF are CR00-CR7F again (the chip decodes CRTC
+index bits 6-0 only), so CRC5, CRCA and CRCB are left out as well, and the watch ignores CRC6-CRCF
+as it ignores CR46-CR4F (#74). It is built by NASM alone: the PE header is written out in
 `s3regs/s3regs32.asm`. The emulator runs it on a 32-bit CPU with the same register model
 (`vgaemu.Machine.run_pe32`).
 
@@ -625,6 +629,47 @@ Fixes
   to the Trio64V+ (whose dispatcher saves only 16-bit registers). S3TEST's mode 13h scroll line checks
   it (fail bit 10h), the emulator test rom_patches too.
 - The card's POST flags (0xD1 = 05h) and CR80 POST value (00h).
+
+### VIDSPEED on the card: stock 2.04.11 against p21
+
+VIDSPEED in plain DOS on the Trio64V2 card (80486, 31 October 2026), once with the card's stock BIOS
+2.04.11 and once with 2.04.07-p21. The values are bytes per millisecond written with 32-bit stores
+(VIDSPEED's third line per mode), then read; the system RAM lines of both runs are equal, so the
+machine was the same.
+
+| Mode | Stock write | p21 write | Factor | Stock read | p21 read |
+| --- | --- | --- | --- | --- | --- |
+| 640x400x256 | 23135 | 87360 | 3.8 | 2585 | 7267 |
+| 640x480x256 | 23103 | 87360 | 3.8 | 2585 | 7257 |
+| 800x600x256 | 22514 | 86907 | 3.9 | 2467 | 7119 |
+| 1024x768x256 | 21178 | 86016 | 4.1 | 2385 | 6832 |
+| 1280x1024x256 | 20580 | 82626 | 4.0 | 2340 | 6717 |
+| 640x480x16bit | 22011 | 87360 | 4.0 | 2420 | 7035 |
+| 1024x768x16bit | 17805 | 81029 | 4.6 | 2285 | 6709 |
+| 800x600x24bit | 16541 | 76241 | 4.6 | 2226 | 6725 |
+| 320x200x256 (mode 13h) | 44043 | 53718 | 1.22 | 4476 | 4476 |
+| 640x480x16 (mode 12h) | 21991 | 26932 | 1.22 | 2580 | 2597 |
+| 80x25 text | 39384 | 51200 | 1.30 | 4096 | 4413 |
+
+- **Banked SVGA modes (the booster):** writes 3.8 to 4.6 times faster, reads 2.8 to 3 times. All of
+  them reach 76-87 MB/s, as fast as the linear frame buffer; S3TEST's banked throughput line measures
+  83 MB/s. With the stock BIOS the deeper modes were slower than the 8 bpp ones; with the booster they
+  are about equal. 16-bit stores gain 15-60 % (the booster takes them too); 8-bit stores stay at about
+  10 MB/s, the bus limit.
+- **VGA and text modes (no booster):** about 22 % more in mode 13h and the 16-colour modes, 30-35 % in
+  text: the memory clock, 59.96 MHz instead of 50.11 MHz (20 % more).
+- **Refresh lines:** 1280x1024 runs at 60.26 Hz (61.65 kHz) instead of the stock's interlaced 86.89 Hz
+  (44.47 kHz), and the 640x480 modes at 28.65 kHz (800 pixels per line) instead of 28.79-28.94 kHz: the
+  60 Hz defaults and the 800-pixel line. The 132-column text modes (VESA 109h/10Ah) at 28.09 kHz and
+  800x600 at 36.28 kHz instead of 28.00 and 36.17 kHz: 2.04.07 programs 40.09 MHz where 2.04.11 has
+  39.97 MHz (SR12/SR13 63h/6Eh against 61h/41h), 0.3 %; a difference of the base BIOS, not of a patch.
+- **VGALOG /M during the p21 run** (all 330 INT 10h calls): after every banked 4F02 of a packed mode
+  CR58 = 90h and CR59/CR5A = 000Ah (the booster on), after the planar modes 102h, 104h and 106h CR58 =
+  83h and E000h (off), and every return to mode 03h puts E000h back. VIDSPEED never calls 4F05: it
+  switches banks without INT 10h, so it gets the booster only because p18 switches it on at the end
+  of 4F02 (with p16 and p17, which waited for the first 4F05 or window function call, it would not).
+  The other calls (VIDSPEED's DESQview and chipset probes, 4F01 of every listed mode, the BIOS's own
+  AX=1130h inside the mode sets) return as they should.
 
 ### Byte-level changes
 
@@ -805,9 +850,6 @@ Solution: [8x14 font support as a TSR](https://www.bttr-software.de/products/fix
 
 ### To do
 
-- Measure the booster with VIDSPEED in plain DOS: first with the stock BIOS, then with the latest ROM,
-  and write both banked results here. VIDSPEED's banked mode (4F02 0113h) gets the booster (VGALOG:
-  CR58 90h, CR59/CR5A 000Ah after the call).
 - POST delay (p20) on the card: cold boot several times, then S3TEST and S3COMPAT with its VRAM test
   (without /Q); no difference to p19 is expected.
 - Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
