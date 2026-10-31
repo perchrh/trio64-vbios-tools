@@ -40,6 +40,7 @@ must do, written from the datasheets alone.
 | V2 | S3 Trio64V2/DX & GX Graphics/Video Accelerators (preliminary, changes from the Trio64V+) |
 | UV+ | S3 Trio64UV+ UMA Graphics/Video Accelerator, DB024-A, March 1996, with the update ER010-B (May 1996) |
 | XFree86 | XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c` |
+| V864 | S3 Vision864 Graphics Accelerator data book (`86c864_vision864_ocr.pdf`, an OCR scan with a text layer): the chip the Trio64 integrates with the RAMDAC and the clock synthesizer. Used for comparison, never as the source of a rule ("Related chip: the Vision864") |
 | V968 | S3 Vision968 Multimedia Accelerator, DB016-A, April 1995 (`86c968-vision968-...pdf`, a scan without text, 95 pages): the changes from the Vision964 only. Not a Trio64-family chip; used for comparison, never as the source of a rule ("Related chip: the Vision968") |
 
 The datasheets are in `datasheets/`. `357_86c732-86c764_trio32_64.pdf` was compared with the
@@ -173,6 +174,32 @@ failed or unknown subfunction):
 
 A program or driver may check the query's version (OEM-1) and expect this behaviour, so a BIOS for this
 card keeps it unchanged (README "Not taken: the S3 OEM functions (4F14h) of later BIOSes").
+
+## Related chip: the Vision864 (comparison, not rules)
+
+The Trio64 is a Vision864 with the RAMDAC and the clock synthesizer on the chip ("Integrated '864, DAC
+and clock chip"); its section 7.4 (display memory access control) is the Vision864's with changes.
+What V864 adds to T64-MEM-1 and the FIFO M computation of our Trio64 ROM (#75, #82):
+
+- **The cost of an M period** (V864 7.4, the same words in T32/64 7.4): "One entry cycle requires 6-9
+  MCLKs; one page mode cycle requires 2 MCLKs", and the example M = 10 allows "9 + (10x2) = 29 MCLKs"
+  before the FIFO is filled again. That counts page hits after one entry cycle. Our ROM counts 6
+  MCLKs per access (p3; p2: 5), between page hits (2) and a new page each time (6-9), because the CPU
+  and the graphics engine do not keep to one page.
+- **S3's own example** (V864 table 9-4, 1024x768x8 at 75 Hz, 80 MHz DCLK): CR54 = 70h (M = 14), CR60 =
+  FFh (N: fill the FIFO to full each time), CR3B = CR00 - 5. Our ROM gives 1024x768x8 at 60 Hz (65 MHz)
+  M = 11 (55 MHz) to 16 (69.8 MHz): of the same order, lower at the lower clocks. Phoenix's Vision864
+  BIOSes write a fixed M per mode class (8 bpp 23, 800x600x16 11, docs/trio64-backport.md).
+- **The L parameter** (V864: CR61 bits 2-0 and CR62, enabled by CR61 bit 7): the 8-byte units of a
+  line's fetch, after which FIFO filling stops until CR3B. The Trio64 has no L: T32/64 7.4 names two
+  parameters, M and N, and says filling stops at the end of active display; its register list has no
+  CR61 or CR62. Phoenix 1.5-07 still writes CR61 = 80h and CR62 = A1h in every packed mode (161 units,
+  whatever the line length), a leftover of its Vision864 code without a documented effect on the
+  Trio64.
+- **CR3B**: "normally programmed with a value 5 less than the value programmed in CR0" in both books;
+  Phoenix 1.5-07 uses CR00 - 7 in every packed mode, which starts the fetch two character clocks
+  earlier (T64-MEM-2).
+- **MCLK**: 16.7 to 25 ns (60 to 40 MHz), the same as the Trio64 book and V968.
 
 ## Related chip: the Vision968 (comparison, not rules)
 
