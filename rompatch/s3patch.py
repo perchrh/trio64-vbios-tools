@@ -18,7 +18,7 @@ Output
   firmware that reads the ROM through PCI ignores the copy. (p15 to p21 had zeros in the upper half,
   p14 and earlier the card's Trio64V+ BIOS 1.03-08.)
 
-What is applied (docs/775-rom.md of trio64-vbios-tools, "Features and changes compared to the reference BIOS 2.04.07" and "Byte-level changes")
+What is applied (trio64-vbios-tools docs/775-changes.md, each change with its issue, and docs/775-rom.md "Byte-level changes")
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
          value 00h, CR41/CR52 60 Hz defaults for 1280x1024 and 1600x1200, 640x480 line total 800,
          320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384, 1600x1200 vertical display

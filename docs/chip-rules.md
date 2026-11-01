@@ -14,7 +14,7 @@ must do, written from the datasheets alone.
 - **Sources.** A rule comes from a datasheet, quoted or paraphrased with its section or table. A rule
   from another public source (XFree86, VESA) is marked *derived* and is never a FAIL on its own.
   Nothing here may come from reading a BIOS image (its code, tables or strings): those findings belong
-  in docs/775-rom.md ("Features and changes", "Byte-level changes") and are implementation knowledge, not chip
+  in docs/775-changes.md and docs/775-rom.md ("Byte-level changes") and are implementation knowledge, not chip
   rules. Keep the two apart, so the rules can be handed to someone who has never seen a BIOS image.
   The one exception is the section "S3 OEM functions (4F14h)": no datasheet describes them, so it is
   taken from BIOS images, says so, and its entries are not chip rules.
