@@ -910,8 +910,6 @@ AX = 004Fh from them, the real-mode status. The ROM keeps that:
   allow, gains from 2.04.11's change, and none is known.
 - Warcraft II switches banks through this code and works with the ROM.
 
-The ELSA Winner 1000/T2D BIOS (ELSA 6.01.00, built on S3's 1.01.04) and S3's 1.01.04 have no reason
-to be compared here: 1.01.04 has no 4F0A, and ELSA's own 4F0A reports a wrong table length.
 
 ### Not used: the S3 OEM functions (4F14h) of later BIOSes
 
