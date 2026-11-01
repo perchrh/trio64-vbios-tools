@@ -1,6 +1,6 @@
 # Trio64V2/DX ROM (775): fixes and improvements
 
-What 2.04.07-pN (the level in [`common/version.inc`](../common/version.inc), now p22) changes against the S3 reference BIOS
+What 2.04.07-pN (the level in [`common/version.inc`](../common/version.inc), now p23) changes against the S3 reference BIOS
 2.04.07, each with the issue that has the details: what was wrong or missing, the cause, the effect
 and how it is tested. The build, the byte-level changes, what was borrowed, not taken or omitted, and
 what is left are in [`docs/775-rom.md`](775-rom.md); the speed measured on the card is in README "Speed". The Trio64V+
@@ -32,6 +32,7 @@ and Trio64 ROMs carry backports of many of these ([`docs/765-changes.md`](765-ch
 | DDC delay without the first-reading race | fix | p22 | [#86](https://github.com/perchrh/trio64-vbios-tools/issues/86) |
 | Booster base and Windows mark kept apart | fix | p22 | [#87](https://github.com/perchrh/trio64-vbios-tools/issues/87) |
 | The 32 KB twice in the 64 KB image | fix | p15, p22 | [#78](https://github.com/perchrh/trio64-vbios-tools/issues/78) |
+| No monitor sense at POST | picture | p23 | [#134](https://github.com/perchrh/trio64-vbios-tools/issues/134) |
 
 ## In detail
 
@@ -153,4 +154,5 @@ Fixes
   base (bits 31-24) and the Windows refusal mark 01h, so a base at 01xxxxxxh was taken for the mark at
   the next mode set and lost. The mode set hook now restores the base first and clears CR6D after it,
   then forgets the mark. The emulator test `rom_patches` runs the booster with base 01000000h.
+- **No monitor sense at POST** (p23, [#134](https://github.com/perchrh/trio64-vbios-tools/issues/134)): POST no longer senses the monitor (black, blue and green on screen, 3C2h bit 4 after each), as S3's Trio64V+ BIOS 1.03-08N does not. A display that does not load the outputs as a CRT does (an LCD, a scaler, a VGA-to-HDMI converter) could read as monochrome and get grey-scale summing. Only the call of the sense (1984h, call 127Dh) becomes `xor bx,bx`, the colour result. The rest of the routine at 195Bh still runs, because it also writes SR1A bit 5 (the blank pedestal, from 00D1h), which nothing else in POST writes. That is why the configuration bit for it (00C4h bit 1) is not used. A real monochrome VGA monitor no longer gets grey-scale summing at POST (INT 10h AX=1200h BL=33h still switches it on).
 - **The card's POST flags** (0xD1 = 05h) and CR80 POST value (00h) ([#63](https://github.com/perchrh/trio64-vbios-tools/issues/63)).

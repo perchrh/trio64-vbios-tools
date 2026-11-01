@@ -22,7 +22,9 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
          value 00h, CR41/CR52 60 Hz defaults for 1280x1024 and 1600x1200, 640x480 line total 800,
          320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384, 1600x1200 vertical display
-         end (1200 lines, the reference has 1201)
+         end (1200 lines, the reference has 1201), no monitor sense at POST (p23, #134: the call of the
+         sense in the routine at 195Bh becomes xor bx,bx, the colour result; the rest of the routine,
+         SR1A's blank pedestal among it, still runs)
   code   assembled with nasm from the .asm files next to this script, at the addresses in bios.inc:
          p12ext.asm (fast 4F05, 32-bit font load, 32-bit mode 13h scroll), crtc240.asm (320x240 CRTC
          tables), hooks.asm (mode set hook with LFB base restore, FIFO fix and ATC flip-flop reset;
@@ -174,6 +176,8 @@ DATA = [
     (0x00D1, '02', '05', 'POST flags: blank pedestal off (bit 1), the card\'s board flags (bits 0 and 2)'),
     (0x00D3, '10', '00', 'CR80 POST value 00h, as on the card'),
     (0x00DE, '08 80', '88 81', 'CR41/CR52 refresh fields: 1280x1024 and 1600x1200 default 60 Hz'),
+    (0x1984, 'e8 f6 f8', '33 db 90', 'POST: no monitor sense (call 127Dh replaced by xor bx,bx: the colour '
+                                      'result; the SR1A pedestal write after it stays, #134)'),
     (0x04C1, '5e 4f 50 81', '5f 4f 50 82', '640x480x8/x32 @ 60 Hz: line total 800'),
     (0x089F, 'c1 03 82 48 33', '40 7e 82 3c 28', '320x240x8 refresh entry: CRTC table 7E40h, 60 Hz, 25.06 MHz'),
     (0x08AD, 'f5 0c 82 48 33', '60 7e 82 3c 28', '320x240x15/16 refresh entry: CRTC table 7E60h, 60 Hz'),
