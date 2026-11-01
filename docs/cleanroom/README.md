@@ -10,6 +10,7 @@ documents from `spec-a-post.md`; what remains for a second reader is listed unde
 | File | Side | What it is |
 | --- | --- | --- |
 | `BRIEF.md` | dirty | the rules the specification was written under |
+| `LEAK-REVIEW.md` | dirty | how a file is reviewed before it crosses, and how the result is recorded |
 | `spec-a-post.md` | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
 | `spec-b-modeset.md` | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
 | `spec-c-vbe.md` | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
@@ -58,7 +59,7 @@ notes), and anything from another vendor's BIOS source.
 
 ## Leak review
 
-Done once on 1 November 2026 by the dirty side (a search of the three specification files for
+The procedure is in `LEAK-REVIEW.md`; the results are recorded here. Done once on 1 November 2026 by the dirty side (a search of the three specification files for
 Phoenix, the reference ROMs, `rompatch/`, `docs/trio64-backport.md` and riplin, then a reading of the
 hits). Left for a second reader to judge:
 
