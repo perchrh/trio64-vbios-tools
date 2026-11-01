@@ -2,7 +2,7 @@
 """test_s3patch.py - checksum tests for the ROM patcher s3patch.py (needs python3 and nasm).
 
     python3 rompatch/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P16.BIN] [--nasm nasm]
-    make rom-test REF=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P16.BIN]
+    make 775-rom-test REF775=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P16.BIN]
 
 REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN (optional) the 64 KB dump of the card
 (its 2.04.11 must be refused), S3V2P16.BIN a build to compare with byte by byte. No ROM image is in the

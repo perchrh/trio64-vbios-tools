@@ -2,7 +2,7 @@
 """test_s3tpatch.py - checksum and table tests for the Trio64 ROM patcher s3tpatch.py (needs python3 and nasm).
 
     python3 rompatch/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P3.BIN] [--nasm nasm]
-    make trom-test [TREF=...] [ROM=S3T64P3.BIN]
+    make 764-rom-test [REF764=...] [ROM=S3T64P3.BIN]
 
 --ref is the 32 KB Phoenix S3 Trio64 BIOS 1.5-07 (default reference/trio64/1_5_07.bin), --rom a build to
 compare with byte by byte.
@@ -16,7 +16,7 @@ Tests
                  modes are gone from the mode table, the VESA lists and the mode map, every kept entry is
                  byte for byte the one of 1.5-07 (only bit 7 of a new first entry set), and no list
                  reaches into the code placed after the lists
-  fonts          all five font tables are those of 1.03-08 (--vref) byte for byte, end to end from 5720h
+  fonts          all five font tables are those of 1.03-08 (--ref765) byte for byte, end to end from 5720h
                  to 7F90h, and the eight references to the moved 8x16 font and 9x16 table point at their
                  new places; --fonts-only changes only the fonts, those references and the checksum byte
   ddc            the 4F15 sites carry their new bytes and the VDIF code (DDC_FREED) is gone, tfifo.asm in
@@ -29,9 +29,10 @@ Tests
                  (as the card makers' builds differ) is patched too and keeps them
   input_64k      a 64 KB image with 1.5-07 in the lower half gives the same result, whatever its upper half
   size32         --size 32 gives the same lower 32 KB alone
-  mclk           --mclk 50, 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change nothing
-                 else but the checksum and the FIFO code's 112 x MCLK; 69.8 and 70 MHz are valid, 71 and 39 MHz refused (70 MHz, the
-                 86C764X's rating); 57, 53 and 70 MHz take the pair other Trio64-family BIOSes use
+  mclk           --mclk 50 (--model 764p), 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change
+                 nothing else but the checksum and the FIFO code's 112 x MCLK; 69.8 and 70 MHz are valid; outside the
+                 model's range refused (764x 55-70 MHz: 71, 54, 39; 764p 50-60 MHz: 61, 49); 57, 53 (764p) and 70 MHz
+                 take the pair other Trio64-family BIOSes use
                  (41h 2Eh 57.27, 42h 39h 52.80, 22h 25h 69.80; s3patch.KNOWN_MCLK_8811); with --overclock 85
                  and 100 MHz are valid, 101 MHz and --overclock without --mclk refused
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte changed
@@ -111,7 +112,7 @@ def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum and table tests for s3tpatch.py')
     ap.add_argument('--ref', default=os.path.join(REPO, 'reference', 'trio64', '1_5_07.bin'), help='32 KB Phoenix Trio64 BIOS 1.5-07')
-    ap.add_argument('--vref', default=os.path.join(REPO, 'reference', 'vplus', '1_03_08.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
+    ap.add_argument('--ref765', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
     ap.add_argument('--rom', help='a build to compare with')
     ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3tpatch.py')
     a = ap.parse_args()
@@ -143,8 +144,8 @@ def main():
     result('tables', not errs, '; '.join(errs[:4]) or '%d interlaced entries and %d modes gone, kept entries unchanged'
            % (len(s3tpatch.ILACE), len(s3tpatch.REMOVE)))
     errs = []
-    if os.path.exists(a.vref):
-        v = open(a.vref, 'rb').read()
+    if os.path.exists(a.ref765):
+        v = open(a.ref765, 'rb').read()
         where = {}
         for name, so, ln, _, at in s3tpatch.S3FONTS:
             where[name] = at
@@ -165,7 +166,7 @@ def main():
                     any(fref[i] != img[i] for i in fonts) or sum(fref) & 0xFF:
                 errs.append('--fonts-only changes other bytes or not the same fonts')
     else:
-        errs.append('no %s' % a.vref)
+        errs.append('no %s' % a.ref765)
     result('fonts', not errs, '; '.join(errs) or 'the five tables of 1.03-08, %d references moved; --fonts-only the same'
            % len(s3tpatch.FONT_REFS))
     errs = []
@@ -218,8 +219,8 @@ def main():
     rc, small, err = run(tmp, ref, ['--size', '32'])
     result('size32', rc == 0 and small == img[:0x8000], err or '32 KB, the same lower half')
     bad = []
-    for mhz in ('50', '55', '60'):
-        rc, out, err = run(tmp, ref, ['--mclk', mhz])
+    for mhz in ('50', '55', '60'):                  # 50 MHz only on the 86C764-P (--model 764p)
+        rc, out, err = run(tmp, ref, ['--mclk', mhz] + (['--model', '764p'] if mhz == '50' else []))
         if rc or not out:
             bad.append('%s MHz: %s' % (mhz, err))
             continue
@@ -239,13 +240,13 @@ def main():
         if abs(f - float(mhz)) >= 0.5 or f > 70:
             bad.append('%s MHz: %s %.2f MHz' % (mhz, err, f))
     for mhz, pair in (('57', '2e 41'), ('53', '39 42'), ('70', '25 22')):   # a pair other BIOSes use first
-        rc, out, err = run(tmp, ref, ['--mclk', mhz])
+        rc, out, err = run(tmp, ref, ['--mclk', mhz] + (['--model', '764p'] if mhz == '53' else []))
         if rc or not out or out[0x3B5:0x3B7] != bytes.fromhex(pair):
             bad.append('%s MHz: %s, expected the known pair %s' % (mhz, err or out[0x3B5:0x3B7].hex(' '), pair))
-    for mhz in ('71', '39'):
-        rc, out, err = run(tmp, ref, ['--mclk', mhz])
+    for mhz, model in (('71', '764x'), ('39', '764x'), ('54', '764x'), ('61', '764p'), ('49', '764p')):
+        rc, out, err = run(tmp, ref, ['--mclk', mhz, '--model', model])   # outside the model's range
         if rc != 1 or out is not None:
-            bad.append('%s MHz not refused' % mhz)
+            bad.append('%s MHz not refused for %s' % (mhz, model))
     for mhz in ('85', '100'):                       # the overclock: up to twice 50 MHz, with --overclock only
         rc, out, err = run(tmp, ref, ['--mclk', mhz, '--overclock'])
         f = (14.31818 * (out[0x3B5] + 2) / ((out[0x3B6] & 0x1F) + 2) / (1 << ((out[0x3B6] >> 5) & 3))
@@ -256,14 +257,15 @@ def main():
         rc, out, err = run(tmp, ref, args)
         if rc != 1 or out is not None:
             bad.append('%s not refused' % ' '.join(args))
-    result('mclk', not bad, '; '.join(bad) or '50, 55, 60, 69.8 and 70 MHz valid at 3B5h, 57, 53 and 70 MHz the known pairs, 71 and 39 MHz refused; '
+    result('mclk', not bad, '; '.join(bad) or '50 (764p), 55, 60, 69.8 and 70 MHz valid at 3B5h, 57, 53 (764p) and 70 MHz the known pairs, '
+           '71, 54 and 39 MHz refused for the 764x, 61 and 49 MHz for the 764p; '
            'with --overclock 85 and 100 MHz valid, 101 MHz refused')
     code = bytearray(ref)
     code[0x3000] ^= 1
     cases = [('already patched', img), ('code byte changed', fixsum(code)),
              ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]))]
-    if os.path.exists(a.vref):
-        cases.append(('Trio64V+ 1.03-08', open(a.vref, 'rb').read()[:0x8000]))
+    if os.path.exists(a.ref765):
+        cases.append(('Trio64V+ 1.03-08', open(a.ref765, 'rb').read()[:0x8000]))
     bad = []
     for name, data in cases:
         rc, out, err = run(tmp, data)

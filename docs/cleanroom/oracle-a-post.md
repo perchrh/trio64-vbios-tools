@@ -15,7 +15,7 @@ clean ROM; none of its values may be copied into the specification. Observed 1 N
   `Machine._pcibios` for the PCI BIOS calls. The scripts were throw-away (scratchpad); each step below
   says what was read. Model limits as in the spec ("Emulator limits"): registers start at 00h, CR2D-CR30
   and CR36 answer fixed values, BAR0 is CR59/CR5A, no PLL, no missing memory, 9AE8h reads busy.
-- Tests: `emu/tests.py --chip trio64 --tests post,windows,engine_init` and S3TEST run on the model
+- Tests: `emu/tests.py --chip 764 --tests post,windows,engine_init` and S3TEST run on the model
   (`Machine.run_com`) with the reference ROM.
 - Card: the S3REGS values quoted in docs/trio64-backport.md ("On the card", "The DSP-3364P's memory")
   and README.md ("Windows 9x driver test"; that record is from the Trio64V2 card).
@@ -124,12 +124,12 @@ call (open question 12 of the spec).
 
 ## The Windows 9x driver conventions
 
-- `emu/tests.py --chip trio64 --tests windows` with the reference ROM: FAIL, one check: "4F06 set:
+- `emu/tests.py --chip 764 --tests windows` with the reference ROM: FAIL, one check: "4F06 set:
   upper halves changed: eax A55A4F06->0000004F, ecx 855A0400->00000400, edx 955A0000->00000800" (CONV-4;
   docs/trio64-backport.md "Left as in 1.5-07" lists it). Every other check passes: CR59/CR5A stay
   E000h after the driver's banked 4F02 calls (CONV-1), every call returns with IF = 0 and no tick
   (CONV-5), mode 03h after the driver is IBM's (CONV-7).
-- `engine_init` is skipped on `--chip trio64` (the rule is tagged for the Trio64V+ family): the
+- `engine_init` is skipped on `--chip 764` (the rule is tagged for the Trio64V+ family): the
   reference would fail it for index D (above).
 - Card (Trio64V2 card, README): the driver's sequence as CONV-3 lists it; CR58 = 92h and CR59/CR5A =
   E000h on the desktop; the MCLK kept. On the DSP-3364P under Windows 98 (backport doc): the driver

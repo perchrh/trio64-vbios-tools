@@ -33,7 +33,7 @@ are separate parts of this specification; where a rule here depends on them it s
   implementer needs; never a FAIL.
 - **Checked by.** An existing test (S3TEST or S3COMPAT result line, emulator test in `emu/tests.py`),
   or "not checked" with the test that would check it. S3TEST and S3COMPAT run on the card and in the
-  emulator; the emulator's Trio64 model (`--chip trio64`) has limits listed under "Emulator limits".
+  emulator; the emulator's Trio64 model (`--chip 764`) has limits listed under "Emulator limits".
 - **Terms.** *S3 registers*: CR2D-CR6C, SR08-SR18 and the enhanced command registers (x2E8h ports).
   *Locked*: SR08 holds no unlock key (00h), CR38 and CR39 hold no key (00h), CR40 bit 0 = 0, the
   power-on state (T32/64 section 15, 16: "read/write protected at power-up"). *Found*: the value a
@@ -98,7 +98,7 @@ are separate parts of this specification; where a rule here depends on them it s
 | --- | --- | --- | --- | --- |
 | POST-30 | Graphics engine reset, with CR40 bit 0 = 1: write 42E8h with bits 15-14 = 10b (reset), then with bits 15-14 = 01b (engine enabled). In both writes bits 11-8 = 0 (vertical sync, engine busy and FIFO interrupts disabled) and bits 3-0 = 1 (clear their status). The MCLK of POST-24 is loaded first: the engine runs on the MCLK | T32/64 18 (Subsystem Control 42E8h: GE-RST 00 no change, 01 enabled, 10 reset), 9.2 | should | not checked: an emulator test that logs the 42E8h writes |
 | POST-31 | 4AE8h = 0000h after POST: enhanced functions off (bit 0 = 0, VGA and planar modes), linear addressing (bit 4) and MMIO (bit 5) through this register off | T32/64 11.1 (wake-up writes 0 to 4AE8h), 18 (Advanced Function Control) | must | not checked |
-| POST-32 | BEE8h index D and index E are written before the first graphics engine command, by POST or by whichever call first issues one: index D = D000h (source and destination in the first MB unless E says otherwise), index E = E000h (base address bits 0, RSF 0, clipping inside, fast read/modify/write, colour compare off, 16-bit command registers). These are the T32/64 power-on values, but a warm boot leaves what the last program wrote, and the Trio64V+ family erratum calls them undefined | ENG-1; T32/64 18 (BEE8h index D power-on D000h, index E power-on E000h) | should | emu t_engine_init (runs on the Trio64V+, Trio64UV+ and Trio64V2 models only; with `--chip trio64` not run: to extend) |
+| POST-32 | BEE8h index D and index E are written before the first graphics engine command, by POST or by whichever call first issues one: index D = D000h (source and destination in the first MB unless E says otherwise), index E = E000h (base address bits 0, RSF 0, clipping inside, fast read/modify/write, colour compare off, 16-bit command registers). These are the T32/64 power-on values, but a warm boot leaves what the last program wrote, and the Trio64V+ family erratum calls them undefined | ENG-1; T32/64 18 (BEE8h index D power-on D000h, index E power-on E000h) | should | emu t_engine_init (runs on the Trio64V+, Trio64UV+ and Trio64V2 models only; with `--chip 764` not run: to extend) |
 | POST-33 | If the ROM issues graphics engine commands (at POST or in a mode set clear), every command written to 9AE8h has bit 0 = 1, and before the ROM relocks CR40 bit 0, enables linear addressing or returns from the call, it waits until 9AE8h bit 9 = 0 (engine idle). The waits must end on a chip that never reports idle within a bounded time (error return, no hang) | T64-ENG-1, T64-REG-1, T64-REG-2; T32/64 9AE8h | must | not checked: the model counts engine commands (`ge_cmds`) but reads 9AE8h as FFFFh (busy), so a ROM that waits without a bound hangs there |
 | POST-34 | POST ends in mode 03h, set as by INT 10h AH=00h AL=03h with the clear (B00 rules of `docs/bios-rules.md`), after the S3 registers hold the values of POST-36 | bios-rules B00-1 to B00-22, BDA-2 | must | emu t_post (POST returns, INT 10h vector at C000h); S3COMPAT 'Mode 03h' (run after POST) |
 | POST-35 | Before POST (or any later call) writes a standard VGA register it clears the S3 write locks a warm boot may leave set: CR33 bit 4 = 0 (RAMDAC writes allowed), CR33 bit 6 = 0 (palette and border registers writable), CR35 bits 5-4 = 0 (horizontal and vertical timing registers writable), CR33 bit 1 = 0 (CR07 bits 1 and 6 protected by CR11 bit 7 as on a VGA) | T32/64 11.2.3 table 11-1, CR33, CR35 | must | not checked: an emulator test that sets these bits, calls AH=00h 03h and compares the registers with IBM's (as t_vga_registers does) |
@@ -259,7 +259,7 @@ must produce for mode 03h from the data book, and POST must at least not leave a
 
 ## Emulator limits for these rules
 
-The Trio64 model (`emu/vgaemu.py`, `--chip trio64`) starts every register at 00h (not the data
+The Trio64 model (`emu/vgaemu.py`, `--chip 764`) starts every register at 00h (not the data
 book's power-on values: CR40 is 00h there, not 30h), answers CR2D-CR30 and CR36 with fixed values
 whatever is written (CR36: the strapped type and the `--vram` size), keeps BAR0 in CR59/CR5A, does not
 model missing video memory, bus width, refresh or the PLLs (an MCLK load has no effect), reads 9AE8h
@@ -268,12 +268,12 @@ the engine can be checked there only as register writes, not as effects.
 
 ## Tests to add (traceability)
 
-- An emulator POST state test for `--chip trio64`: after `m.post()`, every row of POST-36, SR15 bits
+- An emulator POST state test for `--chip 764`: after `m.post()`, every row of POST-36, SR15 bits
   0, 1, 5 (POST-24, POST-25), the lock (POST-8), CR59/CR5A against BAR0 (POST-11), CR58 bit 4 = 0
   (POST-13), 4AE8h = 0 (POST-31), no write to CR37, CR68, CR6B, CR6D-CRFF or to CR36 bits 4-0 (POST-14,
   POST-18, CONV-10, CONV-11), and the order of POST-40 from a write log.
 - The POST stub passing AX = 0048h (POST-1) and a frozen tick during POST (CONV-6).
-- An extension of `t_engine_init` to `--chip trio64` (POST-32).
+- An extension of `t_engine_init` to `--chip 764` (POST-32).
 - A lock and index test over every INT 10h function, entered locked and unlocked with unusual
   3C4h/3CEh/3D4h indexes (CONV-8, CONV-9).
 - A build test: header, PCI data structure, checksum, padding and the two identical halves (ROM-1 to

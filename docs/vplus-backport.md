@@ -10,12 +10,12 @@ other VBE 2.0 additions). The Trio64V+ BIOSes at hand offer VBE 1.2.
 
 ## The build: 1.03-08-p1
 
-    make vrom OUT=S3VPP1.BIN             (rompatch/vplus/s3vpatch.py, 32 KB; VSIZE=64 for a 64 KB EEPROM)
-    make vrom-test ROM=S3VPP1.BIN
-    make emu-test ROM=S3VPP1.BIN CHIP=vplus
-    make vref-compare ROM=S3VPP1.BIN
+    make 765-rom OUT=S3VPP1.BIN             (rompatch/vplus/s3vpatch.py, 32 KB; SIZE765=64 for a 64 KB EEPROM)
+    make 765-rom-test ROM=S3VPP1.BIN
+    make emu-test ROM=S3VPP1.BIN CHIP=765
+    make 765-ref-compare ROM=S3VPP1.BIN
 
-Base: the S3 BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96) in `reference/vplus/1_03_08.bin`, the
+Base: the S3 BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96) in `reference/64vplus/1_03_08.bin`, the
 upper 32 KB of the Gainward GW503A stock dump (SHA-256 0da79703...). S3's own BIOS for the chip, from the
 same 1.0x code base as the Trio64V2 BIOS 1.01.04. A Phoenix Trio64V+ BIOS (1.01-05, 1.02-02) shares
 S3's code for the VGA functions (the speed patch signatures match, checked 30 October 2026) but has its
@@ -34,16 +34,16 @@ D2g (09/19/97, PCI 8811h) matches every signature of 1.03-08, at other addresses
 
 The mode 13h scroll keeps EAX on the Trio64V+: the 1.03-08 dispatcher saves only the 16-bit registers,
 so the 2.04.07 code (`p12ext.asm`), which uses EAX bits 31-16 without saving them, would hand them back
-changed after every AH=06h in mode 13h. The emulator test `vplus_patches` checks it. The same code in
+changed after every AH=06h in mode 13h. The emulator test `765_patches` checks it. The same code in
 2.04.07-p20 did this through AH=0Eh, which bypasses the 32-bit dispatcher there; fixed in p21.
 
-Checked in the emulator (Trio64V+ model): `make vrom-test` (the pinned SHA-256, checksum, every changed
-byte at a patch site, the free bytes still 00, the refusals); `make emu-test CHIP=vplus` with 1, 2
-and 4 MB, where every test that applies passes, `vplus_patches` and `stores` among them, apart from the
-1.03-08 failures below; `make vref-compare`: 2389 calls in the CGA, MDA and EGA modes behave as in
+Checked in the emulator (Trio64V+ model): `make 765-rom-test` (the pinned SHA-256, checksum, every changed
+byte at a patch site, the free bytes still 00, the refusals); `make emu-test CHIP=765` with 1, 2
+and 4 MB, where every test that applies passes, `765_patches` and `stores` among them, apart from the
+1.03-08 failures below; `make 765-ref-compare`: 2389 calls in the CGA, MDA and EGA modes behave as in
 1.03-08. The S3COMPAT logs of the emulator runs (the whole S3COMPAT with 2 and 4 MB, its VBE part, its
 VGA part) and the VSHOW /R log are line for line those of 1.03-08, apart from the sign-on. Test coverage
-(`make coverage CHIP=vplus`): 87.1 % of the code, every byte of the new code among it.
+(`make coverage CHIP=765`): 87.1 % of the code, every byte of the new code among it.
 
 ## The VCO fix: not possible on the Trio64V+
 
@@ -89,7 +89,7 @@ keeps the 32-bit registers around 4F06); neither is part of this backport.
 
 | Change in this ROM | What decides it |
 | --- | --- |
-| MCLK 59.96 MHz | 1.03-08 picks its MCLK by the strapped memory type: 52.79 MHz (SR10 = 42h, SR11 = 39h, entry A8h) for 1-cycle EDO, 59.96 MHz (A6h) for fast page and 2-cycle EDO. 1.03-08-p1 keeps both; `make vrom MCLK=... [MEMTYPE=edo1|fpm]` sets one, at most 60 MHz (MEM-1; README "MCLK build option"). Whether the memory of a card runs at a higher clock is decided on that card, with the VRAM test of S3COMPAT. |
+| MCLK 59.96 MHz | 1.03-08 picks its MCLK by the strapped memory type: 52.79 MHz (SR10 = 42h, SR11 = 39h, entry A8h) for 1-cycle EDO, 59.96 MHz (A6h) for fast page and 2-cycle EDO. 1.03-08-p1 keeps both; `make 765-rom MCLK=... [MEMTYPE=edo1|fpm]` sets one, at most 60 MHz (MEM-1; README "MCLK build option"). Whether the memory of a card runs at a higher clock is decided on that card, with the VRAM test of S3COMPAT. |
 | Memory size | 1, 2 or 4 MB in the data book. 1.03-08 sizes the memory at every POST (0E80h: 4 MB, then 2 MB, else 1 MB, written to CR36 bits 7-5), so a card upgraded from 1 to 2 MB needs no other ROM. The emulator tests run with 1, 2 and 4 MB. |
 
 ## Already right in 1.03-08
@@ -135,7 +135,7 @@ Palette loads, pixels, AH=0Eh and the graphics-mode AH=09h are equal in all thre
 
 - The test card: S3TEST and S3COMPAT logs from it with 1.03-08 and 1.03-08-p1. If its BIOS is not
   1.03-08, the base and the addresses follow that BIOS.
-- S3TEST has a Trio64V+ test set (since 30 October 2026): on a Trio64V+ it expects VROMVER
+- S3TEST has a Trio64V+ test set (since 30 October 2026): on a Trio64V+ it expects VER765
   (1.03-08-p1) and checks this ROM's patches (README "Other Trio64-family BIOSes"). S3COMPAT and VSHOW
   apply as they are.
 

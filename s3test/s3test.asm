@@ -1,5 +1,5 @@
 ; S3TEST.COM - regression test for our patched VBIOSes: Trio64V2/DX, Trio64V+ and Trio64 (386+)
-; The tool version (VERSION) and the ROM versions it expects (ROMVER, VROMVER, TROMVER) come from
+; The tool version (VERSION) and the ROM versions it expects (VER775, VER765, VER764) come from
 ; common/version.inc.
 ;
 ; Purpose
@@ -9,12 +9,12 @@
 ;   run after flashing a new ROM version. S3COMPAT is the broad compatibility test.
 ;
 ; Test set by chip (common/chip.inc, found before the first test)
-;   Trio64V2     every test below, the signature against ROMVER
-;   Trio64V+     the signature against VROMVER; no pedestal and refresh default lines, its own mode list
+;   Trio64V2     every test below, the signature against VER775
+;   Trio64V+     the signature against VER765; no pedestal and refresh default lines, its own mode list
 ;                (vmodelist: 1.03-08's modes, the booster without the CR6D check, no FIFO check), no
 ;                4F01 PhysBasePtr, 4F03 in 4101h, 4F06 BL=3 or CR50 lines (VBE 1.2, no 512x384), and the
 ;                4F05 line without the 0040:04FE and linear-mode bits
-;   Trio64       as the Trio64V+, the signature against TROMVER and its own mode list (tmodelist: the
+;   Trio64       as the Trio64V+, the signature against VER764 and its own mode list (tmodelist: the
 ;                defaults of 1.5-07-p1, no interlace, 800x600 at 60 Hz)
 ;   other chips  no ROM of ours exists: the version found is INFO, then only the tests that need none
 ;                (checksum, chip, MCLK, memory type, VGA clear, font load, scrolls, AH=09h, timings)
@@ -42,8 +42,8 @@
 ;   writing the debug log, so it is the one line that differs from a run without /V).
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
-;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by ROMVER (now
-;                    "2.04.07-p21") on a Trio64V2, VROMVER ("1.03-08-p1") on a Trio64V+, TROMVER
+;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by VER775 (now
+;                    "2.04.07-p21") on a Trio64V2, VER765 ("1.03-08-p1") on a Trio64V+, VER764
 ;                    ("1.5-07-p2") on a Trio64; the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
@@ -117,10 +117,10 @@ F_VGA   equ 1
 F_BOOST equ 2
 F_LFB   equ 4
 F_2MB   equ 8                           ; needs more than 1 MB: not set with 1 MB (CR36 bits 7-5 = 110b)
-RK_V2   equ 0                           ; test set: Trio64V2, our ROM 2.04.07-pN (ROMVER)
-RK_VP   equ 1                           ; Trio64V+, our ROM 1.03-08-pN (VROMVER)
+RK_V2   equ 0                           ; test set: Trio64V2, our ROM 2.04.07-pN (VER775)
+RK_VP   equ 1                           ; Trio64V+, our ROM 1.03-08-pN (VER765)
 RK_OTHER equ 2                          ; any other chip: the tests that need no ROM of ours
-RK_T64  equ 3                           ; Trio64, our ROM 1.5-07-pN (TROMVER): as RK_VP, its own mode list
+RK_T64  equ 3                           ; Trio64, our ROM 1.5-07-pN (VER764): as RK_VP, its own mode list
 
 start:  cld
         call tickrd
@@ -315,8 +315,8 @@ start:  cld
 .ex:    int 0x21
 
 ; ---------------- ROM identity ----------------
-; Expect: 'Version ' and the version of our ROM for the chip within C000:0000-00FF (Trio64V2: ROMVER, now
-; "2.04.07-p21"; Trio64V+: VROMVER, now "1.03-08-p1"), and an 8-bit checksum of 00 over the lower 32 KB
+; Expect: 'Version ' and the version of our ROM for the chip within C000:0000-00FF (Trio64V2: VER775, now
+; "2.04.07-p21"; Trio64V+: VER765, now "1.03-08-p1"), and an 8-bit checksum of 00 over the lower 32 KB
 ; (the half the VGA BIOS runs from). On another chip there is no ROM of ours: the version found is an
 ; INFO line, not counted.
 t_rom:  mov dx,s_sig
@@ -367,7 +367,7 @@ t_rom:  mov dx,s_sig
         pop ds
         inc si
         loop .pv
-.pe:    push es                         ; compare with ROMVER/VROMVER, which must end there
+.pe:    push es                         ; compare with VER775/VER765, which must end there
         push cs
         pop es
         mov si,bx
@@ -2687,17 +2687,17 @@ tmodelist:
 
 s_vname db 'S3TEST.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
-s_title db 'S3TEST ',VERSION,' - VBIOS test suite: Trio64V2 ',ROMVER,', Trio64V+ ',VROMVER,', Trio64 ',TROMVER,13,10
+s_title db 'S3TEST ',VERSION,' - VBIOS test suite: Trio64V2 ',VER775,', Trio64V+ ',VER765,', Trio64 ',VER764,13,10
         db 'Category column: ROM (image), CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10,13,10,'$'
-s_romver db ROMVER
+s_romver db VER775
 ROMVLEN equ $-s_romver
-s_vromver db VROMVER
+s_vromver db VER765
 VROMVLEN equ $-s_vromver
-s_tromver db TROMVER
+s_tromver db VER764
 TROMVLEN equ $-s_tromver
-s_sig   db 'ROM  ROM signature ',ROMVER,' ............ $'
-s_sigv  db 'ROM  ROM signature ',VROMVER,' ............. $'
-s_sigt  db 'ROM  ROM signature ',TROMVER,' .............. $'
+s_sig   db 'ROM  ROM signature ',VER775,' ............ $'
+s_sigv  db 'ROM  ROM signature ',VER765,' ............. $'
+s_sigt  db 'ROM  ROM signature ',VER764,' .............. $'
 s_sigo  db 'ROM  ROM version (no ROM of ours for the chip) $'
 s_nover db '(no version string)$'
 s_cks   db 'ROM  ROM checksum (C000:0000-7FFF) = $'
@@ -2769,8 +2769,8 @@ silent  db 0                            ; /S given
 vwant   db 0                            ; /V given
 s_cf    db '  FAIL $'
 s_ci    db '  INFO $'
-s_help  db 'S3TEST ',VERSION,' - regression test for our VBIOSes: Trio64V2 ',ROMVER,', Trio64V+ ',VROMVER,13,10
-        db '  and Trio64 ',TROMVER,13,10
+s_help  db 'S3TEST ',VERSION,' - regression test for our VBIOSes: Trio64V2 ',VER775,', Trio64V+ ',VER765,13,10
+        db '  and Trio64 ',VER764,13,10
         db '  S3TEST [/V] [/S] > S3TEST.LOG',13,10
         db 'The test set follows the chip; on other Trio64-family chips only the tests that',13,10
         db 'need no ROM of ours run.',13,10

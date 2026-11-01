@@ -35,12 +35,12 @@ documents from `spec-a-post.md`; what remains for a second reader is listed unde
 
 The reference ROMs (`reference/`), the patched ROMs and their code (`rompatch/`), the oracle files,
 riplin's disassembly, `docs/trio64-backport.md`, the README sections on byte-level changes, the
-emulator tests that compare with a reference ROM (`make ref-compare`, `tref-compare`, the `T64_BASE`
+emulator tests that compare with a reference ROM (`make 775-ref-compare`, `764-ref-compare`, the `T64_BASE`
 notes), and anything from another vendor's BIOS source.
 
 ## Checking the clean ROM (on the dirty side)
 
-1. **Emulator**: `make emu-test ROM=CLEAN.BIN CHIP=trio64` with 2, 4 and 1 MB. The tests tagged `patch`
+1. **Emulator**: `make emu-test ROM=CLEAN.BIN CHIP=764` with 2, 4 and 1 MB. The tests tagged `patch`
    are skipped for a ROM that is not ours; S3TEST runs its set for other BIOSes on a Trio64 (chip,
    MCLK, memory, VGA and VESA mode lines, clears, scrolls, timings), S3COMPAT and VSHOW run in full.
 2. **The oracle**: the register state after POST and after each mode set compared with

@@ -3,14 +3,14 @@
 
     python3 rompatch/vplus/s3vpatch.py 1_03_08.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
                                        [--nasm nasm] [-q]
-    make vrom OUT=S3VPP1.BIN [MCLK=55 [MEMTYPE=edo1]]
+    make 765-rom OUT=S3VPP1.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
 assembler driver and the shared patch code of s3patch.py next to it.
 
 Input
   1_03_08.BIN  the S3 Trio64V+ BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96), 32 KB, as in
-               reference/vplus/1_03_08.bin (the upper half of the Gainward GW503A stock dump), or a
+               reference/64vplus/1_03_08.bin (the upper half of the Gainward GW503A stock dump), or a
                64 KB image with it in the lower half (the upper half of the input is not used)
 
 Output
@@ -52,7 +52,7 @@ import s3patch  # noqa: E402
 from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, mclk_put  # noqa: E402
 
 VERSION = '1.03-08'
-LEVEL = s3patch.rom_level('VROMVER', VERSION)   # the sign-on level: common/version.inc VROMVER
+LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '0da79703951db097b3cbb8f9d4041f72f6205db9a11760a58bc9820431e5dba6'   # 32 KB 1.03-08 image
 RESULT_SHA = '47418ec6f2bf21b51f0c860508f20ee6fbc6fb311a5130c5dd5ae7c240de26de'  # 1.03-08-p1 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see

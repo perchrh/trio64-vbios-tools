@@ -3,7 +3,7 @@
 
     python3 rompatch/s3patch.py REF2047.BIN -o S3V2P22.BIN [--no-vco-fix] [--mclk MHZ [--memtype edo1|fpm|sgram]]
                                 [--nasm nasm] [-q]
-    make rom IN=REF2047.BIN OUT=S3V2P22.BIN [MCLK=55 [MEMTYPE=edo1]]
+    make 775-rom IN=REF2047.BIN OUT=S3V2P22.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -68,7 +68,7 @@ import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
 def rom_level(name, version):
     """The level (pN) of one of our ROMs from common/version.inc, the one place the ROM levels are kept:
-    `%define NAME 'VERSION-pN'` with NAME = ROMVER (Trio64V2), VROMVER (Trio64V+) or TROMVER (Trio64).
+    `%define NAME 'VERSION-pN'` with NAME = VER775 (Trio64V2), VER765 (Trio64V+) or VER764 (Trio64).
     The patchers write it into the sign-on; S3TEST, built from the same file, expects it."""
     inc = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'common', 'version.inc')
     m = re.search(r"^%%define %s '%s-(p\d+)'" % (name, re.escape(version)), open(inc).read(), re.M)
@@ -78,7 +78,7 @@ def rom_level(name, version):
 
 
 VERSION = '2.04.07'
-LEVEL = rom_level('ROMVER', VERSION)            # the sign-on level: common/version.inc ROMVER
+LEVEL = rom_level('VER775', VERSION)            # the sign-on level: common/version.inc VER775
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
 RESULT_SHA = '5e53224067199327bc211cc269578c36399eafa746e15e64230ac192c6aaa041'  # 2.04.07-p22 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
@@ -646,7 +646,7 @@ def diagnose(nasm, output, img):
         out.append('blocks assembled differently: %s' % ', '.join(diff))
         if TESTED_NASM not in v:
             out.append('another NASM version encodes some instructions differently: build with NASM %s '
-                       '(make rom ... NASM=/path/to/nasm)' % TESTED_NASM)
+                       '(make 775-rom ... NASM=/path/to/nasm)' % TESTED_NASM)
     else:
         out.append('every block is as in the tested build: the difference is in the data patches')
     with open(output + '.untested', 'wb') as f:
