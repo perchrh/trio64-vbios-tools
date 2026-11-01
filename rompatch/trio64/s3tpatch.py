@@ -43,7 +43,7 @@ What is applied (docs/764-rom.md)
           lowered in the packed modes to what the memory bandwidth allows, (t - 23) / 6 (p3, #82; p2: / 5) with
           t = 112 x MCLK / (DCLK x bytes per pixel); 112 x MCLK in kHz is written into the code (kmclk)
           from the final MCLK pair at 3B5h, so --mclk builds follow
-  fonts   S3's fonts from the Trio64V+ BIOS 1.03-08 (--fonts, default reference/64vplus/1_03_08.bin; the
+  fonts   S3's fonts from the Trio64V+ BIOS 1.03-08 (--fonts, default reference/64vplus/1_03_08n.bin; the
           same bytes as in 2.04.07) in place of Phoenix's, all five tables whole: S3's 9-dot alternate
           tables are 63 bytes longer, so the 8x16 font and the 9x16 table move up (S3FONTS) and the eight
           references to them are rewritten (FONT_REFS); --fonts-only applies only these, the reference
@@ -147,7 +147,7 @@ SYMSIG = [('GETCRTC', '50 ba cc 03 ec ba b4 03 a8 01 74 03 ba d4 03 58 c3'),
 # entries, Phoenix's 18 and 17, so the 9x14 table grows into the 8x16 font's place and the 8x16 font
 # and the 9x16 table move up by 29 and 63 bytes, into the zeros after the 9x16 table (UNUSED, checked).
 # The 8x8 and 8x14 fonts and the 9x14 table keep their addresses.
-FONT_SRC = os.path.join(os.path.dirname(SHARED), 'reference', '64vplus', '1_03_08.bin')
+FONT_SRC = os.path.join(os.path.dirname(SHARED), 'reference', '64vplus', '1_03_08n.bin')
 S3FONTS = [
     ('8x8', 0x526C, 0x0800, '75c79a7e7fa423dda67ec6d6d76cec86b63f85677726368750c75b0920ddf319', 0x5720),
     ('8x14', 0x5A6C, 0x0E00, '657ca6588b6bf729f0ed71a3d3c781a465bd30cdfb11eb5fc7e27594c0717ea1', 0x5F20),
@@ -528,7 +528,7 @@ def main():
                     'the card owner\'s choice' % (MCLK_MAX, OVERCLOCK_MAX))
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
     ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '
-                    '(default reference/64vplus/1_03_08.bin)')
+                    '(default reference/64vplus/1_03_08n.bin)')
     ap.add_argument('--fonts-only', action='store_true', help='apply the fonts only (and the checksum): the '
                     'reference make 764-ref-compare compares our ROM with')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')

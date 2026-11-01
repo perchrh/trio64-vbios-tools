@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""s3vpatch.py - build the Trio64V+ ROM (1.03-08-pN, the level from common/version.inc VER765) from the S3 Trio64V+ BIOS 1.03-08.
+"""s3vpatch.py - build the Trio64V+ ROM (1.03-08N-pN, the level from common/version.inc VER765) from the S3 Trio64V+ BIOS 1.03-08N.
 
-    python3 rompatch/vplus/s3vpatch.py 1_03_08.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
+    python3 rompatch/vplus/s3vpatch.py 1_03_08N.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
                                        [--nasm nasm] [-q]
     make 765-rom OUT=S3VPP1.BIN [MCLK=55 [MEMTYPE=edo1]]
 
@@ -9,9 +9,11 @@ Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) do
 assembler driver and the shared patch code of s3patch.py next to it.
 
 Input
-  1_03_08.BIN  the S3 Trio64V+ BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96), 32 KB, as in
-               reference/64vplus/1_03_08.bin (the upper half of the Gainward GW503A stock dump), or a
-               64 KB image with it in the lower half (the upper half of the input is not used)
+  1_03_08N.BIN the S3 Trio64V+ BIOS 1.03-08N ("S3 86C765 Video BIOS. Version 1.03-08N", 09/03/96),
+               32 KB, as in reference/64vplus/1_03_08n.bin (theretroweb, S3 86C765 page), or a 64 KB
+               image with it in the lower half (the upper half of the input is not used). S3's 1.03-08
+               (the upper half of the Gainward GW503A stock dump) has the same code but is refused: its
+               configuration bytes differ (#129, docs/765-rom.md)
 
 Output
   32 KB (--size 64: 64 KB, the 32 KB twice, for a 64 KB EEPROM whichever half the board maps; a board
@@ -39,9 +41,9 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
          Trio64 build)
   MCLK   (only with --mclk) the MCLK PLL entry of --memtype, at most 60 MHz; without it the MCLK is as
-         in 1.03-08 (52.79 MHz with 1-cycle EDO, 59.96 MHz with fast page or 2-cycle EDO, picked by the
+         in 1.03-08N (50.11 MHz with 1-cycle EDO, 59.96 MHz with fast page or 2-cycle EDO, picked by the
          card's strapping)
-  sign-on "1.03-08-p1", checksum byte 7FFF
+  sign-on "1.03-08N-p4", checksum byte 7FFF
 
 Not applied, and why (docs/765-rom.md): the VCO fix (the Trio64V+ post divider R has 2 bits, at
 most divide by 8, so 12.6 MHz for 10Dh-10Fh cannot come from a VCO of 135 MHz or more), the FIFO fix,
@@ -50,7 +52,7 @@ VBE 2.0 functions (out of scope), MCLK and the black level (card decisions).
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the 32 KB sum to 00 and
-declare 32 KB, the free block that the code does not use is still zeros, and with the known 1.03-08
+declare 32 KB, the free block that the code does not use is still zeros, and with the known 1.03-08N
 image the SHA-256 of the build that passed the emulator tests.
 """
 import argparse, hashlib, os, re, struct, sys
@@ -61,9 +63,9 @@ sys.path.insert(0, SHARED)
 import s3patch  # noqa: E402
 from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, mclk_put  # noqa: E402
 
-VERSION = '1.03-08'
+VERSION = '1.03-08N'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
-REF_SHA = '0da79703951db097b3cbb8f9d4041f72f6205db9a11760a58bc9820431e5dba6'   # 32 KB 1.03-08 image
+REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   # 32 KB 1.03-08N image
 RESULT_SHA = 'b49fcdc4951f21521dd81f0dd3a62490fff94bf95ddb848d98424483704d8c62'  # 1.03-08-p3 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
@@ -94,7 +96,7 @@ SIG = dict({k: s3patch.SIG[k] for k in SHARED_SIG},
     vbecall='2e ff 94 8c 47 58 e8 ?? ?? c3',            # VBE dispatcher: call [cs:si+478Ch] / pop ax / call / ret (p2)
 )
 # MCLK (build option): POST picks the MCLK PLL pair (SR11 = M, then SR10 = N/R) by the strapped memory
-# type, CR36 bit 3 (code at 0A3Bh): 1-cycle EDO A8h (52.79 MHz in 1.03-08), 2-cycle EDO and fast page
+# type, CR36 bit 3 (code at 0A3Bh): 1-cycle EDO A8h (50.11 MHz in 1.03-08N, 52.79 MHz in 1.03-08), 2-cycle EDO and fast page
 # A6h (59.96 MHz). The Trio64V+ limit is 60 MHz for every type (16.67 ns MCLK cycle, data book table
 # 4-6, MEM-1; its feature list names 50 MHz for EDO, which 1.03-08 itself exceeds).
 MCLK_ENTRY = {'edo1': 0x00A8, 'fpm': 0x00A6}
@@ -180,9 +182,9 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     Returns (new 32 KB, log lines)."""
     d = bytearray(lo)
     log = []
-    m = re.search(rb'S3 86C765 Video BIOS\. Version (\d\.\d\d-\d\d)\r\n', d[:0x100])
+    m = re.search(rb'S3 86C765 Video BIOS\. Version (\d\.\d\d-\d\dN?)\r\n', d[:0x100])
     if not m:
-        raise PatchError('no "S3 86C765 Video BIOS. Version x.xx-xx" sign-on in the first 256 bytes')
+        raise PatchError('no "S3 86C765 Video BIOS. Version x.xx-xx[N]" sign-on in the first 256 bytes')
     if m.group(1).decode() != VERSION:
         raise PatchError('BIOS version %s: only the Trio64V+ BIOS %s is supported' % (m.group(1).decode(), VERSION))
     if sum(d) & 0xFF:
@@ -326,11 +328,11 @@ def diagnose(nasm, output, img):
 
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 Trio64V+ BIOS %s' % (VERSION, LEVEL, VERSION))
-    ap.add_argument('input', help='the Trio64V+ BIOS 1.03-08: 32 KB, or a 64 KB image with it in the lower half')
+    ap.add_argument('input', help='the Trio64V+ BIOS 1.03-08N: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (32 KB, or 64 KB with --size 64)')
     ap.add_argument('--size', type=int, choices=(32, 64), default=32, help='output size in KB (64: the 32 KB twice)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype, at most 60 '
-                    '(default: as 1.03-08, 52.79 for 1-cycle EDO, 59.96 for fast page/2-cycle EDO)')
+                    '(default: as 1.03-08N, 50.11 for 1-cycle EDO, 59.96 for fast page/2-cycle EDO)')
     ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',
                     help='the MCLK entry --mclk sets: edo1 (1-cycle EDO) or fpm (fast page and 2-cycle EDO)')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
@@ -358,7 +360,7 @@ def main():
         f.write(img)
     if not a.quiet:
         ref = hashlib.sha256(lo).hexdigest() == REF_SHA
-        print('base %s%s' % (VERSION, ' (the known 1.03-08 image)' if ref else ''))
+        print('base %s%s' % (VERSION, ' (the known 1.03-08N image)' if ref else ''))
         for line in log:
             print('  ' + line)
     print('%s: %s-%s, %d KB, checksum %02X (the lower 32 KB sums to 00), SHA-256 of the 32 KB %s%s'

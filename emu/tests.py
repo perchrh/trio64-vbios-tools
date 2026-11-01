@@ -14,7 +14,7 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: the ROM under test carries the sign-on of its level in
-                   common/version.inc (VER775 2.04.07-p21, VER765 1.03-08-p1, VER764 1.5-07-p2), where
+                   common/version.inc (VER775 2.04.07-p21, VER765 1.03-08N-p4, VER764 1.5-07-p2), where
                    the patchers read it and S3TEST expects it; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on VER775, the checksum and 32 KB size of the lower
@@ -27,7 +27,7 @@ Tests
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
                    the mode 13h scroll (p21), AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
-  765_patches    (our Trio64V+ ROM 1.03-08-pN, rompatch/vplus, with --chip 765) the ROM file (sign-on of
+  765_patches    (our Trio64V+ ROM 1.03-08N-pN, rompatch/vplus, with --chip 765) the ROM file (sign-on of
                    the level s3vpatch.py builds, checksum, 32 KB), the mode set clear (bank 0 zeroed, EAX
                    bits 31-16 kept), the booster (on after a banked 4F02 and the window function after AH=00
                    69h, off under Windows enhanced mode with INT 2Fh asked once per mode set, the PCI base
@@ -208,9 +208,9 @@ class Ctx:
         # our patched BIOS (2.04.07-pN sign-on) or another one (the stock BIOS of a Trio64-family card):
         # the tests tagged 'patch' check our patches and are skipped on another BIOS
         self.ours = bool(re.search(rb'Version 2\.04\.07-p\d+', self.rom[:0x100]))
-        # our Trio64V+ ROM (1.03-08-pN, rompatch/vplus): the tests tagged 'patch' run on it only when
+        # our Trio64V+ ROM (1.03-08N-pN, rompatch/vplus): the tests tagged 'patch' run on it only when
         # they are tagged '765' too (the shared speed patches, its own patch test)
-        self.vours = bool(re.search(rb'Version 1\.03-08-p\d+', self.rom[:0x100]))
+        self.vours = bool(re.search(rb'Version 1\.03-08N?-p\d+', self.rom[:0x100]))
         # our Trio64 ROM (1.5-07-pN, rompatch/trio64): likewise with the tag 764
         self.tours = bool(re.search(rb'Version 1\.5-07-p\d+', self.rom[:0x100]))
         os.makedirs(logs, exist_ok=True)
@@ -506,12 +506,12 @@ def t_rom_patches(c):
 
 
 def t_vplus_patches(c):
-    """Our Trio64V+ ROM (1.03-08-pN, rompatch/vplus): the ROM file, the booster with the Windows check,
+    """Our Trio64V+ ROM (1.03-08N-pN, rompatch/vplus): the ROM file, the booster with the Windows check,
     the base back at the next mode set, the fast 4F05 path and the window function, the attribute
     controller flip-flop after the mode set, the 32-bit registers kept across the 32-bit clears, font load
     and scrolls (the shared speed patches themselves: stores). Only on the Trio64V+ and UV+ models."""
     if not c.vours:
-        raise Skip('not our Trio64V+ ROM (1.03-08-pN)')
+        raise Skip('not our Trio64V+ ROM (1.03-08N-pN)')
     if Machine.chip not in ('vplus', 'uvplus'):
         raise Skip('Trio64V+ ROM (--chip 765)')
     m = c.machine()
@@ -738,7 +738,7 @@ def t_t64_patches(c):
         % (base[0], base[1], cr.get(0x52, 0)))
     # S3's fonts (1.03-08, the same as 2.04.07), all five tables whole: AX=1130h finds each, the moved 8x16
     # font and 9x16 table too
-    vref = os.path.join(os.path.dirname(HERE), 'reference', '64vplus', '1_03_08.bin')
+    vref = os.path.join(os.path.dirname(HERE), 'reference', '64vplus', '1_03_08n.bin')
     if os.path.exists(vref):
         v = open(vref, 'rb').read()
         for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000),
@@ -2191,7 +2191,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
 # itself), patch (our changes to the reference BIOS; with vplus the test runs on our Trio64V+ ROM
-# 1.03-08-pN too, with t64 on our Trio64 ROM 1.5-07-pN, otherwise only on 2.04.07-pN), call (how the BIOS is called: registers, flags,
+# 1.03-08N-pN too, with t64 on our Trio64 ROM 1.5-07-pN, otherwise only on 2.04.07-pN), call (how the BIOS is called: registers, flags,
 # invalid input), tools (our DOS tools, not the BIOS), and where it runs: card = a tool that also runs
 # on the card, whose hardware log decides; emu = only in the emulator. vram: the result depends on
 # the video memory size (the VESA mode list, 4F06 maximum, the mode set clear of the whole memory, the
@@ -2386,7 +2386,7 @@ def main():
              and n not in a.skip.split(',')]
     if not c.ours:
         print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped'
-              + (' unless tagged 765 (our Trio64V+ ROM 1.03-08-pN)' if c.vours else
+              + (' unless tagged 765 (our Trio64V+ ROM 1.03-08N-pN)' if c.vours else
                  ' unless tagged 764 (our Trio64 ROM 1.5-07-pN)' if c.tours else ''))
 
     if a.j > 1 and not (a.coverage or a.profile or a.calls):

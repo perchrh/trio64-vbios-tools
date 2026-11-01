@@ -23,7 +23,7 @@ import argparse, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 DEFAULT_REFS = [os.path.join(REPO, 'reference', p) for p in
-                ('trio64/1_5_07.bin', '64vplus/1_03_08.bin', 'v2/2_04_07.bin')]
+                ('trio64/1_5_07.bin', '64vplus/1_03_08n.bin', 'v2/2_04_07.bin')]
 
 
 def rom32(path):

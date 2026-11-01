@@ -3,7 +3,7 @@
 
     python3 emu/refcompare.py --ref REF2047.BIN --rom S3V2P15.BIN
     make 775-ref-compare REF775=REF2047.BIN ROM=S3V2P15.BIN
-    python3 emu/refcompare.py --chip 765 --ref reference/64vplus/1_03_08.bin --rom S3VPP1.BIN
+    python3 emu/refcompare.py --chip 765 --ref reference/64vplus/1_03_08n.bin --rom S3VPP1.BIN
     make 765-ref-compare ROM=S3VPP1.BIN       (our Trio64V+ ROM against 1.03-08, the Trio64V+ model)
 
 Goal (AGENTS.md): in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves like the reference

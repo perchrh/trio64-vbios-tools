@@ -8,7 +8,7 @@ in its own emulator and on real cards, and prepares a clean-room BIOS of its own
 | Chip | ROM | Reference BIOS | Test card(s) | Fixes and improvements | Description |
 | --- | --- | --- | --- | --- | --- |
 | Trio64 86C764X and 86C764-P | 1.5-07-pN (`make 764x-rom`, `make 764p-rom`) | Phoenix 1.5-07 | ExpertColor DSP-3364P, 2 MB fast page | [docs/764-changes.md](docs/764-changes.md) | [docs/764-rom.md](docs/764-rom.md) |
-| Trio64V+ 86C765 | 1.03-08-pN (`make 765-rom`) | S3 1.03-08 | STB Powergraph 64, Hercules Terminator 64 | [docs/765-changes.md](docs/765-changes.md) | [docs/765-rom.md](docs/765-rom.md) |
+| Trio64V+ 86C765 | 1.03-08N-pN (`make 765-rom`) | S3 1.03-08N | STB Powergraph 64, Hercules Terminator 64 | [docs/765-changes.md](docs/765-changes.md) | [docs/765-rom.md](docs/765-rom.md) |
 | Trio64V2/DX 86C775 and Trio64V2/GX 86C785 | 2.04.07-pN (`make 775-rom`) | S3 2.04.07 | Gainward GW503A, 2 MB EDO 40 ns | [docs/775-changes.md](docs/775-changes.md) | [docs/775-rom.md](docs/775-rom.md) |
 
 Each fix and improvement is listed in the chip's changes document with the GitHub issue that describes
@@ -218,7 +218,7 @@ standards or from the registers the BIOS set, not from our BIOS:
 
     python3 emu/tests.py --rom TRIO64VP.BIN --chip 765
 
-Our Trio64V+ ROM (`1.03-08-pN` sign-on, section "Trio64V+ ROM") is in between: of the `patch` tests it
+Our Trio64V+ ROM (`1.03-08N-pN` sign-on, section "Trio64V+ ROM") is in between: of the `patch` tests it
 runs those also tagged `765` (version, stores, s3test, and `765_patches` for its own patches), and
 the failures it keeps from 1.03-08 (below) pass with a note (`VPLUS_BASE` in `emu/tests.py`). Our
 Trio64 ROM (`1.5-07-pN`, section "Trio64 ROM") likewise with the tag `764`, `764_patches` and
@@ -369,15 +369,15 @@ the patcher tests in its section "The build".
 
 ## Trio64V+ ROM
 
-`rompatch/vplus/` builds 1.03-08-pN from the S3 Trio64V+ BIOS 1.03-08 (86C765, VBE 1.2) in
-`reference/64vplus/1_03_08.bin`: backports of the Trio64V2 ROM's speed patches and fixes, and fixes of
+`rompatch/vplus/` builds 1.03-08N-pN from the S3 Trio64V+ BIOS 1.03-08N (86C765, VBE 1.2) in
+`reference/64vplus/1_03_08n.bin`: backports of the Trio64V2 ROM's speed patches and fixes, and fixes of
 1.03-08's own faults, each with its issue in [docs/765-changes.md](docs/765-changes.md). The build, what
 does not apply to the Trio64V+ and the per-call costs: [docs/765-rom.md](docs/765-rom.md).
 
-    make 765-rom OUT=S3VPP3.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
-    make 765-rom-test [ROM=S3VPP3.BIN]
-    make emu-test ROM=S3VPP3.BIN CHIP=765 [LOGS=emu/vlogs]
-    make 765-ref-compare ROM=S3VPP3.BIN
+    make 765-rom OUT=S3VPP4.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
+    make 765-rom-test [ROM=S3VPP4.BIN]
+    make emu-test ROM=S3VPP4.BIN CHIP=765 [LOGS=emu/vlogs]
+    make 765-ref-compare ROM=S3VPP4.BIN
 
 Square brackets in these lines mark options: type `SIZE765=64`, not `[SIZE765=64]`.
 
@@ -432,7 +432,7 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
 | 775 (Trio64V2/DX) | `775-P22/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p22, 64 KB, the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P3/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08-p3, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P4/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p4, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
 | 764X (Trio64 PnP) | `764X-P3/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p3, 64 KB |
 | 764P (86C764-P) | `764P-P3/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p3, 64 KB |
 
@@ -442,7 +442,7 @@ with `OVERCLOCK=1`).
 
 
     make 775-rom OUT=S3V2P22-55.BIN MCLK=55 [MEMTYPE=edo1]
-    make 765-rom OUT=S3VPP3-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make 765-rom OUT=S3VPP4-55.BIN MCLK=55 [MEMTYPE=edo1]
 
 Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
 for (CR36 bits 3-2, set by resistors on the board and kept by the BIOS). `MCLK` sets the entry of
@@ -455,7 +455,7 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 | Trio64V2, 2.04.07-p22 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | C9h | 59.96 MHz | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
-| Trio64V+, 1.03-08-p3 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
+| Trio64V+, 1.03-08N-p4 | edo1 | A8h | 50.11 MHz (1.03-08: 52.79) | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
 | Trio64, 1.5-07-p3 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
 
@@ -480,7 +480,7 @@ Up to 70 MHz the build prints no warning and S3TEST's and S3COMPAT's MCLK lines 
 the card owner's choice, never a default; the build says OVERCLOCK in its result line.
 
 The Trio64V+ feature list names 50 MHz for EDO and 1-cycle EDO; the timing table allows 60 MHz, which
-S3COMPAT checks (MEM-1), and 1.03-08 itself runs 52.79 MHz. Below 40 MHz the option refuses (the data
+S3COMPAT checks (MEM-1); 1.03-08N runs 50.11 MHz, 1.03-08 52.79 MHz. Below 40 MHz the option refuses (the data
 books give no minimum; it guards against typing errors). Without `MCLK` the build is the tested one and
 its SHA-256 is checked; with it the code is the same and only the MCLK entry and the checksum differ,
 so the clock is judged on the card: S3TEST's MCLK line and S3COMPAT's POST line compare it with the
@@ -693,8 +693,8 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
   them in its cache for as long as the cache allows (a key on the SHA-256 values, so the files are
   fetched again only when the list changes), so no run depends on theretroweb being reachable.
   Decided 1 November 2026, to be done later. Status of 1 November 2026: the Trio64 reference is on
-  theretroweb (DataExpert CP764, [docs/764-rom.md](docs/764-rom.md)); the Trio64V+ page has 1.03-08N,
-  another build than our 1.03-08 ([docs/765-rom.md](docs/765-rom.md)); the Trio64V2 2.04.07 and
+  theretroweb (DataExpert CP764, [docs/764-rom.md](docs/764-rom.md)); the Trio64V+ reference is its
+  1.03-08N (from p4, [#129](https://github.com/perchrh/trio64-vbios-tools/issues/129), [docs/765-rom.md](docs/765-rom.md)); the Trio64V2 2.04.07 and
   2.04.11 are not there yet.
 - Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
   that one ROM can be tested on several cards with different memory speeds without flashing each

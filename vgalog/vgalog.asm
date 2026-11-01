@@ -37,7 +37,7 @@
 ;   +4  CR36 (memory size and type, as strapped)    +5  ROM size in 512-byte blocks (C000:0002)
 ;   +6  SR10, +7 SR11 (the memory clock PLL the POST set)
 ;   +8  the ROM version: the word after "Version" or "Vers." in C000:0000-00FFh (for our ROMs
-;       "2.04.07-p21", "1.03-08-p1", "1.5-07-p2"), up to 15 characters, zero-padded
+;       "2.04.07-p21", "1.03-08N-p4", "1.5-07-p2"), up to 15 characters, zero-padded
 ;   +24 8 bytes 0 (reserved)
 ;
 ; File mode: a 16-byte header 'VGALOGF1' and 8 bytes 0, the chip and ROM block, then the records.
