@@ -25,11 +25,15 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
                      and at the first bank switch, not under Windows enhanced mode)
          vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry
          vfix.asm    (p2) 4F02 refuses a mode that does not fit the video memory (4F01's rule), and the
-                     VBE dispatcher keeps the upper halves of the 32-bit registers (4F06 changed them)
+                     VBE dispatcher keeps the upper halves of the 32-bit registers (4F06 changed them);
+                     msx: after the mode set, 320x200 at 15/16/32 bpp (10Dh-10Fh) gets SR01 bit 3 (dot
+                     clock / 2) for its new 25.06 MHz DCLK (the refresh entries below)
   tables (p2) no interlaced timing: the modes that exist only interlaced on the Trio64V+ (118h
          1024x768x16M, 119h/11Ah 1280x1024x32K/64K, 120h 1600x1200; S3 modes 78h, 79h, 7Ah, 7Ch) are
          removed from the mode table and the VESA list, and the interlaced refresh entries of 1024x768
-         and 1280x1024 are cut off their lists, so refresh index 0 gives the lowest non-interlaced rate
+         and 1280x1024 are cut off their lists, so refresh index 0 gives the lowest non-interlaced rate;
+         10Dh-10Fh get 25.06 MHz (VCO 200.5 MHz) in place of 12.62 MHz (VCO 101 MHz, below the 135 MHz
+         minimum), halved by SR01 bit 3 for the same timing
          shared with the other builds (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
@@ -60,16 +64,16 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '0da79703951db097b3cbb8f9d4041f72f6205db9a11760a58bc9820431e5dba6'   # 32 KB 1.03-08 image
-RESULT_SHA = '593582c657488f287bd28576d85ec59d730ce8a97aa9051a06e11a07dc257bcc'  # 1.03-08-p2 (NASM 3.02), emulator tests passed
+RESULT_SHA = '39014c3f5b3abd368be8a82dffc65e20fd0ee0df5d94bf050d55867637a96535'  # 1.03-08-p2 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
-    'vhooks.asm': 'f830c6adc0a588ce', 'vext.asm': '911cb6e38ca370ef',
+    'vhooks.asm': '042132c715684eb1', 'vext.asm': '911cb6e38ca370ef',
     'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '5df0f0902ec6065b',
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
-    'vfix.asm': 'd165168af55f7599',
+    'vfix.asm': '9afe8b50acfff744',
 }
 FREE_START, FREE_END = 0x7AE0, 0x7FF0   # free in 1.03-08 from 7AD9h (zeros); 7FF0h-7FF6h: 'Cardex1'
 
@@ -121,7 +125,7 @@ BLOCKS = [
     ('p13bfill.asm', 'BFILL', 0x7D0B - 0x7CF2, ('bfill0', 'bfill')),
     ('p13bfa.asm', 'P13C', 14, ('bfilla',)),               # dead: old font loop
     ('clear32.asm', 'CLEAR32', 0x7D2E - 0x7D0B, ('clear',)),
-    ('vfix.asm', 'VFIX', 0x7D80 - 0x7D2E, ('fit', 'vbe32')),          # p2
+    ('vfix.asm', 'VFIX', 0x7DC0 - 0x7D2E, ('msx', 'fit', 'vbe32')),   # p2
 ]
 
 
@@ -144,6 +148,10 @@ VENT = (0x4C90, '78 ae 4d 79 ba 4d 7a c6 4d 7c d2 4d 80 00 00 4e de 4d 4f ea 4d 
 # non-interlaced rate
 ILACE_END = {0x0563: '5b 07 02', 0x0590: 'bf 07 04', 0x060E: 'eb 08 02', 0x065F: 'bf 07 04'}
 ILACE_ENT = (0x055A, 0x0587, 0x0605, 0x0656)
+# p2: the refresh entries of 320x200 at 15/16 bpp (S3 modes 65h, 66h) and 32 bpp (67h): SR13 = M, SR12 = N/R
+# 12.62 MHz (VCO 101 MHz, below the 135 MHz minimum) becomes 25.06 MHz (VCO 200.5 MHz), which vfix.asm's
+# msx halves with SR01 bit 3
+HALF_DCLK = {0x05A2: 'b8 02 80 7d 70', 0x05AB: '93 06 80 7d 70'}
 
 
 def drop_interlaced(d, put):
@@ -253,6 +261,8 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
         raise PatchError('the VBE dispatcher at %04X does not call through VBE_TAB' % a)
     put(a, d[a:a + 5], call(a, lab['vbe32']) + b'\x90\x90', 'VBE dispatcher: keep the 32-bit registers (p2)')
     drop_interlaced(d, put)
+    for off, b in HALF_DCLK.items():
+        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR01 bit 3 (p2)')
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
                  known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first

@@ -38,9 +38,10 @@ Tests
                    scrolls, AH=09h and AH=0Eh; p2: 4F06 keeps the 32-bit registers, 4F02 refuses (014Fh,
                    mode kept) exactly the listed modes 4F01 marks unsupported, no interlaced timing
                    (118h-11Ah and 120h removed, also as S3 modes 78h-7Ch; 1024x768 and 1280x1024
-                   non-interlaced at every CR41 index); all failures listed. On this ROM the tests tagged patch run
+                   non-interlaced at every CR41 index), 10Dh-10Fh with the DCLK VCO in 135-270 MHz
+                   and SR01 bit 3 set (frame rate within 1 Hz of 70.3); all failures listed. On this ROM the tests tagged patch run
                    only when tagged 765 too (version, stores, 765_patches), and the failures 1.03-08
-                   itself has (VPLUS_BASE: s3compat_full) pass with a note
+                   itself has (VPLUS_BASE, empty since p2) pass with a note
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
@@ -684,9 +685,19 @@ def t_vplus_patches(c):
             m.int10(0x4F02, bx=v | 0x8000)
             chk(not m.r['crtc'].get(0x42, 0) & 0x20, '4F02 %03X with CR41 = %02X: interlaced (CR42 %02X)'
                 % (v, c41, m.r['crtc'].get(0x42, 0)))
+    # p2: 320x200 at 15/16/32 bpp with the DCLK VCO in 135-270 MHz (PLL-1): 25.06 MHz halved by SR01 bit 3,
+    # the frame rate as before within 1 Hz (70.3 Hz with 1.03-08's 12.62 MHz)
+    for v in (0x10D, 0x10E, 0x10F):
+        m.int10(0x4F02, bx=v)
+        sq = m.r['seq']
+        mm, nn, rr = (sq.get(0x13, 0) & 0x7F) + 2, (sq.get(0x12, 0) & 0x1F) + 2, (sq.get(0x12, 0) >> 5) & 3
+        vco = 14.31818 * mm / nn
+        hz = m.frame()[0]
+        chk(135 <= vco <= 270 and sq.get(1, 0) & 8 and abs(hz - 70.3) < 1, '4F02 %03X: VCO %.1f MHz, SR01 %02X, %.1f Hz'
+            % (v, vco, sq.get(1, 0), hz))
     m.int10(0x03)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return 'booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers, %d of %d modes refused by 4F02, no interlace' % (refused, len(modes))
+    return 'booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers, %d of %d modes refused by 4F02, no interlace, 10Dh-10Fh VCO in range' % (refused, len(modes))
 
 
 def t_t64_patches(c):
@@ -2208,11 +2219,8 @@ DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 9
 # "Left as in 1.03-08"); the unpatched 1.03-08 fails the same lines. A test of that ROM whose failure lines
 # all match passes with a note; any other line still fails it.
 VPLUS_BASE = {
-    # (1.03-08-p2 fixed the two others: 4F02 set modes that need more memory than the card has, and 4F06
-    # changed the upper halves of EAX, ECX and EDX)
-    # the DCLK VCO at 101 MHz in 320x200 15/16/32 bpp: the Trio64V+ post divider cannot reach 12.6 MHz with
-    # the VCO in range (the interlaced 1600x1200, 1024x768x16M and 1280x1024x32K/64K are gone since p2)
-    's3compat_full': (r'VESA 010[DEF] 320x200x(15|16|32) .*VCO 101\.02MHz .*FAIL 0200$',),
+    # none left since p2: it fixed 4F02 (modes beyond the memory) and 4F06 (32-bit registers), removed the
+    # interlaced modes, and moved the DCLK VCO of 10Dh-10Fh into range (25.06 MHz halved by SR01 bit 3)
 }
 
 

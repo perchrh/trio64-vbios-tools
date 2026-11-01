@@ -142,6 +142,7 @@ def main():
     for off, b in (s3vpatch.S3TAB_DROP, s3vpatch.S3TAB_TAIL, s3vpatch.VLIST, s3vpatch.VENT):   # p2 tables
         sites.update(range(off, off + len(b.split())))
     sites.update(off + 2 for off in s3vpatch.ILACE_END)
+    sites.update(i for off in s3vpatch.HALF_DCLK for i in (off + 3, off + 4))
     signon = set(range(0x3F, 0x8F))
     diff = [i for i in range(0x8000) if img[i] != ref[i] and i not in used | sites | signon | {0x7FFF}]
     result('unchanged', not diff, 'changed outside the patches: %s' % ', '.join('%04X' % i for i in diff[:8])
