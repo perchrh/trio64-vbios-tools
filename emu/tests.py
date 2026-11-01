@@ -2126,7 +2126,7 @@ VPLUS_BASE = {
 }
 
 
-# Our Trio64 ROM keeps these of its base Phoenix 1.5-07 (docs/trio64-backport.md, "Left as they are"); the
+# Our Trio64 ROM keeps these of its base Phoenix 1.5-07 (docs/trio64-backport.md, "Left as in 1.5-07"); the
 # unpatched 1.5-07 gives the same lines.
 T64_BASE = {
     # with 1 MB Phoenix sets the modes that need more memory (107h, 112h, 115h-117h; the removed 118h-120h
