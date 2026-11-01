@@ -56,9 +56,9 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
-    make rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
+    make rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
 assemble code themselves too (`emu/tests.py --nasm`, `emu/mutants.py --nasm`; both also read the
