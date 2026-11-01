@@ -70,7 +70,7 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 | PLL-1 | all | f = fREF x (M+2) / ((N+2) x 2^R), fREF = 14.31818 MHz. The VCO, fREF x (M+2) / (N+2), must lie in 135-270 MHz (DCLK maximum raised on the V2, see V2-PLL-1) | V+ 9.1 constraint 1; T32/64 9.1 | must | S3COMPAT POST (MCLK, fail 1), VESA lines (DCLK, fail 200), `tvco` (fail 1) |
 | PLL-2 | all | M 1-127 (SR11 / SR13 bits 6-0), N 1-31 (SR10 / SR12 bits 4-0), R 0-3 (bits 6-5): "min N >= 1" | V+ 9.1 | must | N: S3COMPAT POST fail 1, VESA lines fail 200 ('PLL N=0'); `test_s3patch.py` pllcodes (M, N, R of every refresh entry) |
 | V2-PLL-1 | V2 | DCLK PLL VCO maximum 340 MHz. Only the maximum is raised: the minimum stays 135 MHz, and the MCLK PLL keeps 135-270 MHz | V2 3.6 | must | VESA lines fail 200, `tvco` fail 1, POST fail 1 (MCLK) |
-| V2-PLL-2 | V2 | XFree86 programs the V2 DCLK VCO in 170-340 MHz | XFree86 | derived | VESA lines WARN 08, `tvco` WARN 08; `s3patch.py` keeps every refresh entry in 170-340 MHz |
+| V2-PLL-2 | V2 | XFree86 programs the V2 DCLK VCO in 170-340 MHz. Not a data book limit: since 1 November 2026 the tools judge the V2 VCO by the book's 135-340 MHz only (PLL-1, V2-PLL-1), so 135-170 MHz is no longer a WARN | XFree86 | information | not checked; `s3patch.py` still moves the 22 reference entries below 170 MHz into 170-340 MHz (the tested ROM), and its result check uses 135-340 MHz |
 | V2-PLL-3 | V2 | SR12 bit 7 is the third bit of the DCLK R divider; SR12 bits 7-5 = 100b divides by 16. No other code with bit 7 set is defined. SR10 (MCLK) has no third R bit: bit 7 stays reserved | V2 3.6, 4.1 (SR12); V+ 16 (SR10 bit 7 reserved) | must | VESA lines fail 200 ('PLL R code'), `tvco` fail 4, POST WARN 1 (SR10 bit 7); `test_s3patch.py` pllcodes |
 | V2-CLK-1 | V2 | DCLK maximum 95 MHz single-clocked with the Streams Processor off; 170 MHz with clock doubling (two 8-bit pixels per 85 MHz clock) | V2 table 5-7 note 2 | limit | VESA lines WARN 02 |
 | V2-CLK-2 | V2 | DCLK maximum 80 MHz single-clocked with the Streams Processor on (CR67 bits 3-2 = 11b) | V2 table 5-7 note 2 | limit | VESA lines WARN 02 |
@@ -256,7 +256,7 @@ books stay the closer relatives (README "Missing documents"). What V968 says tha
 - V2 table 5-7 gives a 12.5 ns minimum DCLK cycle (80 MHz) in enhanced mode, while note 2 of the
   same table allows 95 MHz single-clocked with the Streams Processor off. The tools use the note.
 - V2 3.6 raises the DCLK PLL maximum to 340 MHz and says nothing about the minimum; the 170 MHz that
-  XFree86 uses is not in the book (V2-PLL-2).
+  XFree86 uses is not in the book (V2-PLL-2), so the tools keep the 135 MHz of PLL-1 for the V2 too.
 - Packed 24 bpp: sections 8.1.4 (T32/64) and 8.2.4 (V+) select it with SRB bits 7-4 = 0111b and CR67
   bits 7-4 = 0000b, while the CR67 descriptions list 0111b as mode 12. The tools accept both (CLK-2).
 - UV+ errata ER010-B items 1 and 4 correct the Trio64V+ data book; they are taken as Trio64V+ rules

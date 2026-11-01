@@ -14,8 +14,9 @@
 ; chipname   DX -> the '$' string with the chip's name ([chip])
 ;
 ; Limits per chip (kHz), rule IDs from docs/chip-rules.md:
-;   [vcomin]   DCLK PLL VCO minimum used for a FAIL-free result: 135 MHz (Trio32/64/V+ datasheet
-;              section 9.1, PLL-1); 170 MHz on the Trio64V2, from XFree86 s3_Trio64DAC.c (V2-PLL-2)
+;   [vcomin]   DCLK PLL VCO minimum below which a VCO in the datasheet range is a WARN: 135 MHz on every
+;              chip (datasheet section 9.1, PLL-1). The Trio64V2 used 170 MHz, XFree86's minimum
+;              (s3_Trio64DAC.c, V2-PLL-2), until 1 November 2026; its datasheet gives no other minimum
 ;   [vcodsmin] DCLK PLL VCO minimum the datasheet gives: 135 MHz on every chip (the Trio64V2 datasheet
 ;              changes only the maximum, section 3.6). A VCO from [vcodsmin] up to [vcomin] is a WARN
 ;   [vcomax]   DCLK PLL VCO maximum: 270 MHz, 340 MHz on the Trio64V2 (section 3.6, V2-PLL-1)
@@ -160,7 +161,7 @@ CHIPLIM equ $-chiplims
         dd 135000, 270000, 80000, 135000, 75000, 50000      ; Trio64V+
         db 0
         dd 135000, 270000, 80000, 60000
-        dd 170000, 340000, 95000, 170000, 75000, 50000      ; Trio64V2/DX/GX
+        dd 135000, 340000, 95000, 170000, 75000, 50000      ; Trio64V2/DX/GX
         db 1
         dd 135000, 270000, 80000, 66667
         dd 135000, 270000, 80000, 135000, 75000, 50000      ; Trio64UV+
@@ -171,7 +172,7 @@ chip    db CHIP_NONE
 chiprev db 0
 chipbx  dw 0
 chipdev dw 0
-vcomin  dd 170000                       ; the V2 values until chipfind ran
+vcomin  dd 135000                       ; the V2 values until chipfind ran
 vcomax  dd 340000
 dsingle dd 95000
 ddouble dd 170000

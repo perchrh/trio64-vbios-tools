@@ -240,8 +240,8 @@ an error), an interlaced mode is judged by its frame (twice the lines of a field
 
 Chip rules: S3COMPAT judges the registers the BIOS programs by the datasheet rules of the chip it
 found; `docs/chip-rules.md` lists every rule with its ID, chips, source and the result bit that checks
-it. On the Trio64V2 a DCLK VCO outside 135-340 MHz (the datasheet range) is FAIL 200; inside it but
-below 170 MHz (the minimum of XFree86, not of the datasheet) it is WARN 08. The Trio64V2 POST part also
+it. On the Trio64V2 a DCLK VCO outside 135-340 MHz (the datasheet range) is FAIL 200 (XFree86's 170 MHz
+minimum, V2-PLL-2, is not a data book limit and gives no WARN since 1 November 2026). The Trio64V2 POST part also
 checks SR1A bit 4 and the PCI subsystem ID handover (ROM C000:0040-0043 to CR81-CR84, CR37 bit 2
 cleared), and its VESA lines CR32 bit 3 (FAIL 1000) and the CR86 and CR90/CR91 rules (WARN 80; on this
 ROM 012Eh, 010Fh, 0131h, 0134h and 012Ah, see docs/775-rom.md, "Known remaining items"). The emulator test `775_writes`

@@ -30,7 +30,9 @@ What is applied (docs/775-rom.md of trio64-vbios-tools, "Features and changes co
          mode set clear), p13*.asm (32-bit text and planar scroll fills, text window moves, AH=09h);
          p14: the VGA mode set clear in place as a jump to wfill
   VCO    (unless --no-vco-fix) the 22 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
-         larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz
+         larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz. The data
+         book allows 135-340 MHz (the result check uses that); 170 MHz is XFree86's minimum, kept here
+         because the ROM was built and tested with it
   p16    the booster no longer at the end of VBE 4F02 (the reference instruction stays at 56F7h): the
          window set at 584Bh (4F05 BH=0 slow path and the window function) and the fast 4F05 path call
          it, so a banked 4F02 leaves CR58-CR5A as the reference does (S3 Windows 9x driver)
@@ -58,7 +60,7 @@ What is applied (docs/775-rom.md of trio64-vbios-tools, "Features and changes co
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
-and declares 32 KB, the upper 32 KB is a copy of it, every DCLK VCO in 170-340 MHz (unless --no-vco-fix),
+and declares 32 KB, the upper 32 KB is a copy of it, every DCLK VCO in the data book's 135-340 MHz (unless --no-vco-fix),
 and with the known reference image the SHA-256 (of the lower 32 KB) of the build that passed the
 emulator tests.
 """
@@ -626,7 +628,7 @@ def verify(img, vcofix):
     if vcofix:
         for e in refresh_entries(img):
             vco, f = pll(img[e + 4], img[e + 5])
-            if not 170 <= vco <= 340:
+            if not 135 <= vco <= 340:
                 errs.append('refresh entry %04X: VCO %.1f MHz' % (e, vco))
     return errs
 
