@@ -38,7 +38,29 @@ other languages `vfont`; the installed AUTOEXEC loads `fdapm APMDOS` and `ctmous
 
 Not used by anything found: AH=1Bh, AH=1Ch, the save pointer table at 04A8h.
 
-## Mode numbers in 0449h for the VBE text modes
+## FreeDOS use cases we support (decision of 1 November 2026)
+
+For the clean ROM, and for our patched ROMs where the space allows:
+
+- `MODE CON COLS=132` with `LINES=25`, `43`, `50` and `60`, and `MODE CON LINES=60` (80x60): the VBE
+  text modes 109h, 10Ah, 10Bh, 10Ch and 108h, listed and answered by 4F01h as FD-14 describes.
+- CTMOUSE with a visible mouse cursor in those modes, so the number 0449h holds there must be one
+  CTMOUSE takes as text (below).
+- MORE and MODE as they are; their own defects in this area are reported to FreeDOS (below), and the
+  ROM does not work around them.
+
+## Defects found in FreeDOS (master of April 2026 unchanged since 1.4)
+
+- **MORE** (`base/more`, `MORE.C`, `GetScreenSize`): the line count is the page size at 0040:004Ch
+  divided by 2 x columns. A BIOS that rounds the page size up (IBM's 4 KB pages, SeaVGABIOS's 2 KB
+  rounding) gives too many lines: 31 on a 132x25 screen (8192 bytes), 51 on an 80x50 screen (8192 or
+  8256 bytes). BDA 0484h (rows - 1) is the number to use; it is right on every EGA and VGA BIOS.
+- **MODE** (`base/mode`, `MODEVGA.C`, the VESA path): `xcols` and `xlines` are set only when 4F01h
+  for the current mode succeeds and describes a text mode. A BIOS that answers 4F01h only for the modes
+  in its VBE list (VBE 1.2: "mode number must be one of those returned by Function 0"), which is every
+  S3 BIOS measured, leaves them uninitialised in the first search pass.
+
+
 
 CTMOUSE, NANSI, HTMLHELP and V8Power take only modes 00h-03h and 07h in 0449h as text. With any other number
 CTMOUSE draws no mouse cursor, NANSI falls back to slow BIOS output, and HTMLHELP resets the screen to mode
