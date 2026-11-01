@@ -3,7 +3,7 @@
 
     python3 rompatch/s3patch.py REF2047.BIN -o S3V2P22.BIN [--no-vco-fix] [--mclk MHZ [--memtype edo1|fpm|sgram]]
                                 [--nasm nasm] [-q]
-    make v2-rom IN=REF2047.BIN OUT=S3V2P22.BIN [MCLK=55 [MEMTYPE=edo1]]
+    make 775-rom IN=REF2047.BIN OUT=S3V2P22.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -646,7 +646,7 @@ def diagnose(nasm, output, img):
         out.append('blocks assembled differently: %s' % ', '.join(diff))
         if TESTED_NASM not in v:
             out.append('another NASM version encodes some instructions differently: build with NASM %s '
-                       '(make v2-rom ... NASM=/path/to/nasm)' % TESTED_NASM)
+                       '(make 775-rom ... NASM=/path/to/nasm)' % TESTED_NASM)
     else:
         out.append('every block is as in the tested build: the difference is in the data patches')
     with open(output + '.untested', 'wb') as f:

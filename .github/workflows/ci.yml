@@ -7,8 +7,8 @@
 #
 # The tests run as parallel jobs, one row of the matrix per chip and memory size (the emulator tests
 # took 37 minutes one after the other). Every job builds NASM 3.02 from its release source (cached),
-# the tools with `make`, and its chip's ROM from the reference image in reference/ (make v2-rom, vplus-rom or
-# trio64-rom), checked against the pinned SHA-256. The first job of each chip also runs the patcher tests and
+# the tools with `make`, and its chip's ROM from the reference image in reference/ (make 775-rom, 765-rom or
+# 764x-rom), checked against the pinned SHA-256. The first job of each chip also runs the patcher tests and
 # the EGA/CGA comparison with the unpatched reference; the others run the emulator tests with 4 MB
 # (Trio64V2) or 4 and 1 MB (Trio64V+, Trio64) of video memory, the tests tagged `vram`. On the
 # Trio64V2 the longest test, s3compat_full, has a job of its own for each memory size. The last job,
@@ -45,21 +45,21 @@ jobs:
       matrix:
         include:
           # runs: one or more "VRAM|tests.py arguments" separated by ";"
-          - {chip: Trio64V2, part: '2 MB, patcher, EGA/CGA', model: v2, rom: v2-rom, first: true,
+          - {chip: Trio64V2, part: '2 MB, patcher, EGA/CGA', model: v2, rom: 775-rom, code: '775', first: true,
              runs: '2|--skip s3compat_full'}
-          - {chip: Trio64V2, part: '2 MB s3compat_full', model: v2, rom: v2-rom,
+          - {chip: Trio64V2, part: '2 MB s3compat_full', model: v2, rom: 775-rom, code: '775',
              runs: '2|--tests s3compat_full'}
-          - {chip: Trio64V2, part: '4 MB', model: v2, rom: v2-rom,
+          - {chip: Trio64V2, part: '4 MB', model: v2, rom: 775-rom, code: '775',
              runs: '4|-t vram --skip s3compat_full'}
-          - {chip: Trio64V2, part: '4 MB s3compat_full', model: v2, rom: v2-rom,
+          - {chip: Trio64V2, part: '4 MB s3compat_full', model: v2, rom: 775-rom, code: '775',
              runs: '4|--tests s3compat_full'}
-          - {chip: Trio64V+, part: '2 MB, patcher, EGA/CGA', model: vplus, rom: vplus-rom, first: true,
+          - {chip: Trio64V+, part: '2 MB, patcher, EGA/CGA', model: vplus, rom: 765-rom, code: '765', first: true,
              runs: '2|'}
-          - {chip: Trio64V+, part: '4 and 1 MB', model: vplus, rom: vplus-rom,
+          - {chip: Trio64V+, part: '4 and 1 MB', model: vplus, rom: 765-rom, code: '765',
              runs: '4|-t vram;1|-t vram'}
-          - {chip: Trio64, part: '2 MB, patcher, EGA/CGA', model: trio64, rom: trio64-rom, first: true,
+          - {chip: Trio64, part: '2 MB, patcher, EGA/CGA', model: trio64, rom: 764x-rom, code: '764', first: true,
              runs: '2|'}
-          - {chip: Trio64, part: '4 and 1 MB', model: trio64, rom: trio64-rom,
+          - {chip: Trio64, part: '4 and 1 MB', model: trio64, rom: 764x-rom, code: '764',
              runs: '4|-t vram;1|-t vram'}
     steps:
       - uses: actions/checkout@v5
@@ -114,7 +114,7 @@ jobs:
 
       - name: ${{ matrix.chip }} ROM patcher tests
         if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
-        run: make ${{ matrix.rom }}-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
+        run: make ${{ matrix.code }}-rom-test NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
 
       - name: ${{ matrix.chip }} emulator tests, ${{ matrix.part }}
         if: ${{ !cancelled() && steps.rom.outcome == 'success' }}
@@ -135,11 +135,7 @@ jobs:
       - name: ${{ matrix.chip }} EGA/CGA against the unpatched reference
         if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
         run: |
-          case "${{ matrix.rom }}" in
-            v2-rom) make v2-ref-compare ROM="$RUNNER_TEMP/ROM.BIN" ;;
-            vplus-rom) make vplus-ref-compare ROM="$RUNNER_TEMP/ROM.BIN" ;;
-            trio64-rom) make trio64-ref-compare ROM="$RUNNER_TEMP/ROM.BIN" ;;
-          esac
+          make ${{ matrix.code }}-ref-compare ROM="$RUNNER_TEMP/ROM.BIN"
 
       - name: Name for the log artifact
         id: art

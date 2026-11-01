@@ -10,10 +10,10 @@ other VBE 2.0 additions). The Trio64V+ BIOSes at hand offer VBE 1.2.
 
 ## The build: 1.03-08-p1
 
-    make vplus-rom OUT=S3VPP1.BIN             (rompatch/vplus/s3vpatch.py, 32 KB; VSIZE=64 for a 64 KB EEPROM)
-    make vplus-rom-test ROM=S3VPP1.BIN
+    make 765-rom OUT=S3VPP1.BIN             (rompatch/vplus/s3vpatch.py, 32 KB; VSIZE=64 for a 64 KB EEPROM)
+    make 765-rom-test ROM=S3VPP1.BIN
     make emu-test ROM=S3VPP1.BIN CHIP=vplus
-    make vplus-ref-compare ROM=S3VPP1.BIN
+    make 765-ref-compare ROM=S3VPP1.BIN
 
 Base: the S3 BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96) in `reference/64vplus/1_03_08.bin`, the
 upper 32 KB of the Gainward GW503A stock dump (SHA-256 0da79703...). S3's own BIOS for the chip, from the
@@ -37,10 +37,10 @@ so the 2.04.07 code (`p12ext.asm`), which uses EAX bits 31-16 without saving the
 changed after every AH=06h in mode 13h. The emulator test `vplus_patches` checks it. The same code in
 2.04.07-p20 did this through AH=0Eh, which bypasses the 32-bit dispatcher there; fixed in p21.
 
-Checked in the emulator (Trio64V+ model): `make vplus-rom-test` (the pinned SHA-256, checksum, every changed
+Checked in the emulator (Trio64V+ model): `make 765-rom-test` (the pinned SHA-256, checksum, every changed
 byte at a patch site, the free bytes still 00, the refusals); `make emu-test CHIP=vplus` with 1, 2
 and 4 MB, where every test that applies passes, `vplus_patches` and `stores` among them, apart from the
-1.03-08 failures below; `make vplus-ref-compare`: 2389 calls in the CGA, MDA and EGA modes behave as in
+1.03-08 failures below; `make 765-ref-compare`: 2389 calls in the CGA, MDA and EGA modes behave as in
 1.03-08. The S3COMPAT logs of the emulator runs (the whole S3COMPAT with 2 and 4 MB, its VBE part, its
 VGA part) and the VSHOW /R log are line for line those of 1.03-08, apart from the sign-on. Test coverage
 (`make coverage CHIP=vplus`): 87.1 % of the code, every byte of the new code among it.
@@ -89,7 +89,7 @@ keeps the 32-bit registers around 4F06); neither is part of this backport.
 
 | Change in this ROM | What decides it |
 | --- | --- |
-| MCLK 59.96 MHz | 1.03-08 picks its MCLK by the strapped memory type: 52.79 MHz (SR10 = 42h, SR11 = 39h, entry A8h) for 1-cycle EDO, 59.96 MHz (A6h) for fast page and 2-cycle EDO. 1.03-08-p1 keeps both; `make vplus-rom MCLK=... [MEMTYPE=edo1|fpm]` sets one, at most 60 MHz (MEM-1; README "MCLK build option"). Whether the memory of a card runs at a higher clock is decided on that card, with the VRAM test of S3COMPAT. |
+| MCLK 59.96 MHz | 1.03-08 picks its MCLK by the strapped memory type: 52.79 MHz (SR10 = 42h, SR11 = 39h, entry A8h) for 1-cycle EDO, 59.96 MHz (A6h) for fast page and 2-cycle EDO. 1.03-08-p1 keeps both; `make 765-rom MCLK=... [MEMTYPE=edo1|fpm]` sets one, at most 60 MHz (MEM-1; README "MCLK build option"). Whether the memory of a card runs at a higher clock is decided on that card, with the VRAM test of S3COMPAT. |
 | Memory size | 1, 2 or 4 MB in the data book. 1.03-08 sizes the memory at every POST (0E80h: 4 MB, then 2 MB, else 1 MB, written to CR36 bits 7-5), so a card upgraded from 1 to 2 MB needs no other ROM. The emulator tests run with 1, 2 and 4 MB. |
 
 ## Already right in 1.03-08

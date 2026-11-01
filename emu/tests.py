@@ -267,18 +267,18 @@ def t_version(c):
     if c.tours:
         m = re.search(rb'Version ([0-9.]+-\d\d-p\d+)', c.rom[:0x100])
         got = m.group(1).decode() if m else '(no sign-on)'
-        check(got == twant, 'the ROM is %s, the tests are for the newest Trio64 ROM %s (make trio64-rom OUT=...)' % (got, twant))
+        check(got == twant, 'the ROM is %s, the tests are for the newest Trio64 ROM %s (make 764x-rom OUT=...)' % (got, twant))
         return twant
     if c.vours:
         want = vwant
         m = re.search(rb'Version ([0-9.]+-\d\d-p\d+)', c.rom[:0x100])
         got = m.group(1).decode() if m else '(no sign-on)'
-        check(got == want, 'the ROM is %s, the tests are for the newest Trio64V+ ROM %s (make vplus-rom OUT=...)' % (got, want))
+        check(got == want, 'the ROM is %s, the tests are for the newest Trio64V+ ROM %s (make 765-rom OUT=...)' % (got, want))
         return want
     want = latest()
     m = re.search(rb'Version ([0-9.]+(-p\d+)?)', c.rom[:0x100])
     got = m.group(1).decode() if m else '(no sign-on)'
-    check(got == want, 'the ROM is %s, the tests are for the newest ROM %s (make v2-rom ... OUT=S3V2%s.BIN)'
+    check(got == want, 'the ROM is %s, the tests are for the newest ROM %s (make 775-rom ... OUT=S3V2%s.BIN)'
           % (got, want, want.split('-')[-1].upper()))
     return want
 

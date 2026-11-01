@@ -110,91 +110,101 @@ coverage: all
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --chip $(CHIP) --coverage emu/logs/COVER.BIN
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
-# The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF of v2-ref-compare and v2-rom-test
+# The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF of 775-ref-compare and 775-rom-test
 # and the default IN of rom; give REF=... or IN=... for another copy
 REF ?= reference/v2/2_04_07.bin
 IN ?= $(REF)
 
 # EGA/CGA behaviour against the unpatched reference BIOS (AGENTS.md goal)
-#   make v2-ref-compare ROM=S3V2P15.BIN [REF=REF2047.BIN]
-v2-ref-compare:
-	@test -n "$(REF)" -a -n "$(ROM)" || { echo "v2-ref-compare: set ROM (and REF, default reference/v2/2_04_07.bin)"; exit 2; }
+#   make 775-ref-compare ROM=S3V2P15.BIN [REF=REF2047.BIN]
+775-ref-compare:
+	@test -n "$(REF)" -a -n "$(ROM)" || { echo "775-ref-compare: set ROM (and REF, default reference/v2/2_04_07.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --ref "$(REF)" --rom "$(ROM)"
 
 clean:
 	rm -rf build
 
-# MCLK build option of v2-rom and vplus-rom: MCLK = MHz for the memory type MEMTYPE (default edo1, 1-cycle EDO;
+# MCLK build option of 775-rom and 765-rom: MCLK = MHz for the memory type MEMTYPE (default edo1, 1-cycle EDO;
 # fpm = fast page and 2-cycle EDO; sgram on the Trio64V2/GX), within the data book limits (rompatch/
 # s3patch.py, rompatch/vplus/s3vpatch.py); without MCLK the default build
 MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 
 # ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
-#   make v2-rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
-#   make v2-rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
-v2-rom:
-	@test -n "$(IN)" -a -n "$(OUT)" || { echo "v2-rom: set OUT, e.g. make v2-rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
+#   make 775-rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
+#   make 775-rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
+775-rom:
+	@test -n "$(IN)" -a -n "$(OUT)" || { echo "775-rom: set OUT, e.g. make 775-rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
 	python3 rompatch/s3patch.py --nasm "$(NASMBIN)" "$(IN)" -o "$(OUT)" $(MCLKOPT)
 
-v2-rom-test:
-	@test -n "$(REF)" || { echo "v2-rom-test: set REF (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
+775-rom-test:
+	@test -n "$(REF)" || { echo "775-rom-test: set REF (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
 	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
 # reference/64vplus/1_03_08.bin (VREF), docs/vplus-backport.md
-#   make vplus-rom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
-#   make vplus-rom-test [VREF=...] [ROM=S3VPP1.BIN]
-#   make vplus-ref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
+#   make 765-rom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
+#   make 765-rom-test [VREF=...] [ROM=S3VPP1.BIN]
+#   make 765-ref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
 VREF ?= reference/64vplus/1_03_08.bin
 VSIZE ?= 32
 TSIZE ?= 64
-vplus-rom:
-	@test -n "$(OUT)" || { echo "vplus-rom: set OUT, e.g. make vplus-rom OUT=S3VPP1.BIN (VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
+765-rom:
+	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
 	python3 rompatch/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(VSIZE) "$(VREF)" -o "$(OUT)" $(MCLKOPT)
 
-vplus-rom-test:
+765-rom-test:
 	python3 rompatch/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(VREF)" --v2ref "$(REF)" $(if $(ROM),--rom "$(ROM)")
 
-vplus-ref-compare:
-	@test -n "$(ROM)" || { echo "vplus-ref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
+765-ref-compare:
+	@test -n "$(ROM)" || { echo "765-ref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --chip vplus --ref "$(VREF)" --rom "$(ROM)"
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
 # (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
-#   make trio64-rom OUT=S3T64P3.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
-#   make trio64-rom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
-#   make trio64-rom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
-#   make trio64-rom-test [TREF=...] [ROM=S3T64P3.BIN]
-#   make trio64-ref-compare ROM=S3T64P3.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
+#   make 764x-rom OUT=S3T64P3.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+#   make 764x-rom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
+#   make 764x-rom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
+#   make 764-rom-test [TREF=...] [ROM=S3T64P3.BIN]
+#   make 764-ref-compare ROM=S3T64P3.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
 #   make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
 TREF ?= reference/trio64/1_5_07.bin
-trio64-rom:
-	@test -n "$(OUT)" || { echo "trio64-rom: set OUT, e.g. make trio64-rom OUT=S3T64P3.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
-	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(TSIZE) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
+# 764x-rom is for the 86C764X (Trio64 PnP, MCLK 55-70 MHz), 764p-rom for the 86C764-P (50-60 MHz): the same
+# ROM, only the MCLK range the build option accepts differs (T64-MEM-7); without MCLK the two are identical.
+764x-rom 764p-rom:
+	@test -n "$(OUT)" || { echo "$@: set OUT, e.g. make $@ OUT=S3T64P3.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(TSIZE) --model $(subst -rom,,$@) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
 
-trio64-rom-test:
+764-rom-test:
 	python3 rompatch/trio64/test_s3tpatch.py --nasm "$(NASMBIN)" --ref "$(TREF)" --vref "$(VREF)" $(if $(ROM),--rom "$(ROM)")
 
-trio64-ref-compare: | build
-	@test -n "$(ROM)" || { echo "trio64-ref-compare: set ROM (our Trio64 ROM; TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+764-ref-compare: | build
+	@test -n "$(ROM)" || { echo "764-ref-compare: set ROM (our Trio64 ROM; TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
 	python3 rompatch/trio64/s3tpatch.py --fonts-only --fonts "$(VREF)" "$(TREF)" -o build/T64FONTS.BIN
 	$(PYTHON) emu/refcompare.py --chip trio64 --ref build/T64FONTS.BIN --rom "$(ROM)"
 
-# All three ROMs at each memory clock of ROMCLOCKS (MHz) into build/roms, with 8.3 names for a DOS disk:
-# chip, level (from common/version.inc), M and the clock, for example V2P22M60.BIN, VPP1M55.BIN, T64P3M50.BIN.
-# On the Trio64V2 and Trio64V+ the clock goes into the edo1 entry (MEMTYPE; 1-cycle EDO), on the Trio64
-# into its one entry. The images keep each target's size (Trio64V2 and Trio64 64 KB, Trio64V+ VSIZE).
-#   make roms [ROMCLOCKS="50 55 60"] [NASM=...]
-ROMCLOCKS ?= 50 55 60
+# All four chips' ROMs, each at its memory clocks, into build/roms/<chip>-<level>/ (level from
+# common/version.inc) with 8.3 names for a DOS disk: the chip code, M and the clock, for example
+# build/roms/775-P22/775M60.BIN, build/roms/764X-P3/764XM70.BIN. On the 775 and 765 the clock goes into the
+# edo1 entry (MEMTYPE; 1-cycle EDO), on the 764 models into their one entry. The images keep each target's
+# size (775 and 764 64 KB, 765 VSIZE).
+#   make roms [CLOCKS_775="50 55 60"] [CLOCKS_765=...] [CLOCKS_764X="55 60 70"] [CLOCKS_764P="50 55 60"]
+CLOCKS_775 ?= 50 55 60
+CLOCKS_765 ?= 50 55 60
+CLOCKS_764X ?= 55 60 70
+CLOCKS_764P ?= 50 55 60
 level = $(shell sed -n "s/^%define $(1) '.*-\(p[0-9]*\)'.*/\1/p" common/version.inc | tr a-z A-Z)
+ROMDIR_775 = build/roms/775-$(call level,ROMVER)
+ROMDIR_765 = build/roms/765-$(call level,VROMVER)
+ROMDIR_764X = build/roms/764X-$(call level,TROMVER)
+ROMDIR_764P = build/roms/764P-$(call level,TROMVER)
 roms:
-	@mkdir -p build/roms
-	@set -e; for m in $(ROMCLOCKS); do \
-	  $(MAKE) --no-print-directory v2-rom OUT=build/roms/V2$(call level,ROMVER)M$$m.BIN MCLK=$$m; \
-	  $(MAKE) --no-print-directory vplus-rom OUT=build/roms/VP$(call level,VROMVER)M$$m.BIN MCLK=$$m; \
-	  $(MAKE) --no-print-directory trio64-rom OUT=build/roms/T64$(call level,TROMVER)M$$m.BIN MCLK=$$m; \
-	done
-	@ls -l build/roms
+	@mkdir -p $(ROMDIR_775) $(ROMDIR_765) $(ROMDIR_764X) $(ROMDIR_764P)
+	@set -e; \
+	for m in $(CLOCKS_775); do $(MAKE) --no-print-directory 775-rom OUT=$(ROMDIR_775)/775M$$m.BIN MCLK=$$m; done; \
+	for m in $(CLOCKS_765); do $(MAKE) --no-print-directory 765-rom OUT=$(ROMDIR_765)/765M$$m.BIN MCLK=$$m; done; \
+	for m in $(CLOCKS_764X); do $(MAKE) --no-print-directory 764x-rom OUT=$(ROMDIR_764X)/764XM$$m.BIN MCLK=$$m; done; \
+	for m in $(CLOCKS_764P); do $(MAKE) --no-print-directory 764p-rom OUT=$(ROMDIR_764P)/764PM$$m.BIN MCLK=$$m; done
+	@ls -lR build/roms
 
-.PHONY: all clean emu-test v2-rom roms v2-rom-test coverage v2-ref-compare vplus-rom vplus-rom-test vplus-ref-compare trio64-rom trio64-rom-test trio64-ref-compare
+.PHONY: all clean emu-test 775-rom roms 775-rom-test coverage 775-ref-compare 765-rom 765-rom-test 765-ref-compare 764x-rom 764p-rom 764-rom-test 764-ref-compare

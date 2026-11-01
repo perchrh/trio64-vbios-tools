@@ -2,9 +2,9 @@
 """refcompare.py - the EGA/CGA behaviour of the ROM against the unpatched S3 reference BIOS 2.04.07.
 
     python3 emu/refcompare.py --ref REF2047.BIN --rom S3V2P15.BIN
-    make v2-ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
+    make 775-ref-compare REF=REF2047.BIN ROM=S3V2P15.BIN
     python3 emu/refcompare.py --chip vplus --ref reference/64vplus/1_03_08.bin --rom S3VPP1.BIN
-    make vplus-ref-compare ROM=S3VPP1.BIN       (our Trio64V+ ROM against 1.03-08, the Trio64V+ model)
+    make 765-ref-compare ROM=S3VPP1.BIN       (our Trio64V+ ROM against 1.03-08, the Trio64V+ model)
 
 Goal (AGENTS.md): in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves like the reference
 BIOS. Both run the same INT 10h calls in the emulator: mode sets at 200, 350 and 400 lines and without
