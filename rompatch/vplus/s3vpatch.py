@@ -26,6 +26,10 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
          vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry
          vfix.asm    (p2) 4F02 refuses a mode that does not fit the video memory (4F01's rule), and the
                      VBE dispatcher keeps the upper halves of the 32-bit registers (4F06 changed them)
+  tables (p2) no interlaced timing: the modes that exist only interlaced on the Trio64V+ (118h
+         1024x768x16M, 119h/11Ah 1280x1024x32K/64K, 120h 1600x1200; S3 modes 78h, 79h, 7Ah, 7Ch) are
+         removed from the mode table and the VESA list, and the interlaced refresh entries of 1024x768
+         and 1280x1024 are cut off their lists, so refresh index 0 gives the lowest non-interlaced rate
          shared with the other builds (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
@@ -56,7 +60,7 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '0da79703951db097b3cbb8f9d4041f72f6205db9a11760a58bc9820431e5dba6'   # 32 KB 1.03-08 image
-RESULT_SHA = '24c202666f7894b810f4d5089469b0a37ab18af632b65e2f4830d7dc3066d637'  # 1.03-08-p2 (NASM 3.02), emulator tests passed
+RESULT_SHA = '593582c657488f287bd28576d85ec59d730ce8a97aa9051a06e11a07dc257bcc'  # 1.03-08-p2 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -119,6 +123,48 @@ BLOCKS = [
     ('clear32.asm', 'CLEAR32', 0x7D2E - 0x7D0B, ('clear',)),
     ('vfix.asm', 'VFIX', 0x7D80 - 0x7D2E, ('fit', 'vbe32')),          # p2
 ]
+
+
+# p2: interlaced timings out (as in the Trio64 ROM). 1.03-08 keeps, per S3 mode, a 9-byte entry in the mode
+# table at 0128h (mode number, ..., the refresh list pointer at +7), terminated by FFh. A refresh list
+# runs downwards in 9-byte entries from that pointer: byte 2 holds the refresh index (bits 3-0) and the
+# end mark (bit 7), byte 5 bit 5 marks an interlaced timing (emulator: CR42 bit 5 after the mode set).
+# The mode set takes the first entry whose index is at or below the one CR41/CR52 select, or the marked
+# last one. The VESA list at 4C13h (words, FFFFh, then the S3 numbers 207h-213h, FFFFh) runs parallel
+# to the 3-byte entries at 4C51h (S3 mode, record pointer); 4F00 reports the list up to the first FFFFh.
+S3TAB_DROP = (0x01E5, '78 ee 03 36 01 d0 0e 32 06 79 2e 04 36 01 30 0e 3b 06 '
+                      '7a 2e 04 36 01 50 0e 3b 06 7c ae 04 36 01 10 0e 44 06')   # 118h 119h 11Ah 120h
+S3TAB_TAIL = (0x0209, '4e 6e 04 36 01 00 0e 4d 06 4f 2e 04 32 05 00 0e 5f 06 '
+                      '51 6e 03 36 01 00 0e 68 06 52 2e 03 36 01 d0 0e 71 06 ff')  # 207h 208h 212h 213h, end
+VLIST = (0x4C3D, '18 01 19 01 1a 01 20 01 ff ff 07 02 08 02 12 02 13 02 ff ff')
+VENT = (0x4C90, '78 ae 4d 79 ba 4d 7a c6 4d 7c d2 4d 80 00 00 4e de 4d 4f ea 4d 51 f6 4d 52 02 4e ff')
+# the entry above each interlaced last entry of a list with other rates: its byte 2 gets the end mark,
+# so the interlaced entry below it (055Ah 1024x768 4/8 bpp, 0587h 1280x1024 4/8 bpp, 0605h 1024x768
+# 15/16 bpp, 0656h 1280x1024 S3 mode 4Fh) is never reached; CR41/CR52 index 0 then gives the lowest
+# non-interlaced rate
+ILACE_END = {0x0563: '5b 07 02', 0x0590: 'bf 07 04', 0x060E: 'eb 08 02', 0x065F: 'bf 07 04'}
+ILACE_ENT = (0x055A, 0x0587, 0x0605, 0x0656)
+
+
+def drop_interlaced(d, put):
+    """p2: remove 118h, 119h, 11Ah and 120h (interlaced only on the Trio64V+) and the interlaced refresh
+    entries of the other modes (see above)."""
+    for off in ILACE_ENT:
+        if d[off + 5] & 0x20 == 0 or d[off + 2] & 0x80 == 0:
+            raise PatchError('refresh entry %04X is not an interlaced last entry' % off)
+    for off, b in ILACE_END.items():
+        put(off, b, bytes.fromhex(b)[:2] + bytes([bytes.fromhex(b)[2] | 0x80]),
+            'refresh list ends above the interlaced entry %04X' % (off - 9))
+    a, old = S3TAB_DROP
+    b, tail = S3TAB_TAIL
+    old, tail = bytes.fromhex(old), bytes.fromhex(tail)
+    put(a, old + tail, tail[:-1] + b'\xff' * (len(old) + 1), 'mode table: 78h 79h 7Ah 7Ch (interlaced only) out')
+    a, old = VLIST
+    put(a, old, 'ff ff 07 02 08 02 12 02 13 02 ff ff ff ff ff ff ff ff ff ff',
+        'VESA list: 118h 119h 11Ah 120h out, the S3 numbers moved up')
+    a, old = VENT
+    put(a, old, '80 00 00 4e de 4d 4f ea 4d 51 f6 4d 52 02 4e 80 00 00 80 00 00 80 00 00 80 00 00 ff',
+        'VESA mode entries moved with the list')
 
 
 def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
@@ -206,6 +252,7 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     if struct.unpack_from('<H', d, a + 3)[0] != sym['VBE_TAB']:
         raise PatchError('the VBE dispatcher at %04X does not call through VBE_TAB' % a)
     put(a, d[a:a + 5], call(a, lab['vbe32']) + b'\x90\x90', 'VBE dispatcher: keep the 32-bit registers (p2)')
+    drop_interlaced(d, put)
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
                  known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first

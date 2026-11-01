@@ -14,8 +14,9 @@ Tests
   checksums      the 32 KB sum to 00 (byte 7FFFh makes it so) and have the 55AAh header with 32 KB size
   free_space     the bytes of the free block 7AE0-7FEF that no code uses are still 00, and 'Cardex1'
                  at 7FF0h is kept
-  unchanged      outside the patch sites, the code blocks, the sign-on and the checksum every byte is
-                 as in 1.03-08 (the DCLK tables among them: no VCO fix on the Trio64V+)
+  unchanged      outside the patch sites, the code blocks, the table edits of p2 (the interlaced modes and
+                 refresh entries), the sign-on and the checksum every byte is as in 1.03-08 (the DCLK
+                 values among them: no VCO fix on the Trio64V+)
   input_64k      a 64 KB image with 1.03-08 in the lower half gives the same result, whatever its upper
                  half holds
   size64         --size 64 gives the same 32 KB twice (#78)
@@ -138,6 +139,9 @@ def main():
         if k != 'cr59':
             sites.update(range(off, off + len(s3vpatch.SIG.get(k, '?? ??').split())))
     sites.update(range(sym['WSET'], sym['WSET'] + 4))
+    for off, b in (s3vpatch.S3TAB_DROP, s3vpatch.S3TAB_TAIL, s3vpatch.VLIST, s3vpatch.VENT):   # p2 tables
+        sites.update(range(off, off + len(b.split())))
+    sites.update(off + 2 for off in s3vpatch.ILACE_END)
     signon = set(range(0x3F, 0x8F))
     diff = [i for i in range(0x8000) if img[i] != ref[i] and i not in used | sites | signon | {0x7FFF}]
     result('unchanged', not diff, 'changed outside the patches: %s' % ', '.join('%04X' % i for i in diff[:8])
