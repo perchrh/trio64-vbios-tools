@@ -275,7 +275,7 @@ def t_version(c):
         return twant
     if c.vours:
         want = vwant
-        m = re.search(rb'Version ([0-9.]+-\d\d-p\d+)', c.rom[:0x100])
+        m = re.search(rb'Version ([0-9.]+-\d\dN?-p\d+)', c.rom[:0x100])
         got = m.group(1).decode() if m else '(no sign-on)'
         check(got == want, 'the ROM is %s, the tests are for the newest Trio64V+ ROM %s (make 765-rom OUT=...)' % (got, want))
         return want
