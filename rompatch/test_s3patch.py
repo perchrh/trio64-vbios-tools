@@ -14,7 +14,7 @@ Tests
                  as p15-p21 were built, compares by its lower 32 KB)
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
                  32 KB size, the upper 32 KB is a copy of the lower (#78)
-  vco            every DCLK refresh entry runs its VCO in 170-340 MHz
+  vco            every DCLK refresh entry runs its VCO in 135-340 MHz (the data book's range, V2-PLL-1)
   pllcodes       every DCLK refresh entry has M 1-127, N 1-31 and an R code the datasheet defines (SR12
                  bits 7-5: with bit 7 set only 100b), docs/chip-rules.md PLL-2 and V2-PLL-3
   free_space     the bytes of the free blocks 7C8B-7FEF that no code uses are still 00, so a later level
@@ -76,8 +76,8 @@ def pll_bad(img):
     return [e for e in s3patch.refresh_entries(img) if s3patch.pll_rule(img[e + 4], img[e + 5])]
 
 
-def vco_out(img):
-    return [e for e in s3patch.refresh_entries(img) if not 170 <= s3patch.pll(img[e + 4], img[e + 5])[0] <= 340]
+def vco_out(img, lo=135):
+    return [e for e in s3patch.refresh_entries(img) if not lo <= s3patch.pll(img[e + 4], img[e + 5])[0] <= 340]
 
 
 def corrupt(img, off):
@@ -142,7 +142,7 @@ def main():
     errs = image_checks(img)
     result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper 32 KB a copy' % img[0x7FFF])
     bad = vco_out(img)
-    result('vco', not bad, ', '.join('%04X' % e for e in bad) or 'all entries in 170-340 MHz')
+    result('vco', not bad, ', '.join('%04X' % e for e in bad) or 'all entries in 135-340 MHz')
     bad = pll_bad(img)
     result('pllcodes', not bad, ', '.join('%04X' % e for e in bad) or 'all entries M 1-127, N 1-31, defined R')
     used = set()
@@ -157,7 +157,7 @@ def main():
     rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
     rc, nimg, err = run(tmp, ref, ['--no-vco-fix'])
-    low = len(vco_out(nimg)) if nimg else -1
+    low = len(vco_out(nimg, 170)) if nimg else -1
     result('novco', rc == 0 and low == 22 and not image_checks(nimg), err or '%d entries below 170 MHz kept' % low)
 
     bad = mclk_cases(tmp, ref, img, s3patch.MCLK_ENTRY, run)

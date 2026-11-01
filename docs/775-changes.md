@@ -59,7 +59,9 @@ Picture and monitor
   shows 1201.
 - **DCLK PLL in the XFree86 range** ([#57](https://github.com/perchrh/trio64-vbios-tools/issues/57)): 22 refresh entries of the reference ran the VCO at 145-162 MHz,
   inside the datasheet range (135-340 MHz) but below the 170 MHz minimum XFree86 uses; new M/N/R give
-  exactly the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N).
+  exactly the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N). The data book
+  itself allows 135-340 MHz, which the tools and the patcher's result check use; the moved entries
+  stay because the ROM was built and tested with them (`--no-vco-fix` leaves them as in 2.04.07).
   Each mode's refresh list starts at the entry its mode table pointer gives and runs downwards to the
   entry with bit 7 of byte 2 set.
 - 1280x1024x16 colours (106h) keeps the VESA DMT timing (108 MHz, 64 kHz, 60 Hz): 14% above the 95 MHz
