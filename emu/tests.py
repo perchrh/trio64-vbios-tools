@@ -672,7 +672,7 @@ def t_t64_patches(c):
         % (base[0], base[1], cr.get(0x52, 0)))
     # S3's fonts (1.03-08, the same as 2.04.07), all five tables whole: AX=1130h finds each, the moved 8x16
     # font and 9x16 table too
-    vref = os.path.join(os.path.dirname(HERE), 'reference', 'vplus', '1_03_08.bin')
+    vref = os.path.join(os.path.dirname(HERE), 'reference', '64vplus', '1_03_08.bin')
     if os.path.exists(vref):
         v = open(vref, 'rb').read()
         for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000),

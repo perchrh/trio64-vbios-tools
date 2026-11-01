@@ -4,7 +4,7 @@
     python3 rompatch/vplus/test_s3vpatch.py [--ref 1_03_08.BIN] [--v2ref 2_04_07.BIN] [--rom S3VPP1.BIN] [--nasm nasm]
     make vplus-rom-test [VREF=...] [ROM=S3VPP1.BIN]
 
---ref is the 32 KB S3 Trio64V+ BIOS 1.03-08 (default reference/vplus/1_03_08.bin), --v2ref the Trio64V2
+--ref is the 32 KB S3 Trio64V+ BIOS 1.03-08 (default reference/64vplus/1_03_08.bin), --v2ref the Trio64V2
 reference 2.04.07 (default reference/v2/2_04_07.bin; it must be refused), --rom a build to compare with
 byte by byte.
 
@@ -92,7 +92,7 @@ def mclk_cases(tmp, ref, img, entries, run):
 def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum tests for s3vpatch.py')
-    ap.add_argument('--ref', default=os.path.join(REPO, 'reference', 'vplus', '1_03_08.bin'),
+    ap.add_argument('--ref', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08.bin'),
                     help='32 KB S3 Trio64V+ BIOS 1.03-08')
     ap.add_argument('--v2ref', default=os.path.join(REPO, 'reference', 'v2', '2_04_07.bin'),
                     help='32 KB Trio64V2 reference 2.04.07 (must be refused)')

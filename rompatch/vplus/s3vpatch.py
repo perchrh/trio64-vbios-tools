@@ -10,7 +10,7 @@ assembler driver and the shared patch code of s3patch.py next to it.
 
 Input
   1_03_08.BIN  the S3 Trio64V+ BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96), 32 KB, as in
-               reference/vplus/1_03_08.bin (the upper half of the Gainward GW503A stock dump), or a
+               reference/64vplus/1_03_08.bin (the upper half of the Gainward GW503A stock dump), or a
                64 KB image with it in the lower half (the upper half of the input is not used)
 
 Output

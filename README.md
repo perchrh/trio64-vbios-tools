@@ -316,6 +316,18 @@ be refused (already patched, three patch sites changed, a wrong checksum, and wi
 
 ### MCLK build option
 
+All three ROMs at 50, 55 and 60 MHz in one go, into `build/roms` with 8.3 names for a DOS disk (chip,
+level from `common/version.inc`, M and the clock):
+
+    make roms [ROMCLOCKS="50 55 60"]
+
+| File | ROM |
+| --- | --- |
+| `V2P22M50.BIN`, `V2P22M55.BIN`, `V2P22M60.BIN` | Trio64V2 2.04.07-p22, 64 KB, the clock in the edo1 entry |
+| `VPP1M50.BIN`, `VPP1M55.BIN`, `VPP1M60.BIN` | Trio64V+ 1.03-08-p1, 32 KB (`VSIZE=64` for 64 KB), the clock in the edo1 entry |
+| `T64P3M50.BIN`, `T64P3M55.BIN`, `T64P3M60.BIN` | Trio64 1.5-07-p3, 64 KB |
+
+
     make v2-rom OUT=S3V2P22-55.BIN MCLK=55 [MEMTYPE=edo1]
     make vplus-rom OUT=S3VPP1-55.BIN MCLK=55 [MEMTYPE=edo1]
 
@@ -381,7 +393,7 @@ page (11b).
 ## Trio64V+ ROM
 
 `rompatch/vplus/` backports this ROM's changes to the S3 Trio64V+ BIOS 1.03-08 (86C765, VBE 1.2), in
-`reference/vplus/1_03_08.bin`: the 32-bit mode set clears, font load, scrolls and AH=09h text, the
+`reference/64vplus/1_03_08.bin`: the 32-bit mode set clears, font load, scrolls and AH=09h text, the
 booster with the Windows enhanced mode check, the fast 4F05h and the attribute controller flip-flop
 reset. The result signs on as 1.03-08-p1. The VCO fix is not possible on the Trio64V+ (its post
 divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus-backport.md` has the

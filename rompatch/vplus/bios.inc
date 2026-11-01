@@ -1,4 +1,4 @@
-; bios.inc - addresses in the S3 Trio64V+ BIOS 1.03-08 (32 KB, reference/vplus/1_03_08.bin) that the
+; bios.inc - addresses in the S3 Trio64V+ BIOS 1.03-08 (32 KB, reference/64vplus/1_03_08.bin) that the
 ;            Trio64V+ patch code uses (C000:offset)
 ;
 ; s3vpatch.py reads these lines too (the name, then the value), for its own checks of the BIOS code at

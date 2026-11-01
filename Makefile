@@ -141,23 +141,23 @@ v2-rom-test:
 	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
-# reference/vplus/1_03_08.bin (VREF), docs/vplus-backport.md
+# reference/64vplus/1_03_08.bin (VREF), docs/vplus-backport.md
 #   make vplus-rom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
 #   make vplus-rom-test [VREF=...] [ROM=S3VPP1.BIN]
 #   make vplus-ref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
-VREF ?= reference/vplus/1_03_08.bin
+VREF ?= reference/64vplus/1_03_08.bin
 VSIZE ?= 32
 TSIZE ?= 64
 vplus-rom:
-	@test -n "$(OUT)" || { echo "vplus-rom: set OUT, e.g. make vplus-rom OUT=S3VPP1.BIN (VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
+	@test -n "$(OUT)" || { echo "vplus-rom: set OUT, e.g. make vplus-rom OUT=S3VPP1.BIN (VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
 	python3 rompatch/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(VSIZE) "$(VREF)" -o "$(OUT)" $(MCLKOPT)
 
 vplus-rom-test:
 	python3 rompatch/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(VREF)" --v2ref "$(REF)" $(if $(ROM),--rom "$(ROM)")
 
 vplus-ref-compare:
-	@test -n "$(ROM)" || { echo "vplus-ref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
+	@test -n "$(ROM)" || { echo "vplus-ref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --chip vplus --ref "$(VREF)" --rom "$(ROM)"
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
@@ -181,4 +181,20 @@ trio64-ref-compare: | build
 	python3 rompatch/trio64/s3tpatch.py --fonts-only --fonts "$(VREF)" "$(TREF)" -o build/T64FONTS.BIN
 	$(PYTHON) emu/refcompare.py --chip trio64 --ref build/T64FONTS.BIN --rom "$(ROM)"
 
-.PHONY: all clean emu-test v2-rom v2-rom-test coverage v2-ref-compare vplus-rom vplus-rom-test vplus-ref-compare trio64-rom trio64-rom-test trio64-ref-compare
+# All three ROMs at each memory clock of ROMCLOCKS (MHz) into build/roms, with 8.3 names for a DOS disk:
+# chip, level (from common/version.inc), M and the clock, for example V2P22M60.BIN, VPP1M55.BIN, T64P3M50.BIN.
+# On the Trio64V2 and Trio64V+ the clock goes into the edo1 entry (MEMTYPE; 1-cycle EDO), on the Trio64
+# into its one entry. The images keep each target's size (Trio64V2 and Trio64 64 KB, Trio64V+ VSIZE).
+#   make roms [ROMCLOCKS="50 55 60"] [NASM=...]
+ROMCLOCKS ?= 50 55 60
+level = $(shell sed -n "s/^%define $(1) '.*-\(p[0-9]*\)'.*/\1/p" common/version.inc | tr a-z A-Z)
+roms:
+	@mkdir -p build/roms
+	@set -e; for m in $(ROMCLOCKS); do \
+	  $(MAKE) --no-print-directory v2-rom OUT=build/roms/V2$(call level,ROMVER)M$$m.BIN MCLK=$$m; \
+	  $(MAKE) --no-print-directory vplus-rom OUT=build/roms/VP$(call level,VROMVER)M$$m.BIN MCLK=$$m; \
+	  $(MAKE) --no-print-directory trio64-rom OUT=build/roms/T64$(call level,TROMVER)M$$m.BIN MCLK=$$m; \
+	done
+	@ls -l build/roms
+
+.PHONY: all clean emu-test v2-rom roms v2-rom-test coverage v2-ref-compare vplus-rom vplus-rom-test vplus-ref-compare trio64-rom trio64-rom-test trio64-ref-compare

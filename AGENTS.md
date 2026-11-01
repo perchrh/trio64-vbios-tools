@@ -17,7 +17,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   block of that same NASM 3.02 build (all files in `BLOCKS`, also new ones); s3patch uses them to name
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
   repository also holds the Trio64V+ backport (`rompatch/vplus/`: `s3vpatch.py` builds 1.03-08-pN
-  from the S3 Trio64V+ BIOS 1.03-08 in `reference/vplus/`, with the same rules: byte assertions, a
+  from the S3 Trio64V+ BIOS 1.03-08 in `reference/64vplus/`, with the same rules: byte assertions, a
   pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VROMVER`; docs/vplus-backport.md) and the Trio64 ROM
   (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
   `reference/trio64/`, the same rules, `TROMVER`; docs/trio64-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),

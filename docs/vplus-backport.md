@@ -15,7 +15,7 @@ other VBE 2.0 additions). The Trio64V+ BIOSes at hand offer VBE 1.2.
     make emu-test ROM=S3VPP1.BIN CHIP=vplus
     make vplus-ref-compare ROM=S3VPP1.BIN
 
-Base: the S3 BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96) in `reference/vplus/1_03_08.bin`, the
+Base: the S3 BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96) in `reference/64vplus/1_03_08.bin`, the
 upper 32 KB of the Gainward GW503A stock dump (SHA-256 0da79703...). S3's own BIOS for the chip, from the
 same 1.0x code base as the Trio64V2 BIOS 1.01.04. A Phoenix Trio64V+ BIOS (1.01-05, 1.02-02) shares
 S3's code for the VGA functions (the speed patch signatures match, checked 30 October 2026) but has its

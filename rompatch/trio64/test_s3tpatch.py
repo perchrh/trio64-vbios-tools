@@ -111,7 +111,7 @@ def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum and table tests for s3tpatch.py')
     ap.add_argument('--ref', default=os.path.join(REPO, 'reference', 'trio64', '1_5_07.bin'), help='32 KB Phoenix Trio64 BIOS 1.5-07')
-    ap.add_argument('--vref', default=os.path.join(REPO, 'reference', 'vplus', '1_03_08.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
+    ap.add_argument('--vref', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
     ap.add_argument('--rom', help='a build to compare with')
     ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3tpatch.py')
     a = ap.parse_args()
