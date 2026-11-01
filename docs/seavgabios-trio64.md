@@ -22,8 +22,8 @@ The S3 vendor functions are only a part. In order of need:
 1. **Chip start-up at POST** (data book sections 5, 9, 13; `docs/chip-rules.md`):
    - Unlock the S3 registers (SR08 = 06h, CR38 = 48h, CR39 = A5h) and leave the lock as the chip had it
      at the end of every call, as the Phoenix BIOS and Windows' driver expect.
-   - Memory size from CR36 bits 7-5 (strapped, never written; 1, 2 or 4 MB) and the memory type from
-     CR36 bits 3-2; CR68 (strapped timings) left alone.
+   - Memory size found by test and written to CR36 bits 7-5 (data book 5.1: the BIOS determines it,
+     boards need not strap it; 1, 2 or 4 MB), the memory type from CR36 bits 3-2 (strapped, never written); CR68 (strapped timings) left alone.
    - The memory clock: SR10/SR11 with the SR15 load sequence (PLL-1, PLL-2). The card's own value is
      69.8 MHz (22h 25h); the build option and the known pairs of `s3patch.KNOWN_MCLK_8811` carry over.
    - The PCI base: CR59/CR5A from PCI BAR0 (the Windows 9x S3 driver reads them, README "Windows 9x

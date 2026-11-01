@@ -68,8 +68,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Trio64 ROM (Phoenix 1.5-07): CR41 and CR52 bits 7-4 hold Phoenix's refresh indexes, CR6B/CR6C the
   PCI base (copied into CR59/CR5A at every mode set), CR6D is no Trio64 register; our mark is CR52
   bit 3, which Phoenix masks off. Do not keep marks in CR6B-CR6D: CR6B bit 7 and bits 1-0 have
-  hardware meanings in the Trio64 data book (T64-MEM-6). Phoenix relocks the S3 registers after its
-  calls and its unlock changes AX: new code unlocks itself and leaves the lock as found.
+  hardware meanings in the Trio64 data book (T64-MEM-6). Phoenix's mode sets relock SR08 but leave CR38/CR39
+  unlocked (emulator, 1 November 2026), and its unlock changes AX: new code unlocks itself and leaves the lock as found.
 - riplin's annotated disassembly of the Phoenix 1.5-07 EDO build (README "Sources") is a map of our
   Trio64 base: its offsets hold from 1000h to 7EFFh in every 1.5-07 build (the first 4 KB differ by
   card maker). Use it to find routines, callers and data; copy no code, tables or ROM bytes from it

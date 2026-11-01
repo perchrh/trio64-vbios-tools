@@ -61,9 +61,9 @@ most that much video memory (1 MB = 1048576 bytes).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 100h | 640x400 | 256 | 1 | 0 (0000b) | 640 | 256000 | yes | yes | yes | IBM 400-line, 70 Hz | offered |
 | 101h | 640x480 | 256 | 1 | 0 | 640 | 307200 | yes | yes | yes | DMT 640x480 60 Hz | offered |
-| 102h | 800x600 | 16 (planar) | - | - | 100 per plane | 240000 | yes | yes | yes | - | not a packed mode: outside this part (MQ-9) |
+| 102h | 800x600 | 16 (planar) | - | - | 100 per plane | 240000 | yes | yes | yes | - | not a packed mode: part C (VBE-10) |
 | 103h | 800x600 | 256 | 1 | 0 | 800 | 480000 | yes | yes | yes | DMT 800x600 60 Hz | offered |
-| 104h | 1024x768 | 16 (planar) | - | - | 128 per plane | 393216 | yes | yes | yes | - | not a packed mode: outside this part (MQ-9) |
+| 104h | 1024x768 | 16 (planar) | - | - | 128 per plane | 393216 | yes | yes | yes | - | not a packed mode: part C (VBE-10) |
 | 105h | 1024x768 | 256 | 1 | 0 | 1024 | 786432 | yes | yes | yes | DMT 1024x768 60 Hz | offered |
 | 106h | 1280x1024 | 16 (planar) | - | - | 160 per plane | 655360 | - | - | - | - | not offered (MODE-102) |
 | 107h | 1280x1024 | 256 | 1 | 8 (0001b), clock-doubled | 1280 | 1310720 | no | yes | yes | DMT 1280x1024 60 Hz | offered with 2 or 4 MB |
@@ -241,8 +241,8 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
 8. **MQ-8** CR31 bit 2 (16-bit VGA memory bus) in the planar and CGA graphics modes: the data book calls
    it useful in text modes "when VGA graphics controller functions are typically not used". Safe in
    0Dh-12h, or 0 there?
-9. **MQ-9** Which part specifies the planar VBE modes 102h and 104h, the VBE text modes 108h-10Ch, and
-   would 10Dh-10Fh (320x200 at 70 Hz in high colour) be possible with SR01 bit 3 halving a 25.175 MHz
+9. **MQ-9** Answered for the modes: part C (`spec-c-vbe.md` VBE-10) offers the planar 102h and 104h
+   through the VGA 16-colour path and no VBE text modes 108h-10Ch. Still open: 10Dh-10Fh (320x200 at 70 Hz in high colour) be possible with SR01 bit 3 halving a 25.175 MHz
    DCLK in an enhanced mode?
 10. **MQ-10** Display start units for 4F07 (VBE part): does CR0C/CR0D/CR69 count 4-byte or 8-byte units in
     the enhanced modes with 2 MB (64-bit bus) and with 1 MB?
@@ -254,8 +254,8 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
     mode 0 setting; is bit 0 = 0 right for mode 8 too?
 14. **MQ-14** SR01 bit 5: on the Trio64V2 the screen off takes effect up to 3 HSYNCs later (V2-REG-6);
     must a Trio64 mode set wait before it writes CR54/CR60? The Trio64 book is silent.
-15. **MQ-15** 4F01 BitsPerPixel of 112h and 115h (VBE part): 24 (the VBE 1.2 mode list) or 32 with an
-    8-bit reserved field (the 4-byte memory format)?
+15. **MQ-15** Answered by part C: 4F01 BitsPerPixel of 112h and 115h is 32 with an 8-bit reserved
+    field (the 4-byte memory format; the Trio64 has no packed 24-bit mode).
 
 ## Sources disagree
 

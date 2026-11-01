@@ -2,8 +2,8 @@
 
 What the clean side gets for writing the S3 Trio64 module of SeaVGABIOS (the plan:
 `docs/seavgabios-trio64.md`), what stays on the dirty side, and how the result is checked. The process
-and its reasons are in `docs/clean-room.md`. Prepared 1 November 2026; the leak review of the
-specification files is still to be done.
+and its reasons are in `docs/clean-room.md`. Prepared 1 November 2026. The first leak review (1 November) removed the references to dirty-side
+documents from `spec-a-post.md`; what remains for a second reader is listed under "Leak review".
 
 ## Files here
 
@@ -55,6 +55,19 @@ notes), and anything from another vendor's BIOS source.
        python3 emu/similarity.py slim.bin --fonts 409E-509D --fonts 509E-5E9D --fonts 5E9E-669D --tables 38B8-4053
 
 4. **On the card**: `docs/seavgabios-trio64.md` "Clean-room steps", step 4.
+
+## Leak review
+
+Done once on 1 November 2026 by the dirty side (a search of the three specification files for
+Phoenix, the reference ROMs, `rompatch/`, `docs/trio64-backport.md` and riplin, then a reading of the
+hits). Left for a second reader to judge:
+
+- `spec-c-vbe.md` 4F14h (OEM-1 to OEM-7) and the open questions on the S3 mode numbers rest on
+  the observed behaviour of S3's BIOSes, not on a public document; they cross as behaviour only.
+- `spec-b-modeset.md`: the PLL values for 25.175 MHz (SR12 61h, SR13 28h) equal the reference ROM's,
+  because both follow the data book's procedure 9.1; the derivation is in the rule.
+- Part B and part C agree on the mode list: 102h and 104h are part C's (VBE-10), 4F01 reports 32 bits
+  per pixel for the 4-byte modes (MQ-9, MQ-15 of part B answered).
 
 ## Font origin (to settle before distribution)
 
