@@ -9,7 +9,7 @@ in its own emulator and on real cards, and prepares a clean-room BIOS of its own
 | --- | --- | --- | --- | --- |
 | Trio64 86C764X and 86C764-P  | 1.5-07-pN (`make 764x-rom`) | Phoenix 1.5-07 | ExpertColor DSP-3364P, 2 MB fast page | "Trio64 ROM", `docs/trio64-backport.md` |
 | Trio64V+ 86C765 | 1.03-08-pN (`make 765-rom`) | S3 1.03-08 | STB Powergraph 64, Hercules Terminator 64 | "Trio64V+ ROM", `docs/vplus-backport.md` |
-| Trio64V2/DX 86C775 and Trio64V2/GX 86C785 | 2.04.07-pN (`make 775-rom`) | S3 2.04.07 | Gainward Genesis EV (GW503A), 2 MB EDO 40 ns | "ROM patcher", "Features and changes compared to the reference BIOS 2.04.07" |
+| Trio64V2/DX 86C775 and Trio64V2/GX 86C785 | 2.04.07-pN (`make 775-rom`) | S3 2.04.07 | Gainward GW503A, 2 MB EDO 40 ns | "ROM patcher", "Features and changes compared to the reference BIOS 2.04.07" |
 
 ### Chip codes
 
