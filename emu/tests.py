@@ -115,8 +115,8 @@ Tests
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
   --chip 775|765|767|764|764x|764p|732   the chip of the model by its S3 part number (default 775, the card)
-  --vram 1|2|4     the video memory CR36 reports (2 MB, the card; 4 MB, the chip maximum; 1 MB, a Trio64V+ or
-                   Trio64 card before an upgrade). The BIOS finds the size at POST (it writes CR36 bits 7-5
+  --vram 1|2|4     the video memory CR36 reports (2 MB, the card; 4 MB, the chip maximum; 1 MB, the smallest
+                   configuration of every chip). The BIOS finds the size at POST (it writes CR36 bits 7-5
                    after testing the last 64 KB of 4 and 2 MB); the model answers with the size given here
   -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
@@ -1833,9 +1833,12 @@ def t_windows(c):
         if v == 0xFFFF:
             break
         modes.append(v)
+    fits = set()                                        # the modes 4F01h marks as supported with this memory
     for v in modes:
         o = int10w(m, dict(eax=0x4F01, ecx=v, edi=0x1000), es=BUF)
         chk(o['eax'] & 0xFFFF == 0x4F, '4F01 %03Xh: %04X' % (v, o['eax'] & 0xFFFF))
+        if m.mem(BUF * 16 + 0x1000, 1)[0] & 1:
+            fits.add(v)
     for v in (0x101, 0x103, 0x105):
         o = int10w(m, dict(eax=0x4F02, ebx=v), es=BUF)
         chk(o['eax'] & 0xFFFF == 0x4F, '4F02 %03Xh: %04X' % (v, o['eax'] & 0xFFFF))
@@ -1866,7 +1869,7 @@ def t_windows(c):
     m2.mu.mem_write(0x2F * 4, struct.pack('<HH', 0, 0x07E0))
     base = (cr2.get(0x59, 0), cr2.get(0x5A, 0))
     for v, lines in ((0x101, 480), (0x103, 600), (0x111, 480), (0x114, 600), (0x105, 768), (0x112, 480)):
-        if v not in modes:
+        if v not in fits:                               # 112h does not fit 1 MB; the BIOS refuses it, rightly
             continue
         o = int10w(m2, dict(eax=0x4F02, ebx=0x8000 | v, ecx=lines, edx=0x3D4))
         got = (cr2.get(0x59, 0), cr2.get(0x5A, 0))
@@ -2279,8 +2282,8 @@ def main():
                          'PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
                     help='video memory CR36 bits 7-5 report after POST: 2 MB (the card, default), 4 MB (the '
-                         'maximum of every Trio64-family chip but the Trio32) or 1 MB (a Trio64V+ or Trio64 '
-                         'card before an upgrade); the model still has one 64 KB window, no banked or linear memory')
+                         'maximum of every Trio64-family chip but the Trio32) or 1 MB (the smallest configuration '
+                         'of every chip); the model still has one 64 KB window, no banked or linear memory')
     a = ap.parse_args()
     if CHIP_CODES[a.chip] == 'trio32' and a.vram == 4:
         ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')

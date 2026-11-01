@@ -19,6 +19,7 @@ number; the documentation also uses the market names.
 | Code | Market name | S3 part | PCI ID | Make targets | `--chip`, `CHIP=` | Version, reference, size variables |
 | --- | --- | --- | --- | --- | --- | --- |
 | 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775` |
+| 785 | Trio64V2/GX | 86C785 | 5333:8901 | `775-rom` (the same ROM: S3's 2.04.07 is the "86C775/86C785 Video BIOS"; the clock option has an `sgram` entry for the GX) | `775` | as 775 |
 | 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
 | 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
 | 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
@@ -408,8 +409,8 @@ upgraded from 1 to 2 MB, or from 2 to 4 MB where the board has the sockets, work
 Phoenix 1.5-07, the Trio64 ROM's base, does the same, but tries 4 MB only on a Trio64 strapped for fast
 page memory (CR36 bit 2), as the data book allows (docs/trio64-backport.md, "Memory"). The emulator
 answers with a fixed size (`--vram`): `make emu-test` runs the tests whose result depends on the size with
-2 and 4 MB (the Trio32 only with 2 MB, its maximum), and on the Trio64V+, the Trio64 and the Trio32 also
-with 1 MB. The Trio64 and Trio32 models are strapped EDO (CR36 bits 3-2 = 10b), the Trio64 with 4 MB fast
+2 and 4 MB (the Trio32 only with 2 MB, its maximum), and on every chip also with 1 MB, the smallest
+configuration. The Trio64 and Trio32 models are strapped EDO (CR36 bits 3-2 = 10b), the Trio64 with 4 MB fast
 page (11b).
 
 ## Trio64V+ ROM
@@ -481,13 +482,13 @@ a run, and a newer commit on the same branch cancels the running one.
 First the job "All ROMs (make roms)" builds every chip's ROM at its memory clocks. The tests then run
 as parallel jobs on the slowest and the fastest image of each chip. Each job tests its image with 2 MB of
 video memory, then runs the tests tagged `vram` (the ones whose result depends on the memory size) with
-4 MB, and with 1 MB on the Trio64V+ and Trio64; the other tests do not run again at the other sizes:
+4 MB and with 1 MB; the other tests do not run again at the other sizes:
 
 | Job | What it runs |
 | --- | --- |
 | All ROMs (make roms) | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), kept as the artifact `roms` for 14 days |
-| Trio64V2 50 MHz: 2 and 4 MB, patcher, EGA/CGA | `775M50.BIN`; `make 775-rom-test` (builds the default ROM and checks its pinned SHA-256), `make 775-ref-compare` |
-| Trio64V2 60 MHz: 2 and 4 MB | `775M60.BIN` |
+| Trio64V2 50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `775M50.BIN`; `make 775-rom-test` (builds the default ROM and checks its pinned SHA-256), `make 775-ref-compare` |
+| Trio64V2 60 MHz: 2, 4 and 1 MB | `775M60.BIN` |
 | Trio64V2 50 MHz: s3compat_full 2 MB | `775M50.BIN`: the longest test alone |
 | Trio64V2 60 MHz: s3compat_full 4 MB | `775M60.BIN`: the longest test alone |
 | Trio64V+ 50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `765M50.BIN`; `make 765-rom-test`, `make 765-ref-compare` |

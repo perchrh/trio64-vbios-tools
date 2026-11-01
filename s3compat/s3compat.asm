@@ -6019,8 +6019,9 @@ tvco:   TB C_S3,'DCLK VCO at every refresh rate'
 ;     modes of the 4F00h list that 4F01h marks as supported, in its order
 ;   4 BL=02h BH=03h for each of them: EDI = XRes << 16 | YRes and SI bits 7-0 = bits per pixel, as
 ;     4F01h (graphics modes)
-;   8 BL=01h refresh for 101h, 103h, 105h, 107h: every rate of the BH=02h list (DX index, DI Hz) is
-;     accepted by BH=00h (CX mode, DI Hz) and read back by BH=01h
+;   8 BL=01h refresh for 101h, 103h, 105h, 107h (those 4F01h marks as supported: not 107h with 1 MB):
+;     every rate of the BH=02h list (DX index, DI Hz) is accepted by BH=00h (CX mode, DI Hz) and read
+;     back by BH=01h
 ;  10 the mode set after BH=00h runs at that rate: measured within 1.5 Hz (interlaced rates below
 ;     50 Hz: twice the rate, the field rate)
 ;  20 the rates read at the start written back: CR41, CR52 and CR6B as before the test
@@ -6111,6 +6112,14 @@ t4f14:  TB C_S3,'4F14 S3 OEM functions'
         or ax,ax
         jz .rr
         mov [vm],ax
+        push si
+        mov cx,ax                       ; a mode 4F01h marks as not supported (1 MB: 107h) is skipped:
+        mov di,mibuf                    ; the BIOS refuses its rates, rightly
+        mov ax,0x4F01
+        int 0x10
+        pop si
+        test byte [mibuf],1
+        jz .rm
         push si
         mov ax,0x4F14                   ; the rate in use, for the end
         mov bx,0x0101

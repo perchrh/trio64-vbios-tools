@@ -97,7 +97,7 @@ else
 ifneq ($(CHIP),732)
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram $(EMUARGS)
 endif
-ifneq ($(filter 765 764 764x 764p 732,$(CHIP)),)
+ifneq ($(filter 775 765 764 764x 764p 732,$(CHIP)),)
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)1 -j $(JOBS) --chip $(CHIP) --vram 1 -t vram $(EMUARGS)
 endif
 endif
