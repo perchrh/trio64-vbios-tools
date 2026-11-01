@@ -17,7 +17,7 @@ Output
   32 KB (--size 64: 64 KB, the 32 KB twice, for a 64 KB EEPROM whichever half the board maps; a board
   that maps the upper half finds nothing in zeros, #78)
 
-What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
+What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
   code   assembled with nasm at the addresses in vplus/bios.inc:
          vhooks.asm  mode set hook (forget the Windows refusal, real linear base back from CR6B,
                      attribute controller flip-flop reset after the mode set); the booster (64 KB
@@ -33,7 +33,7 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
          card's strapping)
   sign-on "1.03-08-p1", checksum byte 7FFF
 
-Not applied, and why (docs/vplus-backport.md): the VCO fix (the Trio64V+ post divider R has 2 bits, at
+Not applied, and why (docs/765-rom.md): the VCO fix (the Trio64V+ post divider R has 2 bits, at
 most divide by 8, so 12.6 MHz for 10Dh-10Fh cannot come from a VCO of 135 MHz or more), the FIFO fix,
 CR23/CR26, the POST delay and the DDC fixes (Trio64V2 registers or code 1.03-08 does not have), the
 VBE 2.0 functions (out of scope), MCLK and the black level (card decisions).

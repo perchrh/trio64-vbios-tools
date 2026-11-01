@@ -18,9 +18,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
   repository also holds the Trio64V+ backport (`rompatch/vplus/`: `s3vpatch.py` builds 1.03-08-pN
   from the S3 Trio64V+ BIOS 1.03-08 in `reference/64vplus/`, with the same rules: byte assertions, a
-  pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VER765`; docs/vplus-backport.md) and the Trio64 ROM
+  pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VER765`; docs/765-rom.md) and the Trio64 ROM
   (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
-  `reference/trio64/`, the same rules, `VER764`; docs/trio64-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
+  `reference/trio64/`, the same rules, `VER764`; docs/764-rom.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a Dell
   2021FP (EDID over DDC2: Windows 98 identifies it with p21). The multiQ LCD (MQ215 B-1, native
@@ -52,7 +52,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   `rompatch/bios.inc` (the patcher reads it too), patch sites and their original bytes into
   `s3patch.py`.
 - Rejected on this card, do not retry without new evidence: SR15 bit 7 (data errors) and CR87 bit 1
-  (hang), see README "Omitted".
+  (hang), see docs/775-rom.md "Omitted".
 - Fixes that change what a standard function returns, or need more ROM space than is free, stay as
   TSRs (S3ALIAS).
 - The 8x14 font is missing in the BIOS and that is accepted for now. The Trio64 ROM keeps its 8x14
@@ -111,7 +111,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
-- All tools share one version number (1.0 now), `VERSION` in `common/version.inc`; never write the
+- All tools share one version number (1.0.0 now), `VERSION` in `common/version.inc`; never write the
   number into a tool's strings, use `VERSION` (and `VER775` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.
 

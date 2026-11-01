@@ -34,7 +34,7 @@ documents from `spec-a-post.md`; what remains for a second reader is listed unde
 ## What stays on the dirty side
 
 The reference ROMs (`reference/`), the patched ROMs and their code (`rompatch/`), the oracle files,
-riplin's disassembly, `docs/trio64-backport.md`, the README sections on byte-level changes, the
+riplin's disassembly, `docs/764-rom.md`, the README sections on byte-level changes, the
 emulator tests that compare with a reference ROM (`make 775-ref-compare`, `764-ref-compare`, the `T64_BASE`
 notes), and anything from another vendor's BIOS source.
 
@@ -61,7 +61,7 @@ notes), and anything from another vendor's BIOS source.
 ## Leak review
 
 The procedure is in `LEAK-REVIEW.md`; the results are recorded here. Done once on 1 November 2026 by the dirty side (a search of the three specification files for
-Phoenix, the reference ROMs, `rompatch/`, `docs/trio64-backport.md` and riplin, then a reading of the
+Phoenix, the reference ROMs, `rompatch/`, `docs/764-rom.md` and riplin, then a reading of the
 hits). Left for a second reader to judge:
 
 - `spec-c-vbe.md` 4F14h (OEM-1 to OEM-7) and the open questions on the S3 mode numbers rest on

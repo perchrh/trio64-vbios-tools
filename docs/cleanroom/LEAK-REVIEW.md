@@ -8,7 +8,7 @@ advice; the lawyer of `docs/clean-room.md` judges the process as a whole.
 ## Who reviews
 
 - Not the author of the file. A person or a separate agent session that may read the dirty material
-  (the reference ROMs, the oracle files, `docs/trio64-backport.md`) to compare with, but has not written
+  (the reference ROMs, the oracle files, `docs/764-rom.md`) to compare with, but has not written
   the file under review.
 - Never with the Phoenix VGA BIOS source material or riplin's disassembly open: the reviewer compares
   against the reference ROMs' observed behaviour and bytes, not against anyone's source.
