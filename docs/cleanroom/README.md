@@ -1,31 +1,31 @@
 # The clean-room package
 
 What the clean side gets for writing the S3 Trio64 module of SeaVGABIOS (the plan:
-`docs/seavgabios-trio64.md`), what stays on the dirty side, and how the result is checked. The process
-and its reasons are in `docs/clean-room.md`. Prepared 1 November 2026. The first leak review (1 November) removed the references to dirty-side
-documents from `spec-a-post.md`; what remains for a second reader is listed under "Leak review".
+[`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)), what stays on the dirty side, and how the result is checked. The process
+and its reasons are in [`docs/clean-room.md`](../clean-room.md). Prepared 1 November 2026. The first leak review (1 November) removed the references to dirty-side
+documents from [`spec-a-post.md`](spec-a-post.md); what remains for a second reader is listed under "Leak review".
 
 ## Files here
 
 | File | Side | What it is |
 | --- | --- | --- |
-| `BRIEF.md` | dirty | the rules the specification was written under |
-| `LEAK-REVIEW.md` | dirty | how a file is reviewed before it crosses, and how the result is recorded |
-| `spec-a-post.md` | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
-| `spec-b-modeset.md` | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
-| `spec-c-vbe.md` | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
-| `freedos-1.4.md` | goes across | what FreeDOS 1.4 asks of the video BIOS (milestone 2), from its sources |
-| `oracle-a-post.md`, `oracle-b-modeset.md`, `oracle-c-vbe.md` | dirty only | what the reference ROMs do in the emulator and on the card, compared with the specification; the expected values for checking the clean ROM, never handed over |
+| [`BRIEF.md`](BRIEF.md) | dirty | the rules the specification was written under |
+| [`LEAK-REVIEW.md`](LEAK-REVIEW.md) | dirty | how a file is reviewed before it crosses, and how the result is recorded |
+| [`spec-a-post.md`](spec-a-post.md) | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
+| [`spec-b-modeset.md`](spec-b-modeset.md) | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
+| [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
+| [`freedos-1.4.md`](freedos-1.4.md) | goes across | what FreeDOS 1.4 asks of the video BIOS (milestone 2), from its sources |
+| [`oracle-a-post.md`](oracle-a-post.md), [`oracle-b-modeset.md`](oracle-b-modeset.md), [`oracle-c-vbe.md`](oracle-c-vbe.md) | dirty only | what the reference ROMs do in the emulator and on the card, compared with the specification; the expected values for checking the clean ROM, never handed over |
 
 ## What goes to the clean side
 
 - The three specification files above, after the leak review.
-- The public documents: the S3 Trio32/Trio64 data book (`datasheets/`), VBE 2.0 (`standards/vesa/`),
-  the VBE 1.2 text, VGADOC (`standards/thoegersen/`), and the other public sources of
-  `docs/clean-room.md` "Public documents for the clean side".
-- `docs/chip-rules.md`: rules from the data books only, except its section "S3 OEM functions (4F14h)",
-  which is taken from BIOS images and goes only through `spec-c-vbe.md`.
-- `docs/bios-rules.md`, after a leak review of its open questions: its rules rest on public sources, but
+- The public documents: the S3 Trio32/Trio64 data book ([`datasheets/`](../../datasheets/)), VBE 2.0 ([`standards/vesa/`](../../standards/vesa/)),
+  the VBE 1.2 text, VGADOC ([`standards/thoegersen/`](../../standards/thoegersen/)), and the other public sources of
+  [`docs/clean-room.md`](../clean-room.md) "Public documents for the clean side".
+- [`docs/chip-rules.md`](../chip-rules.md): rules from the data books only, except its section "S3 OEM functions (4F14h)",
+  which is taken from BIOS images and goes only through [`spec-c-vbe.md`](spec-c-vbe.md).
+- [`docs/bios-rules.md`](../bios-rules.md), after a leak review of its open questions: its rules rest on public sources, but
   its open-question lists were written while reading another vendor's BIOS source.
 - SeaVGABIOS (branch `claude/slim-vgabios` of perchrh/seabios_fork), under its LGPLv3.
 - The test tools as programs and their result lines (S3TEST, S3COMPAT, VSHOW, VGALOG, S3REGS): what
@@ -33,8 +33,8 @@ documents from `spec-a-post.md`; what remains for a second reader is listed unde
 
 ## What stays on the dirty side
 
-The reference ROMs (`reference/`), the patched ROMs and their code (`rompatch/`), the oracle files,
-riplin's disassembly, `docs/764-rom.md`, the README sections on byte-level changes, the
+The reference ROMs ([`reference/`](../../reference/)), the patched ROMs and their code ([`rompatch/`](../../rompatch/)), the oracle files,
+riplin's disassembly, [`docs/764-rom.md`](../764-rom.md), the README sections on byte-level changes, the
 emulator tests that compare with a reference ROM (`make 775-ref-compare`, `764-ref-compare`, the `T64_BASE`
 notes), and anything from another vendor's BIOS source.
 
@@ -44,7 +44,7 @@ notes), and anything from another vendor's BIOS source.
    are skipped for a ROM that is not ours; S3TEST runs its set for other BIOSes on a Trio64 (chip,
    MCLK, memory, VGA and VESA mode lines, clears, scrolls, timings), S3COMPAT and VSHOW run in full.
 2. **The oracle**: the register state after POST and after each mode set compared with
-   `oracle-a-post.md` and `oracle-b-modeset.md`, the 4F00/4F01 blocks with `oracle-c-vbe.md`. Where the
+   [`oracle-a-post.md`](oracle-a-post.md) and [`oracle-b-modeset.md`](oracle-b-modeset.md), the 4F00/4F01 blocks with [`oracle-c-vbe.md`](oracle-c-vbe.md). Where the
    oracle notes a reference value that the specification deliberately does not follow (non-DMT
    timings, the FIFO M), the specification wins.
 3. **Similarity**: `python3 emu/similarity.py CLEAN.BIN --fonts S-E ... --tables S-E ...` lists
@@ -56,19 +56,19 @@ notes), and anything from another vendor's BIOS source.
 
        python3 emu/similarity.py slim.bin --fonts 409E-509D --fonts 509E-5E9D --fonts 5E9E-669D --tables 38B8-4053
 
-4. **On the card**: `docs/seavgabios-trio64.md` "Clean-room steps", step 4.
+4. **On the card**: [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) "Clean-room steps", step 4.
 
 ## Leak review
 
-The procedure is in `LEAK-REVIEW.md`; the results are recorded here. Done once on 1 November 2026 by the dirty side (a search of the three specification files for
-Phoenix, the reference ROMs, `rompatch/`, `docs/764-rom.md` and riplin, then a reading of the
+The procedure is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md); the results are recorded here. Done once on 1 November 2026 by the dirty side (a search of the three specification files for
+Phoenix, the reference ROMs, [`rompatch/`](../../rompatch/), [`docs/764-rom.md`](../764-rom.md) and riplin, then a reading of the
 hits). Left for a second reader to judge:
 
-- `spec-c-vbe.md` 4F14h (OEM-1 to OEM-7) and the open questions on the S3 mode numbers rest on
+- [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the open questions on the S3 mode numbers rest on
   the observed behaviour of S3's BIOSes, not on a public document; they cross as behaviour only.
-- `spec-b-modeset.md`: the PLL values for 25.175 MHz (SR12 61h, SR13 28h) equal the reference ROM's,
+- [`spec-b-modeset.md`](spec-b-modeset.md): the PLL values for 25.175 MHz (SR12 61h, SR13 28h) equal the reference ROM's,
   because both follow the data book's procedure 9.1; the derivation is in the rule.
-- `docs/chip-rules.md`: four sentences on what Phoenix's BIOSes do (T64-MEM-9, and the CR61/CR62,
+- [`docs/chip-rules.md`](../chip-rules.md): four sentences on what Phoenix's BIOSes do (T64-MEM-9, and the CR61/CR62,
   CR3B and fixed-M notes of "Related chip: the Vision864") carry a leak review note: observed BIOS
   behaviour, to keep as behaviour or cut from the clean side's copy.
 - Part B and part C agree on the mode list: 102h and 104h are part C's (VBE-10), 4F01 reports 32 bits
@@ -78,6 +78,6 @@ hits). Left for a second reader to judge:
 
 The similarity check shows SeaVGABIOS's 8x8, 8x14 and 8x16 fonts byte for byte equal to S3's and
 Phoenix's fonts over runs of up to 3.6 KB: all of them carry the IBM VGA font. SeaVGABIOS calls its
-fonts public domain (from Joseph Gil's FNTCOL16 collection, `docs/clean-room.md`). Whether the IBM glyphs
-are free to distribute is a question for the lawyer of `docs/clean-room.md`; the FreeDOS cpidos fonts
+fonts public domain (from Joseph Gil's FNTCOL16 collection, [`docs/clean-room.md`](../clean-room.md)). Whether the IBM glyphs
+are free to distribute is a question for the lawyer of [`docs/clean-room.md`](../clean-room.md); the FreeDOS cpidos fonts
 (GPL 2 or later) are the alternative that the plan already names.

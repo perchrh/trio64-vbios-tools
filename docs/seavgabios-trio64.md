@@ -2,11 +2,11 @@
 
 How the slimmed SeaVGABIOS (branch `claude/slim-vgabios` of perchrh/seabios_fork, 26320 bytes with
 VBE) becomes a video BIOS for the ExpertColor DSP-3364P (S3 86C764X Trio64, 2 MB fast page memory) under
-the clean-room rules of `docs/clean-room.md`. Written 1 November 2026; nothing here is started yet.
+the clean-room rules of [`docs/clean-room.md`](clean-room.md). Written 1 November 2026; nothing here is started yet.
 
 ## Changes of 1 November 2026
 
-- **Base under review.** The owner wants the ROM in the public domain (`docs/clean-room.md` "Scope,
+- **Base under review.** The owner wants the ROM in the public domain ([`docs/clean-room.md`](clean-room.md) "Scope,
   base and licence"), which rules out building on SeaVGABIOS's LGPLv3 code, and wants the VGA functions
   no slower than our Trio64 ROM p3 (CGA, EGA and MDA may be slower). SeaVGABIOS then becomes a source
   of facts and a reference implementation to test against, and the clean side writes its own code,
@@ -20,7 +20,7 @@ the clean-room rules of `docs/clean-room.md`. Written 1 November 2026; nothing h
   distribution asks of the video BIOS is a requirement: MODE (25, 28, 43 and 50 lines, 40, 80 and
   132 columns, the 132 columns through the VBE text modes), DISPLAY (code page fonts), CTMOUSE, the
   installer, FreeCOM, NANSI, EDIT and the rest. The requirements from a survey of the packages' sources, and
-  how our three ROMs meet them today: `docs/cleanroom/freedos-1.4.md`.
+  how our three ROMs meet them today: [`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md).
 
 ## Milestones
 
@@ -37,7 +37,7 @@ S3COMPAT and VSHOW, games, Windows 3.11 and Windows 9x.
 - The standard VGA functions (INT 10h AH=00h-1Ch) from SeaVGABIOS as they are.
 - VBE 1.2: 4F00-4F08 for the packed modes 100h-117h that the 2 MB card can show at 60 Hz or more, banked
   through a 64 KB window at A0000h. No VBE 2.0 (no linear frame buffer field, no protected-mode
-  interface), no 4F10 (power management), no 4F15 (DDC); `docs/clean-room.md` "Scope".
+  interface), no 4F10 (power management), no 4F15 (DDC); [`docs/clean-room.md`](clean-room.md) "Scope".
 - SeaVGABIOS's fonts (8x8, 8x14, 8x16). Its 9x14 and 9x16 alternate tables are empty placeholders, so
   the 9-dot text modes use the 8-dot glyphs with the VGA's ninth-column rule; FreeDOS cpidos fonts and
   derived 9-dot glyphs can follow.
@@ -47,7 +47,7 @@ S3COMPAT and VSHOW, games, Windows 3.11 and Windows 9x.
 
 The S3 vendor functions are only a part. In order of need:
 
-1. **Chip start-up at POST** (data book sections 5, 9, 13; `docs/chip-rules.md`):
+1. **Chip start-up at POST** (data book sections 5, 9, 13; [`docs/chip-rules.md`](chip-rules.md)):
    - Unlock the S3 registers (SR08 = 06h, CR38 = 48h, CR39 = A5h) and leave the lock as the chip had it
      at the end of every call, as the Phoenix BIOS and Windows' driver expect.
    - Memory size found by test and written to CR36 bits 7-5 (data book 5.1: the BIOS determines it,
@@ -76,17 +76,17 @@ The S3 vendor functions are only a part. In order of need:
    4F05 and the far window function setting CR6A (bank) with CR31/CR35/CR51 as the data book says,
    4F06/4F07 (logical width CR13/CR51, display start CR0C/CR0D/CR31/CR69), 4F08 (DAC width: 8 bits
    only if the data book's RAMDAC section allows it, otherwise 4F08 answers 6).
-4. **The conventions programs and drivers rely on** (`docs/clean-room.md` item 5): CR59/CR5A hold the
+4. **The conventions programs and drivers rely on** ([`docs/clean-room.md`](clean-room.md) item 5): CR59/CR5A hold the
    PCI base; the VGA register state after 4F02 as the S3 Windows 9x driver expects (its sequence is in
    the emulator test `windows`); the sequencer and CRTC indexes as found after every call.
 5. **The S3 mode numbers** (AH=00h with 4Fh and up, for example 49h/4Bh that Pinball Illusions uses,
-   README) and **4F14h** (the S3 OEM functions, `docs/chip-rules.md` "S3 OEM functions"): a second
+   README) and **4F14h** (the S3 OEM functions, [`docs/chip-rules.md`](chip-rules.md) "S3 OEM functions"): a second
    step, from the behaviour our tools log, not from BIOS code.
 6. **The PCI ROM header and sign-on**: vendor 5333h, device 8811h, class 030000h, one 32 KB image;
    SeaVGABIOS's slim config builds QEMU's IDs and no sign-on string.
 
 Optional later: the booster (64 KB linear window for banked modes), VBE 2.0, 4F15 DDC (the board's GOP
-wiring is still open, `docs/764-rom.md` "Pending"), 4F10.
+wiring is still open, [`docs/764-rom.md`](764-rom.md) "Pending"), 4F10.
 
 ## Size budget
 
@@ -105,12 +105,12 @@ The first step fits without more slimming; the S3 mode numbers and 4F14h (step 5
 ## Clean-room steps
 
 1. The dirty side (this repository) writes the specification for items 1-6 as behaviour, from the
-   data book, `docs/chip-rules.md`, `docs/bios-rules.md` and black-box logs of the reference ROM in the
-   emulator; the leak review reads it (`docs/clean-room.md` "The process").
+   data book, [`docs/chip-rules.md`](chip-rules.md), [`docs/bios-rules.md`](bios-rules.md) and black-box logs of the reference ROM in the
+   emulator; the leak review reads it ([`docs/clean-room.md`](clean-room.md) "The process").
 2. The clean side writes `vgasrc/s3trio.c` and the Kconfig entry `VGA_S3TRIO` in the SeaBIOS fork from
    the specification, the data book and SeaVGABIOS (LGPLv3, used under its licence).
 3. Tests before the card:
-   - The emulator's Trio64 model (`emu/`, `--chip 764`) runs POST and every mode; S3TEST, S3COMPAT and
+   - The emulator's Trio64 model ([`emu/`](../emu/), `--chip 764`) runs POST and every mode; S3TEST, S3COMPAT and
      VSHOW run on it (`make emu-test ROM=... CHIP=764`; tests tagged `patch` are skipped for a ROM
      that is not ours).
    - `scripts/vgaemu_check.py` (seabios_fork) compares the standard functions with the plain build.

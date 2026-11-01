@@ -4,8 +4,8 @@ This file describes what a VGA-compatible video BIOS must do, function by functi
 caller can observe: registers in and out, flags, the BIOS data area, video memory, the I/O port state
 and the interrupt vectors. It covers the IBM-compatible part of our ROMs, INT 10h AH=00h-1Ch, the BIOS
 data area and the tables a VGA BIOS publishes; no VBE and no S3 registers (those are in
-`docs/chip-rules.md`). Like chip-rules.md it is meant as part of a clean-room specification
-(`docs/clean-room.md`): someone who has never seen a BIOS image or BIOS source should be able to
+[`docs/chip-rules.md`](chip-rules.md)). Like [chip-rules.md](chip-rules.md) it is meant as part of a clean-room specification
+([`docs/clean-room.md`](clean-room.md)): someone who has never seen a BIOS image or BIOS source should be able to
 write a compatible BIOS from it.
 
 ## Conventions
@@ -13,8 +13,8 @@ write a compatible BIOS from it.
 - **Sources.** Every rule rests on a public source: Ferraro (R. Ferraro, Programmer's Guide to the
   EGA, VGA and Super VGA Cards, 3rd edition, 1994; cited by section), RBIL (Ralf Brown's Interrupt
   List, release 61, 2000; cited by entry and table number), VGADOC (Finn Thoegersen's VGADOC 4b,
-  `standards/thoegersen/`), or IBM (the IBM VGA BIOS behaviour as VGATEST, PC Tech Journal, November
-  1988, gives it, encoded in `s3compat/vgaref.inc` and the S3COMPAT checks). Nothing here comes from a
+  [`standards/thoegersen/`](../standards/thoegersen/)), or IBM (the IBM VGA BIOS behaviour as VGATEST, PC Tech Journal, November
+  1988, gives it, encoded in [`s3compat/vgaref.inc`](../s3compat/vgaref.inc) and the S3COMPAT checks). Nothing here comes from a
   BIOS image or BIOS source. Behaviour no public source settles is listed under "Open questions" in
   each section, to be answered by running the reference ROMs in the emulator, not written as a rule.
 - **IDs.** `B` + AH in hex (`B00-1`); with an AL subfunction `B` + AX (`B1012-1`); for AH=12h, whose
@@ -25,7 +25,7 @@ write a compatible BIOS from it.
 - **Strength.** *must*: IBM behaviour that programs rely on; a violation is a FAIL. *should*:
   documented, but BIOSes differ; a WARN at most. *note*: a known difference between BIOSes or
   documents; never a FAIL.
-- **Checked by.** The S3COMPAT line, S3TEST line or emulator test (`emu/tests.py`) that checks the
+- **Checked by.** The S3COMPAT line, S3TEST line or emulator test ([`emu/tests.py`](../emu/tests.py)) that checks the
   rule, or "not checked". `make 775-ref-compare` compares every call in the CGA, EGA and MDA modes with
   the unpatched reference BIOS: it finds regressions, it does not prove IBM behaviour.
 - **General rule.** A register not named in a rule's outputs is returned as the caller gave it.

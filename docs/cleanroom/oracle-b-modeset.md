@@ -1,7 +1,7 @@
 # Oracle for part B, item 2: the S3 mode set (dirty side only)
 
 **This file stays on the dirty side.** It holds register values observed from the reference ROM and
-from our patched build in the emulator, next to the values derived in `spec-b-modeset.md`. It is used
+from our patched build in the emulator, next to the values derived in [`spec-b-modeset.md`](spec-b-modeset.md). It is used
 to check the clean ROM and to explain where the derived rules and the reference ROM part; it must not
 be handed to the clean side, and no value in it is a source for the specification.
 
@@ -12,7 +12,7 @@ Written 1 November 2026.
 - ROMs: `reference/trio64/1_5_07.bin` (Phoenix 1.5-07, CP764 build, MCLK 54.89 MHz; "1.5-07" below)
   and our 1.5-07-p3, built with `make 764x-rom OUT=/tmp/claude-0/oracle-p3.BIN NASM=...` (SHA-256 of the
   32 KB f6eb2bf0..., "identical to the tested build"; "p3" below).
-- Emulator: `emu/vgaemu.py`, `Machine.chip = 'trio64'`, `Machine.vram` = 1, 2 and 4. For each mode a
+- Emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py), `Machine.chip = 'trio64'`, `Machine.vram` = 1, 2 and 4. For each mode a
   fresh machine: POST, 4F01 (CX = mode), then 4F02 (BX = mode) with the write log on; the registers
   after the call (`m.r`), the DCLK from SR12/SR13 and the rate from `Machine.frame()` (the model's
   rule: 15/16 bpp and clock-doubled modes count twice, SR15 bit 4 halves). For the VGA modes: POST then
@@ -39,7 +39,7 @@ Written 1 November 2026.
   value: 11 there, where the formula gives 16), and p3 computes M with 112 bytes at 1 MB too. p3 keeps Phoenix's non-DMT timings for 1024x768 (line 1352), 1280x1024 (1760 x 1056 at 112.16
   MHz) and 640x480 in 15/16 bpp (796 x 526).
 - **1.5-07 at its defaults** runs 800x600 at 56 Hz (36.15 MHz, line 1024), and 1024x768 and 1280x1024
-  interlaced (CR42 bit 5 = 1); p3 removed those (docs/764-rom.md).
+  interlaced (CR42 bit 5 = 1); p3 removed those ([docs/764-rom.md](../764-rom.md)).
 
 ## Differences, with the reason
 
@@ -48,19 +48,19 @@ Written 1 November 2026.
 | 100h sync polarity | MISC 6Fh: HSYNC negative, VSYNC positive (the VGA's 400-line code) | EFh (both negative, the 480-line code) | EFh | Phoenix keeps one MISC for 640-wide modes; the spec follows IBM's 400-line polarity (MODE-106). A monitor that sizes by polarity may show 100h with the wrong height on the ROMs |
 | 1280x1024 sync polarity | 2Fh (DMT: positive) | EFh | EFh | Phoenix's 1280x1024 timing is not DMT |
 | 800x600 PLL | M 54, N 3, R 2: 40.091 MHz (+0.23 %) | 36.15 MHz (56 Hz entry) | M 43, N 2, R 2: 40.27 MHz (+0.67 %) | p3's entry is outside the data book's 0.5 % (T32/64 9.1 step 3); the spec takes the first N within 0.5 % |
-| 1024x768 timing | DMT: 65.148 MHz, 1344 x 806, 60.14 Hz | interlaced, 44.74 MHz | 65.327 MHz (+0.50 %), line 1352, 59.87 Hz | Phoenix's non-DMT entry (docs/764-rom.md "Left as in 1.5-07"); the PLL is 0.503 % off, just outside 0.5 % |
+| 1024x768 timing | DMT: 65.148 MHz, 1344 x 806, 60.14 Hz | interlaced, 44.74 MHz | 65.327 MHz (+0.50 %), line 1352, 59.87 Hz | Phoenix's non-DMT entry ([docs/764-rom.md](../764-rom.md) "Left as in 1.5-07"); the PLL is 0.503 % off, just outside 0.5 % |
 | 1280x1024 timing | DMT: 108.409 MHz, 1688 x 1066, 60.25 Hz | interlaced, 75.17 MHz | 112.159 MHz, 1760 x 1056, 60.35 Hz | Phoenix's non-DMT entry |
 | 640x480 in 15/16 bpp | HT 200 CC (800 pixels), VT 525 | 199 CC (796 pixels), VT 526 | the same as 1.5-07 | Phoenix's 15/16 bpp table is one character clock short and one line long; 59.84 Hz |
 | Horizontal sync start | DMT position (CR04 = HSS) | one character clock later in 640x480 (53h for 52h) and 800x600x16 (D3h for D2h); 640x400 two later (54h, IBM's value) | as 1.5-07 | pipeline offset or Phoenix's choice (MQ-3) |
 | Horizontal blank | HA to HT - 1 | IBM-style values in the 640 modes (100h: IBM's 13h values, CR03 82h, CR05 80h); in 115h the end is counter 128 plus CR5D bit 3 (+64 DCLKs = 8 CC), past HT = 132 | as 1.5-07, and the same in p3's 103h (60 Hz entry) | read literally, the 103h/115h extension reaches 4 CC into the next line; no picture fault is reported on the card |
 | Vertical blank | Vactive - 1 to Vtotal - 1 | IBM-style border values (E7h/04h in 640x480) | as 1.5-07 | IBM's 640x480 values; DMT has no border |
-| CR3B | CR00 - 5 | CR00 - 7 | CR00 - 7 | Phoenix's choice (docs/chip-rules.md "Related chip: the Vision864"); both lie in the blank |
+| CR3B | CR00 - 5 | CR00 - 7 | CR00 - 7 | Phoenix's choice ([docs/chip-rules.md](../chip-rules.md) "Related chip: the Vision864"); both lie in the blank |
 | Line compare bit 10 (CR5E bit 6) | 1 (7FFh) | 0 (3FFh) | 0, except 107h (1) | 3FFh is above every line of the 1.5-07 modes but the last of 1280x1024; p3 sets bit 6 in 107h |
 | CR50 bit 1 (reserved) | 0 | 1 in 113h, 114h, 115h | 1 also in 103h | Phoenix's table byte |
 | GR05 / AR10 | 40h / 41h (IBM 13h) | 00h / 01h in the 800, 1024 and 1280 modes | as 1.5-07 | with CR3A bit 4 = 1 both work (T32/64 9.3) |
 | CR60 in 112h | FFh | 1Ch (N = 28) | 1Ch | Phoenix's table |
 | CR67 bit 0 in 107h | 0 | 1 (11h) in its interlaced entry | 0 (10h) | MQ-13 |
-| CR58 | bit 4 = 0 (banked), size bits as POST | 03h (4 MB window size with 2 MB, bit 4 = 0) | 10h (the booster: linear addressing on with a 64 KB window at A0000h) | the booster is optional later (`docs/seavgabios-trio64.md`); Phoenix's size 11b exceeds 2 MB (VGADOC: must not) |
+| CR58 | bit 4 = 0 (banked), size bits as POST | 03h (4 MB window size with 2 MB, bit 4 = 0) | 10h (the booster: linear addressing on with a 64 KB window at A0000h) | the booster is optional later ([`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)); Phoenix's size 11b exceeds 2 MB (VGADOC: must not) |
 | SR15 after POST | bit 0 = 0 (MODE-121) | 03h: bit 0 (MCLK load) left 1 after POST, 02h after a VESA mode set | the same | T64-PLL-1 says bit 0 must be cleared after loading |
 | DCLK load path | immediate (SR15 bit 5 1 then 0) | delayed: SR15 written 00h then 02h (bit 1) after SR12/SR13 | the same | both allowed (T32/64 9.2); the spec prefers the immediate one |
 | FIFO M | MODE-136 | Phoenix's table (31 in most 8 bpp modes, 19 in 113h/114h, 26 in 107h, ...) | MODE-136 at 2 and 4 MB; at 1 MB Phoenix's 1 MB table lowered by the 112-byte formula | p3 does not know the 32-bit bus; Phoenix has a separate 1 MB table |
@@ -101,7 +101,7 @@ and 112h, in both ROMs:
 
 ## Per mode: derived values against the two ROMs (2 MB, MCLK 54.89 MHz)
 
-"Derived" = the formulas of `spec-b-modeset.md` (DMT or IBM timing, data book PLL procedure, MODE-136 M).
+"Derived" = the formulas of [`spec-b-modeset.md`](spec-b-modeset.md) (DMT or IBM timing, data book PLL procedure, MODE-136 M).
 SR18 and CR58 show only the bit the spec fixes (bit 7, bit 4); the other bits are POST's. Rates are
 the emulator's (`Machine.frame()`); an interlaced mode shows its field rate.
 

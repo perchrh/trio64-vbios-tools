@@ -1,14 +1,14 @@
 # Leak review: instructions
 
-How to review a file before it crosses from the dirty side to the clean side (`docs/clean-room.md`
+How to review a file before it crosses from the dirty side to the clean side ([`docs/clean-room.md`](../clean-room.md)
 "The process", step 2). The aim: what crosses describes behaviour that a public source or a black-box
 observation supports, and nothing in it expresses a reference BIOS's code or data. This is not legal
-advice; the lawyer of `docs/clean-room.md` judges the process as a whole.
+advice; the lawyer of [`docs/clean-room.md`](../clean-room.md) judges the process as a whole.
 
 ## Who reviews
 
 - Not the author of the file. A person or a separate agent session that may read the dirty material
-  (the reference ROMs, the oracle files, `docs/764-rom.md`) to compare with, but has not written
+  (the reference ROMs, the oracle files, [`docs/764-rom.md`](../764-rom.md)) to compare with, but has not written
   the file under review.
 - Never with the Phoenix VGA BIOS source material or riplin's disassembly open: the reviewer compares
   against the reference ROMs' observed behaviour and bytes, not against anyone's source.
@@ -17,13 +17,13 @@ advice; the lawyer of `docs/clean-room.md` judges the process as a whole.
 
 Everything that goes to the clean side, each time it changes:
 
-- `spec-a-post.md`, `spec-b-modeset.md`, `spec-c-vbe.md`;
-- `docs/chip-rules.md` (the clean side's copy) and `docs/bios-rules.md` with its open questions;
-- every answer given through the wall (`docs/clean-room.md` step 4) before it is added to a
+- [`spec-a-post.md`](spec-a-post.md), [`spec-b-modeset.md`](spec-b-modeset.md), [`spec-c-vbe.md`](spec-c-vbe.md);
+- [`docs/chip-rules.md`](../chip-rules.md) (the clean side's copy) and [`docs/bios-rules.md`](../bios-rules.md) with its open questions;
+- every answer given through the wall ([`docs/clean-room.md`](../clean-room.md) step 4) before it is added to a
   specification;
-- test expectations moved to the clean repository (`docs/clean-room.md` "Next steps").
+- test expectations moved to the clean repository ([`docs/clean-room.md`](../clean-room.md) "Next steps").
 
-The oracle files, `BRIEF.md` and this file never cross and are not reviewed.
+The oracle files, [`BRIEF.md`](BRIEF.md) and this file never cross and are not reviewed.
 
 ## The checks, in order
 
@@ -36,7 +36,7 @@ The oracle files, `BRIEF.md` and this file never cross and are not reviewed.
    Also read every sentence that carries a `[Leak review: ...]` note.
 
 2. **Sources.** Every rule names a source in its Source column: the data book (T32/64 with section or
-   table, or a `docs/chip-rules.md` rule ID that rests on one), VESA, the IBM references, VGADOC, or
+   table, or a [`docs/chip-rules.md`](../chip-rules.md) rule ID that rests on one), VESA, the IBM references, VGADOC, or
    a black-box observation stated as such. A rule without one is returned to the author.
 
 3. **Values.** For every register value, table, timing and constant, ask where it comes from:
@@ -75,7 +75,7 @@ The oracle files, `BRIEF.md` and this file never cross and are not reviewed.
 
 ## Recording the result
 
-Per file and review, add a section to the "Leak review" part of `docs/cleanroom/README.md`:
+Per file and review, add a section to the "Leak review" part of [`docs/cleanroom/README.md`](README.md):
 
 - the date, the file and its commit, the reviewer;
 - each finding with its decision: **keep** (and why), **rewrite** (the new text), **cut** (from the
@@ -87,9 +87,9 @@ reason recorded. A file crosses only when every finding is decided and nothing i
 
 ## Open items (1 November 2026)
 
-- `spec-c-vbe.md` 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
+- [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
   BIOSes, kept for compatibility (step 5), still to be confirmed by a second reader.
-- `spec-b-modeset.md`: the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3).
-- `docs/chip-rules.md`: the four sentences marked `[Leak review: ...]` (step 5).
+- [`spec-b-modeset.md`](spec-b-modeset.md): the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3).
+- [`docs/chip-rules.md`](../chip-rules.md): the four sentences marked `[Leak review: ...]` (step 5).
 - The three specifications: the first review (1 November 2026) was the dirty side's own search; the
   full review by a second reader, steps 1-6, is still to be done.

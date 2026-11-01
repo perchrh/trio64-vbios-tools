@@ -1,8 +1,8 @@
 # Oracle for part A: POST state observed (dirty side only)
 
 This file stays on the dirty side. It records what the reference ROM and our patched build do at POST
-and in the conventions of `spec-a-post.md`, observed in the emulator, and what the card logs in
-README.md and docs/764-rom.md show, and compares each with the rules. It is used to check the
+and in the conventions of [`spec-a-post.md`](spec-a-post.md), observed in the emulator, and what the card logs in
+[README.md](../../README.md) and [docs/764-rom.md](../764-rom.md) show, and compares each with the rules. It is used to check the
 clean ROM; none of its values may be copied into the specification. Observed 1 November 2026.
 
 ## How it was observed
@@ -10,15 +10,15 @@ clean ROM; none of its values may be copied into the specification. Observed 1 N
 - Reference: `reference/trio64/1_5_07.bin` (Phoenix S3 Trio64 1.5-07, CP764 build, 32 KB; doubled to
   64 KB for the emulator). Patched: 1.5-07-p3 built with `s3tpatch.py --size 64 --mclk 69.8` (NASM
   2.16 here; that build reports itself as the tested code with only the MCLK changed).
-- Emulator: `emu/vgaemu.py`, `Machine.chip = 'trio64'`, `Machine.vram` 1, 2 and 4; `m.wlog` for the
+- Emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py), `Machine.chip = 'trio64'`, `Machine.vram` 1, 2 and 4; `m.wlog` for the
   SR/CR writes in order, an extra `UC_HOOK_INSN` OUT hook for the other ports, a wrapper around
   `Machine._pcibios` for the PCI BIOS calls. The scripts were throw-away (scratchpad); each step below
   says what was read. Model limits as in the spec ("Emulator limits"): registers start at 00h, CR2D-CR30
   and CR36 answer fixed values, BAR0 is CR59/CR5A, no PLL, no missing memory, 9AE8h reads busy.
 - Tests: `emu/tests.py --chip 764 --tests post,windows,engine_init` and S3TEST run on the model
   (`Machine.run_com`) with the reference ROM.
-- Card: the S3REGS values quoted in docs/764-rom.md ("On the card", "The DSP-3364P's memory")
-  and README.md ("Windows 9x driver test"; that record is from the Trio64V2 card).
+- Card: the S3REGS values quoted in [docs/764-rom.md](../764-rom.md) ("On the card", "The DSP-3364P's memory")
+  and [README.md](../../README.md) ("Windows 9x driver test"; that record is from the Trio64V2 card).
 
 ## POST of 1.5-07 in the emulator (2 MB)
 
@@ -117,7 +117,7 @@ Each call entered once with the chip locked (SR08 00h, CR38 00h, CR39 00h) and o
 Against CONV-8 and CONV-9: the reference differs. Its mode sets relock SR08 but leave CR38/CR39
 unlocked (48h/A5h) whatever was found; every VBE call leaves CR38/CR39 unlocked; CR40 bit 0 stays 1
 after an S3 mode. The CRTC index is not kept by any call that touches S3 registers; the sequencer index
-is changed by mode sets and, in 1.5-07, by 4F05 (p3 fixes 4F05 only). AGENTS.md says "Phoenix relocks
+is changed by mode sets and, in 1.5-07, by 4F05 (p3 fixes 4F05 only). [AGENTS.md](../../AGENTS.md) says "Phoenix relocks
 the S3 registers after its calls": in the emulator only SR08 is relocked (by mode sets), CR38/CR39 are
 not. A program written for this BIOS may therefore find the CRTC S3 registers unlocked after a VESA
 call (open question 12 of the spec).
@@ -126,7 +126,7 @@ call (open question 12 of the spec).
 
 - `emu/tests.py --chip 764 --tests windows` with the reference ROM: FAIL, one check: "4F06 set:
   upper halves changed: eax A55A4F06->0000004F, ecx 855A0400->00000400, edx 955A0000->00000800" (CONV-4;
-  docs/764-rom.md "Left as in 1.5-07" lists it). Every other check passes: CR59/CR5A stay
+  [docs/764-rom.md](../764-rom.md) "Left as in 1.5-07" lists it). Every other check passes: CR59/CR5A stay
   E000h after the driver's banked 4F02 calls (CONV-1), every call returns with IF = 0 and no tick
   (CONV-5), mode 03h after the driver is IBM's (CONV-7).
 - `engine_init` is skipped on `--chip 764` (the rule is tagged for the Trio64V+ family): the
@@ -154,7 +154,7 @@ its own.
 
 | Register | Card (DSP-3364P) | Source |
 | --- | --- | --- |
-| CR36 | 8Eh: 2 MB (BIOS-written), fast page, PCI | docs/764-rom.md "On the card" |
+| CR36 | 8Eh: 2 MB (BIOS-written), fast page, PCI | [docs/764-rom.md](../764-rom.md) "On the card" |
 | CR68 | 8Dh: 64-bit bus, RAS low 3.5, precharge 2.5, stretch 5 ns | same |
 | BAR0, CR6B | E0000000h, E0h | same |
 | SR10/SR11 | 22h 25h with the card's own BIOS (69.8 MHz); 41h 2Ch with p1 | same; README "MCLK build option" |

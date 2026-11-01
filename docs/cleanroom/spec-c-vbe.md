@@ -4,13 +4,13 @@ This part specifies the VESA BIOS Extension of the Trio64 (S3 86C764X) video BIO
 functions 4F00h-4F08h as VBE 1.2 (VS911022) defines them, the mode list and the mode information of
 each mode, the window (bank) function, the logical scan line and display start functions, the DAC
 width, and, as a second step, the S3 mode numbers reachable through INT 10h AH=00h and the S3 OEM
-function 4F14h. It covers items 3 and 5 of `docs/seavgabios-trio64.md`. The register timings of each
+function 4F14h. It covers items 3 and 5 of [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md). The register timings of each
 mode (CRTC, PLL, FIFO) belong to item 2 and are referred to, not repeated; the standard INT 10h
-functions are in `docs/bios-rules.md`; the data book rules in `docs/chip-rules.md`.
+functions are in [`docs/bios-rules.md`](../bios-rules.md); the data book rules in [`docs/chip-rules.md`](../chip-rules.md).
 
 Written 1 November 2026 from the sources below. Everything here is behaviour: inputs, outputs, register
 values or formulas, error cases. The observed results of the reference ROM are kept apart, in
-`docs/cleanroom/oracle-c-vbe.md` (dirty side only).
+[`docs/cleanroom/oracle-c-vbe.md`](oracle-c-vbe.md) (dirty side only).
 
 ## Conventions
 
@@ -19,15 +19,15 @@ values or formulas, error cases. The observed results of the reference ROM are k
   | Short name | Document |
   | --- | --- |
   | VBE12 | VESA Super VGA BIOS Extension, Standard VS911022, 22 October 1991, VBE version 1.2 (the retyped text, README "VESA standards"); cited by its section numbers (4 mode numbers, 5 windows, 6.1 status, 6.2-6.10 functions 00h-08h) |
-  | VBE20 | VESA BIOS Extension Core Functions 2.0, Rev. 1.1 (`standards/vesa/vbe20.pdf`), for the shared definitions (4.1 status, 4.3 ModeInfoBlock, 4.7-4.11); never a source of a 2.0-only feature |
-  | T32/64 | S3 Trio32/Trio64 data book, March 1995 (`datasheets/`), by section, table, figure or register |
-  | chip-rules | `docs/chip-rules.md`, by rule ID (CLK-1, T64-MEM-6, ...) |
-  | bios-rules | `docs/bios-rules.md`, by rule ID (B00-4, BDA-14, ...) |
-  | VGADOC | Finn Thoegersen's VGADOC 4b, `standards/thoegersen/` (VESA.TXT, S3.TXT) |
+  | VBE20 | VESA BIOS Extension Core Functions 2.0, Rev. 1.1 ([`standards/vesa/vbe20.pdf`](../../standards/vesa/vbe20.pdf)), for the shared definitions (4.1 status, 4.3 ModeInfoBlock, 4.7-4.11); never a source of a 2.0-only feature |
+  | T32/64 | S3 Trio32/Trio64 data book, March 1995 ([`datasheets/`](../../datasheets/)), by section, table, figure or register |
+  | chip-rules | [`docs/chip-rules.md`](../chip-rules.md), by rule ID (CLK-1, T64-MEM-6, ...) |
+  | bios-rules | [`docs/bios-rules.md`](../bios-rules.md), by rule ID (B00-4, BDA-14, ...) |
+  | VGADOC | Finn Thoegersen's VGADOC 4b, [`standards/thoegersen/`](../../standards/thoegersen/) (VESA.TXT, S3.TXT) |
   | DMT | VESA DMT pixel clocks as published industry figures: 640x480 at 60 Hz 25.175 MHz, 800x600 at 60 Hz 40.000 MHz, 1024x768 at 60 Hz 65.000 MHz, 1280x1024 at 60 Hz 108.000 MHz; 640x400 at 70 Hz is the IBM VGA 400-line timing, 25.175 MHz (bios-rules MODE-11) |
   | Haakenson | B. Haakenson, "Examining the VESA VBE 2.0 Specification", DDJ July 1995 (README "VESA standards") |
   | README | this repository's README, for the behaviour of programs and drivers logged on the cards (VGALOG, S3REGS) |
-  | AGENTS | the project's hard rules for the ROM (`AGENTS.md`) |
+  | AGENTS | the project's hard rules for the ROM ([`AGENTS.md`](../../AGENTS.md)) |
 
 - **IDs.** `VBE-n` the VBE functions and the mode list, `S3M-n` the S3 mode numbers through AH=00h,
   `OEM-n` the S3 OEM function 4F14h. An ID is never reused for another rule.
@@ -36,7 +36,7 @@ values or formulas, error cases. The observed results of the reference ROM are k
   specification that a public source supports; a WARN at most. *note*: information, never a FAIL.
   *observed*: taken from black-box behaviour of BIOS images or of programs, not from a standard
   (every S3M and OEM rule that is not about the VBE principle); WARN or INFO at most.
-- **Checked by.** An S3COMPAT line, S3TEST line or emulator test (`emu/tests.py`), or "not checked"
+- **Checked by.** An S3COMPAT line, S3TEST line or emulator test ([`emu/tests.py`](../../emu/tests.py)), or "not checked"
   with the test that would check it.
 - **Terms.**
   - *Listed mode*: a mode number of the 4F00h mode list (VBE-10). *Available mode*: a listed mode
@@ -59,9 +59,9 @@ values or formulas, error cases. The observed results of the reference ROM are k
 | --- | --- | --- | --- | --- |
 | VBE-1 | Every VBE call is INT 10h with AH = 4Fh and the function in AL. The status is returned in AX: AL = 4Fh means the function is supported, AH = 00h success, AH = 01h failure. A VBE 1.2 BIOS uses only these two AH values: every failure of this BIOS returns AX = 014Fh (the VBE 2.0 codes 02h and 03h are not returned) | VBE12 6.1; VBE20 4.1 (02h, 03h added by 2.0) | must (004Fh/014Fh), should (no 024Fh/034Fh) | S3COMPAT 'VBE invalid subfunctions refused' (each refusal must not be 004Fh); not checked for 024Fh/034Fh: a test calling each failure case and comparing AX with 014Fh would |
 | VBE-2 | A failed call (AX = 014Fh) changes nothing: no register other than AX, no video memory, no BIOS data, no VGA or S3 register | VBE12 6.4 ("If the mode cannot be set, the BIOS should leave the video environment unchanged"); VBE20 4.10 note ("fail the Function call and make no changes") | must | emu t_errors (refused 4F02h modes: video state unchanged; 4F14h refusals); S3COMPAT '4F01/4F02 reject invalid mode 17Fh' (fail 4: current mode unchanged) |
-| VBE-3 | AL values the BIOS does not implement (09h-FFh in the first version, including 4F10h, 4F14h, 4F15h, which are out of scope) return with AL other than 4Fh (AX = 0100h is acceptable) and change nothing; in particular the current mode (4F03h) stays | VBE12 6.1 ("AL != 4Fh: function is not supported"), 6 ("Subfunction numbers ... reserved for future use"); `docs/clean-room.md` "Scope" | must | S3COMPAT 'VBE undefined functions 4F0B-4F1F' (fail 1 a 004Fh, 2 the mode changed); S3COMPAT '4F14 S3 OEM functions' (INFO when AL is not 4Fh) |
+| VBE-3 | AL values the BIOS does not implement (09h-FFh in the first version, including 4F10h, 4F14h, 4F15h, which are out of scope) return with AL other than 4Fh (AX = 0100h is acceptable) and change nothing; in particular the current mode (4F03h) stays | VBE12 6.1 ("AL != 4Fh: function is not supported"), 6 ("Subfunction numbers ... reserved for future use"); [`docs/clean-room.md`](../clean-room.md) "Scope" | must | S3COMPAT 'VBE undefined functions 4F0B-4F1F' (fail 1 a 004Fh, 2 the mode changed); S3COMPAT '4F14 S3 OEM functions' (INFO when AL is not 4Fh) |
 | VBE-4 | The VBE functions do not enable interrupts when the caller called with IF = 0, and return with the caller's IF | README "Windows 9x driver"; emu t_windows | must | emu t_windows (every call returns with IF = 0 and no timer tick) |
-| VBE-5 | Index registers: after every VBE call (and the far window function) the sequencer index (3C4h) and the CRTC index (3D4h) hold what the caller left in them; the S3 register locks (SR08, CR38, CR39) are left as found, and CR40 bit 0 too, except where a mode set (4F02h) or a 4F04h restore sets it as part of the mode | AGENTS ("A BIOS call of our ROMs leaves the index registers it touches as it found them"); `docs/seavgabios-trio64.md` item 1 (lock as found) | must (3C4h), should (3D4h) | S3TEST 'VBE 4F05 regs, SR index, CR6A, planar, LFB' (fail bit 2, 3C4h after 4F05); emu 764_patches (SR index after 4F05 BH = 0 and 1); 3D4h not checked: a test like 764_patches reading the CRTC index after each 4F0xh would |
+| VBE-5 | Index registers: after every VBE call (and the far window function) the sequencer index (3C4h) and the CRTC index (3D4h) hold what the caller left in them; the S3 register locks (SR08, CR38, CR39) are left as found, and CR40 bit 0 too, except where a mode set (4F02h) or a 4F04h restore sets it as part of the mode | AGENTS ("A BIOS call of our ROMs leaves the index registers it touches as it found them"); [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) item 1 (lock as found) | must (3C4h), should (3D4h) | S3TEST 'VBE 4F05 regs, SR index, CR6A, planar, LFB' (fail bit 2, 3C4h after 4F05); emu 764_patches (SR index after 4F05 BH = 0 and 1); 3D4h not checked: a test like 764_patches reading the CRTC index after each 4F0xh would |
 | VBE-6 | A function that is valid only in a VESA mode (4F05h, 4F06h, 4F07h) and is called in a standard mode 00h-13h returns 014Fh and changes nothing (see open question 7) | VBE12 6.7 (window parameters come from 4F01h, which covers listed modes only); decision of this specification | should | not checked: a test calling 4F05h-4F07h in modes 03h and 13h and comparing the registers |
 
 ## The mode list and the modes (4F00h list, 4F01h, 4F02h)
@@ -94,9 +94,9 @@ Left out, with the reason: 106h (1280x1024x4, 108 MHz above the 80 MHz of the LU
 exists for 8 bpp only, CLK-1, CLK-3); 118h (1024x768x32, 65 MHz above the 50 MHz of colour mode 13);
 119h and 11Ah (1280x1024 at 15/16 bpp, 108 MHz above 80 MHz); 11Bh (both reasons); 108h-10Ch (text,
 outside the first version's scope of packed modes, open question 1); 10Dh-10Fh (320x200 direct colour,
-open question 2; `spec-b-modeset.md` MODE-102 also leaves them out). The planar modes 102h and 104h are
-in the list here; their register programming is not in `spec-b-modeset.md` (its MQ-9). A lower refresh than 60 Hz or an interlaced timing is not used to bring a mode in
-(`docs/seavgabios-trio64.md` "Scope": 60 Hz or more).
+open question 2; [`spec-b-modeset.md`](spec-b-modeset.md) MODE-102 also leaves them out). The planar modes 102h and 104h are
+in the list here; their register programming is not in [`spec-b-modeset.md`](spec-b-modeset.md) (its MQ-9). A lower refresh than 60 Hz or an interlaced timing is not used to bring a mode in
+([`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) "Scope": 60 Hz or more).
 
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
@@ -114,8 +114,8 @@ pointer), 12h TotalMemory (word), 14h Reserved (236 bytes).
 | --- | --- | --- | --- | --- |
 | VBE-20 | Output AX = 004Fh; every register other than AX is returned as given (ES and DI included) | VBE12 6.2 ("All other registers are preserved") | must | S3COMPAT '4F00 VESA sig' (fail 1 status) |
 | VBE-21 | Exactly 256 bytes are written at ES:DI, whatever the caller put in the signature field: a 'VBE2' signature does not make a 1.2 BIOS write 512 bytes. Bytes 14h-FFh (Reserved) are written as 00h | VBE12 6.2 ("The information block size is 256 bytes"); VBE12 6.3 notes (unused fields zero, from 1.1); Haakenson (the 512-byte block and 'VBE2' are 2.0) | must (256), should (zeros) | S3COMPAT '4F00 VESA sig' (warn 1 wrote past 256 bytes); S3COMPAT '4F00 VBE2 sig, 512 byte block' (fail 1 past 512) |
-| VBE-22 | VESASignature = 'VESA' (56h 45h 53h 41h); VESAVersion = 0102h | VBE12 6.2; `docs/seavgabios-trio64.md` item 3 | must | S3COMPAT '4F00 VESA sig' (fail 1: signature, version below 1.2) |
-| VBE-23 | OEMStringPtr: a far pointer into the ROM (segment C000h) to an ASCII string ending in 00h, of this BIOS's own wording (open question 3); it is never a string of another BIOS | VBE12 6.2 ("There are no restrictions on the format of the string"); `docs/clean-room.md` item 2 ("our own OEM strings") | must (pointer, NUL), should (wording) | S3COMPAT 'OEM string:' (INFO, prints it) |
+| VBE-22 | VESASignature = 'VESA' (56h 45h 53h 41h); VESAVersion = 0102h | VBE12 6.2; [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) item 3 | must | S3COMPAT '4F00 VESA sig' (fail 1: signature, version below 1.2) |
+| VBE-23 | OEMStringPtr: a far pointer into the ROM (segment C000h) to an ASCII string ending in 00h, of this BIOS's own wording (open question 3); it is never a string of another BIOS | VBE12 6.2 ("There are no restrictions on the format of the string"); [`docs/clean-room.md`](../clean-room.md) item 2 ("our own OEM strings") | must (pointer, NUL), should (wording) | S3COMPAT 'OEM string:' (INFO, prints it) |
 | VBE-24 | Capabilities = 00000000h: bit D0 = 0, the DAC has a fixed width of 6 bits per primary (VBE-80); D1-D31 reserved = 0 | VBE12 6.2; T32/64 section 8 ("three 256 6-bit word color look-up table (LUT) RAMs"), 14.7 (3C9h: "The least significant 6 bits of each byte") | must | S3COMPAT '4F00 capabilities vs 4F08' (fail 1 bit 0 against 4F08h, 2 bit 1 set) |
 | VBE-25 | VideoModePtr: a far pointer to the list of VBE-10 as words, ending in FFFFh, kept in the ROM (not built inside the caller's 256-byte block, which a VBE 1.x program may copy or reuse) | VBE12 6.2 (ROM or RAM allowed); VBE20 4.2 note on the Reserved field (2.0 allows the list there) | must (list, FFFFh), should (in ROM) | S3COMPAT '4F00 VESA sig' (warn 2 mode list inside the caller's buffer) |
 | VBE-26 | TotalMemory = M / 65536: 16 (0010h) with 1 MB, 32 (0020h) with 2 MB, 64 (0040h) with 4 MB, from the memory size found at POST (CR36 bits 7-5) | VBE12 6.2 ("number of 64kb blocks of memory currently installed"); T64-MEM-5 | must | S3COMPAT '4F00 VESA sig' (prints the KB); S3COMPAT '4F14 S3 OEM functions' compares SI with it; emu tests run with 1, 2 and 4 MB (`vram` tag) |
@@ -270,13 +270,13 @@ Illusions' S3 driver uses, and the one of S3's 2.04 BIOSes, where 49h and 4Bh ar
 ## S3 OEM functions (INT 10h AX=4F14h)
 
 No S3 document on 4F14h is at hand; the behaviour below is that of the S3 BIOSes 2.04.07 and 2.04.11
-for the Trio64V2, observed in the emulator and recorded in `docs/chip-rules.md` "S3 OEM functions
+for the Trio64V2, observed in the emulator and recorded in [`docs/chip-rules.md`](../chip-rules.md) "S3 OEM functions
 (4F14h)" (OEM-1 to OEM-6 there). Every rule here is derived from that observed behaviour. None of the
 Trio64 BIOSes examined there offers 4F14h.
 
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
-| OEM-1 | First version: 4F14h is not offered. Every AX = 4F14h call returns AL other than 4Fh and changes nothing (VBE-3) | `docs/clean-room.md` "Scope" (VBE 1.2 at most); chip-rules "S3 OEM functions" (no Trio64 BIOS has 4F14h) | should | S3COMPAT '4F14 S3 OEM functions' (INFO "not offered"); emu s3compat_vbe accepts INFO on a ROM that is not ours |
+| OEM-1 | First version: 4F14h is not offered. Every AX = 4F14h call returns AL other than 4Fh and changes nothing (VBE-3) | [`docs/clean-room.md`](../clean-room.md) "Scope" (VBE 1.2 at most); chip-rules "S3 OEM functions" (no Trio64 BIOS has 4F14h) | should | S3COMPAT '4F14 S3 OEM functions' (INFO "not offered"); emu s3compat_vbe accepts INFO on a ROM that is not ours |
 | OEM-2 | When offered (second step): BL = 00h, BH = 00h, query: AX = 004Fh, BX = version of the OEM functions (value open question 14), CX = 0003h, SI = TotalMemory (VBE-26), DI = the PCI device ID (8811h on the Trio64, T64-ID-1) | chip-rules OEM-1 (observed: BX 0010h or 0411h, CX 0003h, SI, DI = 8901h on the V2); T64-ID-1 | observed | S3COMPAT '4F14 S3 OEM functions' (fail 1: AX, DI = PCI device ID, SI = 4F00h's memory) |
 | OEM-3 | BL = 01h, BH = 00h, set refresh: CX = a listed mode, DI = a rate in Hz from that mode's list (OEM-5): AX = 004Fh; the next set of that mode (4F02h or AH=00h) runs at that rate. The current mode is not changed by the call | chip-rules OEM-2 (observed) | observed | S3COMPAT '4F14 S3 OEM functions' (fail 8, 10 the rate measured after the mode set, 20 the start rates written back) |
 | OEM-4 | BL = 01h, BH = 01h, get refresh: CX = a listed mode: AX = 004Fh, DI = the rate the next set of that mode uses | chip-rules OEM-3 (observed) | observed | S3COMPAT '4F14 S3 OEM functions' (fail 8) |
@@ -290,7 +290,7 @@ Trio64 BIOSes examined there offers 4F14h.
 ## Open questions
 
 1. VESA text modes 108h-10Ch (80x60, 132x25/43/50/60): VBE 1.2 defines them and a Trio64 BIOS may offer
-   them (the S3 132-column modes). The first version's scope (`docs/seavgabios-trio64.md` item 3) names
+   them (the S3 132-column modes). The first version's scope ([`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) item 3) names
    the packed modes only. Are 109h and 10Ah wanted (CRTC from the 132-column VGA timing, 9-dot or
    8-dot cells, B800h window, 4F01h memory model 00h with WinGranularity/WinSize 32 KB)? Which
    character height and refresh?
@@ -298,12 +298,12 @@ Trio64 BIOSes examined there offers 4F14h.
    modes whose 4F01h attributes say supported text mode, matches XResolution/YResolution as columns
    and rows, and sets the mode with 4F02h; without 108h-10Ch it cannot give 132 columns.
    Decided by the FreeDOS 1.4 target (1 November 2026): the text modes MODE reaches are required,
-   109h-10Ch and 108h (`docs/cleanroom/freedos-1.4.md` FD-14, FD-15, and the open question there on
+   109h-10Ch and 108h ([`docs/cleanroom/freedos-1.4.md`](freedos-1.4.md) FD-14, FD-15, and the open question there on
    the number 0449h holds in them).
 2. 320x200 direct colour 10Dh-10Fh: VBE 1.2 modes that need a double-scanned 70 Hz timing with a
    12.59 MHz pixel clock, below the lowest PLL output (135 MHz / 8 = 16.9 MHz, PLL-1, PLL-2), so only
    with the dot clock halved from 25.175 MHz (SR01 bit 3) in an enhanced mode, which the data book does
-   not describe (`spec-b-modeset.md` MODE-102 and MQ-9 leave them out). Wanted, if the card shows the
+   not describe ([`spec-b-modeset.md`](spec-b-modeset.md) MODE-102 and MQ-9 leave them out). Wanted, if the card shows the
    halved clock works?
 3. OEM string wording (VBE-23): the project's own text. Does any driver or program match the OEM string
    (for example on "S3" or "Trio64") to pick its Trio64 code path? If one does, the string must contain
