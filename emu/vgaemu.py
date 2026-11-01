@@ -88,12 +88,20 @@ MEM_TOP = 0x9000           # first segment after conventional memory available t
 STUB = 0x7C00              # small code stubs (POST far call, INT 10h call) live here
 
 
+def budget_msg(what, limit, knob, where):
+    """The message for a run that the emulator stopped because its instruction count ran out. Unicorn
+    stops at the count either way, so a hang and a call that only needs more instructions (a 4 MB clear
+    traced by VGALOG, for example) look the same: the message says which budget, and where it stopped."""
+    return ('instruction budget exceeded: %s did not finish within %d instructions (%s); stopped at %s, '
+            'a hang or a run that needs a larger budget' % (what, limit, knob, where))
+
+
 class ComResult:
     def __init__(self):
         self.stdout = bytearray()      # handle 1 and console output (AH=02h/09h)
         self.stderr = bytearray()      # handle 2
         self.files = {}                # created files: name -> bytes written
-        self.exit = None               # ('exit', code) or ('tsr', code, paragraphs) or None (did not end)
+        self.exit = None               # ('exit', code), ('tsr', code, paragraphs), ('error', text), ('budget', text)
         self.dos_calls = set()         # (AH) values seen
 
 
@@ -715,8 +723,8 @@ class Machine:
         except UcError as e:
             raise RuntimeError('INT 10h AX=%04X: %s' % (ax, e))
         if self._reg(UC_X86_REG_IP) != 0x7D02 or self._reg(UC_X86_REG_CS) != 0:
-            raise RuntimeError('INT 10h AX=%04X did not return within %d instructions (hang at %04X:%04X)'
-                               % (ax, Machine.call_limit, self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP)))
+            raise RuntimeError(budget_msg('INT 10h AX=%04X' % ax, Machine.call_limit, '--call-limit',
+                                          '%04X:%04X' % (self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP))))
         return {k: self._reg(v) for k, v in (('ax', UC_X86_REG_AX), ('bx', UC_X86_REG_BX), ('cx', UC_X86_REG_CX),
                                               ('dx', UC_X86_REG_DX), ('es', UC_X86_REG_ES), ('bp', UC_X86_REG_BP),
                                               ('flags', UC_X86_REG_EFLAGS))}
@@ -775,6 +783,9 @@ class Machine:
             self.mu.emu_start(start, 0, count=max_insn)
         except UcError as e:
             c.exit = ('error', '%s at %04x:%04x' % (e, self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP)))
+        if c.exit is None:              # neither an exit nor an error: the count ran out
+            c.exit = ('budget', budget_msg('the program', max_insn, 'max_insn',
+                                           '%04X:%04X' % (self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP))))
         self.com = None
         return c
 
@@ -933,6 +944,8 @@ class Machine:
             u.emu_start(base + entry, STUBS + 0xFF0, count=max_insn)
         except UcError as e:
             c.exit = ('error', '%s at %08x' % (e, u.reg_read(UC_X86_REG_EIP)))
+        if c.exit is None:              # neither an exit nor an error: the count ran out
+            c.exit = ('budget', budget_msg('the program', max_insn, 'max_insn', '%08X' % u.reg_read(UC_X86_REG_EIP)))
         return c
 
     # ------------------------------------------------------------------ coverage

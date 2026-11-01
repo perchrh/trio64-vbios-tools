@@ -134,7 +134,7 @@ Tests
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES  # noqa: E402
+from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES, budget_msg  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -1416,11 +1416,19 @@ def t_vgalog_trace(c):
             ev.append((port + 1, (val >> 8) & 0xFF, 2))
     h = m.mu.hook_add(UC_HOOK_INSN, out, None, 1, 0, UC_X86_INS_OUT)
     calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=1))]
-    for ax, kw in calls:
-        cur[0] = ax
-        res = m.int10(ax, **kw)
-        check(not res['flags'] & 0x100, 'AX=%04X returned with the trap flag set' % ax)
-        check(m.mem(4, 4) == i1, 'AX=%04X: INT 1 not put back after the call' % ax)
+    # VGALOG single-steps every call (INT 1 after each instruction, each REP iteration too), so 4F02's
+    # clear of 4 MB takes more than the 50 million of --call-limit (stopped at VGALOG's trap handler);
+    # 400 million passes with 4 MB
+    limit = Machine.call_limit
+    Machine.call_limit = max(limit, 400_000_000)
+    try:
+        for ax, kw in calls:
+            cur[0] = ax
+            res = m.int10(ax, **kw)
+            check(not res['flags'] & 0x100, 'AX=%04X returned with the trap flag set' % ax)
+            check(m.mem(4, 4) == i1, 'AX=%04X: INT 1 not put back after the call' % ax)
+    finally:
+        Machine.call_limit = limit
     cur[0] = None
     m.mu.hook_del(h)
     rd = m.run_com(com, '/D', seg=0x4000)
@@ -1567,7 +1575,8 @@ def int10x(m, ax, bx=0, cx=0, dx=0, si=0, di=0, bp=0, es=0, std=False):
         mu.reg_write(reg, v)
     mu.emu_start(0x7D00, 0x7D03, count=Machine.call_limit)
     if mu.reg_read(UC_X86_REG_IP) != 0x7D03:
-        raise AssertionError('INT 10h AX=%04X did not return within %d instructions' % (ax, Machine.call_limit))
+        raise AssertionError(budget_msg('INT 10h AX=%04X' % ax, Machine.call_limit, '--call-limit',
+                                        '%04X:%04X' % (mu.reg_read(UC_X86_REG_CS), mu.reg_read(UC_X86_REG_IP))))
     return {k: mu.reg_read(r) for k, r in (('ax', UC_X86_REG_AX), ('bx', UC_X86_REG_BX), ('cx', UC_X86_REG_CX),
                                             ('dx', UC_X86_REG_DX), ('si', UC_X86_REG_SI), ('di', UC_X86_REG_DI),
                                             ('bp', UC_X86_REG_BP), ('es', UC_X86_REG_ES))}
@@ -1810,8 +1819,9 @@ def int10w(m, regs, ds=0, es=0, flags=0x202, count=None):
         mu.reg_write(reg, v)
     mu.emu_start(0x7D00, 0x7D02, count=count or Machine.call_limit)
     if mu.reg_read(UC_X86_REG_IP) != 0x7D02 or mu.reg_read(UC_X86_REG_CS) != 0:
-        raise AssertionError('INT 10h EAX=%08X did not return (hang at %04X:%04X)'
-                             % (regs.get('eax', 0), mu.reg_read(UC_X86_REG_CS), mu.reg_read(UC_X86_REG_IP)))
+        raise AssertionError(budget_msg('INT 10h EAX=%08X' % regs.get('eax', 0), count or Machine.call_limit,
+                                        '--call-limit' if not count else 'this call\'s own limit',
+                                        '%04X:%04X' % (mu.reg_read(UC_X86_REG_CS), mu.reg_read(UC_X86_REG_IP))))
     out = {k: mu.reg_read(r) for k, r in R32}
     out['ds'], out['es'] = mu.reg_read(UC_X86_REG_DS), mu.reg_read(UC_X86_REG_ES)
     return out
