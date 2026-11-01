@@ -140,6 +140,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Record why a choice was made (for example why a fix is a WARN, why a timing was kept) next to the
   code or in README.md, with the source.
 - Generated documents and README text: no long dashes, no emoji, no accented letters such as e-acute.
+- In Markdown files, a reference to another Markdown file is a relative link
+  (`[docs/764-rom.md](docs/764-rom.md)`, from docs/ `[764-rom.md](764-rom.md)`), and so is a reference to a
+  directory or source file in the repository (`[rompatch/trio64](rompatch/trio64/)`). Plain text is
+  kept only in code blocks, headings and for reference ROM images.
 
 ## Verifying a change
 

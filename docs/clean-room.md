@@ -6,7 +6,7 @@ is not legal advice: before anything is distributed, a lawyer should look at the
 
 ## The idea
 
-Today's Trio64 ROM is Phoenix's 1.5-07 with our patches (docs/764-rom.md), so it cannot be
+Today's Trio64 ROM is Phoenix's 1.5-07 with our patches ([docs/764-rom.md](764-rom.md)), so it cannot be
 given away freely. A clean-room implementation would replace it with code of our own that behaves
 the same towards programs, drivers and the card:
 
@@ -20,7 +20,7 @@ the same towards programs, drivers and the card:
 
 riplin's repository is an annotated disassembly of the Phoenix 1.5-07 EDO build: it holds Phoenix's
 code as instructions, which is exactly what the clean side must never see. Its MIT licence covers
-riplin's annotations, not the Phoenix bytes (AGENTS.md). Forking it and adding information would
+riplin's annotations, not the Phoenix bytes ([AGENTS.md](../AGENTS.md)). Forking it and adding information would
 make the base itself dirty. It stays what it is today: a map for the dirty side, used to find
 routines and data while writing the specification.
 
@@ -54,7 +54,7 @@ standards that one of our BIOSes implements (README "VESA standards"): VBE 2.0 a
 1.0 Rev. 0.7 and GTF 1.0 for the timings, and the Mode 6Ah standard; of the secondary references in
 README "VESA standards", the first VBE (VS891001) and Haakenson's article on the changes from VBE
 1.2 to 2.0, which describe behaviour our BIOSes have; VBE 1.2 is at hand as a retyped text. VGADOC
-(`standards/thoegersen/`, freeware whose licence allows any use of its information) describes the
+([`standards/thoegersen/`](../standards/thoegersen/), freeware whose licence allows any use of its information) describes the
 standard INT 10h functions, the VGA, EGA and CGA registers and the S3 registers. Nothing beyond what our BIOSes
 do concerns the clean-room implementation: VBE 3.0, VBE/SCI, VBE/AF and the EDID structure stay out
 of its specification. The timing values of the ROM can then come from DMT and GTF instead of from
@@ -78,26 +78,26 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
 
 ## What we have
 
-- `docs/bios-rules.md`: 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
+- [`docs/bios-rules.md`](bios-rules.md): 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
   area, the published tables) from public sources, with the open questions still to settle in the
   emulator: the start of item 1 below.
-- `docs/chip-rules.md`: 92 rules from the data books (clock limits, memory timing, register
+- [`docs/chip-rules.md`](chip-rules.md): 92 rules from the data books (clock limits, memory timing, register
   meanings), each with its source.
 - S3TEST and S3COMPAT: checks against the IBM VGA tables, the VBE 2.0 specification, VESA DMT and
-  the data book, written to the AGENTS.md rule that expected values come from independent sources.
-- The emulator (`emu/`): our own code, a VGA and S3 register model with a small DOS. Its tests need
+  the data book, written to the [AGENTS.md](../AGENTS.md) rule that expected values come from independent sources.
+- The emulator ([`emu/`](../emu/)): our own code, a VGA and S3 register model with a small DOS. Its tests need
   a review first: some expectations were taken from the reference ROMs' behaviour (for example the
   Trio64 base lists), and `refcompare` uses the reference ROM as its oracle, which is acceptable
   only on the dirty side.
 - The README's Windows 9x driver findings (what S3's driver expects from the BIOS) and
-  docs/764-rom.md (the Trio64 card, its memory, the DDC wiring).
+  [docs/764-rom.md](764-rom.md) (the Trio64 card, its memory, the DDC wiring).
 
 ## What is missing, in order of size
 
 1. **A function-by-function interface specification.** For every INT 10h function and subfunction
    the ROM supports: the registers in and out, the BIOS data area fields written, what happens to
    video memory, the DAC and the VGA and S3 registers, the error returns, and which registers are
-   left as found (the AGENTS.md index register rule). The AH=1Bh state table and the AH=1Ch save
+   left as found (the [AGENTS.md](../AGENTS.md) index register rule). The AH=1Bh state table and the AH=1Ch save
    buffer formats belong here.
 2. **The VBE specification.** The version reported, our own OEM strings, the exact mode list with
    the memory each mode needs, the field values of each mode's information block (4F01), the window
@@ -120,7 +120,7 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
    MCLK, CR5C's General Output Port value, the timing bytes) as inputs of the build, like today's
    `MCLK=` option.
 8. **The non-functional requirements.** 32 KB of ROM, real mode, a 386 or later, the speed goals
-   (32-bit stores, the booster), and the AGENTS.md hard rules for the ROM.
+   (32-bit stores, the booster), and the [AGENTS.md](../AGENTS.md) hard rules for the ROM.
 9. **A traceability matrix.** Each specification item mapped to the test that checks it, so the
    clean side knows when it is done and the dirty side can see what is untested.
 
@@ -169,9 +169,9 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
     stay sources of facts only, like the standards. The ROM is then written in full by the clean side,
     probably in assembly: the owner also wants the VGA functions no slower than our Trio64 ROM p3,
     while CGA, EGA and MDA may be slower (the comparison of the slim SeaVGABIOS with p3 decides how
-    much the C code costs; `docs/seavgabios-trio64.md`).
+    much the C code costs; [`docs/seavgabios-trio64.md`](seavgabios-trio64.md)).
   - Fonts: an 8x8, 8x14 and 8x16 set that is itself public domain, or drawn anew. SeaVGABIOS's fonts
-    are called public domain but equal IBM's (`docs/cleanroom/README.md` "Font origin").
+    are called public domain but equal IBM's ([`docs/cleanroom/README.md`](cleanroom/README.md) "Font origin").
   - The specification, the tests and the tools stay as they are; only what goes into the ROM image
     must be free of other people's licences.
   - Public domain is not recognised everywhere (in Norway the author's moral rights cannot be given
@@ -193,7 +193,7 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
      simplified CRTC values. Its values are checked against the data book before they are used.
   3. A table in an emulator may have been taken from a vendor's BIOS (an S3 mode list, SVGA register
      tables). Cite such tables for facts only (numbers, resolutions, colour depths), never copy them,
-     and the leak review treats them as observed BIOS behaviour (`docs/cleanroom/LEAK-REVIEW.md`,
+     and the leak review treats them as observed BIOS behaviour ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md),
      check 5).
 
   | Source | Licence | Use |
@@ -216,7 +216,7 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
 
 ## Next steps (when started)
 
-- The plan for basing it on the slim SeaVGABIOS: `docs/seavgabios-trio64.md`.
+- The plan for basing it on the slim SeaVGABIOS: [`docs/seavgabios-trio64.md`](seavgabios-trio64.md).
 
 - Create the separate specification repository with the skeleton of items 1-9.
 - Review the emulator tests for expectations taken from the reference ROMs, and move the clean

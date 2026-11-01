@@ -1,10 +1,10 @@
 # Trio64 ROM (764): fixes and improvements
 
-What 1.5-07-pN (the level in `common/version.inc`, now p3) changes against the Phoenix S3 Trio64 BIOS
+What 1.5-07-pN (the level in [`common/version.inc`](../common/version.inc), now p3) changes against the Phoenix S3 Trio64 BIOS
 1.5-07, each with the issue that has the details. The speed patches, the booster and the flip-flop reset
-are backports from the Trio64V2 ROM (`docs/775-changes.md`); their issues are the Trio64V2 ones, which
+are backports from the Trio64V2 ROM ([`docs/775-changes.md`](775-changes.md)); their issues are the Trio64V2 ones, which
 carry the label 764. The build, the space map, the base candidates, the MCLK survey and the
-card runs are in `docs/764-rom.md`.
+card runs are in [`docs/764-rom.md`](764-rom.md).
 
 | Change | Level | Issue | How |
 | --- | --- | --- | --- |
@@ -25,6 +25,6 @@ card runs are in `docs/764-rom.md`.
 
 
 Not applied: the fast 4F05 path ([#59](https://github.com/perchrh/trio64-vbios-tools/issues/59): Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in our ROM with the booster check and the sequencer index kept), the 32-bit S3/VESA
-mode set clear ([#60](https://github.com/perchrh/trio64-vbios-tools/issues/60): Phoenix clears with the graphics engine; open, `docs/764-rom.md` "Pending"), the base restore (Phoenix writes CR59 from
+mode set clear ([#60](https://github.com/perchrh/trio64-vbios-tools/issues/60): Phoenix clears with the graphics engine; open, [`docs/764-rom.md`](764-rom.md) "Pending"), the base restore (Phoenix writes CR59 from
 CR6B and CR5A from CR6C bit 7 at every mode set), the PLL N = 0 fix (the N = 0 entries were the
 interlaced 1280x1024 ones, now removed), the Trio64V2 register fixes and VBE 2.0.

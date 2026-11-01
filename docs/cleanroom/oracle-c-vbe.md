@@ -2,13 +2,13 @@
 
 DIRTY SIDE ONLY. This file records what the reference ROM `reference/trio64/1_5_07.bin` (Phoenix S3
 Trio64 BIOS 1.5-07, VBE 1.2) returns in the emulator, and compares it with the rules of
-`docs/cleanroom/spec-c-vbe.md`. It is used to check the clean ROM and to answer questions through the
+[`docs/cleanroom/spec-c-vbe.md`](spec-c-vbe.md). It is used to check the clean ROM and to answer questions through the
 wall; its values do not go into the specification unless a rule there derives them from a public
 source.
 
 ## How it was run
 
-1 November 2026, `emu/vgaemu.py` with `Machine.chip = 'trio64'`, `Machine.vram` = 1, 2 and 4, the
+1 November 2026, [`emu/vgaemu.py`](../../emu/vgaemu.py) with `Machine.chip = 'trio64'`, `Machine.vram` = 1, 2 and 4, the
 32 KB image doubled to 64 KB, `m.post()`, then `m.int10(...)` from mode 03h; registers from `m.r`,
 memory with `m.mem`. Buffers at 3000:0000h prefilled with CCh to see what is written. The emulator
 models registers and a planar window, not banked or linear video memory, so the clear of 4F02h and
