@@ -155,6 +155,30 @@ files of their own, not in a public repository.
   - Francois Gervais, "Programmation des cartes graphiques CGA, EGA, VGA" (Sybex): the BIOS
     functions and registers.
   - DOSEMU 1.0.1 source: its VGA emulation and video BIOS tables and formulas, as facts.
+- **Open-source programs as secondary sources** (checked 1 November 2026). They are public and the
+  clean side may read them, but they rank below the standards and the data book, as VGADOC does:
+  where they disagree, the standard or the data book decides. Three conditions:
+  1. Facts (a formula, a mode number, a calling convention, a timing) may be cited in the
+     specification. Code copied into the ROM comes under its licence: GPL 2 or later and MIT are
+     compatible with a GPL 3 ROM; GPL 2 only is not, so such a source is used for facts only.
+  2. An emulator models what programs needed, not the chip: no display FIFO, no memory timing,
+     simplified CRTC values. Its values are checked against the data book before they are used.
+  3. A table in an emulator may have been taken from a vendor's BIOS (an S3 mode list, SVGA register
+     tables). Cite such tables for facts only (numbers, resolutions, colour depths), never copy them,
+     and the leak review treats them as observed BIOS behaviour (`docs/cleanroom/LEAK-REVIEW.md`,
+     check 5).
+
+  | Source | Licence | Use |
+  | --- | --- | --- |
+  | SeaBIOS and SeaVGABIOS (the base, branch `claude/slim-vgabios` of perchrh/seabios_fork) | LGPLv3 | The PCI option ROM call (AX = bus, device and function) and the "PCIR" data structure its build script writes; the standard INT 10h functions and IBM's parameter tables; its code is used under its licence |
+  | DOSBox Staging (`src/hardware/video/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (SPDX header) | Cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions; condition 3 for its mode tables |
+  | X.Org server `hw/xfree86/common/vesamodes` | XFree86 Project licence (MIT style) | 34 modelines "distilled from" VESA DMT 1.0 Rev. 0.8 (1998): pixel clock, horizontal and vertical totals, sync positions and polarities, for example 640x480 at 60 Hz (25.175 MHz, 800 x 525), 800x600 at 60 Hz (40 MHz, 1056 x 628), 1024x768 at 60 Hz (65 MHz, 1344 x 806). A stand-in for DMT until DMT itself is at hand |
+  | Linux `drivers/gpu/drm/drm_edid.c`, the table `drm_dmt_modes[]` | MIT | The DMT modes as a second copy, to check `vesamodes` against |
+  | Linux `drivers/video/fbdev/core/modedb.c`, `vesa_modes[]` | GPL 2 (the kernel's COPYING) | DMT timings, facts only (GPL 2 only) |
+  | 86Box `src/video/vid_s3.c` (from PCem) | GPL 2 (COPYING; the file header states no "or later") | A closer model of the Trio64 than DOSBox (register behaviour, the high-colour modes); facts only |
+
+  None of them answers the memory refresh, the board's CR5C wiring or the memory timing: those need the
+  datasheet of the card's memory chips and the board itself.
 
 ## Next steps (when started)
 
