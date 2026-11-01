@@ -10,13 +10,17 @@ the clean-room rules of `docs/clean-room.md`. Written 1 November 2026; nothing h
   base and licence"), which rules out building on SeaVGABIOS's LGPLv3 code, and wants the VGA functions
   no slower than our Trio64 ROM p3 (CGA, EGA and MDA may be slower). SeaVGABIOS then becomes a source
   of facts and a reference implementation to test against, and the clean side writes its own code,
-  probably in assembly. An emulator comparison of the slim SeaVGABIOS with p3 is running; the decision
-  follows its result. The milestones and the compatibility target below hold for either base.
+  probably in assembly. The emulator comparison of the slim SeaVGABIOS with p3 (instructions per call, 1 November 2026):
+  mode sets, fonts and palette 0.85-2.2 times p3, text output and the cursor 1.5-2.8, text scrolls about
+  4, AH=09h over 2000 characters 121 (one character at a time), mode 12h pixels 12-23, characters about 62
+  and clears 18 (one plane at a time where the hardware writes all four). The requirement is not met by
+  SeaVGABIOS's C code; the hot paths need hand-written assembly. With the public-domain wish this points
+  to a ROM of our own, with SeaVGABIOS as a reference to test against.
 - **Compatibility target: FreeDOS 1.4** (the latest stable release, 5 April 2025). Everything its
   distribution asks of the video BIOS is a requirement: MODE (25, 28, 43 and 50 lines, 40, 80 and
   132 columns, the 132 columns through the VBE text modes), DISPLAY (code page fonts), CTMOUSE, the
-  installer, FreeCOM, NANSI, EDIT and the rest. A survey of the packages' video BIOS calls is running;
-  its requirements go into the specifications (`docs/cleanroom/`).
+  installer, FreeCOM, NANSI, EDIT and the rest. The requirements from a survey of the packages' sources, and
+  how our three ROMs meet them today: `docs/cleanroom/freedos-1.4.md`.
 
 ## Milestones
 
