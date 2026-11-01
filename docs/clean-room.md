@@ -158,6 +158,8 @@ files of their own, not in a public repository.
 
 ## Next steps (when started)
 
+- The plan for basing it on the slim SeaVGABIOS: `docs/seavgabios-trio64.md`.
+
 - Create the separate specification repository with the skeleton of items 1-9.
 - Review the emulator tests for expectations taken from the reference ROMs, and move the clean
   ones to the new repository.
