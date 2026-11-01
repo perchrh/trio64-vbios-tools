@@ -416,6 +416,22 @@ def t_rom_patches(c):
     chk(cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x6D) == base[0],
         'no booster after Windows ended (the CR6D mark not cleared?): CR58 %02X, CR6D %02X'
         % (cr.get(0x58, 0), cr.get(0x6D, 0)))
+    # p22: a linear base of 01xxxxxxh (CR6D = 01h while the booster is on, the value of wcheck's refusal
+    # mark): the next mode set puts the base back and clears CR6D, and the booster goes on again
+    m.int10(0x0003)
+    cr[0x59] = 0x01
+    m.int10(0x4F02, bx=0x0101)
+    on1 = cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x6D) == 0x01
+    m.int10(0x0003)
+    back = (cr.get(0x59, 0), cr.get(0x5A, 0), cr.get(0x6D, 0))
+    m.int10(0x4F02, bx=0x0101)
+    chk(on1 and back == (0x01, 0x00, 0x00) and cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x6D) == 0x01,
+        'base 01000000h: booster %s, after mode 03h CR59/5A/6D %02X %02X %02X (expected 01 00 00), then '
+        'CR58 %02X CR6D %02X (booster expected on again)' % ('on' if on1 else 'off', back[0], back[1], back[2],
+                                                             cr.get(0x58, 0), cr.get(0x6D, 0)))
+    m.int10(0x0003)
+    cr[0x59] = base[0]
+    m.int10(0x4F02, bx=0x0101)
     m.int10(0x4F05, bx=0, dx=0)
     # p12: the fast 4F05 path from the INT 10h entry runs without the dispatcher, which saves the 32-bit
     # registers; it must keep them itself and use few port accesses
@@ -1980,12 +1996,27 @@ def t_ddc(c):
     with interrupts off (2.04.11 pushf/cli around the operation, p19 ddcin/ddcout); the delays program
     PIT channel 2 with B6h (mode 3, low then high byte) and never write 86h, the latch command 2.04.07
     sent before loading a count; the probe's delay of 0255h arrives in AX (5E07, 2.04.07 loaded BX) and
-    so is loaded as 04AAh (mode 3 counts by 2). The model has no monitor on the DDC lines: BX = 0000h."""
+    so is loaded as 04AAh (mode 3 counts by 2). The model has no monitor on the DDC lines: BX = 0000h.
+    p22: on the card a latch within about 1.7 us of a load can still read the loaded count; the model
+    returns it for the first latch after each load here, and every delay must read the counter again
+    (p19 to p21 ended the wait on that first reading)."""
     if not c.ours:
         raise Skip('p19 DDC code (our ROM only)')
     m = c.machine()
     pit43, loads, mmio = [], [], []
-    st = {'lo': None}
+    st = {'lo': None, 'fresh': False}
+    reads = []                                  # latches of channel 2 after each load (FFFFh loads not counted)
+    pit_count = m._pit_count
+
+    def first_reads_loaded(ch):
+        v = pit_count(ch)
+        if ch == 0x42 and reads:
+            reads[-1] += 1
+            if st['fresh']:
+                st['fresh'] = False
+                return m.pit[ch]['reload'] or 0x10000
+        return v
+    m._pit_count = first_reads_loaded
 
     def out(uc, port, size, val, ud):
         if port == 0x43:
@@ -1996,6 +2027,9 @@ def t_ddc(c):
                 st['lo'] = val & 0xFF
             else:
                 loads.append(st['lo'] | (val & 0xFF) << 8)
+                if loads[-1] != 0xFFFF:
+                    reads.append(0)
+                    st['fresh'] = True
                 st['lo'] = None
 
     def acc(uc, kind, addr, size, val, ud):
@@ -2013,7 +2047,11 @@ def t_ddc(c):
     check(0xB6 in pit43, 'PIT channel 2 never set with B6h')
     check(0x04AA in loads, 'the probe delay 0255h not loaded as 04AAh (loads: %s)'
           % ' '.join('%04X' % x for x in loads[:8]))
-    return '%d serial port accesses, %d PIT loads, BX=%04X' % (len(mmio), len(loads), r['bx'])
+    short = sum(1 for n in reads if n < 2)
+    check(reads and not short, '%d of %d DDC delays ended on their first counter reading (the loaded count, p22)'
+          % (short, len(reads)))
+    return '%d serial port accesses, %d PIT loads, every delay read the counter at least twice, BX=%04X' % (
+        len(mmio), len(loads), r['bx'])
 
 
 def t_engine_init(c):

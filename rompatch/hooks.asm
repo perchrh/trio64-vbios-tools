@@ -54,9 +54,11 @@ hook:
         popf
         ret
 
-; restore real LFB base (CR59/CR5A) if the booster left 000A there. In: DX=CRTC, unlocked
+; restore real LFB base (CR59/CR5A) if the booster left 000A there, then forget wcheck's refusal.
+; In: DX=CRTC, unlocked. p22: the base is restored first and CR6D cleared after it, so wclear never
+; takes a saved base of 01h (a linear base at 01xxxxxxh) for its refusal mark (CR6D = 01h), and no stale
+; base is left in CR6D for the next mode's wcheck to read as a refusal.
 restore_base:
-        call    L_wclear                ; a new mode: wcheck asks Windows again (p17)
         mov     al, 0x5A
         call    RDREG
         cmp     ah, 0x0A
@@ -73,7 +75,9 @@ restore_base:
         out     dx, ax
         mov     ax, 0x005A
         out     dx, ax
-.r:     ret
+        mov     ax, 0x006D              ; the base is back: CR6D free for wcheck's mark (p22)
+        out     dx, ax
+.r:     jmp     L_wclear                ; a new mode: wcheck asks Windows again (p17)
 
 ; ---------------- booster on (called by the 4F05 set window paths) ----------------
 ; In: nothing. Turns the booster on if the mode is a banked packed mode with a known LFB base,

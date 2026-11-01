@@ -401,7 +401,8 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False):
     end = d.index(b'\x00', s)
     txt = bytes(d[s:end]).replace(VERSION.encode(), (VERSION + '-' + LEVEL).encode(), 1)
     stop = end
-    while stop < 0xE4 and d[stop] == 0:
+    top = sym['TFIFO2']   # tfifo2.asm follows in this padding
+    while stop < top and d[stop] == 0:
         stop += 1
     if s + len(txt) + 1 > stop:
         raise PatchError('no room for the longer sign-on')
