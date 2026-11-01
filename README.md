@@ -893,7 +893,6 @@ as the reference 2.04.07 the ROM is built on.
 | Attribute flip-flop reset | S3VBEFIX | The idea: a dummy read of the input status register (3DAh) after the mode set |
 | Booster | S3VBEFIX, which credits SVGATRIX.TXT; the 64 KB linear window at A0000h is documented in the Trio64V+ datasheet | The register sequence CR58 AND ECh, CR59=00, CR5A=0Ah, CR58 OR 10h. Saving the real base in CR6D and restoring it in the ROM's own mode set is our design |
 | LFB mode set handling | S3VBEFIX | Only the observation that the booster's base must be restored before an LFB mode; implemented differently |
-| Refresh and LCD timings | Not from S3REFRSH | The ROM carries the timings itself: VESA DMT 640x480 @ 60 Hz (800x525) and the BIOS's own 640x480 tables halved for 320x240 |
 | Memory clock 59.96 MHz | Trio64V2 datasheet | PLL values chosen to meet the 16.67 ns 1-cycle EDO limit |
 | DDC fixes, CR23 before CR26 | S3 BIOS 2.04.11 (the card's stock BIOS); Trio64V2 datasheet section 4.2 | The DDC delay routine, the probe's count in AX and interrupts off during 4F15 as in 2.04.11; CR23 = 00h before CR26 on every mode set (2.04.11 does it only after modes above 13h) |
 
@@ -914,7 +913,7 @@ AX = 004Fh from them, the real-mode status. The ROM keeps that:
 The ELSA Winner 1000/T2D BIOS (ELSA 6.01.00, built on S3's 1.01.04) and S3's 1.01.04 have no reason
 to be compared here: 1.01.04 has no 4F0A, and ELSA's own 4F0A reports a wrong table length.
 
-### Not taken: the S3 OEM functions (4F14h) of later BIOSes
+### Not used: the S3 OEM functions (4F14h) of later BIOSes
 
 The S3 OEM functions of 2.04.11, the Trio3D BIOS 2.0B.10 and the Trio3D/2X BIOS 2.0C.10 were compared
 with this ROM's (2.04.07) on 30 October 2026, every BL 00h-1Fh with BH 00h-07h in the emulator:
