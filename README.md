@@ -474,7 +474,8 @@ The tests run as parallel jobs, one matrix row per chip and memory size, each na
 | Trio64V+ 4 and 1 MB | the `vram` tests with 4 and 1 MB |
 | Trio64 2 MB, patcher, EGA/CGA | `make 764x-rom`, `make 764-rom-test`, `make emu-test CHIP=trio64` with 2 MB, `make 764-ref-compare` |
 | Trio64 4 and 1 MB | the `vram` tests with 4 and 1 MB |
-| build-and-test | passes when every row passed (the check name branch rules can require) |
+| All ROMs (make roms) | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), kept as the artifact `roms` for 14 days |
+| build-and-test | passes when every row passed and every ROM built (the check name branch rules can require) |
 
 Every job builds NASM 3.02 from its release source (cached between runs), the tools with `make` and
 its chip's ROM from `reference/` with the pinned SHA-256 checked; the .COM files are kept as the

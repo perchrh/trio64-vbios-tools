@@ -12,8 +12,9 @@
 # the EGA/CGA comparison with the unpatched reference; the others run the emulator tests with 4 MB
 # (Trio64V2) or 4 and 1 MB (Trio64V+, Trio64) of video memory, the tests tagged `vram`. On the
 # Trio64V2 the longest test, s3compat_full, has a job of its own for each memory size. The last job,
-# build-and-test, passes when every row passed (the check name branch rules can require). The
-# patched ROM images are not kept. The coverage goal has its own workflow, coverage.yml, which pull
+# build-and-test, passes when every row passed (the check name branch rules can require). The job
+# roms runs `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), kept as the
+# artifact `roms` for 14 days. The coverage goal has its own workflow, coverage.yml, which pull
 # requests do not start.
 name: CI
 
@@ -153,13 +154,50 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  roms:
+    name: All ROMs (make roms)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache NASM
+        id: nasm-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/nasm
+          key: nasm-${{ env.NASM_VERSION }}-${{ runner.os }}
+
+      - name: Build NASM ${{ env.NASM_VERSION }}
+        if: steps.nasm-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
+            "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
+          tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
+          ./configure --quiet
+          make -j"$(nproc)" nasm
+          mkdir -p ~/nasm
+          cp nasm ~/nasm/
+
+      - name: Every chip's ROM at its memory clocks
+        run: make roms NASM=$HOME/nasm/nasm
+
+      - name: Upload the ROMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: roms
+          path: build/roms/
+          retention-days: 14
+
   build-and-test:
     name: build-and-test
     if: always()
-    needs: test
+    needs: [test, roms]
     runs-on: ubuntu-latest
     steps:
-      - name: Every chip and memory size passed
+      - name: Every chip and memory size passed, every ROM built
         run: |
-          echo "matrix result: ${{ needs.test.result }}"
+          echo "matrix result: ${{ needs.test.result }}, roms: ${{ needs.roms.result }}"
           test "${{ needs.test.result }}" = success
+          test "${{ needs.roms.result }}" = success
