@@ -24,8 +24,9 @@ The S3 vendor functions are only a part. In order of need:
      at the end of every call, as the Phoenix BIOS and Windows' driver expect.
    - Memory size found by test and written to CR36 bits 7-5 (data book 5.1: the BIOS determines it,
      boards need not strap it; 1, 2 or 4 MB), the memory type from CR36 bits 3-2 (strapped, never written); CR68 (strapped timings) left alone.
-   - The memory clock: SR10/SR11 with the SR15 load sequence (PLL-1, PLL-2). The card's own value is
-     69.8 MHz (22h 25h); the build option and the known pairs of `s3patch.KNOWN_MCLK_8811` carry over.
+   - The memory clock: SR10/SR11 with the SR15 load sequence (PLL-1, PLL-2). The default is 59.96 MHz, the data
+     book's 60 MHz (decided 1 November 2026); the card's own value, 69.8 MHz (22h 25h), through the
+     build option. The build option and the known pairs of `s3patch.KNOWN_MCLK_8811` carry over.
    - The PCI base: CR59/CR5A from PCI BAR0 (the Windows 9x S3 driver reads them, README "Windows 9x
      driver test"); CR58 linear addressing off at POST.
    - Enhanced mode setup: CR40 bit 0, CR31, CR32, CR33, CR34 (CR3B enable), CR3A, CR43, CR53, CR66;
