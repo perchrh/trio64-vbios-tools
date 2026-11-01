@@ -692,7 +692,10 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
   and the tests then take the files from where the user saved them. CI downloads them once and keeps
   them in its cache for as long as the cache allows (a key on the SHA-256 values, so the files are
   fetched again only when the list changes), so no run depends on theretroweb being reachable.
-  Decided 1 November 2026, to be done later.
+  Decided 1 November 2026, to be done later. Status of 1 November 2026: the Trio64 reference is on
+  theretroweb (DataExpert CP764, [docs/764-rom.md](docs/764-rom.md)); the Trio64V+ page has 1.03-08N,
+  another build than our 1.03-08 ([docs/765-rom.md](docs/765-rom.md)); the Trio64V2 2.04.07 and
+  2.04.11 are not there yet.
 - Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
   that one ROM can be tested on several cards with different memory speeds without flashing each
   clock (`make roms` builds the clocks as separate images): the tool sets the memory
