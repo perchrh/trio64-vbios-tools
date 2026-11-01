@@ -86,7 +86,7 @@ The S3 vendor functions are only a part. In order of need:
    SeaVGABIOS's slim config builds QEMU's IDs and no sign-on string.
 
 Optional later: the booster (64 KB linear window for banked modes), VBE 2.0, 4F15 DDC (the board's GOP
-wiring is still open, `docs/trio64-backport.md` "Pending"), 4F10.
+wiring is still open, `docs/764-rom.md` "Pending"), 4F10.
 
 ## Size budget
 

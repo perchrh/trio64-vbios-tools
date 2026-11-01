@@ -39,7 +39,7 @@ Written 1 November 2026.
   value: 11 there, where the formula gives 16), and p3 computes M with 112 bytes at 1 MB too. p3 keeps Phoenix's non-DMT timings for 1024x768 (line 1352), 1280x1024 (1760 x 1056 at 112.16
   MHz) and 640x480 in 15/16 bpp (796 x 526).
 - **1.5-07 at its defaults** runs 800x600 at 56 Hz (36.15 MHz, line 1024), and 1024x768 and 1280x1024
-  interlaced (CR42 bit 5 = 1); p3 removed those (docs/trio64-backport.md).
+  interlaced (CR42 bit 5 = 1); p3 removed those (docs/764-rom.md).
 
 ## Differences, with the reason
 
@@ -48,7 +48,7 @@ Written 1 November 2026.
 | 100h sync polarity | MISC 6Fh: HSYNC negative, VSYNC positive (the VGA's 400-line code) | EFh (both negative, the 480-line code) | EFh | Phoenix keeps one MISC for 640-wide modes; the spec follows IBM's 400-line polarity (MODE-106). A monitor that sizes by polarity may show 100h with the wrong height on the ROMs |
 | 1280x1024 sync polarity | 2Fh (DMT: positive) | EFh | EFh | Phoenix's 1280x1024 timing is not DMT |
 | 800x600 PLL | M 54, N 3, R 2: 40.091 MHz (+0.23 %) | 36.15 MHz (56 Hz entry) | M 43, N 2, R 2: 40.27 MHz (+0.67 %) | p3's entry is outside the data book's 0.5 % (T32/64 9.1 step 3); the spec takes the first N within 0.5 % |
-| 1024x768 timing | DMT: 65.148 MHz, 1344 x 806, 60.14 Hz | interlaced, 44.74 MHz | 65.327 MHz (+0.50 %), line 1352, 59.87 Hz | Phoenix's non-DMT entry (docs/trio64-backport.md "Left as in 1.5-07"); the PLL is 0.503 % off, just outside 0.5 % |
+| 1024x768 timing | DMT: 65.148 MHz, 1344 x 806, 60.14 Hz | interlaced, 44.74 MHz | 65.327 MHz (+0.50 %), line 1352, 59.87 Hz | Phoenix's non-DMT entry (docs/764-rom.md "Left as in 1.5-07"); the PLL is 0.503 % off, just outside 0.5 % |
 | 1280x1024 timing | DMT: 108.409 MHz, 1688 x 1066, 60.25 Hz | interlaced, 75.17 MHz | 112.159 MHz, 1760 x 1056, 60.35 Hz | Phoenix's non-DMT entry |
 | 640x480 in 15/16 bpp | HT 200 CC (800 pixels), VT 525 | 199 CC (796 pixels), VT 526 | the same as 1.5-07 | Phoenix's 15/16 bpp table is one character clock short and one line long; 59.84 Hz |
 | Horizontal sync start | DMT position (CR04 = HSS) | one character clock later in 640x480 (53h for 52h) and 800x600x16 (D3h for D2h); 640x400 two later (54h, IBM's value) | as 1.5-07 | pipeline offset or Phoenix's choice (MQ-3) |

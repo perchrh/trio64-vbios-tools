@@ -18,7 +18,7 @@ Output
   firmware that reads the ROM through PCI ignores the copy. (p15 to p21 had zeros in the upper half,
   p14 and earlier the card's Trio64V+ BIOS 1.03-08.)
 
-What is applied (README of trio64-vbios-tools, "Features and changes compared to the reference BIOS 2.04.07" and "Byte-level changes")
+What is applied (docs/775-rom.md of trio64-vbios-tools, "Features and changes compared to the reference BIOS 2.04.07" and "Byte-level changes")
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
          value 00h, CR41/CR52 60 Hz defaults for 1280x1024 and 1600x1200, 640x480 line total 800,
          320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384, 1600x1200 vertical display
@@ -360,7 +360,7 @@ FREF = 14.31818
 
 # MCLK PLL pairs (SR10 N/R byte, SR11 M byte, images) that the Trio32/Trio64/Trio64V+ BIOS images at hand
 # (PCI 5333:8811: Phoenix, Diamond, ELSA, Hercules, Number Nine, Octek, S3) load at POST, from the survey
-# in docs/trio64-backport.md ("The MCLK of the BIOS images at hand"). Left out: Diamond's 40h 1Dh (N = 0,
+# in docs/764-rom.md ("The MCLK of the BIOS images at hand"). Left out: Diamond's 40h 1Dh (N = 0,
 # PLL-2) and the Trio32's 23h 28h (VCO 120.3 MHz, below 135 MHz, PLL-1).
 KNOWN_MCLK_8811 = [
     (0x42, 0x41, 9),        # 59.96 MHz: Phoenix 1.5-06 and Trio64V+ 1.01-05/1.02-02, Diamond, ELSA, Hercules

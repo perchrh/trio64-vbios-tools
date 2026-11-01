@@ -6,7 +6,8 @@
 # branch or pull request arrives.
 #
 # The job roms runs `make roms` first: every chip's ROM at its memory clocks (775, 765, 764X, 764P),
-# kept as the artifact `roms` for 14 days. The tests then run as parallel jobs on those images, one
+# handed to the test jobs as the artifact `roms` (kept 1 day), and `make dist`: the tools as the artifact
+# trio64-tools-<VERSION> (kept 90 days; the download is trio64-tools-<VERSION>.zip with trio64/tools/ in it). The tests then run as parallel jobs on those images, one
 # matrix row per chip and memory clock: the slowest and the fastest image of each chip (column image).
 # Each row tests its image with 2 MB, then runs the tests tagged `vram` (the ones whose result depends on
 # the memory size) with 4 MB and with 1 MB. On the Trio64V2 the longest
@@ -98,14 +99,6 @@ jobs:
       - name: Build the tools
         run: make NASM=$HOME/nasm/nasm
 
-      - name: Upload the tools
-        if: ${{ matrix.chip == 'Trio64V2' && matrix.first }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: tools
-          path: build/
-          retention-days: 14
-
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -160,18 +153,18 @@ jobs:
         run: echo "name=emu-logs-$(echo '${{ matrix.chip }} ${{ matrix.part }}' | tr -c 'A-Za-z0-9+\n' '-')" >> "$GITHUB_OUTPUT"
 
       - name: Upload the emulator logs
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.art.outputs.name }}
           path: |
             emu/ci-*/
             !emu/**/*.BIN
-          retention-days: 14
+          retention-days: 7
           if-no-files-found: ignore
 
   roms:
-    name: All ROMs (make roms)
+    name: All ROMs (make roms) and the release zip
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -199,12 +192,25 @@ jobs:
       - name: Every chip's ROM at its memory clocks
         run: make roms NASM=$HOME/nasm/nasm
 
-      - name: Upload the ROMs
+      - name: Upload the ROMs for the test jobs
         uses: actions/upload-artifact@v4
         with:
           name: roms
           path: build/roms/
-          retention-days: 14
+          retention-days: 1
+
+      - name: The release zip (make dist, the tools)
+        id: dist
+        run: |
+          make dist NASM=$HOME/nasm/nasm
+          echo "version=$(make -s version)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: trio64-tools-${{ steps.dist.outputs.version }}
+          path: build/dist/
+          retention-days: 90
 
   build-and-test:
     name: build-and-test

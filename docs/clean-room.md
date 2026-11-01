@@ -6,7 +6,7 @@ is not legal advice: before anything is distributed, a lawyer should look at the
 
 ## The idea
 
-Today's Trio64 ROM is Phoenix's 1.5-07 with our patches (docs/trio64-backport.md), so it cannot be
+Today's Trio64 ROM is Phoenix's 1.5-07 with our patches (docs/764-rom.md), so it cannot be
 given away freely. A clean-room implementation would replace it with code of our own that behaves
 the same towards programs, drivers and the card:
 
@@ -66,8 +66,10 @@ it): VBE 1.2 (VS911022, the text of 22 October 1991; its mode table restates 6Ah
 VBE 2.0 covers the Mode 6Ah standard), VBE 3.0, Ralf Brown's Interrupt List, IBM's "Personal System/2
 and Personal Computer BIOS Interface Technical Reference" (April 1987: the INT 10h functions at first
 hand), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3 (the option ROM header,
-the start-up call and the VGA palette snoop). Named by the owner but not yet handed over: DMT, GTF 1.1
-and a German BIOS book. VBE/PM 1.0 (4F10h) is summarised in VBE 2.0 compilations and VGADOC; for DPMS
+the start-up call and the VGA palette snoop), DMT, GTF 1.1, Ferraro's "Programmer's Guide to the EGA,
+VGA and Super VGA Cards" and a German BIOS reference book. VBE/PM 1.0 (4F10h) is summarised in VBE 2.0
+and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are restated
+in VBE 1.2 and 2.0, so none of them is needed on its own; for DPMS
 1.0, the X Window System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) and the
 states On, Standby, Suspend and Off (the VESA DPMS article on Wikipedia) stand in until the standard
 itself is at hand.
@@ -86,7 +88,7 @@ itself is at hand.
   Trio64 base lists), and `refcompare` uses the reference ROM as its oracle, which is acceptable
   only on the dirty side.
 - The README's Windows 9x driver findings (what S3's driver expects from the BIOS) and
-  docs/trio64-backport.md (the Trio64 card, its memory, the DDC wiring).
+  docs/764-rom.md (the Trio64 card, its memory, the DDC wiring).
 
 ## What is missing, in order of size
 
