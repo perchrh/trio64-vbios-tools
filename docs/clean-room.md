@@ -177,6 +177,11 @@ files of their own, not in a public repository.
   | Linux `drivers/gpu/drm/drm_edid.c`, the table `drm_dmt_modes[]` | MIT | The DMT modes as a second copy, to check `vesamodes` against |
   | Linux `drivers/video/fbdev/core/modedb.c`, `vesa_modes[]` | GPL 2 (the kernel's COPYING) | DMT timings, facts only (GPL 2 only) |
   | 86Box `src/video/vid_s3.c` (from PCem) | GPL 2 (COPYING; the file header states no "or later") | A closer model of the Trio64 than DOSBox (register behaviour, the high-colour modes); facts only |
+  | FreeDOS MODE (`modevga.c`, `modecon.c`, github.com/FDOS/mode) | GPL 2 ("GPL (v2)" in the headers, no "or later"): facts only | A client of the standard functions: 25, 28, 43 and 50 lines through the AH=11h font loads and AH=12h BL=30h scan lines, 40 and 80 columns, and 132 columns through the VBE text modes: it lists 4F00h, takes every mode whose 4F01h attributes say supported text mode (XResolution and YResolution in characters) and sets it with 4F02h. A BIOS without VBE text modes (108h-10Ch) gives no `MODE CON COLS=132` |
+  | FreeDOS DISPLAY (github.com/FDOS/display) | GPL 2 or later | Code page switching on CGA, EGA and VGA: which font loads (AX=1100h, 1110h) it makes and how it reloads the font after a mode set; what DOS programs expect of AH=00h and the font functions |
+  | FreeDOS GRAPHICS (github.com/FDOS/graphics) | GPL 2 (COPYING): facts only | Screen printing: the memory layout of the CGA, EGA and VGA graphics modes and of MDA/Hercules, read pixel by pixel; a check of the mode table's memory organisation |
+  | FreeDOS NANSI (github.com/FDOS/ansi) | GPL 2 or later | An ANSI console driver: its use of the BIOS text output (AH=02h, 06h, 07h, 09h, 0Eh) and of the BIOS data area fields (columns, rows at 0040:0084h, cursor positions, active page) |
+  | FreeDOS FDAPM (`dpmsfunc.asm`, github.com/FDOS/fdapm) | GPL 2 or later | Monitor power states through VBE/PM 4F10h; for when 4F10h comes into scope |
 
   None of them answers the memory refresh, the board's CR5C wiring or the memory timing: those need the
   datasheet of the card's memory chips and the board itself.
