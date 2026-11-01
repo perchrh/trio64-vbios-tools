@@ -64,7 +64,7 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '0da79703951db097b3cbb8f9d4041f72f6205db9a11760a58bc9820431e5dba6'   # 32 KB 1.03-08 image
-RESULT_SHA = '39014c3f5b3abd368be8a82dffc65e20fd0ee0df5d94bf050d55867637a96535'  # 1.03-08-p2 (NASM 3.02), emulator tests passed
+RESULT_SHA = 'b49fcdc4951f21521dd81f0dd3a62490fff94bf95ddb848d98424483704d8c62'  # 1.03-08-p3 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -73,7 +73,7 @@ BLOCK_SHA = {
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
-    'vfix.asm': '9afe8b50acfff744',
+    'vfix.asm': 'a2fe5962c89579d5',
 }
 FREE_START, FREE_END = 0x7AE0, 0x7FF0   # free in 1.03-08 from 7AD9h (zeros); 7FF0h-7FF6h: 'Cardex1'
 

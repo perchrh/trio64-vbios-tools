@@ -316,7 +316,7 @@ fonts, strings, padding) and code nothing reaches (the routines our patches jump
 count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p21 is at
 86.6 % (15135 of 17487 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
-(`make coverage ROM=S3VPP2.BIN CHIP=765`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
+(`make coverage ROM=S3VPP3.BIN CHIP=765`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
 (`CHIP=764`) was at 85.2 % (13341 of 15650 bytes) at 1.5-07-p1, its new code all run; the FIFO code
 of p2 and p3 came after that measurement.
 
@@ -374,10 +374,10 @@ the patcher tests in its section "The build".
 1.03-08's own faults, each with its issue in [docs/765-changes.md](docs/765-changes.md). The build, what
 does not apply to the Trio64V+ and the per-call costs: [docs/765-rom.md](docs/765-rom.md).
 
-    make 765-rom OUT=S3VPP2.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
-    make 765-rom-test [ROM=S3VPP2.BIN]
-    make emu-test ROM=S3VPP2.BIN CHIP=765 [LOGS=emu/vlogs]
-    make 765-ref-compare ROM=S3VPP2.BIN
+    make 765-rom OUT=S3VPP3.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
+    make 765-rom-test [ROM=S3VPP3.BIN]
+    make emu-test ROM=S3VPP3.BIN CHIP=765 [LOGS=emu/vlogs]
+    make 765-ref-compare ROM=S3VPP3.BIN
 
 Square brackets in these lines mark options: type `SIZE765=64`, not `[SIZE765=64]`.
 
@@ -432,7 +432,7 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
 | 775 (Trio64V2/DX) | `775-P22/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p22, 64 KB, the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P2/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08-p2, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P3/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08-p3, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
 | 764X (Trio64 PnP) | `764X-P3/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p3, 64 KB |
 | 764P (86C764-P) | `764P-P3/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p3, 64 KB |
 
@@ -442,7 +442,7 @@ with `OVERCLOCK=1`).
 
 
     make 775-rom OUT=S3V2P22-55.BIN MCLK=55 [MEMTYPE=edo1]
-    make 765-rom OUT=S3VPP2-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make 765-rom OUT=S3VPP3-55.BIN MCLK=55 [MEMTYPE=edo1]
 
 Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
 for (CR36 bits 3-2, set by resistors on the board and kept by the BIOS). `MCLK` sets the entry of
@@ -455,7 +455,7 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 | Trio64V2, 2.04.07-p22 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | C9h | 59.96 MHz | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
-| Trio64V+, 1.03-08-p2 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
+| Trio64V+, 1.03-08-p3 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
 | Trio64, 1.5-07-p3 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
 

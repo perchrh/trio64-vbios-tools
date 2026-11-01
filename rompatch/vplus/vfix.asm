@@ -19,7 +19,10 @@ cpu 386
 org 0x7D2E
 
 ; ---- the mode set (called from the hook in place of MODESET; first in this block: its address is VFIX) ----
-; In and out: as MODESET. Keeps every register, the flags and the sequencer index.
+; In and out: as MODESET. Keeps every register, the flags and the sequencer index. Interrupts are off
+; from reading the sequencer index to putting it back (p3, #116): an interrupt there would stretch the
+; synchronous reset to the length of its handler, and one that writes the sequencer index without
+; putting it back would send the SR01 write elsewhere. The popf at the end restores IF.
 msx:    call    MODESET
         pushf
         push    ax
@@ -33,6 +36,7 @@ msx:    call    MODESET
         cmp     al,0x67                 ; 320x200x32
         ja      .r
         mov     dx,0x3C4
+        cli                             ; p3: no interrupt inside the reset or between index and data
         in      al,dx
         push    ax                      ; the sequencer index, put back below
         mov     ax,0x0100               ; synchronous reset while the dot clock changes
@@ -48,7 +52,7 @@ msx:    call    MODESET
         out     dx,ax
         pop     ax
         out     dx,al
-.r:     pop     ds
+.r:     pop     ds                      ; (the flags, IF among them, come back with the popf below)
         pop     dx
         pop     ax
         popf
