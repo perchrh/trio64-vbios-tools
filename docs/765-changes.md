@@ -2,7 +2,7 @@
 
 What 1.03-08-pN (the level in `common/version.inc`) changes against S3's Trio64V+ BIOS 1.03-08, each
 with the issue that has the details. Most p1 changes are backports from the Trio64V2 ROM
-(`docs/775-changes.md`): the issue is the Trio64V2 one, which names the Trio64V+ in its labels. p2 fixes
+(`docs/775-changes.md`): the issue is the Trio64V2 one, which carries the label 765. p2 fixes
 faults of 1.03-08 itself. The build, what does not apply to the Trio64V+ and why, the per-call costs and
 the card runs are in `docs/765-rom.md`.
 

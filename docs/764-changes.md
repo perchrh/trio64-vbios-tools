@@ -3,7 +3,7 @@
 What 1.5-07-pN (the level in `common/version.inc`, now p3) changes against the Phoenix S3 Trio64 BIOS
 1.5-07, each with the issue that has the details. The speed patches, the booster and the flip-flop reset
 are backports from the Trio64V2 ROM (`docs/775-changes.md`); their issues are the Trio64V2 ones, which
-name the Trio64 in their labels. The build, the space map, the base candidates, the MCLK survey and the
+carry the label 764. The build, the space map, the base candidates, the MCLK survey and the
 card runs are in `docs/764-rom.md`.
 
 | Change | Level | Issue | How |
