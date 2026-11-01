@@ -61,6 +61,17 @@ of its specification. The timing values of the ROM can then come from DMT and GT
 Phoenix's tables. VESA allows only VBE 2.0 to be posted online, so the others go to the clean side as
 files of their own, not in a public repository.
 
+At hand on 1 November 2026 (uploaded by the owner, kept outside the repository unless their terms allow
+it): VBE 1.2 (VS911022, the text of 22 October 1991; its mode table restates 6Ah as 102h, which with
+VBE 2.0 covers the Mode 6Ah standard), VBE 3.0, Ralf Brown's Interrupt List, IBM's "Personal System/2
+and Personal Computer BIOS Interface Technical Reference" (April 1987: the INT 10h functions at first
+hand), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3 (the option ROM header,
+the start-up call and the VGA palette snoop). Named by the owner but not yet handed over: DMT, GTF 1.1
+and a German BIOS book. VBE/PM 1.0 (4F10h) is summarised in VBE 2.0 compilations and VGADOC; for DPMS
+1.0, the X Window System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) and the
+states On, Standby, Suspend and Off (the VESA DPMS article on Wikipedia) stand in until the standard
+itself is at hand.
+
 ## What we have
 
 - `docs/bios-rules.md`: 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
@@ -149,6 +160,19 @@ files of their own, not in a public repository.
 - **Licence of the result:** LGPLv3 code and GPL-2-or-later fonts can both be used under GPL 3, so
   the ROM would be GPL 3 (or later). Code under GPL 2 only (DOSEMU, if its licence says so) cannot
   be combined with LGPLv3 or GPL 3 code: use it as a reference for facts only.
+- **The owner's wish (1 November 2026): public domain, no licence at all.** What follows from it:
+  - No code from SeaBIOS (LGPLv3), the FreeDOS fonts (GPL) or any emulator may go into the ROM; they
+    stay sources of facts only, like the standards. The ROM is then written in full by the clean side,
+    probably in assembly: the owner also wants the VGA functions no slower than our Trio64 ROM p3,
+    while CGA, EGA and MDA may be slower (the comparison of the slim SeaVGABIOS with p3 decides how
+    much the C code costs; `docs/seavgabios-trio64.md`).
+  - Fonts: an 8x8, 8x14 and 8x16 set that is itself public domain, or drawn anew. SeaVGABIOS's fonts
+    are called public domain but equal IBM's (`docs/cleanroom/README.md` "Font origin").
+  - The specification, the tests and the tools stay as they are; only what goes into the ROM image
+    must be free of other people's licences.
+  - Public domain is not recognised everywhere (in Norway the author's moral rights cannot be given
+    up); a waiver with a permissive fallback licence, such as CC0 1.0 or the Unlicense, gives the same
+    result where public domain is not available. To settle with the lawyer of this document.
 - **More sources the clean side may read:**
   - Michael Abrash's Graphics Programming Black Book (freely published by the author): the VGA
     hardware (latches, write modes, Mode X), not the BIOS functions.
@@ -171,8 +195,8 @@ files of their own, not in a public repository.
   | Source | Licence | Use |
   | --- | --- | --- |
   | SeaBIOS and SeaVGABIOS (the base, branch `claude/slim-vgabios` of perchrh/seabios_fork) | LGPLv3 | The PCI option ROM call (AX = bus, device and function) and the "PCIR" data structure its build script writes; the standard INT 10h functions and IBM's parameter tables; its code is used under its licence |
-  | DOSBox Staging (`src/hardware/video/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (SPDX header) | Cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions; condition 3 for its mode tables |
-  | DOSBox-X (`src/hardware/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (file headers) | As DOSBox Staging, and closer to our chips: it models the Vision864, Trio32/Trio64 and Trio64V+ as separate cards (CR2E 11h for the Trio64, revision 40h for the Trio64V+) and cites the Vision864 and Trio32/Trio64 data books in its comments; condition 3 for its mode tables |
+  | DOSBox-X (`src/hardware/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (file headers) | The emulator to read first (decision of 1 November 2026): cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions. Closer to our chips than DOSBox Staging: it models the Vision864, Trio32/Trio64 and Trio64V+ as separate cards (CR2E 11h for the Trio64, revision 40h for the Trio64V+) and cites the Vision864 and Trio32/Trio64 data books in its comments; condition 3 for its mode tables |
+  | DOSBox Staging (`src/hardware/video/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (SPDX header) | Lower tier: read only where DOSBox-X says nothing. Cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions; condition 3 for its mode tables |
   | X.Org server `hw/xfree86/common/vesamodes` | XFree86 Project licence (MIT style) | 34 modelines "distilled from" VESA DMT 1.0 Rev. 0.8 (1998): pixel clock, horizontal and vertical totals, sync positions and polarities, for example 640x480 at 60 Hz (25.175 MHz, 800 x 525), 800x600 at 60 Hz (40 MHz, 1056 x 628), 1024x768 at 60 Hz (65 MHz, 1344 x 806). A stand-in for DMT until DMT itself is at hand |
   | Linux `drivers/gpu/drm/drm_edid.c`, the table `drm_dmt_modes[]` | MIT | The DMT modes as a second copy, to check `vesamodes` against |
   | Linux `drivers/video/fbdev/core/modedb.c`, `vesa_modes[]` | GPL 2 (the kernel's COPYING) | DMT timings, facts only (GPL 2 only) |

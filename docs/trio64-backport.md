@@ -86,6 +86,13 @@ below the data book's 135 MHz (PLL-1).
 | 44 6B | 65.03 MHz | 260.1 MHz | 1 | Trio64V2 |
 | 41 41 | 79.94 MHz | 319.8 MHz | 1 | Trio3D |
 
+Two Trio64V+ images added on 1 November 2026, POST run in the emulator with its default straps (CR36
+= 12h, 1-cycle EDO), not counted in the table or in `KNOWN_MCLK_8811`: the Hercules Graphite
+Terminator 64 BIOS D2g (09/19/97, S3's code base, VBE 1.2) loads 41h 28h, 50.11 MHz; the STB
+PowerGraph 64 Video BIOS 1.8 (12/10/95, Phoenix's code base, VBE 1.2) loads 40h 1Ah, also 50.11 MHz
+but with N = 0. Neither is a later S3 version with fixes 1.03-08 lacks: D2g matches every 1.03-08
+speed patch signature (`docs/vplus-backport.md`), and both stay at VBE 1.2.
+
 ## Where the code went
 
 The removed entries and modes freed 384 bytes in nine places; with two zero runs the stock BIOS never
@@ -163,7 +170,7 @@ S3's own Trio64V+ BIOS 1.03-08.
 | `1-30.bin` (miroCRYSTAL, uploaded 30 October 2026) | Phoenix 1.5-04 | 16 of 23 | 243 bytes (7F0Ch) | 53.7 MHz | as 1.4-04, plus 1600x1200 interlaced (WARN 50) and 4F02 setting 118h-11Ah with 2 MB (errors) |
 | `5-52.bin` (V7-Mirage P-64 5.52, SPEA/Video Seven, uploaded twice) | Phoenix 1.5-06 | 16 of 23 | 195 bytes (7F3Ch) | 59.96 MHz | as 1.5-04 |
 | `expertcolor.BIN` (the name suggests the DSP-3364P) | Phoenix 1.5-07, "764 M70" | 16 of 23 | 179 bytes (7F4Ch) | 69.8 MHz | as 1.5-04, plus MCLK above the data book maximum of 60 MHz (FAIL 2 then; within the 70 MHz the tools take since T64-MEM-7) |
-| `trio64_expertcolor_dsp3364p.bin` (dumped from the DSP-3364P itself, 86C764X, 2 MB EDO 50 ns, uploaded 31 October 2026) | Phoenix 1.5-07 of 11/16/95, "764 M70" (SHA-256 1056fcee...) | not checked (refused, see below) | 557 bytes (7DD2h) | 69.8 MHz | an earlier 1.5-07 build: its 4F15 has DDC1 only (BL=00h/01h, no DDC2B, no VDIF), 384 bytes less code, so everything from about 528Ah (the VBE/DDC code, the fonts) lies 384 bytes lower and the words that point there differ. Its first 4 KB are those of the CP764 build apart from 52 bytes: the model tag and dates, the 8x8 font pointer at 01B1h, the header word at 003Ch (no code reads it), and the MCLK at 3B5h (25h/22h, 69.8 MHz); the per-mode memory timing bytes are the same |
+| `trio64_expertcolor_dsp3364p.bin` (dumped from the DSP-3364P itself, 86C764X, 2 MB fast page 50 ns, uploaded 31 October 2026) | Phoenix 1.5-07 of 11/16/95, "764 M70" (SHA-256 1056fcee...) | not checked (refused, see below) | 557 bytes (7DD2h) | 69.8 MHz | an earlier 1.5-07 build: its 4F15 has DDC1 only (BL=00h/01h, no DDC2B, no VDIF), 384 bytes less code, so everything from about 528Ah (the VBE/DDC code, the fonts) lies 384 bytes lower and the words that point there differ. Its first 4 KB are those of the CP764 build apart from 52 bytes: the model tag and dates, the 8x8 font pointer at 01B1h, the header word at 003Ch (no code reads it), and the MCLK at 3B5h (25h/22h, 69.8 MHz); the per-mode memory timing bytes are the same |
 | `dataexpertcp764.BIN` = `W27E257 CP764 V1.5-0 7.BIN` (uploaded) | Phoenix 1.5-07 | 16 of 23 | 179 bytes | 54.9 MHz | the 1.5-07 code; 24 bytes differ from `expertcolor.BIN` |
 | `Britek BP-S341 (S3 Trio64).BIN` (uploaded) | Phoenix 1.5-07 as "VIEWTOP Graphics BIOS", "S3 Trio64X (764X)" | 16 of 23 | 164 bytes | 52.5 MHz | the 1.5-07 code |
 | `86c764xtrio64.BIN`, `86c764ptrio64.BIN`, `86c764x2.bin` | Phoenix 1.5-07 (one "EDO") | 16 of 23 | 179 bytes | 55.0-55.5 MHz | the 1.5-07 code with other memory timing bytes |
@@ -248,7 +255,11 @@ The card carries four Mosel Vitelic V53C16256HK50 (SOJ-40): 256K x 16 **fast pag
 2 MB in all; not EDO, as the card had been described. The datasheet (Mosel Vitelic V53C16256H,
 preliminary) gives for the -50 grade: RAS access tRAC 50 ns, column access tCAA 24 ns, fast page cycle
 tPC 28 ns min, read/write cycle tRC 90 ns min, RAS pulse tRAS 50 ns min, RAS precharge tRP 30 ns min,
-CAS pulse tCAS 14 ns min, CAS precharge tCP 7 ns min.
+CAS pulse tCAS 14 ns min, CAS precharge tCP 7 ns min. Refresh (the family's data sheet in the 1993
+Mosel memory data book, V53C16256/18256): 512 cycles in 8 ms, one every 15.6 us, CAS-before-RAS or
+RAS-only. Two chips are soldered (date code 9602), two sit in sockets (the upgrade from 1 MB; card
+photos of 1 November 2026). What that asks of the refresh count per line: `docs/cleanroom/spec-b-modeset.md`
+MQ-5.
 
 The Trio64 counts its memory cycles in MCLKs (Trio32/Trio64 data book section 7): a page mode cycle
 takes 2 MCLKs, RAS stays low 3.5 or 4.5 MCLKs and precharges 2.5 or 3.5 MCLKs (CR68 bits 2 and 3,

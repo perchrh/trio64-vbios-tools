@@ -1,8 +1,19 @@
-# Trio64V2/DX VBIOS test tools
+# S3 Trio64 family video BIOS tools
 
-DOS tools written while modifying the video BIOS of a Gainward S3 Trio64V2/DX card
-(86C775, 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901), and later for its Trio64V+ and Trio64
-relatives.
+Video BIOSes, DOS test tools and an emulator for the S3 Trio64 family: the Trio64 (86C764X), the
+Trio64V+ (86C765) and the Trio64V2/DX (86C775), all PCI 5333h. For each chip the project builds a
+patched video BIOS from a reference BIOS (fixes, speed, 60 Hz defaults, an MCLK build option), tests it
+in its own emulator and on real cards, and prepares a clean-room BIOS of its own (`docs/clean-room.md`).
+
+| Chip | ROM | Reference BIOS | Test card | Section |
+| --- | --- | --- | --- | --- |
+| Trio64 86C764X | 1.5-07-pN (`make trom`) | Phoenix 1.5-07 | ExpertColor DSP-3364P, 2 MB fast page | "Trio64 ROM", `docs/trio64-backport.md` |
+| Trio64V+ 86C765 | 1.03-08-pN (`make vrom`) | S3 1.03-08 | STB, Gainward GW503, Hercules Terminator 64 | "Trio64V+ ROM", `docs/vplus-backport.md` |
+| Trio64V2/DX 86C775 | 2.04.07-pN (`make rom`) | S3 2.04.07 | Gainward Genesis EV (GW503A), 2 MB EDO 40 ns | "ROM patcher", "Features and changes compared to the reference BIOS 2.04.07" |
+
+The work started on the Trio64V2/DX card, so the older sections below describe that ROM first; the
+three ROMs share the patcher library (`rompatch/s3patch.py`), the version file
+(`common/version.inc`), the tools and the emulator.
 
 The patched ROM images are not in this repository: `rompatch/` holds the changes to the reference
 BIOSes and the patchers that build the images from them.
