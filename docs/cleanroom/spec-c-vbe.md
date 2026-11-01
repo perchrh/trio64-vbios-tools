@@ -297,6 +297,9 @@ Trio64 BIOSes examined there offers 4F14h.
    A client that uses them: FreeDOS MODE (`MODE CON COLS=132`) walks the 4F00h list, takes the
    modes whose 4F01h attributes say supported text mode, matches XResolution/YResolution as columns
    and rows, and sets the mode with 4F02h; without 108h-10Ch it cannot give 132 columns.
+   Decided by the FreeDOS 1.4 target (1 November 2026): the text modes MODE reaches are required,
+   109h-10Ch and 108h (`docs/cleanroom/freedos-1.4.md` FD-14, FD-15, and the open question there on
+   the number 0449h holds in them).
 2. 320x200 direct colour 10Dh-10Fh: VBE 1.2 modes that need a double-scanned 70 Hz timing with a
    12.59 MHz pixel clock, below the lowest PLL output (135 MHz / 8 = 16.9 MHz, PLL-1, PLL-2), so only
    with the dot clock halved from 25.175 MHz (SR01 bit 3) in an enhanced mode, which the data book does
