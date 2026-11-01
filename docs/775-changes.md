@@ -36,7 +36,7 @@ and Trio64 ROMs carry backports of many of these (`docs/765-changes.md`, `docs/7
 ## In detail
 
 The ROM is the S3 Trio64V2/DX reference BIOS 2.04.07 with the changes below in the lower 32 KB; the
-upper 32 KB is a copy of it ("The build"). The lower half checksums to 0. Every change keeps
+upper 32 KB is a copy of it (`docs/775-rom.md`, "The build"). The lower half checksums to 0. Every change keeps
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
 behaves exactly like the reference (`make 775-ref-compare`); the changes there only make it faster. About
