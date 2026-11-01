@@ -27,12 +27,20 @@ What is emulated
     at 0050:0020, so a program that hooks INT 21h (for example a TSR that stays resident when its own
     AH=4Ch passes its hook) sees its own calls. INT 16h returns keys from a queue (Enter when empty);
     INT 15h AH=87h reports "not supported".
-
+  - Video memory: the card's 1, 2 or 4 MB (Machine.vram) in one bytearray (vram), seen through the
+    64 KB window at A0000-AFFFF. The window's 64 KB page is CR6A bits 5-0, or when they are 0, CR35
+    bits 3-0 with CR51 bits 3-2 as bits 5-4, and only with CR31 bit 0 set (Trio64V+ data book, CR31,
+    CR35, CR51, CR6A); the same page applies to a 64 KB linear window at A0000h (CR58 bit 4, size
+    64 KB, CR59/CR5A = 000Ah). In the packed modes the window holds bytes page x 64 KB onward; in the
+    16-colour and unchained modes (chain-4 and odd/even off, A0000 mapped) the four planes are the
+    interleaved bytes of the same memory (plane p, address a is vram[4a + p], so a mode 13h byte at A
+    is plane A AND 3 at address A / 4) and the window's plane address starts at page x 16 KB, with the
+    plane logic: map mask, read map, bit mask, set/reset, latches, write modes 0-2, read modes 0 and 1.
+    With linear addressing on at another base (CR58 bit 4) the window at A0000 is off: writes are
+    lost and reads give FFh, as on the chip. B0000-BFFFF (text modes, CGA, MDA) is plain RAM.
 What is not emulated (results that depend on it are meaningless here)
-  - Video memory beyond one 64 KB window: A0000-BFFFF is plain RAM, plus a model of the four planes
-    (map mask, read map, bit mask, set/reset, latches, write modes 0-2, read mode 0) for the 16-colour
-    and unchained modes. There is no banking or LFB memory, so memory tests through banks or the LFB
-    fail.
+  - The linear frame buffer at the CR59/CR5A base (INT 15h AH=87h reports "not supported"), so memory
+    tests through the LFB fail. Video memory itself is modelled (below).
   - The graphics engine (ports 82E8h-BEE8h): commands written to 9AE8h are counted (ge_cmds), not
     executed. The Trio64 BIOS 1.4 clears video memory with it, so its mode sets clear nothing here.
   - Real timing: CPU speed, bus waits and monitor behaviour. Durations come from the virtual clock.
@@ -97,6 +105,38 @@ class ComResult:
         self.dos_calls = set()         # (AH) values seen
 
 
+class _Plane:
+    """One VGA plane as a view on the interleaved video memory: address a of plane p is vram[4a + p]."""
+    def __init__(self, vram, p):
+        self.v, self.p = vram, p
+
+    def __len__(self):
+        return len(self.v) // 4
+
+    def _sl(self, i):
+        start, stop, step = i.indices(len(self))
+        if step != 1:
+            raise ValueError('plane slices take no step')
+        return slice(4 * start + self.p, 4 * stop + self.p if stop > start else 4 * start + self.p, 4)
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            return bytes(self.v[self._sl(i)])
+        return self.v[4 * i + self.p]
+
+    def __setitem__(self, i, val):
+        if isinstance(i, slice):
+            self.v[self._sl(i)] = bytes(val)
+        else:
+            self.v[4 * i + self.p] = val
+
+    def __bytes__(self):
+        return bytes(self.v[self.p::4])
+
+    def __iter__(self):
+        return iter(self.v[self.p::4])
+
+
 class Machine:
     def __init__(self, rom, keys=None):
         self.rom = rom
@@ -133,7 +173,8 @@ class Machine:
         mu.hook_add(UC_HOOK_MEM_READ, self._tread, None, 0x46C, 0x46D)
         mu.hook_add(UC_HOOK_MEM_WRITE, self._vwrite, None, 0xA0000, 0xBFFFF)
         mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
-        self.planes = [bytearray(0x10000) for _ in range(4)]
+        self.vram = bytearray(Machine.vram << 20)     # the card's video memory (see the module docstring)
+        self.win = ('packed', 0)                        # what A0000-AFFFF shows now: (kind, page base)
         self.ge_cmds = 0                                # graphics engine commands written to 9AE8h
         self.bee8 = set()                               # BEE8h indexes written (bits 15-12 of the word)
         self.ge_first = None                            # the BEE8h indexes written before the first command
@@ -299,11 +340,20 @@ class Machine:
                 self.wlog.append((reg, i, v, regs.get(i, 0), r['seq'].get(1, 0), self._retrace(),
                                   r['crtc'].get(0x39, 0)))
             if p == 0x3C4: r['si'] = v
-            elif p == 0x3C5: r['seq'][r['si']] = v
+            elif p == 0x3C5:
+                r['seq'][r['si']] = v
+                if r['si'] == 4:
+                    self._remap()
             elif p in (0x3D4, 0x3B4): r['ci'] = v
-            elif p in (0x3D5, 0x3B5): r['crtc'][self._ci()] = v
+            elif p in (0x3D5, 0x3B5):
+                r['crtc'][self._ci()] = v
+                if self._ci() in self.WINDOW_CR:
+                    self._remap()
             elif p == 0x3CE: r['gi'] = v
-            elif p == 0x3CF: r['gc'][r['gi']] = v
+            elif p == 0x3CF:
+                r['gc'][r['gi']] = v
+                if r['gi'] == 6:
+                    self._remap()
             elif p == 0x3C0:
                 if r['aff'] == 0: r['ai'] = v
                 else: r['atc'][r['ai'] & 0x1F] = v
@@ -365,17 +415,73 @@ class Machine:
         sr4 = self.r['seq'].get(4, 0)
         return not sr4 & 0x08 and sr4 & 0x04 and (self.r['gc'].get(6, 0) >> 2) & 3 == 1
 
+    WINDOW_CR = (0x31, 0x35, 0x51, 0x58, 0x59, 0x5A, 0x6A)
+
+    def _wkey(self):
+        """What the window A0000-AFFFF shows (module docstring): ('packed', byte offset), ('planar', plane
+        address) or ('off', 0) when linear addressing is on at another base than A0000h."""
+        cr = self.r['crtc']
+        if cr.get(0x58, 0) & 0x10 and not (cr.get(0x58, 0) & 3 == 0 and cr.get(0x59, 0) == 0
+                                           and cr.get(0x5A, 0) == 0x0A):
+            return ('off', 0)
+        page = 0
+        if cr.get(0x31, 0) & 1:                         # CR31 bit 0: the base address offset is on
+            page = cr.get(0x6A, 0) & 0x3F or ((cr.get(0x35, 0) & 0x0F) | ((cr.get(0x51, 0) >> 2) & 3) << 4)
+        if self._planar():
+            return ('planar', page * 0x4000)
+        return ('packed', page * 0x10000)
+
+    def sync(self):
+        """Write what the packed window holds back into vram (the window is plain RAM for speed)."""
+        kind, base = self.win
+        if kind == 'packed':
+            data = self.mu.mem_read(0xA0000, 0x10000)
+            n = len(self.vram)
+            base %= n
+            self.vram[base:base + 0x10000] = data[:n - base]
+
+    def _remap(self):
+        """After a register write that can move the window: keep the old page, show the new one."""
+        k = self._wkey()
+        if k == self.win:
+            return
+        self.sync()
+        kind, base = k
+        if kind == 'packed':
+            n = len(self.vram)
+            base %= n
+            self.mu.mem_write(0xA0000, bytes(self.vram[base:base + 0x10000]).ljust(0x10000, b'\0'))
+        elif kind == 'off':
+            self.mu.mem_write(0xA0000, b'\xff' * 0x10000)
+        self.win = k
+
+    @property
+    def planes(self):
+        """The four planes as views on vram (after sync, so a packed window's bytes are in)."""
+        self.sync()
+        return [_Plane(self.vram, p) for p in range(4)]
+
+    @planes.setter
+    def planes(self, data):
+        self.sync()
+        for p, d in enumerate(data):
+            self.vram[p:p + 4 * len(d):4] = bytes(d)
+        if self.win[0] == 'packed':
+            self.win = ('none', 0)
+            self._remap()
+
     def _vwrite(self, uc, acc, addr, size, val, ud):
         self.t += 1                                     # video memory writes take time too
-        if addr >= 0xB0000 or not self._planar():
+        if addr >= 0xB0000 or self.win[0] != 'planar':
             return
         gc, sr = self.r['gc'], self.r['seq']
         mode = gc.get(5, 0) & 3
         mask, sr_en, sr_val = gc.get(8, 0xFF), gc.get(1, 0), gc.get(0, 0)
         mapmask = sr.get(2, 0x0F)
         rot, fn = gc.get(3, 0) & 7, (gc.get(3, 0) >> 3) & 3     # GR03: rotate count, function (0 replace,
+        base, psize, vm = self.win[1], len(self.vram) // 4, self.vram
         for k in range(size):                                   # 1 AND, 2 OR, 3 XOR with the latch)
-            off = (addr + k) & 0xFFFF
+            off = (base + ((addr + k) & 0xFFFF)) % psize
             cpu = (val >> (8 * k)) & 0xFF
             if rot:
                 cpu = ((cpu >> rot) | (cpu << (8 - rot))) & 0xFF
@@ -398,22 +504,26 @@ class Machine:
                     elif fn == 3:
                         d ^= self.latch[p]
                     d = (d & mask) | (self.latch[p] & ~mask & 0xFF)
-                self.planes[p][off] = d
+                vm[4 * off + p] = d
 
     def _vread(self, uc, acc, addr, size, val, ud):
         """Before the CPU reads a planar address: load the latches and put the selected plane's bytes
         (read mode 0) or the colour compare result (read mode 1: GR02 colour, GR07 colour don't care)
         into RAM, so the read returns them."""
-        if not self._planar():
+        if self.win[0] == 'off':
+            uc.mem_write(addr, b'\xff' * size)
+            return
+        if self.win[0] != 'planar':
             return
         gc = self.r['gc']
         plane = gc.get(4, 0) & 3
+        base, psize, vm = self.win[1], len(self.vram) // 4, self.vram
         cmode = gc.get(5, 0) & 0x08                     # read mode 1: colour compare
         ccol, cdc = gc.get(2, 0), gc.get(7, 0x0F)
         data = bytearray()
         for k in range(size):
-            off = (addr + k) & 0xFFFF
-            self.latch = [self.planes[p][off] for p in range(4)]
+            off = (base + ((addr + k) & 0xFFFF)) % psize
+            self.latch = [vm[4 * off + p] for p in range(4)]
             if cmode:
                 v = 0xFF
                 for p in range(4):
@@ -421,7 +531,7 @@ class Machine:
                         v &= ~(self.latch[p] ^ (0xFF if ccol & (1 << p) else 0)) & 0xFF
                 data.append(v)
             else:
-                data.append(self.planes[plane][off])
+                data.append(vm[4 * off + plane])
         uc.mem_write(addr, bytes(data))
 
     def _ticks(self):
@@ -523,6 +633,7 @@ class Machine:
                 v = self._reg(UC_X86_REG_ECX)
                 self.r['crtc'][0x59] = (v >> 24) & 0xFF
                 self.r['crtc'][0x5A] = (v >> 16) & 0xFF
+                self._remap()
         else:
             ok = False
         if ok and al in (0x02, 0x03):
