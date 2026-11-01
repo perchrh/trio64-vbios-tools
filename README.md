@@ -462,20 +462,22 @@ changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or
 a run, and a newer commit on the same branch cancels the running one.
 
 First the job "All ROMs (make roms)" builds every chip's ROM at its memory clocks. The tests then run
-as parallel jobs on those images, one matrix row per chip and memory size, each row on one image (the
-emulator tests took 37 minutes one after the other in a single job):
+as parallel jobs on the slowest and the fastest image of each chip. Each job tests its image with 2 MB of
+video memory, then runs the tests tagged `vram` (the ones whose result depends on the memory size) with
+4 MB, and with 1 MB on the Trio64V+ and Trio64; the other tests do not run again at the other sizes:
 
 | Job | What it runs |
 | --- | --- |
-| All ROMs (make roms) | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), kept as the artifact `roms` for 14 days; the rows below test these images |
-| Trio64V2 2 MB, patcher, EGA/CGA | `775M60.BIN`: `make 775-rom-test` (builds the default ROM and checks its pinned SHA-256), `make emu-test` with 2 MB (without s3compat_full), `make 775-ref-compare` |
-| Trio64V2 2 MB s3compat_full | `775M55.BIN`: the longest test alone |
-| Trio64V2 4 MB | `775M50.BIN`: the tests tagged `vram` with 4 MB (without s3compat_full) |
-| Trio64V2 4 MB s3compat_full | `775M60.BIN`: s3compat_full with 4 MB |
-| Trio64V+ 2 MB, patcher, EGA/CGA | `765M55.BIN`: `make 765-rom-test`, `make emu-test CHIP=vplus` with 2 MB, `make 765-ref-compare` |
-| Trio64V+ 4 and 1 MB | `765M60.BIN`: the `vram` tests with 4 and 1 MB |
-| Trio64 764X 2 MB, patcher, EGA/CGA | `764XM70.BIN`: `make 764-rom-test`, `make emu-test CHIP=trio64` with 2 MB, `make 764-ref-compare` |
-| Trio64 764P 4 and 1 MB | `764PM50.BIN`: the `vram` tests with 4 and 1 MB |
+| All ROMs (make roms) | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), kept as the artifact `roms` for 14 days |
+| Trio64V2 50 MHz: 2 and 4 MB, patcher, EGA/CGA | `775M50.BIN`; `make 775-rom-test` (builds the default ROM and checks its pinned SHA-256), `make 775-ref-compare` |
+| Trio64V2 60 MHz: 2 and 4 MB | `775M60.BIN` |
+| Trio64V2 50 MHz: s3compat_full 2 MB | `775M50.BIN`: the longest test alone |
+| Trio64V2 60 MHz: s3compat_full 4 MB | `775M60.BIN`: the longest test alone |
+| Trio64V+ 50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `765M50.BIN`; `make 765-rom-test`, `make 765-ref-compare` |
+| Trio64V+ 60 MHz: 2, 4 and 1 MB | `765M60.BIN` |
+| Trio64 764X 55 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `764XM55.BIN`; `make 764-rom-test`, `make 764-ref-compare` |
+| Trio64 764X 70 MHz: 2, 4 and 1 MB | `764XM70.BIN` |
+| Trio64 764P 50 MHz and 60 MHz: 2, 4 and 1 MB | `764PM50.BIN`, `764PM60.BIN` (one job each) |
 | build-and-test | passes when every row passed and every ROM built (the check name branch rules can require) |
 
 Every job builds NASM 3.02 from its release source (cached between runs) and the tools with `make`, and
