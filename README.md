@@ -259,6 +259,25 @@ the current ROM there is no difference: the patches in those paths (32-bit text 
 AH=09h, VGA clear, font load) only change how fast it is done, and the mode set hook, the memory
 clock and the pedestal only touch S3 extended registers, which are not compared.
 
+### Other emulators to test with
+
+We want to test compatibility with [rust-dos](https://github.com/dividebysandwich/rust-dos) (GPL-2.0 or
+later, a DOS and Windows 9x emulator in Rust). It emulates an S3 Trio64 and ViRGE among its video cards and
+provides a VBE 2.0 of its own, without a BIOS image. What we want to know:
+
+- whether our tools (S3TEST, S3COMPAT, VSHOW, VGALOG, S3REGS) run on its Trio64 and what they report
+  about its registers and VBE answers, against the data book and our three ROMs;
+- whether it can load a video BIOS image of ours (an option ROM at C000h) instead of its built-in one;
+  if so, it is a second emulator for the ROMs and for the clean ROM's milestones;
+- whether the velocity9x Trio64 driver works there with the mode query fix
+  ([michaeldale/velocity9x#19](https://github.com/michaeldale/velocity9x/pull/19)); velocity9x's issue
+  [michaeldale/velocity9x#4](https://github.com/michaeldale/velocity9x/issues/4) reports the driver
+  installing on rust-dos's S3 machine and then staying in 16 colours after the reboot, which is what a
+  refused 4F02h looks like (the driver falls back to 640x480 in 16 colours).
+
+Not started; DOSBox-X (machine types for the Vision864, Trio32, Trio64 and Trio64V+) is the other
+candidate (`docs/clean-room.md`).
+
 ## ROM patcher
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
