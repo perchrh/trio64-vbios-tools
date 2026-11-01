@@ -43,7 +43,7 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by VER775 (now
-;                    "2.04.07-p21") on a Trio64V2, VER765 ("1.03-08-p1") on a Trio64V+, VER764
+;                    "2.04.07-p21") on a Trio64V2, VER765 ("1.03-08N-p4") on a Trio64V+, VER764
 ;                    ("1.5-07-p2") on a Trio64; the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
@@ -118,7 +118,7 @@ F_BOOST equ 2
 F_LFB   equ 4
 F_2MB   equ 8                           ; needs more than 1 MB: not set with 1 MB (CR36 bits 7-5 = 110b)
 RK_V2   equ 0                           ; test set: Trio64V2, our ROM 2.04.07-pN (VER775)
-RK_VP   equ 1                           ; Trio64V+, our ROM 1.03-08-pN (VER765)
+RK_VP   equ 1                           ; Trio64V+, our ROM 1.03-08N-pN (VER765)
 RK_OTHER equ 2                          ; any other chip: the tests that need no ROM of ours
 RK_T64  equ 3                           ; Trio64, our ROM 1.5-07-pN (VER764): as RK_VP, its own mode list
 
@@ -316,7 +316,7 @@ start:  cld
 
 ; ---------------- ROM identity ----------------
 ; Expect: 'Version ' and the version of our ROM for the chip within C000:0000-00FF (Trio64V2: VER775, now
-; "2.04.07-p21"; Trio64V+: VER765, now "1.03-08-p1"), and an 8-bit checksum of 00 over the lower 32 KB
+; "2.04.07-p21"; Trio64V+: VER765, now "1.03-08N-p4"), and an 8-bit checksum of 00 over the lower 32 KB
 ; (the half the VGA BIOS runs from). On another chip there is no ROM of ours: the version found is an
 ; INFO line, not counted.
 t_rom:  mov dx,s_sig
@@ -2653,7 +2653,7 @@ modelist:
         dw 0x0013,700,F_VGA,320,400
         dw 0xFFFF
 
-; Trio64V+, our ROM 1.03-08-pN: the booster in the banked modes, the base back in the VGA modes. The rates
+; Trio64V+, our ROM 1.03-08N-pN: the booster in the banked modes, the base back in the VGA modes. The rates
 ; and line totals are 1.03-08's (VESA DMT 60 Hz; it has no 320x240, 400x300 or 512x384 modes); its
 ; 1280x1024 uses a 1696-pixel line, not DMT's 1688, which the ROM leaves as it is (not checked).
 vmodelist:
