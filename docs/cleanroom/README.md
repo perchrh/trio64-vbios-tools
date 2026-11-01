@@ -66,6 +66,9 @@ hits). Left for a second reader to judge:
   the observed behaviour of S3's BIOSes, not on a public document; they cross as behaviour only.
 - `spec-b-modeset.md`: the PLL values for 25.175 MHz (SR12 61h, SR13 28h) equal the reference ROM's,
   because both follow the data book's procedure 9.1; the derivation is in the rule.
+- `docs/chip-rules.md`: four sentences on what Phoenix's BIOSes do (T64-MEM-9, and the CR61/CR62,
+  CR3B and fixed-M notes of "Related chip: the Vision864") carry a leak review note: observed BIOS
+  behaviour, to keep as behaviour or cut from the clean side's copy.
 - Part B and part C agree on the mode list: 102h and 104h are part C's (VBE-10), 4F01 reports 32 bits
   per pixel for the 4-byte modes (MQ-9, MQ-15 of part B answered).
 
