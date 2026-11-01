@@ -111,7 +111,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
-- All tools share one version number (1.0 now), `VERSION` in `common/version.inc`; never write the
+- All tools share one version number (1.0.0 now), `VERSION` in `common/version.inc`; never write the
   number into a tool's strings, use `VERSION` (and `VER775` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.
 

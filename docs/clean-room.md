@@ -66,14 +66,15 @@ it): VBE 1.2 (VS911022, the text of 22 October 1991; its mode table restates 6Ah
 VBE 2.0 covers the Mode 6Ah standard), VBE 3.0, Ralf Brown's Interrupt List, IBM's "Personal System/2
 and Personal Computer BIOS Interface Technical Reference" (April 1987: the INT 10h functions at first
 hand), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3 (the option ROM header,
-the start-up call and the VGA palette snoop), DMT, GTF 1.1, Ferraro's "Programmer's Guide to the EGA,
-VGA and Super VGA Cards" and a German BIOS reference book. VBE/PM 1.0 (4F10h) is summarised in VBE 2.0
+the start-up call and the VGA palette snoop), DMT, GTF 1.1 and Ferraro's "Programmer's Guide to the EGA,
+VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised in VBE 2.0
 and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are restated
 in VBE 1.2 and 2.0, so none of them is needed on its own. E-DDC 1.2 (2007) describes DDC2B; it drops
-DDC1, for which DDC 1.0 or 2.0 is still missing. For DPMS 1.0, VESA's own summary
-(https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht), the X Window
-System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) and the states On, Standby,
-Suspend and Off stand in for the standard itself.
+DDC1, for which DDC 1.0 or 2.0 is still missing; hardwarebook.info's "VGA (VESA DDC)" page gives the
+connector pins, and Joe Miseli's Xorg talk of 2007 the history of EDID and DDC. VESA's DPM Standard
+Release A (2003, https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
+replaces DPMS 1.0 and keeps only On and Off; for Standby and Suspend, which 4F10h sets, the X Window
+System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands in for DPMS 1.0.
 
 ## What we have
 

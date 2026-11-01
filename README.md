@@ -546,7 +546,7 @@ tests run by hand.
     make dist [ROMS=1]
 
 builds the tools and packs them into `build/trio64-tools-<VERSION>.zip` (VERSION from
-`common/version.inc`, now 1.0): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
+`common/version.inc`, now 1.0.0): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
 S3REGS32.EXE, RUNALL.BAT, CLEAN.BAT, Info-ZIP's ZIP.EXE and its licence (ZIP-LIC.TXT). CI builds it on
 every run and keeps it as the artifact `trio64-tools-<VERSION>` for 90 days; the download is that zip.
 `ROMS=1` adds `trio64/roms/` with every chip's ROM at its memory clocks (`make roms`); the default leaves
@@ -655,7 +655,7 @@ Findings (S3REGS.TXT and VGALOG.BIN from the card, Windows 98 SE, October 2026):
 
 S3REGS.TXT format (S3REGS and S3REGS32 write the same):
 
-    S3REGS 1.0 [label] DOS                    or  S3REGS32 1.0 [label] Win32
+    S3REGS 1.0.0 [label] DOS                  or  S3REGS32 1.0.0 [label] Win32
     MISC=EF FEAT=00 PEL=FF MODE=59 VBE=0101 TICK=00000032   (MODE and VBE only from DOS)
     SR00: 16 bytes SR00-SR0F                  SR10: SR10-SR1F
     CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B, CRC5, CRCA, CRCB shown as --, not read)
@@ -690,6 +690,12 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
 
 ## To do
 
+- Replace the stock BIOSes in `reference/` with links to their pages on theretroweb.com plus their
+  SHA-256, which the patchers check (the byte assertions already refuse any other image); `make roms`
+  and the tests then take the files from where the user saved them. CI downloads them once and keeps
+  them in its cache for as long as the cache allows (a key on the SHA-256 values, so the files are
+  fetched again only when the list changes), so no run depends on theretroweb being reachable.
+  Decided 1 November 2026, to be done later.
 - Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
   that one ROM can be tested on several cards with different memory speeds without flashing each
   clock (`make roms` builds the clocks as separate images): the tool sets the memory
@@ -729,8 +735,9 @@ Documents the project does not have; what depends on them is marked where it is 
 - An S3 document on the BIOS interface: the S3 OEM functions (4F14h) and the S3 mode numbers are known
   only from BIOS images (`docs/chip-rules.md`, "S3 OEM functions (4F14h)").
 - VESA standards our ROMs implement, not at hand: DDC 1.0 (August 1994) or 2.0 for the DDC1 mode,
-  which E-DDC 1.2 (at hand) no longer describes and which the Trio64 ROM keeps in 4F15. The rest is
-  covered by what is at hand: E-DDC 1.2 for DDC2B, VESA's DPMS summary for the power states, VBE 2.0 and 3.0 describe 4F15
+  which E-DDC 1.2 (at hand) no longer describes and which the Trio64 ROM keeps in 4F15, and DPMS 1.0
+  (August 1993) for the Standby and Suspend states, which DPM Release A (at hand) dropped. The rest is
+  covered by what is at hand: E-DDC 1.2 for DDC2B, VBE 2.0 and 3.0 describe 4F15
   (VBE/DDC) and 4F10 (VBE/PM), VBE 1.2 and 2.0 restate VBE 1.1 and the Mode 6Ah standard (6Ah as
   102h), and DMT and GTF 1.1 are at hand.
 - Richard Wilton's "Programmer's Guide to PC Video Systems" (2nd edition, 1994): worth having, not
@@ -760,11 +767,15 @@ The VESA documents our ROMs implement or the tools check against. Only VBE 2.0 m
 - E-DDC 1.2 (Enhanced Display Data Channel, 26 December 2007; owner's copy): DDC2B over the I2C bus,
   EDID at A0h/A1h, for the DDC2 work on the Trio64. It drops the DDC1 mode ("No support for the DDC1
   mode of operation"), which our ROMs still offer in 4F15.
-- DPMS: VESA's summary of the standard,
-  [sumdpm.mht](https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
-  (the states 4F10h sets), with the X Window System's DPMS extension as a second source.
-- VBE/PM 1.0 (4F10h, BL=00h-02h) as summarised in VBE 2.0 and 3.0, and VBE/DDC (4F15h) as described in
-  VBE 3.0 ("Function 15h"); the standards themselves are not needed.
+- DPM Standard Release A (3 March 2003; owner's copy of VESA's page
+  [sumdpm.mht](https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht),
+  its front matter and contents): it replaces DPMS 1.0 of 20 August 1993 and defines only the On and
+  Off modes, signalled through the syncs. The Standby and Suspend states that 4F10h also sets come from
+  DPMS 1.0, for which the X Window System's DPMS extension stands in.
+- DDC on the VGA connector: [hardwarebook.info, "VGA (VESA DDC)"](https://www.hardwarebook.info/VGA_(VESA_DDC)),
+  the pins (12 SDA, 15 SCL, 9 +5 V) for the DDC2 work on the Trio64 board; and Joe Miseli, "Display
+  Technology, VESA and EDID" (Xorg Developer's Conference, 8 February 2007; owner's copy), the history
+  of EDID, E-EDID, DDC and E-DDC.
 
 At hand, but nothing our ROMs implement, so neither the ROMs nor the clean room depend on them:
 [VBE 3.0](http://www.petesqbsite.com/sections/tutorials/tuts/vbe3.pdf) (September 1998; refresh
@@ -778,8 +789,7 @@ board's DDC wiring), E-EDID Release A (February 2000; EDID 1.3, the data 4F15 ca
 
 Other references at hand (owner's copies, outside the repository): IBM's "Personal System/2 and
 Personal Computer BIOS Interface Technical Reference" (April 1987), Ralf Brown's Interrupt List, Richard
-Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards" (3rd edition, 1994), a German BIOS
-reference book, the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3
+Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards" (3rd edition, 1994), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3
 (`docs/clean-room.md`, "Public documents for the clean side").
 
 Secondary references:
