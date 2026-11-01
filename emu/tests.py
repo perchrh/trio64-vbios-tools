@@ -35,9 +35,13 @@ Tests
                    fast 4F05 path (result, CR6A, x4 in planar modes, the sequencer index and the 32-bit
                    registers kept, at most 6 port writes where 1.03-08 needs 10; BH=1 and a bad BH as
                    1.03-08), the 32-bit registers kept across the clears, font load, text, planar and 13h
-                   scrolls, AH=09h and AH=0Eh; all failures listed. On this ROM the tests tagged patch run
+                   scrolls, AH=09h and AH=0Eh; p2: 4F06 keeps the 32-bit registers, 4F02 refuses (014Fh,
+                   mode kept) exactly the listed modes 4F01 marks unsupported, no interlaced timing
+                   (118h-11Ah and 120h removed, also as S3 modes 78h-7Ch; 1024x768 and 1280x1024
+                   non-interlaced at every CR41 index), 10Dh-10Fh with the DCLK VCO in 135-270 MHz
+                   and SR01 bit 3 set (frame rate within 1 Hz of 70.3); all failures listed. On this ROM the tests tagged patch run
                    only when tagged 765 too (version, stores, 765_patches), and the failures 1.03-08
-                   itself has (VPLUS_BASE: errors, windows, s3compat_full) pass with a note
+                   itself has (VPLUS_BASE, empty since p2) pass with a note
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
@@ -630,8 +634,70 @@ def t_vplus_patches(c):
             high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
             chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
                 % (mode, ax, ['%04X' % h for h in high]))
+    # p2: the VBE dispatcher keeps the 32-bit registers (4F06 computes in EAX, ECX, EDX)
+    m.int10(0x4F02, bx=0x0101)
+    for bl in (0, 1, 3):
+        for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
+            m.mu.reg_write(reg, 0x9ABC0000)
+        m.int10(0x4F06, bx=bl, cx=1024)
+        high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX,
+                                                     UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
+        chk(high == [0x9ABC] * 6, '4F06 BL=%d: bits 31-16 of EAX-EDI changed: %s' % (bl, ['%04X' % h for h in high]))
+    # p2: 4F02 refuses (014Fh, mode kept) exactly the listed modes 4F01 marks unsupported (too large)
+    m.int10(0x4F00, es=0x3000, di=0)
+    loff, lseg = struct.unpack('<HH', m.mem(0x3000E, 4))
+    modes = []
+    for k in range(64):
+        v = word(m, lseg * 16 + loff + 2 * k)
+        if v == 0xFFFF:
+            break
+        modes.append(v)
+    refused = 0
+    for v in modes:
+        m.int10(0x4F01, cx=v, es=0x3000, di=0x400)
+        ok = m.mem(0x30400, 1)[0] & 1
+        m.int10(0x4F02, bx=0x0101)
+        mode0 = m.mem(0x449, 1)[0]
+        r = m.int10(0x4F02, bx=v | 0x8000)
+        if ok:
+            chk(r['ax'] == 0x004F, '4F02 %03X (4F01: supported) refused: AX=%04X' % (v, r['ax']))
+        else:
+            refused += 1
+            chk(r['ax'] == 0x014F and m.mem(0x449, 1)[0] == mode0,
+                '4F02 %03X (4F01: unsupported) not refused: AX=%04X, mode %02X' % (v, r['ax'], m.mem(0x449, 1)[0]))
+    # p2: no interlaced timing. 118h, 119h, 11Ah, 120h (interlaced only on the Trio64V+) are not listed and
+    # refused, their S3 numbers 78h-7Ch too (AH=00 changes nothing); 1024x768 and 1280x1024 run
+    # non-interlaced at every CR41 refresh index, 0 included
+    chk(not {0x118, 0x119, 0x11A, 0x120} & set(modes), '4F00 still lists ' + ' '.join(
+        '%03X' % v for v in sorted({0x118, 0x119, 0x11A, 0x120} & set(modes))))
+    for v in (0x118, 0x119, 0x11A, 0x120):
+        m.int10(0x4F02, bx=0x0101)
+        r = m.int10(0x4F02, bx=v)
+        chk(r['ax'] == 0x014F, '4F02 %03X (removed, interlaced only): AX=%04X' % (v, r['ax']))
+    for mode in (0x78, 0x79, 0x7A, 0x7C):
+        m.int10(0x03)
+        s0 = vga_state(m)
+        m.int10(mode)
+        chk(vga_state(m) == s0, 'AH=00 %02Xh (removed, interlaced only) changed the video state' % mode)
+    for v in (0x104, 0x105, 0x106, 0x107, 0x116, 0x117, 0x208):
+        for c41 in (0x00, 0x40, 0x80, 0x88, 0xC4, 0xFF):
+            m.r['crtc'][0x41] = c41
+            m.int10(0x4F02, bx=v | 0x8000)
+            chk(not m.r['crtc'].get(0x42, 0) & 0x20, '4F02 %03X with CR41 = %02X: interlaced (CR42 %02X)'
+                % (v, c41, m.r['crtc'].get(0x42, 0)))
+    # p2: 320x200 at 15/16/32 bpp with the DCLK VCO in 135-270 MHz (PLL-1): 25.06 MHz halved by SR01 bit 3,
+    # the frame rate as before within 1 Hz (70.3 Hz with 1.03-08's 12.62 MHz)
+    for v in (0x10D, 0x10E, 0x10F):
+        m.int10(0x4F02, bx=v)
+        sq = m.r['seq']
+        mm, nn, rr = (sq.get(0x13, 0) & 0x7F) + 2, (sq.get(0x12, 0) & 0x1F) + 2, (sq.get(0x12, 0) >> 5) & 3
+        vco = 14.31818 * mm / nn
+        hz = m.frame()[0]
+        chk(135 <= vco <= 270 and sq.get(1, 0) & 8 and abs(hz - 70.3) < 1, '4F02 %03X: VCO %.1f MHz, SR01 %02X, %.1f Hz'
+            % (v, vco, sq.get(1, 0), hz))
+    m.int10(0x03)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return 'booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers'
+    return 'booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers, %d of %d modes refused by 4F02, no interlace, 10Dh-10Fh VCO in range' % (refused, len(modes))
 
 
 def t_t64_patches(c):
@@ -2153,17 +2219,8 @@ DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 9
 # "Left as in 1.03-08"); the unpatched 1.03-08 fails the same lines. A test of that ROM whose failure lines
 # all match passes with a note; any other line still fails it.
 VPLUS_BASE = {
-    # 1.03-08 sets the modes that need more memory than the card has (2 MB: 1024x768x16M, 1280x1024x32K/64K;
-    # 1 MB also 107h, 112h, 115h-117h, 120h); the state then differs for the later refused calls too
-    'errors': (r'4F02 BX=01(07|12|1[5-9A]|20) accepted',
-               r'4F02 BX=0(1(07|12|1[5-9A]|20)|1FF|17F|200) \(refused\) changed the video state'),
-    # 4F06 uses 32-bit registers and the 1.03-08 dispatcher saves the 16-bit ones only
-    'windows': (r'4F06 set: upper halves changed: ',),
-    # the DCLK VCO at 101 MHz in 320x200 15/16/32 bpp: the Trio64V+ post divider cannot reach 12.6 MHz with
-    # the VCO in range; interlaced: 1600x1200, and with 4 MB 1024x768x16M and 1280x1024x32K/64K, whose
-    # non-interlaced clocks are above the Trio64V+ limits for the depth
-    's3compat_full': (r'VESA 010[DEF] 320x200x(15|16|32) .*VCO 101\.02MHz .*FAIL 0200$',
-                      r'VESA 0120 1600x1200x8 .*WARN 50$', r'VESA 011[89A] .*WARN 10$'),
+    # none left since p2: it fixed 4F02 (modes beyond the memory) and 4F06 (32-bit registers), removed the
+    # interlaced modes, and moved the DCLK VCO of 10Dh-10Fh into range (25.06 MHz halved by SR01 bit 3)
 }
 
 
@@ -2172,7 +2229,8 @@ VPLUS_BASE = {
 T64_BASE = {
     # with 1 MB Phoenix sets the modes that need more memory (107h, 112h, 115h-117h; the removed 118h-120h
     # did the same), and the state then differs for the later refused calls too
-    'errors': VPLUS_BASE['errors'],
+    'errors': (r'4F02 BX=01(07|12|1[5-9A]|20) accepted',
+               r'4F02 BX=0(1(07|12|1[5-9A]|20)|1FF|17F|200) \(refused\) changed the video state'),
     # 4F06 uses 32-bit registers and the Phoenix dispatcher saves the 16-bit ones only
     'windows': (r'4F06 set: upper halves changed: ',),
     # S3COMPAT's run leaves a register state behind that differs from its baseline, on 1.5-07 as on our ROM

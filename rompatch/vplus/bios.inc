@@ -19,6 +19,10 @@
 %define P13B     0x0E55     ; wmove: the old 16-bit clear loop after the clear jump (dead, 21 bytes)
 %define P13C     0x0B2C     ; bfilla: the old 8-bit font load loop after the font jump (dead, 14 bytes)
 %define WSET     0x49C1     ; VBE window set (BX = window, DX = bank): 4F05 BH=0 and the window function
+%define MEMSIZE  0x0FEB     ; DL = video memory in 64 KB units from CR36 (DH = 0; keeps AX; unlocks CR38/CR39)
+%define MODELIST 0x4C51     ; VBE mode list: per mode the S3 mode number and a word pointer to its record
+%define M4F02_SET 0x48ED    ; 4F02: mode set with BX = the S3 mode number, CX = the caller's BX
+%define VBE_TAB  0x478C     ; VBE dispatcher: word table of the function handlers
 ; the new code in the free block 7AE0-7FEF (the reference has zeros from 7AD9h; 7FF0h holds 'Cardex1')
 %define FONT32   0x7C05     ; font (font32.asm)
 %define SCR13    0x7C21     ; scr13 (scr13.asm)
@@ -26,3 +30,4 @@
 %define DFDN     0x7CEA     ; dfdn (p13df.asm)
 %define BFILL    0x7CF2     ; bfill0/bfill (p13bfill.asm)
 %define CLEAR32  0x7D0B     ; clear (clear32.asm)
+%define VFIX     0x7D2E     ; fit, vbe32 (vfix.asm, p2)

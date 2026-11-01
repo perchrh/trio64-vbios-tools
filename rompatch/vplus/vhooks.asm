@@ -24,7 +24,7 @@ hook:
         call    restore_base
         pop     dx
         pop     ax
-        call    MODESET
+        call    VFIX                    ; MODESET, then the dot clock of 10Dh-10Fh (vfix.asm, p2)
         pushf
         push    ax
         push    dx

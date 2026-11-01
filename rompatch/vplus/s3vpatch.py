@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""s3vpatch.py - build the Trio64V+ ROM (1.03-08-p1) from the S3 Trio64V+ BIOS 1.03-08.
+"""s3vpatch.py - build the Trio64V+ ROM (1.03-08-pN, the level from common/version.inc VER765) from the S3 Trio64V+ BIOS 1.03-08.
 
     python3 rompatch/vplus/s3vpatch.py 1_03_08.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
                                        [--nasm nasm] [-q]
@@ -24,6 +24,16 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
                      linear window at A0000h in banked packed modes, on at the end of a banked 4F02
                      and at the first bank switch, not under Windows enhanced mode)
          vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry
+         vfix.asm    (p2) 4F02 refuses a mode that does not fit the video memory (4F01's rule), and the
+                     VBE dispatcher keeps the upper halves of the 32-bit registers (4F06 changed them);
+                     msx: after the mode set, 320x200 at 15/16/32 bpp (10Dh-10Fh) gets SR01 bit 3 (dot
+                     clock / 2) for its new 25.06 MHz DCLK (the refresh entries below)
+  tables (p2) no interlaced timing: the modes that exist only interlaced on the Trio64V+ (118h
+         1024x768x16M, 119h/11Ah 1280x1024x32K/64K, 120h 1600x1200; S3 modes 78h, 79h, 7Ah, 7Ch) are
+         removed from the mode table and the VESA list, and the interlaced refresh entries of 1024x768
+         and 1280x1024 are cut off their lists, so refresh index 0 gives the lowest non-interlaced rate;
+         10Dh-10Fh get 25.06 MHz (VCO 200.5 MHz) in place of 12.62 MHz (VCO 101 MHz, below the 135 MHz
+         minimum), halved by SR01 bit 3 for the same timing
          shared with the other builds (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
@@ -54,21 +64,23 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '0da79703951db097b3cbb8f9d4041f72f6205db9a11760a58bc9820431e5dba6'   # 32 KB 1.03-08 image
-RESULT_SHA = '47418ec6f2bf21b51f0c860508f20ee6fbc6fb311a5130c5dd5ae7c240de26de'  # 1.03-08-p1 (NASM 3.02), emulator tests passed
+RESULT_SHA = '39014c3f5b3abd368be8a82dffc65e20fd0ee0df5d94bf050d55867637a96535'  # 1.03-08-p2 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
-    'vhooks.asm': 'f830c6adc0a588ce', 'vext.asm': '911cb6e38ca370ef',
+    'vhooks.asm': '042132c715684eb1', 'vext.asm': '911cb6e38ca370ef',
     'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '5df0f0902ec6065b',
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
+    'vfix.asm': '9afe8b50acfff744',
 }
 FREE_START, FREE_END = 0x7AE0, 0x7FF0   # free in 1.03-08 from 7AD9h (zeros); 7FF0h-7FF6h: 'Cardex1'
 
 # Patch sites in 1.03-08. The shared ones (clr ... ah09b) have the 2.04.07 signatures of s3patch.SIG,
 # byte for byte; the others are 1.03-08 code.
 SITES = dict(modetab=0x51DD, m4f02=0x48F9, w4f05=0x49A6, wfn=0x4996, int10=0x5217, cr59=0x102F,
+             fit=0x4924, vbecall=0x47CD,
              clr=0x0E50, vclr=0x1ABF, font=0x0B29, scr=0x207D, txfull=0x1D5D, txwmov=0x1D6C,
              txwfil=0x1D7E, plfull=0x1FAE, plwin=0x1FF9, ah09a=0x239A, ah09b=0x239E)
 SHARED_SIG = ('clr', 'vclr', 'font', 'scr', 'txfull', 'txwmov', 'txwfil', 'plfull', 'plwin', 'ah09a', 'ah09b')
@@ -78,6 +90,8 @@ SIG = dict({k: s3patch.SIG[k] for k in SHARED_SIG},
     wfn='80 ff 01 77 0a 74 05 e8 ?? ?? eb 03 e8 ?? ?? cb',  # window function (4F01 WinFuncPtr): BH=0 calls WSET
     int10='fb fc 80 fc 0e 74 ?? 80 fc 0c 74 ?? 80 fc 0d 74 ?? 50 53 51 52 56 57 55 06 1e 8b ec',
     cr59='b0 6b e8 ?? ?? b0 59 ef 32 e4 fe c0 ef',      # mode set: CR59 = CR6B, CR5A = 00h (not patched; hook relies on it)
+    fit='be 51 4c 03 f7 8a 1c 32 ff eb be',             # 4F02 after the lookup: SI = entry, BL = S3 mode, jmp 48EDh (p2)
+    vbecall='2e ff 94 8c 47 58 e8 ?? ?? c3',            # VBE dispatcher: call [cs:si+478Ch] / pop ax / call / ret (p2)
 )
 # MCLK (build option): POST picks the MCLK PLL pair (SR11 = M, then SR10 = N/R) by the strapped memory
 # type, CR36 bit 3 (code at 0A3Bh): 1-cycle EDO A8h (52.79 MHz in 1.03-08), 2-cycle EDO and fast page
@@ -93,7 +107,10 @@ SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
           ('MODESET', 'e8 ?? ?? 50 52 e8 ?? ?? b0 35 e8 ?? ?? 80 e4 cf ef'),
           ('INT_AH0E', 'e9 ?? ?? e9 ?? ?? e9 ?? ?? 8b c6 80 fc 4f'),
           ('SEG_SCR', '00 00 00 00 00 a0'),
-          ('WSET', '52 53 8b da ba c4 03 b0 04 e8')]
+          ('WSET', '52 53 8b da ba c4 03 b0 04 e8'),
+          ('MEMSIZE', '50 e8 ?? ?? e8 ?? ?? b0 36 e8 ?? ?? 80 e4 e0 b2 40'),   # p2: CR36 bits 7-5 -> DL
+          ('M4F02_SET', '32 e4 8a c3 f7 c1 00 80 74 02 0c 80 60'),          # p2
+          ('MODELIST', '68 b2 4c')]                                        # p2: the first entry, 100h
 
 # The new code: (file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels the
 # patch sites use), assembled in this order (s3patch.assemble)
@@ -108,7 +125,54 @@ BLOCKS = [
     ('p13bfill.asm', 'BFILL', 0x7D0B - 0x7CF2, ('bfill0', 'bfill')),
     ('p13bfa.asm', 'P13C', 14, ('bfilla',)),               # dead: old font loop
     ('clear32.asm', 'CLEAR32', 0x7D2E - 0x7D0B, ('clear',)),
+    ('vfix.asm', 'VFIX', 0x7DC0 - 0x7D2E, ('msx', 'fit', 'vbe32')),   # p2
 ]
+
+
+# p2: interlaced timings out (as in the Trio64 ROM). 1.03-08 keeps, per S3 mode, a 9-byte entry in the mode
+# table at 0128h (mode number, ..., the refresh list pointer at +7), terminated by FFh. A refresh list
+# runs downwards in 9-byte entries from that pointer: byte 2 holds the refresh index (bits 3-0) and the
+# end mark (bit 7), byte 5 bit 5 marks an interlaced timing (emulator: CR42 bit 5 after the mode set).
+# The mode set takes the first entry whose index is at or below the one CR41/CR52 select, or the marked
+# last one. The VESA list at 4C13h (words, FFFFh, then the S3 numbers 207h-213h, FFFFh) runs parallel
+# to the 3-byte entries at 4C51h (S3 mode, record pointer); 4F00 reports the list up to the first FFFFh.
+S3TAB_DROP = (0x01E5, '78 ee 03 36 01 d0 0e 32 06 79 2e 04 36 01 30 0e 3b 06 '
+                      '7a 2e 04 36 01 50 0e 3b 06 7c ae 04 36 01 10 0e 44 06')   # 118h 119h 11Ah 120h
+S3TAB_TAIL = (0x0209, '4e 6e 04 36 01 00 0e 4d 06 4f 2e 04 32 05 00 0e 5f 06 '
+                      '51 6e 03 36 01 00 0e 68 06 52 2e 03 36 01 d0 0e 71 06 ff')  # 207h 208h 212h 213h, end
+VLIST = (0x4C3D, '18 01 19 01 1a 01 20 01 ff ff 07 02 08 02 12 02 13 02 ff ff')
+VENT = (0x4C90, '78 ae 4d 79 ba 4d 7a c6 4d 7c d2 4d 80 00 00 4e de 4d 4f ea 4d 51 f6 4d 52 02 4e ff')
+# the entry above each interlaced last entry of a list with other rates: its byte 2 gets the end mark,
+# so the interlaced entry below it (055Ah 1024x768 4/8 bpp, 0587h 1280x1024 4/8 bpp, 0605h 1024x768
+# 15/16 bpp, 0656h 1280x1024 S3 mode 4Fh) is never reached; CR41/CR52 index 0 then gives the lowest
+# non-interlaced rate
+ILACE_END = {0x0563: '5b 07 02', 0x0590: 'bf 07 04', 0x060E: 'eb 08 02', 0x065F: 'bf 07 04'}
+ILACE_ENT = (0x055A, 0x0587, 0x0605, 0x0656)
+# p2: the refresh entries of 320x200 at 15/16 bpp (S3 modes 65h, 66h) and 32 bpp (67h): SR13 = M, SR12 = N/R
+# 12.62 MHz (VCO 101 MHz, below the 135 MHz minimum) becomes 25.06 MHz (VCO 200.5 MHz), which vfix.asm's
+# msx halves with SR01 bit 3
+HALF_DCLK = {0x05A2: 'b8 02 80 7d 70', 0x05AB: '93 06 80 7d 70'}
+
+
+def drop_interlaced(d, put):
+    """p2: remove 118h, 119h, 11Ah and 120h (interlaced only on the Trio64V+) and the interlaced refresh
+    entries of the other modes (see above)."""
+    for off in ILACE_ENT:
+        if d[off + 5] & 0x20 == 0 or d[off + 2] & 0x80 == 0:
+            raise PatchError('refresh entry %04X is not an interlaced last entry' % off)
+    for off, b in ILACE_END.items():
+        put(off, b, bytes.fromhex(b)[:2] + bytes([bytes.fromhex(b)[2] | 0x80]),
+            'refresh list ends above the interlaced entry %04X' % (off - 9))
+    a, old = S3TAB_DROP
+    b, tail = S3TAB_TAIL
+    old, tail = bytes.fromhex(old), bytes.fromhex(tail)
+    put(a, old + tail, tail[:-1] + b'\xff' * (len(old) + 1), 'mode table: 78h 79h 7Ah 7Ch (interlaced only) out')
+    a, old = VLIST
+    put(a, old, 'ff ff 07 02 08 02 12 02 13 02 ff ff ff ff ff ff ff ff ff ff',
+        'VESA list: 118h 119h 11Ah 120h out, the S3 numbers moved up')
+    a, old = VENT
+    put(a, old, '80 00 00 4e de 4d 4f ea 4d 51 f6 4d 52 02 4e 80 00 00 80 00 00 80 00 00 80 00 00 ff',
+        'VESA mode entries moved with the list')
 
 
 def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
@@ -188,6 +252,17 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     a = site['m4f02'] + 6
     put(a, d[a:a + 3], call(a, lab['h4f02']), 'VBE 4F02: mode set via the hook, then the booster unless Windows runs')
     speed_sites(d, put, site, sym, lab, tags=False)
+    a = site['fit']
+    if a + 11 + struct.unpack_from('<b', d, a + 10)[0] != sym['M4F02_SET'] or struct.unpack_from('<H', d, a + 1)[0] != sym['MODELIST']:
+        raise PatchError('4F02 at %04X does not take its entry from MODELIST and go on to M4F02_SET' % a)
+    put(a, d[a:a + 11], jmp(a, lab['fit']) + b'\x90' * 8, 'VBE 4F02: refuse a mode that does not fit the memory (p2)')
+    a = site['vbecall']
+    if struct.unpack_from('<H', d, a + 3)[0] != sym['VBE_TAB']:
+        raise PatchError('the VBE dispatcher at %04X does not call through VBE_TAB' % a)
+    put(a, d[a:a + 5], call(a, lab['vbe32']) + b'\x90\x90', 'VBE dispatcher: keep the 32-bit registers (p2)')
+    drop_interlaced(d, put)
+    for off, b in HALF_DCLK.items():
+        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR01 bit 3 (p2)')
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
                  known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first
