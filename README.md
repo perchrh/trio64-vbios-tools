@@ -461,27 +461,29 @@ Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted run
 changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or `infozip/` do not start
 a run, and a newer commit on the same branch cancels the running one.
 
-The tests run as parallel jobs, one matrix row per chip and memory size, each named after its chip
-(the emulator tests took 37 minutes one after the other in a single job):
+First the job "All ROMs (make roms)" builds every chip's ROM at its memory clocks. The tests then run
+as parallel jobs on those images, one matrix row per chip and memory size, each row on one image (the
+emulator tests took 37 minutes one after the other in a single job):
 
 | Job | What it runs |
 | --- | --- |
-| Trio64V2 2 MB, patcher, EGA/CGA | `make 775-rom`, `make 775-rom-test`, `make emu-test` with 2 MB (without s3compat_full), `make 775-ref-compare` |
-| Trio64V2 2 MB s3compat_full | the longest test alone |
-| Trio64V2 4 MB | the tests tagged `vram` with 4 MB (without s3compat_full) |
-| Trio64V2 4 MB s3compat_full | s3compat_full with 4 MB |
-| Trio64V+ 2 MB, patcher, EGA/CGA | `make 765-rom`, `make 765-rom-test`, `make emu-test CHIP=vplus` with 2 MB, `make 765-ref-compare` |
-| Trio64V+ 4 and 1 MB | the `vram` tests with 4 and 1 MB |
-| Trio64 2 MB, patcher, EGA/CGA | `make 764x-rom`, `make 764-rom-test`, `make emu-test CHIP=trio64` with 2 MB, `make 764-ref-compare` |
-| Trio64 4 and 1 MB | the `vram` tests with 4 and 1 MB |
-| All ROMs (make roms) | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), kept as the artifact `roms` for 14 days |
+| All ROMs (make roms) | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), kept as the artifact `roms` for 14 days; the rows below test these images |
+| Trio64V2 2 MB, patcher, EGA/CGA | `775M60.BIN`: `make 775-rom-test` (builds the default ROM and checks its pinned SHA-256), `make emu-test` with 2 MB (without s3compat_full), `make 775-ref-compare` |
+| Trio64V2 2 MB s3compat_full | `775M55.BIN`: the longest test alone |
+| Trio64V2 4 MB | `775M50.BIN`: the tests tagged `vram` with 4 MB (without s3compat_full) |
+| Trio64V2 4 MB s3compat_full | `775M60.BIN`: s3compat_full with 4 MB |
+| Trio64V+ 2 MB, patcher, EGA/CGA | `765M55.BIN`: `make 765-rom-test`, `make emu-test CHIP=vplus` with 2 MB, `make 765-ref-compare` |
+| Trio64V+ 4 and 1 MB | `765M60.BIN`: the `vram` tests with 4 and 1 MB |
+| Trio64 764X 2 MB, patcher, EGA/CGA | `764XM70.BIN`: `make 764-rom-test`, `make emu-test CHIP=trio64` with 2 MB, `make 764-ref-compare` |
+| Trio64 764P 4 and 1 MB | `764PM50.BIN`: the `vram` tests with 4 and 1 MB |
 | build-and-test | passes when every row passed and every ROM built (the check name branch rules can require) |
 
-Every job builds NASM 3.02 from its release source (cached between runs), the tools with `make` and
-its chip's ROM from `reference/` with the pinned SHA-256 checked; the .COM files are kept as the
+Every job builds NASM 3.02 from its release source (cached between runs) and the tools with `make`, and
+takes its ROM from the `roms` artifact; the patcher tests build the default ROM (without `MCLK`) and check
+it against the pinned SHA-256. The .COM files are kept as the
 artifact `tools` for 14 days. The split uses `make emu-test VRAM=... EMUARGS=...` (tests.py `--tests`,
 `--skip`, `-t vram`), which works by hand too. Each job keeps its emulator logs as an artifact
-`emu-logs-<job>` (without .BIN files); the patched ROM images are not kept. The hardware logs remain
+`emu-logs-<job>` (without .BIN files); the ROM images are the `roms` artifact. The hardware logs remain
 the final word, as for the emulator tests run by hand.
 
 `.github/workflows/coverage.yml` runs `make coverage` (the 80 % goal, with the list of code no test
