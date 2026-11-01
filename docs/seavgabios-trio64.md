@@ -110,8 +110,8 @@ The first step fits without more slimming; the S3 mode numbers and 4F14h (step 5
 2. The clean side writes `vgasrc/s3trio.c` and the Kconfig entry `VGA_S3TRIO` in the SeaBIOS fork from
    the specification, the data book and SeaVGABIOS (LGPLv3, used under its licence).
 3. Tests before the card:
-   - The emulator's Trio64 model (`emu/`, `--chip trio64`) runs POST and every mode; S3TEST, S3COMPAT and
-     VSHOW run on it (`make emu-test ROM=... CHIP=trio64`; tests tagged `patch` are skipped for a ROM
+   - The emulator's Trio64 model (`emu/`, `--chip 764`) runs POST and every mode; S3TEST, S3COMPAT and
+     VSHOW run on it (`make emu-test ROM=... CHIP=764`; tests tagged `patch` are skipped for a ROM
      that is not ours).
    - `scripts/vgaemu_check.py` (seabios_fork) compares the standard functions with the plain build.
    - The similarity check against Phoenix 1.5-07 and the S3 ROMs (no long identical byte runs).

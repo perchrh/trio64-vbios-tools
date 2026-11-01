@@ -11,6 +11,23 @@ in its own emulator and on real cards, and prepares a clean-room BIOS of its own
 | Trio64V+ 86C765 | 1.03-08-pN (`make 765-rom`) | S3 1.03-08 | STB, Gainward GW503, Hercules Terminator 64 | "Trio64V+ ROM", `docs/vplus-backport.md` |
 | Trio64V2/DX 86C775 | 2.04.07-pN (`make 775-rom`) | S3 2.04.07 | Gainward Genesis EV (GW503A), 2 MB EDO 40 ns | "ROM patcher", "Features and changes compared to the reference BIOS 2.04.07" |
 
+### Chip codes
+
+Make targets, file names, the emulator's `--chip` and the build variables name the chips by their S3 part
+number; the documentation also uses the market names.
+
+| Code | Market name | S3 part | PCI ID | Make targets | `--chip`, `CHIP=` | Version, reference, size variables |
+| --- | --- | --- | --- | --- | --- | --- |
+| 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775` |
+| 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
+| 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
+| 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
+| 767 | Trio64UV+ | 86C767 | 5333:8814 | none (no ROM of ours) | `767` | |
+| 732 | Trio32 | 86C732 | 5333:8811 (CR2E 10h) | none (no ROM of ours) | `732` | |
+
+The emulator's test tags follow the codes too: `765` and `764` mark the tests that run on our Trio64V+ and
+Trio64 ROMs (`765_patches`, `764_patches`), and `775_writes` is the Trio64V2-only test.
+
 The work started on the Trio64V2/DX card, so the older sections below describe that ROM first; the
 three ROMs share the patcher library (`rompatch/s3patch.py`), the version file
 (`common/version.inc`), the tools and the emulator.
@@ -42,8 +59,8 @@ above its range, so do not run these tools with one. The `/H` help of each tool 
 `VSHOW /I` shows it once on the screen before the mode list.
 
 All tools share one version number, and S3TEST checks for one ROM level per chip; all are set in
-`common/version.inc` (`VERSION`; `ROMVER`, `VROMVER`, `TROMVER`) and can be overridden for a build, for
-example `make clean && make VERSION=0.9 ROMVER=2.04.07-p18`.
+`common/version.inc` (`VERSION`; `VER775`, `VER765`, `VER764`) and can be overridden for a build, for
+example `make clean && make VERSION=0.9 VER775=2.04.07-p18`.
 
 ## Building
 
@@ -143,18 +160,18 @@ With a ROM that is not our patched BIOS (no `2.04.07-pN` sign-on) the tests tagg
 rom_patches, stores, s3test, s3alias) are skipped, and the others take their expected values from the
 standards or from the registers the BIOS set, not from our BIOS:
 
-    python3 emu/tests.py --rom TRIO64VP.BIN --chip vplus
+    python3 emu/tests.py --rom TRIO64VP.BIN --chip 765
 
 Our Trio64V+ ROM (`1.03-08-pN` sign-on, section "Trio64V+ ROM") is in between: of the `patch` tests it
-runs those also tagged `vplus` (version, stores, s3test, and `vplus_patches` for its own patches), and
+runs those also tagged `765` (version, stores, s3test, and `765_patches` for its own patches), and
 the failures it keeps from 1.03-08 (below) pass with a note (`VPLUS_BASE` in `emu/tests.py`). Our
-Trio64 ROM (`1.5-07-pN`, section "Trio64 ROM") likewise with the tag `t64`, `t64_patches` and
+Trio64 ROM (`1.5-07-pN`, section "Trio64 ROM") likewise with the tag `764`, `764_patches` and
 `T64_BASE`.
 
 S3TEST picks its test set by the chip it finds (`common/chip.inc`), before the first test. On a
-Trio64V2 it checks our 2.04.07 ROM (ROMVER), on a Trio64V+ our 1.03-08 ROM (VROMVER: the booster
+Trio64V2 it checks our 2.04.07 ROM (VER775), on a Trio64V+ our 1.03-08 ROM (VER765: the booster
 without the CR6D base, no pedestal, refresh default, LFB, 4F06 BL=3 or 512x384 lines, its own mode
-list), on a Trio64 our Phoenix 1.5-07 ROM (TROMVER: as on the Trio64V+, with its own mode list), and
+list), on a Trio64 our Phoenix 1.5-07 ROM (VER764: as on the Trio64V+, with its own mode list), and
 on any other chip (the Trio32), where there is no ROM of ours, only the tests that need none (checksum,
 chip, MCLK against the data book, memory type, VGA clear, font load, scrolls, AH=09h, timings); the
 version found is then INFO. The MCLK line compares the clock with the maximum for the chip (the data
@@ -174,7 +191,7 @@ it. On the Trio64V2 a DCLK VCO outside 135-340 MHz (the datasheet range) is FAIL
 below 170 MHz (the minimum of XFree86, not of the datasheet) it is WARN 08. The Trio64V2 POST part also
 checks SR1A bit 4 and the PCI subsystem ID handover (ROM C000:0040-0043 to CR81-CR84, CR37 bit 2
 cleared), and its VESA lines CR32 bit 3 (FAIL 1000) and the CR86 and CR90/CR91 rules (WARN 80; on this
-ROM 012Eh, 010Fh, 0131h, 0134h and 012Ah, see Known remaining items). The emulator test `v2_writes`
+ROM 012Eh, 010Fh, 0131h, 0134h and 012Ah, see Known remaining items). The emulator test `775_writes`
 (tag `s3 emu`, Trio64V2 model only) checks the rules that concern writes: CR26 = 00h after CR39 = A5h
 on every mode set, and CR40 bit 0 and CR66 bit 0 changed only with the screen off or in vertical retrace.
 
@@ -243,8 +260,8 @@ fonts, strings, padding) and code nothing reaches (the routines our patches jump
 count. `--list` gives the code ranges no test runs. The goal is at least 80 %; 2.04.07-p21 is at
 86.6 % (15135 of 17487 bytes). The parts still not run include the display switch (AH=12h BL=35h),
 the mono/colour adapter switch in the mode set, MDA (3B4h) paths and error paths. The Trio64V+ ROM 1.03-08-p1
-(`make coverage ROM=S3VPP1.BIN CHIP=vplus`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
-(`CHIP=trio64`) was at 85.2 % (13341 of 15650 bytes) at 1.5-07-p1, its new code all run; the FIFO code
+(`make coverage ROM=S3VPP1.BIN CHIP=765`) is at 87.1 % (13200 of 15163 bytes), its new code all run. The Trio64 ROM
+(`CHIP=764`) was at 85.2 % (13341 of 15650 bytes) at 1.5-07-p1, its new code all run; the FIFO code
 of p2 and p3 came after that measurement.
 
 ### EGA/CGA against the reference BIOS
@@ -289,7 +306,7 @@ candidate (`docs/clean-room.md`).
 
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make 775-rom` and
-of `REF` for `make 775-rom-test` and `make 775-ref-compare`; `IN=...` or `REF=...` selects another copy. The
+of `REF775` for `make 775-rom-test` and `make 775-ref-compare`; `IN=...` or `REF775=...` selects another copy. The
 result is 64 KB: the patched 32 KB twice, as in the Trio64 and Trio64V+ ROMs (#78, "Trio64 ROM"; p15 to
 p21 were first built with 32 KB of zeros above). Only 2.04.07 is accepted. Every patch site is
 compared with the original code first (the replaced routines in full), and the result is checked
@@ -324,7 +341,7 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
 | 775 (Trio64V2/DX) | `775-P22/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p22, 64 KB, the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P1/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08-p1, 32 KB (`VSIZE=64` for 64 KB), the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P1/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08-p1, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
 | 764X (Trio64 PnP) | `764X-P3/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p3, 64 KB |
 | 764P (86C764-P) | `764P-P3/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p3, 64 KB |
 
@@ -404,19 +421,19 @@ reset. The result signs on as 1.03-08-p1. The VCO fix is not possible on the Tri
 divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus-backport.md` has the
 details, what 1.03-08 itself still gets wrong, and the per-call costs.
 
-    make 765-rom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
+    make 765-rom OUT=S3VPP1.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
     make 765-rom-test [ROM=S3VPP1.BIN]
-    make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
+    make emu-test ROM=S3VPP1.BIN CHIP=765 [LOGS=emu/vlogs]
     make 765-ref-compare ROM=S3VPP1.BIN
 
-Square brackets in these lines mark options: type `VSIZE=64`, not `[VSIZE=64]`.
+Square brackets in these lines mark options: type `SIZE765=64`, not `[SIZE765=64]`.
 
 `s3vpatch.py` works as `s3patch.py`: byte assertions at every patch site (the shared speed patches use
 the same signatures and the same .asm files, assembled with the 1.03-08 addresses of
 `rompatch/vplus/bios.inc`), the checksum, and the SHA-256 of the build that passed the emulator tests.
 `test_s3vpatch.py` checks that build, the checksum, that every changed byte belongs to a patch, and
 the refusals (an already patched image, changed patch sites, a wrong checksum, the Trio64V2 2.04.07).
-In the emulator tests the ROM runs on the Trio64V+ model (`CHIP=vplus`): `vplus_patches` checks its
+In the emulator tests the ROM runs on the Trio64V+ model (`CHIP=765`): `765_patches` checks its
 patches, `stores` the 32-bit stores, and the tests for the 2.04.07 patches are skipped. Not tried on a
 card yet.
 
@@ -436,9 +453,9 @@ what 1.5-07 still gets wrong and the comparison of the base candidates. The ROM 
 86C764X** (Trio64 PnP, rated for a 70 MHz MCLK); on the earlier 86C764 build it with `MCLK=60` at most
 (docs/trio64-backport.md says why).
 
-    make 764x-rom OUT=S3T64P3.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+    make 764x-rom OUT=S3T64P3.BIN [SIZE764=32] [MCLK=55]   (64 KB, the 32 KB twice; SIZE764=32: 32 KB)
     make 764-rom-test [ROM=S3T64P3.BIN]
-    make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
+    make emu-test ROM=S3T64P3.BIN CHIP=764 [LOGS=emu/tlogs]
     make 764-ref-compare ROM=S3T64P3.BIN
 
 The 64 KB images of all three ROMs (Trio64, Trio64V+ and Trio64V2) carry the 32 KB twice, so a board
@@ -449,7 +466,7 @@ while the PC booted (#78, 31 October 2026).
 
 `s3tpatch.py` checks the 1.5-07 code (1000h-7EFFh, the same in every 1.5-07 build) and the layout of
 its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that card's memory clock and
-timing bytes. The emulator test `t64_patches` checks the ROM's changes, `stores` its 32-bit stores, and
+timing bytes. The emulator test `764_patches` checks the ROM's changes, `stores` its 32-bit stores, and
 S3TEST runs its Trio64 set. On the ExpertColor DSP-3364P (31 October 2026): S3TEST 26 PASS, 0 FAIL,
 banked writes at 81.7 MB/s with the booster; S3COMPAT's 49 FAILs there were test bugs, fixed in the
 tools (#72, #73; docs/trio64-backport.md, "On the card").

@@ -30,7 +30,7 @@ of derived values can be recomputed from the rules.
   'Mode nnh' / 'Mode nnh after xxxx' (the VGA modes, from a clean state and after a VESA mode). S3TEST
   'VBE Mode nnnn' lines (status, measured refresh, line total). Emulator tests of `emu/tests.py`
   (t_s3compat_vbe, t_s3compat_vga, t_s3compat_full, t_errors, t_windows, t_t64_patches) with
-  `--chip trio64`. "not checked" names the test that would.
+  `--chip 764`. "not checked" names the test that would.
 - **ASCII only**, as every document of the project.
 
 ## Terms

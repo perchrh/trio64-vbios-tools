@@ -14,10 +14,10 @@ video memory and no real bus speed, so those results stay with the hardware runs
 
 Tests
   version          the tests are for the newest ROM: the ROM under test carries the sign-on of its level in
-                   common/version.inc (ROMVER 2.04.07-p21, VROMVER 1.03-08-p1, TROMVER 1.5-07-p2), where
+                   common/version.inc (VER775 2.04.07-p21, VER765 1.03-08-p1, VER764 1.5-07-p2), where
                    the patchers read it and S3TEST expects it; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
-  rom_patches      what S3TEST cannot check: sign-on ROMVER, the checksum and 32 KB size of the lower
+  rom_patches      what S3TEST cannot check: sign-on VER775, the checksum and 32 KB size of the lower
                    half and the upper 32 KB a copy of it (#78; p15-p21 were built with zeros there) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the booster (p18: on after a banked 4F02, real base in CR6D; p16: on
                    after the window function by far call in AH=00 mode 59h; p17: off under Windows
@@ -27,7 +27,7 @@ Tests
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
                    the mode 13h scroll (p21), AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
-  vplus_patches    (our Trio64V+ ROM 1.03-08-pN, rompatch/vplus, with --chip vplus) the ROM file (sign-on of
+  765_patches    (our Trio64V+ ROM 1.03-08-pN, rompatch/vplus, with --chip 765) the ROM file (sign-on of
                    the level s3vpatch.py builds, checksum, 32 KB), the mode set clear (bank 0 zeroed, EAX
                    bits 31-16 kept), the booster (on after a banked 4F02 and the window function after AH=00
                    69h, off under Windows enhanced mode with INT 2Fh asked once per mode set, the PCI base
@@ -36,7 +36,7 @@ Tests
                    registers kept, at most 6 port writes where 1.03-08 needs 10; BH=1 and a bad BH as
                    1.03-08), the 32-bit registers kept across the clears, font load, text, planar and 13h
                    scrolls, AH=09h and AH=0Eh; all failures listed. On this ROM the tests tagged patch run
-                   only when tagged vplus too (version, stores, vplus_patches), and the failures 1.03-08
+                   only when tagged 765 too (version, stores, 765_patches), and the failures 1.03-08
                    itself has (VPLUS_BASE: errors, windows, s3compat_full) pass with a note
   vga_registers    every VGA mode in s3compat/vgaref.inc (incl. the 350-line text modes): the 62 standard
                    registers and the AH=1Bh state block equal the IBM reference
@@ -96,7 +96,7 @@ Tests
                    4F02 calls (bit 15, CX = lines, DX = 3D4h, from VGALOG) leave CR59/CR5A at the PCI base, where the driver turns its linear window on;
                    AH=00h with AL bit 7 keeps the text (IBM)
   display_switch   (emulator only) AH=12h BL=35h AL=02h: AL=12h and the state saved at ES:DX (IBM)
-  v2_writes        (emulator only, Trio64V2 model) the datasheet rules about writes (docs/chip-rules.md):
+  775_writes        (emulator only, Trio64V2 model) the datasheet rules about writes (docs/chip-rules.md):
                    CR26 = 00h after CR39 = A5h on every mode set, with CR23 = 00h at that moment although
                    CR23 was 5Ah before the mode set (V2-REG-5, p19), CR40 bit 0 and CR66 bit 0 changed
                    only with the screen off or in vertical retrace (V2-REG-6); modes 03h, 12h, 13h, 101h,
@@ -111,10 +111,10 @@ Tests
   engine_init      (emulator only, Trio64V+/UV+/V2 models) a BIOS that uses the graphics engine writes
                    BEE8h index D and E before its first command (ENG-1); skipped when it uses none
   -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
-                   patch call tools card emu vram; --list shows them; vram = depends on the memory size)
+                   patch 765 764 call tools card emu vram; --list shows them; vram = depends on the memory size)
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
-  --chip v2|vplus|uvplus|trio64|trio32   the chip of the model (default v2, the card)
+  --chip 775|765|767|764|764x|764p|732   the chip of the model by its S3 part number (default 775, the card)
   --vram 1|2|4     the video memory CR36 reports (2 MB, the card; 4 MB, the chip maximum; 1 MB, a Trio64V+ or
                    Trio64 card before an upgrade). The BIOS finds the size at POST (it writes CR36 bits 7-5
                    after testing the last 64 KB of 4 and 2 MB); the model answers with the size given here
@@ -130,7 +130,7 @@ Tests
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, REGNAMES, CHIPS  # noqa: E402
+from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -205,9 +205,9 @@ class Ctx:
         # the tests tagged 'patch' check our patches and are skipped on another BIOS
         self.ours = bool(re.search(rb'Version 2\.04\.07-p\d+', self.rom[:0x100]))
         # our Trio64V+ ROM (1.03-08-pN, rompatch/vplus): the tests tagged 'patch' run on it only when
-        # they are tagged 'vplus' too (the shared speed patches, its own patch test)
+        # they are tagged '765' too (the shared speed patches, its own patch test)
         self.vours = bool(re.search(rb'Version 1\.03-08-p\d+', self.rom[:0x100]))
-        # our Trio64 ROM (1.5-07-pN, rompatch/trio64): likewise with the tag t64
+        # our Trio64 ROM (1.5-07-pN, rompatch/trio64): likewise with the tag 764
         self.tours = bool(re.search(rb'Version 1\.5-07-p\d+', self.rom[:0x100]))
         os.makedirs(logs, exist_ok=True)
 
@@ -260,7 +260,7 @@ def check_dbg(dbg, name):
 # ---------------------------------------------------------------- tests
 def t_version(c):
     """The tests are for the newest ROM: the ROM under test carries the sign-on of the level in
-    common/version.inc (ROMVER, VROMVER for our Trio64V+ ROM, TROMVER for our Trio64 ROM), which the
+    common/version.inc (VER775, VER765 for our Trio64V+ ROM, VER764 for our Trio64 ROM), which the
     patchers write and S3TEST expects."""
     vwant = latest('vplus/s3vpatch.py')
     twant = latest('trio64/s3tpatch.py')
@@ -346,8 +346,8 @@ def t_vga_palettes(c):
 
 
 # ---------------------------------------------------------------- the patches on top of the stock ROM
-def romver(name='ROMVER'):
-    """The ROM version S3TEST is built to expect (common/version.inc): ROMVER on a Trio64V2, VROMVER on a
+def romver(name='VER775'):
+    """The ROM version S3TEST is built to expect (common/version.inc): VER775 on a Trio64V2, VER765 on a
     Trio64V+."""
     t = open(os.path.join(SRC, 'common', 'version.inc')).read()
     return re.search(r"%%define %s '([^']*)'" % name, t).group(1)
@@ -355,9 +355,9 @@ def romver(name='ROMVER'):
 
 def latest(patcher='s3patch.py'):
     """The newest ROM version in the repository, which the patcher builds: common/version.inc, where the
-    patchers read their level (ROMVER for rompatch/s3patch.py, 2.04.07-p21; VROMVER for
-    'vplus/s3vpatch.py'; TROMVER for 'trio64/s3tpatch.py')."""
-    return romver({'s3patch.py': 'ROMVER', 'vplus/s3vpatch.py': 'VROMVER', 'trio64/s3tpatch.py': 'TROMVER'}[patcher])
+    patchers read their level (VER775 for rompatch/s3patch.py, 2.04.07-p21; VER765 for
+    'vplus/s3vpatch.py'; VER764 for 'trio64/s3tpatch.py')."""
+    return romver({'s3patch.py': 'VER775', 'vplus/s3vpatch.py': 'VER765', 'trio64/s3tpatch.py': 'VER764'}[patcher])
 
 
 def t_rom_patches(c):
@@ -509,7 +509,7 @@ def t_vplus_patches(c):
     if not c.vours:
         raise Skip('not our Trio64V+ ROM (1.03-08-pN)')
     if Machine.chip not in ('vplus', 'uvplus'):
-        raise Skip('Trio64V+ ROM (--chip vplus)')
+        raise Skip('Trio64V+ ROM (--chip 765)')
     m = c.machine()
     fails = []
 
@@ -646,7 +646,7 @@ def t_t64_patches(c):
     if not c.tours:
         raise Skip('not our Trio64 ROM (1.5-07-pN)')
     if Machine.chip != 'trio64':
-        raise Skip('Trio64 ROM (--chip trio64)')
+        raise Skip('Trio64 ROM (--chip 764)')
     m = c.machine()
     fails = []
 
@@ -1918,9 +1918,9 @@ def t_v2_writes(c):
     driver may leave it set after vertical interpolation, section 3.2.2), so the BIOS has to clear it
     first (p19; the reference 2.04.07 writes CR26 only); V2-REG-6: CR40 bit 0 and CR66 bit 0 change only with the screen off (SR01 bit 5) or in
     vertical retrace (section 4.1). Checked for VGA modes 03h, 12h, 13h and the VESA modes 101h, 111h
-    and 112h. Only on the Trio64V2 model (--chip v2)."""
+    and 112h. Only on the Trio64V2 model (--chip 775)."""
     if Machine.chip != 'v2':
-        raise Skip('Trio64V2 rules (--chip v2)')
+        raise Skip('Trio64V2 rules (--chip 775)')
     m = c.machine()
     errs = []
     sets = [('03h', lambda: m.int10(0x03)), ('12h', lambda: m.int10(0x12)), ('13h', lambda: m.int10(0x13)),
@@ -2061,7 +2061,7 @@ def t_engine_init(c):
     105h, 111h, 112h: when the BIOS issues an engine command (9AE8h), BEE8h index D and E were written
     before the first one. Trio64V+, Trio64UV+ and Trio64V2 models; skipped when the BIOS uses no engine."""
     if Machine.chip not in ('vplus', 'uvplus', 'v2'):
-        raise Skip('Trio64V+ family rule (--chip vplus, uvplus or v2)')
+        raise Skip('Trio64V+ family rule (--chip 765, 767 or 775)')
     m = c.machine()
     m.int10(0x03)
     for mode in (0x101, 0x103, 0x105, 0x111, 0x112):
@@ -2112,12 +2112,12 @@ def t_stores(c):
     return '%d operations' % len(ops)
 
 
-TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('vplus_patches', t_vplus_patches), ('t64_patches', t_t64_patches), ('vga_registers', t_vga_registers),
+TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
-         ('v2_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
+         ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
 # ega, vga = the IBM BIOS of that adapter; vbe = VESA; s3 = the chip and its datasheet; rom = the image
@@ -2129,15 +2129,15 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
 # functions, the tools) give the same output with 2 and 4 MB.
 TAGS = {
-    'version': 'rom patch vplus t64 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
+    'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch vplus t64 card vram', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
-    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch vplus t64 emu',
-    'vplus_patches': 'rom vbe patch vplus emu vram', 't64_patches': 'rom vbe patch t64 emu vram',
-    'v2_writes': 's3 emu', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
+    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch 765 764 emu',
+    '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
+    '775_writes': 's3 emu', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
 }
 
 
@@ -2192,7 +2192,7 @@ def run_test(c, name, fn, verbose):
     bad = False
     try:
         tags = TAGS[name].split()
-        if 'patch' in tags and not (c.ours or c.vours and 'vplus' in tags or c.tours and 't64' in tags):
+        if 'patch' in tags and not (c.ours or c.vours and '765' in tags or c.tours and '764' in tags):
             raise Skip('not our patched BIOS')
         note = fn(c)
         res = 'PASS' + ('  (%s)' % note if note else '')
@@ -2273,18 +2273,19 @@ def main():
     ap.add_argument('-j', type=int, default=1, metavar='N',
                     help='run N tests at a time, each in its own process (default 1; not with --coverage, '
                          '--profile or --calls). Each test prints a line when it starts and its result when done')
-    ap.add_argument('--chip', choices=('v2', 'vplus', 'uvplus', 'trio64', 'trio32'), default='v2',
-                    help='the chip the model is (vgaemu.CHIPS): v2 = Trio64V2/DX (the card, default), vplus = '
-                         'Trio64V+, uvplus = Trio64UV+, trio64 = Trio64, trio32 = Trio32; ID registers, PCI device and the PLL post divider follow it')
+    ap.add_argument('--chip', choices=sorted(CHIP_CODES), default='775',
+                    help='the chip the model is, by its S3 part number (vgaemu.CHIP_CODES): 775 = Trio64V2/DX (the card, '
+                         'default), 765 = Trio64V+, 767 = Trio64UV+, 764 (764x, 764p) = Trio64, 732 = Trio32; ID registers, '
+                         'PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
                     help='video memory CR36 bits 7-5 report after POST: 2 MB (the card, default), 4 MB (the '
                          'maximum of every Trio64-family chip but the Trio32) or 1 MB (a Trio64V+ or Trio64 '
                          'card before an upgrade); the model still has one 64 KB window, no banked or linear memory')
     a = ap.parse_args()
-    if a.chip == 'trio32' and a.vram == 4:
+    if CHIP_CODES[a.chip] == 'trio32' and a.vram == 4:
         ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')
     Machine.vram = a.vram
-    Machine.chip = a.chip
+    Machine.chip = CHIP_CODES[a.chip]
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
     if a.list:
         for n, _ in TESTS:
@@ -2324,8 +2325,8 @@ def main():
              and n not in a.skip.split(',')]
     if not c.ours:
         print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped'
-              + (' unless tagged vplus (our Trio64V+ ROM 1.03-08-pN)' if c.vours else
-                 ' unless tagged t64 (our Trio64 ROM 1.5-07-pN)' if c.tours else ''))
+              + (' unless tagged 765 (our Trio64V+ ROM 1.03-08-pN)' if c.vours else
+                 ' unless tagged 764 (our Trio64 ROM 1.5-07-pN)' if c.tours else ''))
 
     if a.j > 1 and not (a.coverage or a.profile or a.calls):
         failed = run_parallel(c, tests, a)

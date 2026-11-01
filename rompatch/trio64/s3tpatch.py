@@ -81,7 +81,7 @@ import s3patch  # noqa: E402
 from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, mclk_put  # noqa: E402
 
 VERSION = '1.5-07'
-LEVEL = s3patch.rom_level('TROMVER', VERSION)   # the sign-on level: common/version.inc TROMVER
+LEVEL = s3patch.rom_level('VER764', VERSION)   # the sign-on level: common/version.inc VER764
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
 RESULT_SHA = 'f6eb2bf00ea05abae16946c7f3493fdf747a5124bd1b80e3361876b68445904e'  # 1.5-07-p3 of the reference (NASM 3.02), emulator tests passed

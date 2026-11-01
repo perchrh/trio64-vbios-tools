@@ -40,7 +40,7 @@ notes), and anything from another vendor's BIOS source.
 
 ## Checking the clean ROM (on the dirty side)
 
-1. **Emulator**: `make emu-test ROM=CLEAN.BIN CHIP=trio64` with 2, 4 and 1 MB. The tests tagged `patch`
+1. **Emulator**: `make emu-test ROM=CLEAN.BIN CHIP=764` with 2, 4 and 1 MB. The tests tagged `patch`
    are skipped for a ROM that is not ours; S3TEST runs its set for other BIOSes on a Trio64 (chip,
    MCLK, memory, VGA and VESA mode lines, clears, scrolls, timings), S3COMPAT and VSHOW run in full.
 2. **The oracle**: the register state after POST and after each mode set compared with

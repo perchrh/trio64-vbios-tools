@@ -25,7 +25,7 @@ orc9.py); they are plain calls of the API above and can be retyped from this des
 | Signature, version | 'VESA', 0102h | same | same | VBE-22 | yes |
 | OEM string | C000:4D10h "S3 Incorporated. Trio64" | same | same | VBE-23 | pointer in ROM yes; the wording is the reference's own and must not be copied |
 | Capabilities | 00000000h | same | same | VBE-24 | yes |
-| Mode list | C000:4D28h (in ROM): 100 101 102 103 104 105 106 107 109 10A 110 111 112 113 114 115 116 117 118 119 11A 120, FFFFh | same | same | VBE-10, VBE-25 | pointer in ROM and static list: yes. Content differs: the reference also lists 106h, 109h, 10Ah, 118h, 119h, 11Ah, 120h (interlaced or above the CLK-1 limits at 60 Hz; our patched 1.5-07-pN removes 106h, 118h-11Ah, 120h as interlaced only, emu t64_patches) |
+| Mode list | C000:4D28h (in ROM): 100 101 102 103 104 105 106 107 109 10A 110 111 112 113 114 115 116 117 118 119 11A 120, FFFFh | same | same | VBE-10, VBE-25 | pointer in ROM and static list: yes. Content differs: the reference also lists 106h, 109h, 10Ah, 118h, 119h, 11Ah, 120h (interlaced or above the CLK-1 limits at 60 Hz; our patched 1.5-07-pN removes 106h, 118h-11Ah, 120h as interlaced only, emu 764_patches) |
 | TotalMemory | 16 | 32 | 64 | VBE-26 | yes |
 | Other registers | kept | kept | kept | VBE-20 | yes |
 
@@ -130,7 +130,7 @@ Against the specification:
 | Far call, BX = 0000h DX = 6 | CR6A 06h; AX = 004Fh; BX, CX, SI, DI, BP, DS, ES kept; flags changed | VBE-56 | yes (AX status allowed) |
 | Far call, BX = 0100h | DX = 6 (get), AX = 004Fh | VBE-56 | yes |
 | Far call, BX = 0200h | AX = 014Fh, CR6A unchanged | VBE-56 | yes |
-| Sequencer index after 4F05h set/get and the far call (02h before) | 04h | VBE-5: 02h | DIFFERS (our patched 1.5-07-pN restores it, emu t64_patches) |
+| Sequencer index after 4F05h set/get and the far call (02h before) | 04h | VBE-5: 02h | DIFFERS (our patched 1.5-07-pN restores it, emu 764_patches) |
 | CRTC index after 4F05h | 6Ah | VBE-5 | differs |
 
 ## 4F06h

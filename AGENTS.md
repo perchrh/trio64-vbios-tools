@@ -18,9 +18,9 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
   repository also holds the Trio64V+ backport (`rompatch/vplus/`: `s3vpatch.py` builds 1.03-08-pN
   from the S3 Trio64V+ BIOS 1.03-08 in `reference/64vplus/`, with the same rules: byte assertions, a
-  pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VROMVER`; docs/vplus-backport.md) and the Trio64 ROM
+  pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VER765`; docs/vplus-backport.md) and the Trio64 ROM
   (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
-  `reference/trio64/`, the same rules, `TROMVER`; docs/trio64-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
+  `reference/trio64/`, the same rules, `VER764`; docs/trio64-backport.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a Dell
   2021FP (EDID over DDC2: Windows 98 identifies it with p21). The multiQ LCD (MQ215 B-1, native
@@ -98,7 +98,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   functions on a VBE 1.x BIOS) is WARN or INFO on another BIOS. S3TEST picks its test set by the chip
   (Trio64V2: our 2.04.07 ROM; Trio64V+: our 1.03-08 ROM; Trio64: our Phoenix 1.5-07 ROM; others: only
   the tests that need no ROM of ours). The emulator tests tagged `patch` are skipped for a ROM without
-  the `2.04.07-pN` sign-on, except those also tagged `vplus` on our Trio64V+ ROM and `t64` on our Trio64
+  the `2.04.07-pN` sign-on, except those also tagged `765` on our Trio64V+ ROM and `764` on our Trio64
   ROM; `--chip` selects the chip model.
 - Runs are non-interactive (to look at a mode, use VSHOW). Output must be redirectable to a
   file; anything meant for the person at the screen goes to stderr.
@@ -112,7 +112,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
 - All tools share one version number (1.0 now), `VERSION` in `common/version.inc`; never write the
-  number into a tool's strings, use `VERSION` (and `ROMVER` for the ROM S3TEST expects). Each tool prints its version on its first line of
+  number into a tool's strings, use `VERSION` (and `VER775` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.
 
 ## Assembly conventions
@@ -148,16 +148,16 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - A functional change is verified on the real card: S3TEST and S3COMPAT logs from the test machine are
   the final word. Compare with the previous log: the pass, fail and warn counts and every changed line
   should be explained.
-- The tests are for the newest ROM: a ROM level is kept only in common/version.inc (`ROMVER` for the
-  Trio64V2 ROM, `VROMVER` for the Trio64V+ ROM, `TROMVER` for the Trio64 ROM). The patchers read their
+- The tests are for the newest ROM: a ROM level is kept only in common/version.inc (`VER775` for the
+  Trio64V2 ROM, `VER765` for the Trio64V+ ROM, `VER764` for the Trio64 ROM). The patchers read their
   `LEVEL` from it for the sign-on, and S3TEST is built with it, so a new level changes that one line;
   the emulator test `version` fails when the ROM under test is older.
 - Memory configurations: the ROM supports 2 MB (the test card) and 4 MB (the 86C775 maximum, CR36
   bits 7-5 = 000b) of video memory; the Trio64V+ and Trio64 ROMs also 1 MB. On the Trio64, 4 MB is
   fast page memory only and EDO stops at 2 MB (T64-MEM-3); the Trio32 takes at most 2 MB (T64-MEM-5). The BIOS sizes the memory at every
   POST, so there is no build option for it. `make emu-test ROM=...` runs every test with 2 MB and the
-  ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=vplus`,
-  `CHIP=trio64` or `CHIP=trio32` also with 1 MB (the Trio32 never with 4 MB, its maximum is 2 MB; a 4 MB
+  ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=765`,
+  `CHIP=764` or `CHIP=732` also with 1 MB (the Trio32 never with 4 MB, its maximum is 2 MB; a 4 MB
   Trio64 is fast page memory by its data book, and the model straps it so); a new test that reads the memory size or the VESA mode list gets the tag. Expected
   values follow the memory size, never a fixed 2 MB.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
@@ -166,7 +166,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   function path comes with a test that runs it; `--list` shows the code no test reaches.
 - EGA/CGA goal: in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves exactly like the
   unpatched reference BIOS 2.04.07: same registers back, BIOS data, video memory, DAC and standard VGA
-  registers after every call (`make 775-ref-compare REF=... ROM=...`, emu/refcompare.py). Our
+  registers after every call (`make 775-ref-compare REF775=... ROM=...`, emu/refcompare.py). Our
   changes there are speed only (32-bit stores) or VGA/S3 extended registers; a change that makes a
   difference in those modes needs a reason in README.md. The Trio64 ROM carries S3's fonts instead of
   Phoenix's (README "Trio64 ROM"): `make 764-ref-compare` compares it with 1.5-07 with those fonts only

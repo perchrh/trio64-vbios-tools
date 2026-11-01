@@ -2,7 +2,7 @@
 """test_s3tpatch.py - checksum and table tests for the Trio64 ROM patcher s3tpatch.py (needs python3 and nasm).
 
     python3 rompatch/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P3.BIN] [--nasm nasm]
-    make 764-rom-test [TREF=...] [ROM=S3T64P3.BIN]
+    make 764-rom-test [REF764=...] [ROM=S3T64P3.BIN]
 
 --ref is the 32 KB Phoenix S3 Trio64 BIOS 1.5-07 (default reference/trio64/1_5_07.bin), --rom a build to
 compare with byte by byte.
@@ -16,7 +16,7 @@ Tests
                  modes are gone from the mode table, the VESA lists and the mode map, every kept entry is
                  byte for byte the one of 1.5-07 (only bit 7 of a new first entry set), and no list
                  reaches into the code placed after the lists
-  fonts          all five font tables are those of 1.03-08 (--vref) byte for byte, end to end from 5720h
+  fonts          all five font tables are those of 1.03-08 (--ref765) byte for byte, end to end from 5720h
                  to 7F90h, and the eight references to the moved 8x16 font and 9x16 table point at their
                  new places; --fonts-only changes only the fonts, those references and the checksum byte
   ddc            the 4F15 sites carry their new bytes and the VDIF code (DDC_FREED) is gone, tfifo.asm in
@@ -112,7 +112,7 @@ def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum and table tests for s3tpatch.py')
     ap.add_argument('--ref', default=os.path.join(REPO, 'reference', 'trio64', '1_5_07.bin'), help='32 KB Phoenix Trio64 BIOS 1.5-07')
-    ap.add_argument('--vref', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
+    ap.add_argument('--ref765', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
     ap.add_argument('--rom', help='a build to compare with')
     ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3tpatch.py')
     a = ap.parse_args()
@@ -144,8 +144,8 @@ def main():
     result('tables', not errs, '; '.join(errs[:4]) or '%d interlaced entries and %d modes gone, kept entries unchanged'
            % (len(s3tpatch.ILACE), len(s3tpatch.REMOVE)))
     errs = []
-    if os.path.exists(a.vref):
-        v = open(a.vref, 'rb').read()
+    if os.path.exists(a.ref765):
+        v = open(a.ref765, 'rb').read()
         where = {}
         for name, so, ln, _, at in s3tpatch.S3FONTS:
             where[name] = at
@@ -166,7 +166,7 @@ def main():
                     any(fref[i] != img[i] for i in fonts) or sum(fref) & 0xFF:
                 errs.append('--fonts-only changes other bytes or not the same fonts')
     else:
-        errs.append('no %s' % a.vref)
+        errs.append('no %s' % a.ref765)
     result('fonts', not errs, '; '.join(errs) or 'the five tables of 1.03-08, %d references moved; --fonts-only the same'
            % len(s3tpatch.FONT_REFS))
     errs = []
@@ -264,8 +264,8 @@ def main():
     code[0x3000] ^= 1
     cases = [('already patched', img), ('code byte changed', fixsum(code)),
              ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]))]
-    if os.path.exists(a.vref):
-        cases.append(('Trio64V+ 1.03-08', open(a.vref, 'rb').read()[:0x8000]))
+    if os.path.exists(a.ref765):
+        cases.append(('Trio64V+ 1.03-08', open(a.ref765, 'rb').read()[:0x8000]))
     bad = []
     for name, data in cases:
         rc, out, err = run(tmp, data)

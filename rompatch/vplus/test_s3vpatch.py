@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """test_s3vpatch.py - checksum tests for the Trio64V+ ROM patcher s3vpatch.py (needs python3 and nasm).
 
-    python3 rompatch/vplus/test_s3vpatch.py [--ref 1_03_08.BIN] [--v2ref 2_04_07.BIN] [--rom S3VPP1.BIN] [--nasm nasm]
-    make 765-rom-test [VREF=...] [ROM=S3VPP1.BIN]
+    python3 rompatch/vplus/test_s3vpatch.py [--ref 1_03_08.BIN] [--ref775 2_04_07.BIN] [--rom S3VPP1.BIN] [--nasm nasm]
+    make 765-rom-test [REF765=...] [ROM=S3VPP1.BIN]
 
---ref is the 32 KB S3 Trio64V+ BIOS 1.03-08 (default reference/64vplus/1_03_08.bin), --v2ref the Trio64V2
+--ref is the 32 KB S3 Trio64V+ BIOS 1.03-08 (default reference/64vplus/1_03_08.bin), --ref775 the Trio64V2
 reference 2.04.07 (default reference/v2/2_04_07.bin; it must be refused), --rom a build to compare with
 byte by byte.
 
@@ -94,7 +94,7 @@ def main():
     ap = argparse.ArgumentParser(description='checksum tests for s3vpatch.py')
     ap.add_argument('--ref', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08.bin'),
                     help='32 KB S3 Trio64V+ BIOS 1.03-08')
-    ap.add_argument('--v2ref', default=os.path.join(REPO, 'reference', 'v2', '2_04_07.bin'),
+    ap.add_argument('--ref775', default=os.path.join(REPO, 'reference', 'v2', '2_04_07.bin'),
                     help='32 KB Trio64V2 reference 2.04.07 (must be refused)')
     ap.add_argument('--rom', help='a build to compare with')
     ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3vpatch.py')
@@ -156,8 +156,8 @@ def main():
              ('text scroll fill', corrupt(ref, s['txfull'] + 7)),
              ('VGA clear', corrupt(ref, s['vclr'] + 10)),
              ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]))]
-    if os.path.exists(a.v2ref):
-        cases.append(('Trio64V2 2.04.07', open(a.v2ref, 'rb').read()[:0x8000]))
+    if os.path.exists(a.ref775):
+        cases.append(('Trio64V2 2.04.07', open(a.ref775, 'rb').read()[:0x8000]))
     bad = []
     for name, data in cases:
         rc, out, err = run(tmp, data)

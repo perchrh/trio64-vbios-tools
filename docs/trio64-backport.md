@@ -14,7 +14,7 @@ verified: no 86C764 card at hand). On an 86C764 keep the default build (54.9 MHz
 `MCLK=60` at most. The tools do not tell the two apart (the same PCI ID), so S3TEST's and S3COMPAT's
 MCLK lines accept up to 70 MHz on both.
 
-The build and test commands are in README "Trio64 ROM" (`make 764x-rom`, `764-rom-test`, `emu-test CHIP=trio64`,
+The build and test commands are in README "Trio64 ROM" (`make 764x-rom`, `764-rom-test`, `emu-test CHIP=764`,
 `764-ref-compare`).
 
 Base: `reference/trio64/1_5_07.bin`, the CP764 build of Phoenix 1.5-07 (08/19/96, MCLK 54.9 MHz,
@@ -131,12 +131,12 @@ through the save pointer table.
 
 `make 764-rom-test`: the tables (no list starts with an interlaced entry, every kept entry unchanged), every
 other byte unchanged, another maker's timing bytes and MCLK kept, the MCLK option, the refusals.
-`make emu-test CHIP=trio64` with 2, 4 and 1 MB: `t64_patches` (defaults, removed modes, booster, Windows
+`make emu-test CHIP=764` with 2, 4 and 1 MB: `764_patches` (defaults, removed modes, booster, Windows
 check, lock state, ATC flip-flop, sequencer index after 4F05 BH = 0 and 1, S3's fonts in AX=1130h and
 plane 2, 4F15 answers as 1.5-07's with BL=02h failing at once, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
 `make 764-ref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07 with S3's fonts (`--fonts-only`); `make 764-rom-test`
 checks the fonts against 1.03-08 byte for byte. S3COMPAT's VESA lines: every mode
-non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): README "Test coverage".
+non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=764`): README "Test coverage".
 
 ## Left as in 1.5-07
 

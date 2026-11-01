@@ -10,9 +10,9 @@ other VBE 2.0 additions). The Trio64V+ BIOSes at hand offer VBE 1.2.
 
 ## The build: 1.03-08-p1
 
-    make 765-rom OUT=S3VPP1.BIN             (rompatch/vplus/s3vpatch.py, 32 KB; VSIZE=64 for a 64 KB EEPROM)
+    make 765-rom OUT=S3VPP1.BIN             (rompatch/vplus/s3vpatch.py, 32 KB; SIZE765=64 for a 64 KB EEPROM)
     make 765-rom-test ROM=S3VPP1.BIN
-    make emu-test ROM=S3VPP1.BIN CHIP=vplus
+    make emu-test ROM=S3VPP1.BIN CHIP=765
     make 765-ref-compare ROM=S3VPP1.BIN
 
 Base: the S3 BIOS 1.03-08 ("S3 86C765 Video BIOS", 09/03/96) in `reference/64vplus/1_03_08.bin`, the
@@ -34,16 +34,16 @@ D2g (09/19/97, PCI 8811h) matches every signature of 1.03-08, at other addresses
 
 The mode 13h scroll keeps EAX on the Trio64V+: the 1.03-08 dispatcher saves only the 16-bit registers,
 so the 2.04.07 code (`p12ext.asm`), which uses EAX bits 31-16 without saving them, would hand them back
-changed after every AH=06h in mode 13h. The emulator test `vplus_patches` checks it. The same code in
+changed after every AH=06h in mode 13h. The emulator test `765_patches` checks it. The same code in
 2.04.07-p20 did this through AH=0Eh, which bypasses the 32-bit dispatcher there; fixed in p21.
 
 Checked in the emulator (Trio64V+ model): `make 765-rom-test` (the pinned SHA-256, checksum, every changed
-byte at a patch site, the free bytes still 00, the refusals); `make emu-test CHIP=vplus` with 1, 2
-and 4 MB, where every test that applies passes, `vplus_patches` and `stores` among them, apart from the
+byte at a patch site, the free bytes still 00, the refusals); `make emu-test CHIP=765` with 1, 2
+and 4 MB, where every test that applies passes, `765_patches` and `stores` among them, apart from the
 1.03-08 failures below; `make 765-ref-compare`: 2389 calls in the CGA, MDA and EGA modes behave as in
 1.03-08. The S3COMPAT logs of the emulator runs (the whole S3COMPAT with 2 and 4 MB, its VBE part, its
 VGA part) and the VSHOW /R log are line for line those of 1.03-08, apart from the sign-on. Test coverage
-(`make coverage CHIP=vplus`): 87.1 % of the code, every byte of the new code among it.
+(`make coverage CHIP=765`): 87.1 % of the code, every byte of the new code among it.
 
 ## The VCO fix: not possible on the Trio64V+
 
@@ -135,7 +135,7 @@ Palette loads, pixels, AH=0Eh and the graphics-mode AH=09h are equal in all thre
 
 - The test card: S3TEST and S3COMPAT logs from it with 1.03-08 and 1.03-08-p1. If its BIOS is not
   1.03-08, the base and the addresses follow that BIOS.
-- S3TEST has a Trio64V+ test set (since 30 October 2026): on a Trio64V+ it expects VROMVER
+- S3TEST has a Trio64V+ test set (since 30 October 2026): on a Trio64V+ it expects VER765
   (1.03-08-p1) and checks this ROM's patches (README "Other Trio64-family BIOSes"). S3COMPAT and VSHOW
   apply as they are.
 

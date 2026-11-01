@@ -77,6 +77,10 @@ CHIPS = {
     'trio32': dict(name='Trio32', dev=0x8811, ids=(0x88, 0x10, 0x00, 0xE1), r3=False),
     'uvplus': dict(name='Trio64UV+', dev=0x8814, ids=(0x88, 0x14, 0x00, 0xE1), r3=False),
 }
+# The chip codes the command lines take (--chip, CHIP=): the S3 part numbers, mapped to the CHIPS keys.
+# 764X and 764P are one model: the two Trio64s differ only in the MCLK they take.
+CHIP_CODES = {'775': 'v2', '765': 'vplus', '764': 'trio64', '764x': 'trio64', '764p': 'trio64',
+              '767': 'uvplus', '732': 'trio32'}
 
 IRET_SEG = 0x0060          # every unused vector points to 0060:0000 = IRET
 DOS_STUB = 0x0520          # INT 21h vector 0050:0020: INT F1h (the emulated DOS), RETF 2 (keeps its flags)

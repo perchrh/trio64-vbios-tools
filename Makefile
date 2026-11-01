@@ -10,19 +10,19 @@ $(warning $(NASMBIN): $(if $(NASMVER),$(NASMVER),not found); the project uses NA
 endif
 
 # Versions come from common/version.inc; override for one build with
-#   make clean && make VERSION=0.9 ROMVER=2.04.07-p13
+#   make clean && make VERSION=0.9 VER775=2.04.07-p13
 DEFS :=
 ifdef VERSION
 DEFS += -DVERSION="'$(VERSION)'"
 endif
-ifdef ROMVER
-DEFS += -DROMVER="'$(ROMVER)'"
+ifdef VER775
+DEFS += -DVER775="'$(VER775)'"
 endif
-ifdef VROMVER
-DEFS += -DVROMVER="'$(VROMVER)'"
+ifdef VER765
+DEFS += -DVER765="'$(VER765)'"
 endif
-ifdef TROMVER
-DEFS += -DTROMVER="'$(TROMVER)'"
+ifdef VER764
+DEFS += -DVER764="'$(VER764)'"
 endif
 
 all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
@@ -74,7 +74,7 @@ build/S3REGS32.EXE: s3regs/s3regs32.asm common/version.inc | build
 #   make emu-test ROM=path/to/S3V2P15.BIN          every test with 2 MB, then the memory-size dependent
 #                                                  ones (tag vram) again with 4 MB
 #   make emu-test ROM=... VRAM=4                   every test with one size only (2 or 4 MB)
-#   make emu-test ROM=S3VPP1.BIN CHIP=vplus        our Trio64V+ ROM on the Trio64V+ model (CHIP: the chip of
+#   make emu-test ROM=S3VPP1.BIN CHIP=765        our Trio64V+ ROM on the Trio64V+ model (CHIP: the chip of
 #                                                  the model, v2 by default; tests.py --chip); on the
 #                                                  Trio64V+, Trio64 and Trio32 the vram tests run with
 #                                                  1 MB too (cards sold with 1 MB, upgradable to 2 MB)
@@ -82,7 +82,7 @@ build/S3REGS32.EXE: s3regs/s3regs32.asm common/version.inc | build
 PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
 # emu-test runs this many tests at a time (default: every CPU; JOBS=1 for one after the other)
 JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
-CHIP ?= v2
+CHIP ?= 775
 # the log folders of emu-test: $(LOGS) (2 MB), $(LOGS)4 (4 MB) and $(LOGS)1 (1 MB)
 LOGS ?= emu/logs
 # extra tests.py arguments for every run of emu-test, e.g. EMUARGS="--skip s3compat_full" (CI uses it to
@@ -94,32 +94,32 @@ ifdef VRAM
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM) $(EMUARGS)
 else
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) $(EMUARGS)
-ifneq ($(CHIP),trio32)
+ifneq ($(CHIP),732)
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram $(EMUARGS)
 endif
-ifneq ($(filter vplus trio64 trio32,$(CHIP)),)
+ifneq ($(filter 765 764 764x 764p 732,$(CHIP)),)
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)1 -j $(JOBS) --chip $(CHIP) --vram 1 -t vram $(EMUARGS)
 endif
 endif
 
 # Test coverage of the ROM code (needs capstone too: pip install .[coverage]); fails under 80 %
 #   make coverage ROM=S3V2P15.BIN
-#   make coverage ROM=S3VPP1.BIN CHIP=vplus
+#   make coverage ROM=S3VPP1.BIN CHIP=765
 coverage: all
 	@test -n "$(ROM)" || { echo "coverage: set ROM to the 64 KB VBIOS image"; exit 2; }
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --chip $(CHIP) --coverage emu/logs/COVER.BIN
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
-# The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF of 775-ref-compare and 775-rom-test
-# and the default IN of rom; give REF=... or IN=... for another copy
-REF ?= reference/v2/2_04_07.bin
-IN ?= $(REF)
+# The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF775 of 775-ref-compare and 775-rom-test
+# and the default IN of 775-rom; give REF775=... or IN=... for another copy
+REF775 ?= reference/v2/2_04_07.bin
+IN ?= $(REF775)
 
 # EGA/CGA behaviour against the unpatched reference BIOS (AGENTS.md goal)
-#   make 775-ref-compare ROM=S3V2P15.BIN [REF=REF2047.BIN]
+#   make 775-ref-compare ROM=S3V2P15.BIN [REF775=REF2047.BIN]
 775-ref-compare:
-	@test -n "$(REF)" -a -n "$(ROM)" || { echo "775-ref-compare: set ROM (and REF, default reference/v2/2_04_07.bin)"; exit 2; }
-	$(PYTHON) emu/refcompare.py --ref "$(REF)" --rom "$(ROM)"
+	@test -n "$(REF775)" -a -n "$(ROM)" || { echo "775-ref-compare: set ROM (and REF775, default reference/v2/2_04_07.bin)"; exit 2; }
+	$(PYTHON) emu/refcompare.py --ref "$(REF775)" --rom "$(ROM)"
 
 clean:
 	rm -rf build
@@ -131,73 +131,73 @@ MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 
 # ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
 #   make 775-rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
-#   make 775-rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
+#   make 775-rom-test [REF775=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 775-rom:
 	@test -n "$(IN)" -a -n "$(OUT)" || { echo "775-rom: set OUT, e.g. make 775-rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
 	python3 rompatch/s3patch.py --nasm "$(NASMBIN)" "$(IN)" -o "$(OUT)" $(MCLKOPT)
 
 775-rom-test:
-	@test -n "$(REF)" || { echo "775-rom-test: set REF (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
-	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
+	@test -n "$(REF775)" || { echo "775-rom-test: set REF775 (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
+	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF775)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
-# reference/64vplus/1_03_08.bin (VREF), docs/vplus-backport.md
-#   make 765-rom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
-#   make 765-rom-test [VREF=...] [ROM=S3VPP1.BIN]
-#   make 765-ref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
-#   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
-VREF ?= reference/64vplus/1_03_08.bin
-VSIZE ?= 32
-TSIZE ?= 64
+# reference/64vplus/1_03_08.bin (REF765), docs/vplus-backport.md
+#   make 765-rom OUT=S3VPP1.BIN [REF765=...] [SIZE765=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; SIZE765=64: 64 KB, the 32 KB twice)
+#   make 765-rom-test [REF765=...] [ROM=S3VPP1.BIN]
+#   make 765-ref-compare ROM=S3VPP1.BIN [REF765=...]               (EGA/CGA behaviour against 1.03-08)
+#   make emu-test ROM=S3VPP1.BIN CHIP=765 [LOGS=emu/vlogs]
+REF765 ?= reference/64vplus/1_03_08.bin
+SIZE765 ?= 32
+SIZE764 ?= 64
 765-rom:
-	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
-	python3 rompatch/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(VSIZE) "$(VREF)" -o "$(OUT)" $(MCLKOPT)
+	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (REF765 defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
+	python3 rompatch/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(SIZE765) "$(REF765)" -o "$(OUT)" $(MCLKOPT)
 
 765-rom-test:
-	python3 rompatch/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(VREF)" --v2ref "$(REF)" $(if $(ROM),--rom "$(ROM)")
+	python3 rompatch/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(REF765)" --ref775 "$(REF775)" $(if $(ROM),--rom "$(ROM)")
 
 765-ref-compare:
-	@test -n "$(ROM)" || { echo "765-ref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
-	$(PYTHON) emu/refcompare.py --chip vplus --ref "$(VREF)" --rom "$(ROM)"
+	@test -n "$(ROM)" || { echo "765-ref-compare: set ROM (our Trio64V+ ROM; REF765 defaults to reference/64vplus/1_03_08.bin)"; exit 2; }
+	$(PYTHON) emu/refcompare.py --chip 765 --ref "$(REF765)" --rom "$(ROM)"
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
-# (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
-#   make 764x-rom OUT=S3T64P3.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+# (REF764; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
+#   make 764x-rom OUT=S3T64P3.BIN [REF764=...] [SIZE764=32] [MCLK=55]   (64 KB, the 32 KB twice; SIZE764=32: 32 KB)
 #   make 764x-rom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
 #   make 764x-rom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
-#   make 764-rom-test [TREF=...] [ROM=S3T64P3.BIN]
-#   make 764-ref-compare ROM=S3T64P3.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
-#   make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
-TREF ?= reference/trio64/1_5_07.bin
+#   make 764-rom-test [REF764=...] [ROM=S3T64P3.BIN]
+#   make 764-ref-compare ROM=S3T64P3.BIN [REF764=...]              (EGA/CGA behaviour against 1.5-07)
+#   make emu-test ROM=S3T64P3.BIN CHIP=764 [LOGS=emu/tlogs]
+REF764 ?= reference/trio64/1_5_07.bin
 # 764x-rom is for the 86C764X (Trio64 PnP, MCLK 55-70 MHz), 764p-rom for the 86C764-P (50-60 MHz): the same
 # ROM, only the MCLK range the build option accepts differs (T64-MEM-7); without MCLK the two are identical.
 764x-rom 764p-rom:
-	@test -n "$(OUT)" || { echo "$@: set OUT, e.g. make $@ OUT=S3T64P3.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
-	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(TSIZE) --model $(subst -rom,,$@) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
+	@test -n "$(OUT)" || { echo "$@: set OUT, e.g. make $@ OUT=S3T64P3.BIN (REF764 defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(SIZE764) --model $(subst -rom,,$@) "$(REF764)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
 
 764-rom-test:
-	python3 rompatch/trio64/test_s3tpatch.py --nasm "$(NASMBIN)" --ref "$(TREF)" --vref "$(VREF)" $(if $(ROM),--rom "$(ROM)")
+	python3 rompatch/trio64/test_s3tpatch.py --nasm "$(NASMBIN)" --ref "$(REF764)" --ref765 "$(REF765)" $(if $(ROM),--rom "$(ROM)")
 
 764-ref-compare: | build
-	@test -n "$(ROM)" || { echo "764-ref-compare: set ROM (our Trio64 ROM; TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
-	python3 rompatch/trio64/s3tpatch.py --fonts-only --fonts "$(VREF)" "$(TREF)" -o build/T64FONTS.BIN
-	$(PYTHON) emu/refcompare.py --chip trio64 --ref build/T64FONTS.BIN --rom "$(ROM)"
+	@test -n "$(ROM)" || { echo "764-ref-compare: set ROM (our Trio64 ROM; REF764 defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+	python3 rompatch/trio64/s3tpatch.py --fonts-only --fonts "$(REF765)" "$(REF764)" -o build/T64FONTS.BIN
+	$(PYTHON) emu/refcompare.py --chip 764 --ref build/T64FONTS.BIN --rom "$(ROM)"
 
 # All four chips' ROMs, each at its memory clocks, into build/roms/<chip>-<level>/ (level from
 # common/version.inc) with 8.3 names for a DOS disk: the chip code, M and the clock, for example
 # build/roms/775-P22/775M60.BIN, build/roms/764X-P3/764XM70.BIN. On the 775 and 765 the clock goes into the
 # edo1 entry (MEMTYPE; 1-cycle EDO), on the 764 models into their one entry. The images keep each target's
-# size (775 and 764 64 KB, 765 VSIZE).
+# size (775 and 764 64 KB, 765 SIZE765).
 #   make roms [CLOCKS_775="50 55 60"] [CLOCKS_765=...] [CLOCKS_764X="55 60 70"] [CLOCKS_764P="50 55 60"]
 CLOCKS_775 ?= 50 55 60
 CLOCKS_765 ?= 50 55 60
 CLOCKS_764X ?= 55 60 70
 CLOCKS_764P ?= 50 55 60
 level = $(shell sed -n "s/^%define $(1) '.*-\(p[0-9]*\)'.*/\1/p" common/version.inc | tr a-z A-Z)
-ROMDIR_775 = build/roms/775-$(call level,ROMVER)
-ROMDIR_765 = build/roms/765-$(call level,VROMVER)
-ROMDIR_764X = build/roms/764X-$(call level,TROMVER)
-ROMDIR_764P = build/roms/764P-$(call level,TROMVER)
+ROMDIR_775 = build/roms/775-$(call level,VER775)
+ROMDIR_765 = build/roms/765-$(call level,VER765)
+ROMDIR_764X = build/roms/764X-$(call level,VER764)
+ROMDIR_764P = build/roms/764P-$(call level,VER764)
 roms:
 	@mkdir -p $(ROMDIR_775) $(ROMDIR_765) $(ROMDIR_764X) $(ROMDIR_764P)
 	@set -e; \
