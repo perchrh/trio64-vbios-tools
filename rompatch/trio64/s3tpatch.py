@@ -85,7 +85,7 @@ VERSION = '1.5-07'
 LEVEL = s3patch.rom_level('VER764', VERSION)   # the sign-on level: common/version.inc VER764
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = 'f6eb2bf00ea05abae16946c7f3493fdf747a5124bd1b80e3361876b68445904e'  # 1.5-07-p3 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = 'c6b3ed3d8d7c9fd4f6a5f197a8879175730e7d1f588a8aa7a37b1d1e9bbc066b'  # 1.5-07-p4 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
     'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',

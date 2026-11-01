@@ -84,7 +84,7 @@ def rom_level(name, version):
 VERSION = '2.04.07'
 LEVEL = rom_level('VER775', VERSION)            # the sign-on level: common/version.inc VER775
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = '5e53224067199327bc211cc269578c36399eafa746e15e64230ac192c6aaa041'  # 2.04.07-p22 (NASM 3.02), emulator tests passed;
+RESULT_SHA = '6d32c498cfe8f7760cbc98d4e58c8991de1566a19787dbfbadac54a54547ad3c'  # 2.04.07-p23 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
