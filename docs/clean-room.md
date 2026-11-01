@@ -69,10 +69,11 @@ hand), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3 (t
 the start-up call and the VGA palette snoop), DMT, GTF 1.1, Ferraro's "Programmer's Guide to the EGA,
 VGA and Super VGA Cards" and a German BIOS reference book. VBE/PM 1.0 (4F10h) is summarised in VBE 2.0
 and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are restated
-in VBE 1.2 and 2.0, so none of them is needed on its own; for DPMS
-1.0, the X Window System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) and the
-states On, Standby, Suspend and Off (the VESA DPMS article on Wikipedia) stand in until the standard
-itself is at hand.
+in VBE 1.2 and 2.0, so none of them is needed on its own. E-DDC 1.2 (2007) describes DDC2B; it drops
+DDC1, for which DDC 1.0 or 2.0 is still missing. For DPMS 1.0, VESA's own summary
+(https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht), the X Window
+System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) and the states On, Standby,
+Suspend and Off stand in for the standard itself.
 
 ## What we have
 

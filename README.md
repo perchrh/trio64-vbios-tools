@@ -728,10 +728,9 @@ Documents the project does not have; what depends on them is marked where it is 
 - Trio64V2/DX & GX: only the preliminary book (changes from the Trio64V+) is at hand, no final edition.
 - An S3 document on the BIOS interface: the S3 OEM functions (4F14h) and the S3 mode numbers are known
   only from BIOS images (`docs/chip-rules.md`, "S3 OEM functions (4F14h)").
-- VESA standards our ROMs implement, not at hand: the DDC signalling standards (DDC 1.0 of August
-  1994 to DDC Version 3 of December 1997, or E-DDC 1 of 1999) for the DDC1 and DDC2B timing of the DDC2
-  work on the Trio64, and DPMS 1.0 (August 1993), for which the X Window System's DPMS extension
-  stands in ("VESA standards"). The rest is covered by what is at hand: VBE 2.0 and 3.0 describe 4F15
+- VESA standards our ROMs implement, not at hand: DDC 1.0 (August 1994) or 2.0 for the DDC1 mode,
+  which E-DDC 1.2 (at hand) no longer describes and which the Trio64 ROM keeps in 4F15. The rest is
+  covered by what is at hand: E-DDC 1.2 for DDC2B, VESA's DPMS summary for the power states, VBE 2.0 and 3.0 describe 4F15
   (VBE/DDC) and 4F10 (VBE/PM), VBE 1.2 and 2.0 restate VBE 1.1 and the Mode 6Ah standard (6Ah as
   102h), and DMT and GTF 1.1 are at hand.
 - Richard Wilton's "Programmer's Guide to PC Video Systems" (2nd edition, 1994): worth having, not
@@ -758,6 +757,12 @@ The VESA documents our ROMs implement or the tools check against. Only VBE 2.0 m
   the 15-bit mode numbers from 100h, mode 6Ah as 102h, window granularity; the base of VBE 1.2.
 - DMT 1.0 Rev. 0.7 (December 1996) and GTF 1.1: the timing references of the tools and the refresh
   tables (owner's copies).
+- E-DDC 1.2 (Enhanced Display Data Channel, 26 December 2007; owner's copy): DDC2B over the I2C bus,
+  EDID at A0h/A1h, for the DDC2 work on the Trio64. It drops the DDC1 mode ("No support for the DDC1
+  mode of operation"), which our ROMs still offer in 4F15.
+- DPMS: VESA's summary of the standard,
+  [sumdpm.mht](https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
+  (the states 4F10h sets), with the X Window System's DPMS extension as a second source.
 - VBE/PM 1.0 (4F10h, BL=00h-02h) as summarised in VBE 2.0 and 3.0, and VBE/DDC (4F15h) as described in
   VBE 3.0 ("Function 15h"); the standards themselves are not needed.
 
