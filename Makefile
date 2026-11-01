@@ -130,7 +130,7 @@ clean:
 MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 
 # ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
-#   make rom OUT=S3V2P21.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
+#   make rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
 #   make rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 rom:
 	@test -n "$(IN)" -a -n "$(OUT)" || { echo "rom: set OUT, e.g. make rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }

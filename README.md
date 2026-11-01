@@ -45,8 +45,8 @@ A NASM that is not on the PATH is given with `NASM`, for example a copy in the w
 folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P21.BIN NASM=nasm/nasm-3.02/nasm
-    make rom OUT=S3V2P21.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
+    make rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
 
 Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
@@ -80,7 +80,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P21.BIN
+    make emu-test ROM=path/to/S3V2P22.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -223,7 +223,7 @@ summary counts the SKIP lines.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P21.BIN
+    make coverage ROM=path/to/S3V2P22.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -238,7 +238,7 @@ of p2 and p3 came after that measurement.
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare ROM=S3V2P21.BIN
+    make ref-compare ROM=S3V2P22.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -252,10 +252,10 @@ clock and the pedestal only touch S3 extended registers, which are not compared.
 
 `rompatch/` holds the code the ROM carries (nasm sources, assembled at their ROM offsets, with the
 2.04.07 addresses they use in `bios.inc`) and `s3patch.py`, which applies the whole current change set
-(level p21) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
+(level p22) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
-    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P21.BIN
-    make rom OUT=S3V2P21.BIN
+    python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P22.BIN
+    make rom OUT=S3V2P22.BIN
 
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
 used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
@@ -265,17 +265,17 @@ p21 were first built with 32 KB of zeros above). Only 2.04.07 is accepted. Every
 compared with the original code first (the replaced routines in full), and the result is checked
 before it is written: the lower half sums to 00 and declares 32 KB, the upper half is a copy of it, every
 DCLK VCO is in 170-340 MHz, and with the known reference image the SHA-256 of the lower 32 KB is the one
-of the build that passed every emulator test (283b9a0b...).
+of the build that passed every emulator test (5e532240...).
 
 That SHA-256 holds for NASM 3.02, the assembler of the project. Another NASM version may encode some
 instructions differently (NASM 2.16.01 puts the REP prefix before the operand-size prefix of REP
 MOVSD/STOSD, 3.01 and 3.02 after it; such an image works the same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom OUT=S3V2P21.BIN NASM=nasm/nasm-3.02/nasm`.
+`make rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm`.
 
-    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P21.BIN]
-    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P21.BIN]
+    python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P22.BIN]
+    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P22.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half a copy, the VCO range, every refresh entry with M 1-127,
@@ -286,7 +286,7 @@ be refused (already patched, three patch sites changed, a wrong checksum, and wi
 
 ### MCLK build option
 
-    make rom OUT=S3V2P21-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make rom OUT=S3V2P22-55.BIN MCLK=55 [MEMTYPE=edo1]
     make vrom OUT=S3VPP1-55.BIN MCLK=55 [MEMTYPE=edo1]
 
 Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
@@ -297,7 +297,7 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 
 | Chip, ROM | MEMTYPE | Entry | Default | Data book maximum |
 | --- | --- | --- | --- | --- |
-| Trio64V2, 2.04.07-p21 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
+| Trio64V2, 2.04.07-p22 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | C9h | 59.96 MHz | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
 | Trio64V+, 1.03-08-p1 | edo1 | A8h | 52.79 MHz | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
@@ -680,6 +680,15 @@ Fixes
   returned EAX bits 31-16 = 0000h; the reference keeps them. Found 30 October 2026 while backporting
   to the Trio64V+ (whose dispatcher saves only 16-bit registers). S3TEST's mode 13h scroll line checks
   it (fail bit 10h), the emulator test rom_patches too.
+- **DDC delay without the first-reading race** (p22, #86): the p19 delay compared its first PIT
+  reading with the loaded count, so a latch within about 1.7 us of the load ended the wait at once and
+  the DDC clock ran at bus speed again. The first comparison is now against FFFFh, and the control
+  word is written once, inside the cli. The emulator test `ddc` makes the first latch read the loaded
+  count and checks that every delay reads the counter again.
+- **Booster base and Windows mark kept apart** (p22, #87): CR6D held both the booster's saved linear
+  base (bits 31-24) and the Windows refusal mark 01h, so a base at 01xxxxxxh was taken for the mark at
+  the next mode set and lost. The mode set hook now restores the base first and clears CR6D after it,
+  then forgets the mark. The emulator test `rom_patches` runs the booster with base 01000000h.
 - The card's POST flags (0xD1 = 05h) and CR80 POST value (00h).
 
 ### VIDSPEED on the card: stock 2.04.11 against p21
@@ -730,7 +739,7 @@ zeros. Code blocks are listed with their labels; the sources are in `rompatch/`.
 
 | Offset | 2.04.07 | p21 | Purpose |
 | --- | --- | --- | --- |
-| 0x006F | 2.04.07 | 2.04.07-p21 | Sign-on string (the copyright line moves into the zero padding after it) |
+| 0x006F | 2.04.07 | 2.04.07-p22 | Sign-on string (the copyright line moves into the zero padding after it) |
 | 0x00C7-00C8 | 28 41 | 41 42 | MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz) |
 | 0x00D1 | 02 | 05 | POST flags: blank pedestal off (bit 1), the card's board flags (bits 0 and 2) |
 | 0x00D3 | 10 | 00 | CR80 POST value 00h, as on the card |
@@ -898,6 +907,24 @@ machine, so neither bit is set by the ROM. The Trio64V+ datasheet (SR15 bit 7, "
   VSHOW /A shows is clean on the card with p18 in plain DOS (30 October 2026).
 - The BIOS writes SR04 = 03h in text modes where IBM writes 02h; bit 0 is reserved on the VGA and
   reads back as 0 on the card, so programs see the IBM value.
+- From the code review of 31 October 2026, kept as they are (the fixed items are #86, #87, #88):
+  - Trio64 ROM: after a VESA mode set the CRTC index register is 38h, where Phoenix 1.5-07 leaves
+    67h (the booster's relock writes it last). Programs set the index before use; the sequencer index
+    ends as in 1.5-07 (08h).
+  - Trio64V+ ROM: the fast 4F05 path (`vext.asm`) writes the CRTC at 3D4h without asking for the port.
+    In monochrome addressing (mode 07h) a 4F05 call returns 004Fh without switching a bank; banked
+    modes always use colour addressing.
+  - Trio64 ROM: every bank switch with BH = 0 runs the booster check (`bon`), 6 to 14 OUTs per bank
+    where Phoenix needs 6. Skipping it when the booster is on would save at most 3 port accesses, as
+    the S3 registers must be unlocked to read CR58 at all (Phoenix relocks them after every call), and
+    needs about 35 bytes against 26 free in one piece. On the Trio64V2 and Trio64V+ ROMs the window
+    function path could check CR58 inline for 2 or 3 accesses less.
+  - Duplicated code: `p12ext.asm` keeps its own copies of the font load and the mode 13h scroll that
+    `font32.asm` and `scr13.asm` hold for the other ROMs, and `vhooks.asm`/`vext.asm` repeat
+    `wincheck.asm` and the fast 4F05 path. A fix to one copy must go to the other (p21 was made twice).
+  - Several Trio64V2 blocks give their address both as `org` in the .asm and as a number in
+    `s3patch.py` BLOCKS (wincheck, p19, hooks, p12ext, crtc240, vbe4f06; vhooks and vext on the
+    Trio64V+), not once in `bios.inc`. Moving a block means editing both.
 
 ### To do
 

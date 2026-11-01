@@ -10,6 +10,12 @@
 ; byte). Callers: the DDC code (5E0A, 5F10, 5F21) and POST (14E5, the wait with RAM refresh off before
 ; the graphics engine reset; it loaded its count 0Ah into BX, not AX, in 2.04.07 and 2.04.11 alike, so
 ; the delay used the CR88 word left in AX: fixed in p20).
+; p22: the wait compared its first reading with the loaded count N. The counter loads N on the next PIT
+; clock and counts down one clock later, so a latch taken within about 1.7 us of the load still reads N
+; (or an undefined value before the load), and the wait ended at once: the race let the DDC clock run
+; at bus speed again. The first comparison is now against FFFFh, so the wait ends only when the count
+; reloads after counting down. The control word is written once, inside the cli (it was also written
+; before it, to no effect).
 bits 16
 %include "bios.inc"
 org DDCWAIT
@@ -28,11 +34,9 @@ ddcwait:
         mov     cl, al                  ; port 61h as it was
         or      al, 0x01                ; gate channel 2 on (bit 1, the speaker, unchanged)
         out     dx, al
-        mov     al, 0xB6                ; channel 2: low then high byte, mode 3, binary
-        out     0x43, al
         pushf
         cli
-        mov     al, 0xB6
+        mov     al, 0xB6                ; channel 2: low then high byte, mode 3, binary
         out     0x43, al
         in      al, 0x80                ; I/O delay
         mov     ax, bx
@@ -41,6 +45,7 @@ ddcwait:
         out     0x42, al
         in      al, 0x80
         popf
+        mov     bx, 0xFFFF              ; p22: not the loaded count, which a first latch can still read
 .wait:  call    .read                   ; until the count reloads (goes up)
         cmp     ax, bx
         mov     bx, ax

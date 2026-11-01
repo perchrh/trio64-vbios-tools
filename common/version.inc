@@ -14,7 +14,7 @@
 %define VERSION '1.0'
 %endif
 %ifndef ROMVER
-%define ROMVER '2.04.07-p21'
+%define ROMVER '2.04.07-p22'
 %endif
 %ifndef VROMVER
 %define VROMVER '1.03-08-p1'
