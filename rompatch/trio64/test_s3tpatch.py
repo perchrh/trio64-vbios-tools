@@ -2,7 +2,7 @@
 """test_s3tpatch.py - checksum and table tests for the Trio64 ROM patcher s3tpatch.py (needs python3 and nasm).
 
     python3 rompatch/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P3.BIN] [--nasm nasm]
-    make trom-test [TREF=...] [ROM=S3T64P3.BIN]
+    make trio64-rom-test [TREF=...] [ROM=S3T64P3.BIN]
 
 --ref is the 32 KB Phoenix S3 Trio64 BIOS 1.5-07 (default reference/trio64/1_5_07.bin), --rom a build to
 compare with byte by byte.

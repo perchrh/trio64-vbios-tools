@@ -10,7 +10,7 @@ Written 1 November 2026.
 ## What was run
 
 - ROMs: `reference/trio64/1_5_07.bin` (Phoenix 1.5-07, CP764 build, MCLK 54.89 MHz; "1.5-07" below)
-  and our 1.5-07-p3, built with `make trom OUT=/tmp/claude-0/oracle-p3.BIN NASM=...` (SHA-256 of the
+  and our 1.5-07-p3, built with `make trio64-rom OUT=/tmp/claude-0/oracle-p3.BIN NASM=...` (SHA-256 of the
   32 KB f6eb2bf0..., "identical to the tested build"; "p3" below).
 - Emulator: `emu/vgaemu.py`, `Machine.chip = 'trio64'`, `Machine.vram` = 1, 2 and 4. For each mode a
   fresh machine: POST, 4F01 (CX = mode), then 4F02 (BX = mode) with the write log on; the registers

@@ -2,7 +2,7 @@
 """s3tpatch.py - build the Trio64 ROM (1.5-07-p3) from the Phoenix S3 Trio64 BIOS 1.5-07.
 
     python3 rompatch/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P3.BIN [--size 64|32] [--mclk MHZ [--overclock]] [--nasm nasm] [-q]
-    make trom OUT=S3T64P3.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
+    make trio64-rom OUT=S3T64P3.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
 assembler driver and the shared patch code of s3patch.py.
@@ -47,7 +47,7 @@ What is applied (docs/trio64-backport.md)
           same bytes as in 2.04.07) in place of Phoenix's, all five tables whole: S3's 9-dot alternate
           tables are 63 bytes longer, so the 8x16 font and the 9x16 table move up (S3FONTS) and the eight
           references to them are rewritten (FONT_REFS); --fonts-only applies only these, the reference
-          of make tref-compare
+          of make trio64-ref-compare
   DDC     VBE 4F15 without VDIF (DDC_SITES, DDC_FREED): 97 bytes free, DDC1 and DDC2B kept
   MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 70 MHz (MCLK_MAX); without it
           the build's own clock stays (54.9 MHz in the reference build). The data book gives 60 MHz
@@ -519,7 +519,7 @@ def main():
     ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '
                     '(default reference/vplus/1_03_08.bin)')
     ap.add_argument('--fonts-only', action='store_true', help='apply the fonts only (and the checksum): the '
-                    'reference make tref-compare compares our ROM with')
+                    'reference make trio64-ref-compare compares our ROM with')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
     a = ap.parse_args()
     try:
@@ -537,7 +537,7 @@ def main():
             d[0x7FFF] = (-sum(d)) & 0xFF
             with open(a.output, 'wb') as f:
                 f.write(bytes(d) * (2 if a.size == 64 else 1))
-            print('%s: %s with S3\'s fonts only (the tref-compare reference)' % (a.output, VERSION))
+            print('%s: %s with S3\'s fonts only (the trio64-ref-compare reference)' % (a.output, VERSION))
             return 0
         if a.overclock and a.mclk is None:
             raise PatchError('--overclock needs --mclk')

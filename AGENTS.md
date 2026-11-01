@@ -12,7 +12,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The patched ROM images are kept outside this repository. `rompatch/` holds the ROM code (nasm) and
   `s3patch.py`, which builds the current level from the S3 reference 2.04.07 alone
   with byte assertions; only the latest level is built. A new level replaces the pinned SHA-256
-  (`RESULT_SHA`) once the emulator tests pass, and `make rom-test` checks it. Update `BLOCK_SHA` in
+  (`RESULT_SHA`) once the emulator tests pass, and `make v2-rom-test` checks it. Update `BLOCK_SHA` in
   `s3patch.py` together with `RESULT_SHA`: the first 16 hex digits of the SHA-256 of every assembled
   block of that same NASM 3.02 build (all files in `BLOCKS`, also new ones); s3patch uses them to name
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
@@ -166,10 +166,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   function path comes with a test that runs it; `--list` shows the code no test reaches.
 - EGA/CGA goal: in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) the ROM behaves exactly like the
   unpatched reference BIOS 2.04.07: same registers back, BIOS data, video memory, DAC and standard VGA
-  registers after every call (`make ref-compare REF=... ROM=...`, emu/refcompare.py). Our
+  registers after every call (`make v2-ref-compare REF=... ROM=...`, emu/refcompare.py). Our
   changes there are speed only (32-bit stores) or VGA/S3 extended registers; a change that makes a
   difference in those modes needs a reason in README.md. The Trio64 ROM carries S3's fonts instead of
-  Phoenix's (README "Trio64 ROM"): `make tref-compare` compares it with 1.5-07 with those fonts only
+  Phoenix's (README "Trio64 ROM"): `make trio64-ref-compare` compares it with 1.5-07 with those fonts only
   (`s3tpatch.py --fonts-only`), so every other difference still shows.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and
   the DOS tools on top of it, under Unicorn with a VGA register model (`make emu-test ROM=...`). It

@@ -35,7 +35,7 @@ documents from `spec-a-post.md`; what remains for a second reader is listed unde
 
 The reference ROMs (`reference/`), the patched ROMs and their code (`rompatch/`), the oracle files,
 riplin's disassembly, `docs/trio64-backport.md`, the README sections on byte-level changes, the
-emulator tests that compare with a reference ROM (`make ref-compare`, `tref-compare`, the `T64_BASE`
+emulator tests that compare with a reference ROM (`make v2-ref-compare`, `trio64-ref-compare`, the `T64_BASE`
 notes), and anything from another vendor's BIOS source.
 
 ## Checking the clean ROM (on the dirty side)

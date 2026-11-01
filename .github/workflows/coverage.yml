@@ -70,7 +70,7 @@ jobs:
         run: pip install '.[coverage]'
 
       - name: Build the ROM from the reference BIOS
-        run: make rom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/ROM.BIN"
+        run: make v2-rom NASM=$HOME/nasm/nasm OUT="$RUNNER_TEMP/ROM.BIN"
 
       - name: Coverage
         run: make coverage NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"

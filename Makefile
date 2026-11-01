@@ -110,75 +110,75 @@ coverage: all
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --chip $(CHIP) --coverage emu/logs/COVER.BIN
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
-# The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF of ref-compare and rom-test
+# The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF of v2-ref-compare and v2-rom-test
 # and the default IN of rom; give REF=... or IN=... for another copy
 REF ?= reference/v2/2_04_07.bin
 IN ?= $(REF)
 
 # EGA/CGA behaviour against the unpatched reference BIOS (AGENTS.md goal)
-#   make ref-compare ROM=S3V2P15.BIN [REF=REF2047.BIN]
-ref-compare:
-	@test -n "$(REF)" -a -n "$(ROM)" || { echo "ref-compare: set ROM (and REF, default reference/v2/2_04_07.bin)"; exit 2; }
+#   make v2-ref-compare ROM=S3V2P15.BIN [REF=REF2047.BIN]
+v2-ref-compare:
+	@test -n "$(REF)" -a -n "$(ROM)" || { echo "v2-ref-compare: set ROM (and REF, default reference/v2/2_04_07.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --ref "$(REF)" --rom "$(ROM)"
 
 clean:
 	rm -rf build
 
-# MCLK build option of rom and vrom: MCLK = MHz for the memory type MEMTYPE (default edo1, 1-cycle EDO;
+# MCLK build option of v2-rom and vplus-rom: MCLK = MHz for the memory type MEMTYPE (default edo1, 1-cycle EDO;
 # fpm = fast page and 2-cycle EDO; sgram on the Trio64V2/GX), within the data book limits (rompatch/
 # s3patch.py, rompatch/vplus/s3vpatch.py); without MCLK the default build
 MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 
 # ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
-#   make rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
-#   make rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
-rom:
-	@test -n "$(IN)" -a -n "$(OUT)" || { echo "rom: set OUT, e.g. make rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
+#   make v2-rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
+#   make v2-rom-test [REF=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
+v2-rom:
+	@test -n "$(IN)" -a -n "$(OUT)" || { echo "v2-rom: set OUT, e.g. make v2-rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
 	python3 rompatch/s3patch.py --nasm "$(NASMBIN)" "$(IN)" -o "$(OUT)" $(MCLKOPT)
 
-rom-test:
-	@test -n "$(REF)" || { echo "rom-test: set REF (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
+v2-rom-test:
+	@test -n "$(REF)" || { echo "v2-rom-test: set REF (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
 	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
 # reference/vplus/1_03_08.bin (VREF), docs/vplus-backport.md
-#   make vrom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
-#   make vrom-test [VREF=...] [ROM=S3VPP1.BIN]
-#   make vref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
+#   make vplus-rom OUT=S3VPP1.BIN [VREF=...] [VSIZE=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; VSIZE=64: 64 KB, the 32 KB twice)
+#   make vplus-rom-test [VREF=...] [ROM=S3VPP1.BIN]
+#   make vplus-ref-compare ROM=S3VPP1.BIN [VREF=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
 VREF ?= reference/vplus/1_03_08.bin
 VSIZE ?= 32
 TSIZE ?= 64
-vrom:
-	@test -n "$(OUT)" || { echo "vrom: set OUT, e.g. make vrom OUT=S3VPP1.BIN (VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
+vplus-rom:
+	@test -n "$(OUT)" || { echo "vplus-rom: set OUT, e.g. make vplus-rom OUT=S3VPP1.BIN (VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
 	python3 rompatch/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(VSIZE) "$(VREF)" -o "$(OUT)" $(MCLKOPT)
 
-vrom-test:
+vplus-rom-test:
 	python3 rompatch/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(VREF)" --v2ref "$(REF)" $(if $(ROM),--rom "$(ROM)")
 
-vref-compare:
-	@test -n "$(ROM)" || { echo "vref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
+vplus-ref-compare:
+	@test -n "$(ROM)" || { echo "vplus-ref-compare: set ROM (our Trio64V+ ROM; VREF defaults to reference/vplus/1_03_08.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --chip vplus --ref "$(VREF)" --rom "$(ROM)"
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
 # (TREF; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
-#   make trom OUT=S3T64P3.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
-#   make trom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
-#   make trom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
-#   make trom-test [TREF=...] [ROM=S3T64P3.BIN]
-#   make tref-compare ROM=S3T64P3.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
+#   make trio64-rom OUT=S3T64P3.BIN [TREF=...] [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+#   make trio64-rom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
+#   make trio64-rom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
+#   make trio64-rom-test [TREF=...] [ROM=S3T64P3.BIN]
+#   make trio64-ref-compare ROM=S3T64P3.BIN [TREF=...]              (EGA/CGA behaviour against 1.5-07)
 #   make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
 TREF ?= reference/trio64/1_5_07.bin
-trom:
-	@test -n "$(OUT)" || { echo "trom: set OUT, e.g. make trom OUT=S3T64P3.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+trio64-rom:
+	@test -n "$(OUT)" || { echo "trio64-rom: set OUT, e.g. make trio64-rom OUT=S3T64P3.BIN (TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
 	python3 rompatch/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(TSIZE) "$(TREF)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
 
-trom-test:
+trio64-rom-test:
 	python3 rompatch/trio64/test_s3tpatch.py --nasm "$(NASMBIN)" --ref "$(TREF)" --vref "$(VREF)" $(if $(ROM),--rom "$(ROM)")
 
-tref-compare: | build
-	@test -n "$(ROM)" || { echo "tref-compare: set ROM (our Trio64 ROM; TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+trio64-ref-compare: | build
+	@test -n "$(ROM)" || { echo "trio64-ref-compare: set ROM (our Trio64 ROM; TREF defaults to reference/trio64/1_5_07.bin)"; exit 2; }
 	python3 rompatch/trio64/s3tpatch.py --fonts-only --fonts "$(VREF)" "$(TREF)" -o build/T64FONTS.BIN
 	$(PYTHON) emu/refcompare.py --chip trio64 --ref build/T64FONTS.BIN --rom "$(ROM)"
 
-.PHONY: all clean emu-test rom rom-test coverage ref-compare vrom vrom-test vref-compare trom trom-test tref-compare
+.PHONY: all clean emu-test v2-rom v2-rom-test coverage v2-ref-compare vplus-rom vplus-rom-test vplus-ref-compare trio64-rom trio64-rom-test trio64-ref-compare

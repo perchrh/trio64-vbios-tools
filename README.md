@@ -7,9 +7,9 @@ in its own emulator and on real cards, and prepares a clean-room BIOS of its own
 
 | Chip | ROM | Reference BIOS | Test card | Section |
 | --- | --- | --- | --- | --- |
-| Trio64 86C764X | 1.5-07-pN (`make trom`) | Phoenix 1.5-07 | ExpertColor DSP-3364P, 2 MB fast page | "Trio64 ROM", `docs/trio64-backport.md` |
-| Trio64V+ 86C765 | 1.03-08-pN (`make vrom`) | S3 1.03-08 | STB, Gainward GW503, Hercules Terminator 64 | "Trio64V+ ROM", `docs/vplus-backport.md` |
-| Trio64V2/DX 86C775 | 2.04.07-pN (`make rom`) | S3 2.04.07 | Gainward Genesis EV (GW503A), 2 MB EDO 40 ns | "ROM patcher", "Features and changes compared to the reference BIOS 2.04.07" |
+| Trio64 86C764X | 1.5-07-pN (`make trio64-rom`) | Phoenix 1.5-07 | ExpertColor DSP-3364P, 2 MB fast page | "Trio64 ROM", `docs/trio64-backport.md` |
+| Trio64V+ 86C765 | 1.03-08-pN (`make vplus-rom`) | S3 1.03-08 | STB, Gainward GW503, Hercules Terminator 64 | "Trio64V+ ROM", `docs/vplus-backport.md` |
+| Trio64V2/DX 86C775 | 2.04.07-pN (`make v2-rom`) | S3 2.04.07 | Gainward Genesis EV (GW503A), 2 MB EDO 40 ns | "ROM patcher", "Features and changes compared to the reference BIOS 2.04.07" |
 
 The work started on the Trio64V2/DX card, so the older sections below describe that ROM first; the
 three ROMs share the patcher library (`rompatch/s3patch.py`), the version file
@@ -57,10 +57,10 @@ folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
-    make rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
+    make v2-rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
     make emu-test ROM=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm
 
-Every target uses it: the tools, the ROM build (`rom`, `rom-test`) and the emulator tests, which
+Every target uses it: the tools, the ROM build (`v2-rom`, `v2-rom-test`) and the emulator tests, which
 assemble code themselves too (`emu/tests.py --nasm`, `emu/mutants.py --nasm`; both also read the
 environment variable `NASM`). A relative path is made absolute. `make` warns when the assembler is
 not NASM 3.02.
@@ -200,7 +200,7 @@ What the emulator finds in the stock BIOSes at hand (2 MB; the card logs decide)
 ### Test categories
 
 Every test has categories: the standard its expected values come from (`mda`, `cga`, `ega`, `vga`:
-the IBM BIOS of that adapter; `vbe`: VESA; `s3`: the chip and its datasheet; `rom`: the image itself),
+the IBM BIOS of that adapter; `vbe`: VESA; `s3`: the chip and its datasheet; `v2-rom`: the image itself),
 `patch` (our changes to the reference BIOS), `call` (how the BIOS is called: registers, flags, invalid
 input) and `tools` (our DOS tools), and where it runs: `card` (a tool that also runs on the card, so
 the hardware log decides) or `emu` (emulator only). `python3 emu/tests.py --list` shows them;
@@ -249,7 +249,7 @@ of p2 and p3 came after that measurement.
 
 ### EGA/CGA against the reference BIOS
 
-    make ref-compare ROM=S3V2P22.BIN
+    make v2-ref-compare ROM=S3V2P22.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -285,11 +285,11 @@ candidate (`docs/clean-room.md`).
 (level p22) to the S3 reference BIOS 2.04.07. It needs python3 (no packages) and NASM:
 
     python3 rompatch/s3patch.py reference/v2/2_04_07.bin -o S3V2P22.BIN
-    make rom OUT=S3V2P22.BIN
+    make v2-rom OUT=S3V2P22.BIN
 
 The input is the 32 KB reference BIOS (or a 64 KB image with it in the lower half; the rest is not
-used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make rom` and
-of `REF` for `make rom-test` and `make ref-compare`; `IN=...` or `REF=...` selects another copy. The
+used). The repository carries it as `reference/v2/2_04_07.bin`, the default of `IN` for `make v2-rom` and
+of `REF` for `make v2-rom-test` and `make v2-ref-compare`; `IN=...` or `REF=...` selects another copy. The
 result is 64 KB: the patched 32 KB twice, as in the Trio64 and Trio64V+ ROMs (#78, "Trio64 ROM"; p15 to
 p21 were first built with 32 KB of zeros above). Only 2.04.07 is accepted. Every patch site is
 compared with the original code first (the replaced routines in full), and the result is checked
@@ -302,10 +302,10 @@ instructions differently (NASM 2.16.01 puts the REP prefix before the operand-si
 MOVSD/STOSD, 3.01 and 3.02 after it; such an image works the same), and then the result check fails: s3patch names the assembler and the blocks whose
 code differs from the tested build, writes nothing to OUT and keeps the image in OUT.untested, only
 for a comparison; do not flash it. Build with 3.02 instead, for example
-`make rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm`.
+`make v2-rom OUT=S3V2P22.BIN NASM=nasm/nasm-3.02/nasm`.
 
     python3 rompatch/test_s3patch.py --ref reference/v2/2_04_07.bin [--stock STOCK.BIN] [--rom S3V2P22.BIN]
-    make rom-test [STOCK=STOCK.BIN] [ROM=S3V2P22.BIN]
+    make v2-rom-test [STOCK=STOCK.BIN] [ROM=S3V2P22.BIN]
 
 runs the checksum tests: the pinned SHA-256 (and the same bytes as `--rom`), the lower half sums to
 00 with the right byte at 7FFFh, the upper half a copy, the VCO range, every refresh entry with M 1-127,
@@ -316,8 +316,8 @@ be refused (already patched, three patch sites changed, a wrong checksum, and wi
 
 ### MCLK build option
 
-    make rom OUT=S3V2P22-55.BIN MCLK=55 [MEMTYPE=edo1]
-    make vrom OUT=S3VPP1-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make v2-rom OUT=S3V2P22-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make vplus-rom OUT=S3VPP1-55.BIN MCLK=55 [MEMTYPE=edo1]
 
 Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
 for (CR36 bits 3-2, set by resistors on the board and kept by the BIOS). `MCLK` sets the entry of
@@ -338,7 +338,7 @@ On the Trio64 ROM `MCLK` goes up to 70 MHz, above the data book's 60 MHz: our to
 Trio64's limit (T64-MEM-7), the clock card databases give for the 86C764X (vgamuseum), and the ExpertColor DSP-3364P runs it (its own
 BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"):
 
-    make trom OUT=S3T64P3.BIN MCLK=69.8
+    make trio64-rom OUT=S3T64P3.BIN MCLK=69.8
 
 The display FIFO M follows the build's clock (since p2, #75; docs/trio64-backport.md): windowed video on
 that card, which streaked at 54.9 MHz with Phoenix's values, was clean with p2 at 55 and 69.8 MHz; the
@@ -387,10 +387,10 @@ reset. The result signs on as 1.03-08-p1. The VCO fix is not possible on the Tri
 divider R has 2 bits), and the Trio64V2 register fixes do not apply; `docs/vplus-backport.md` has the
 details, what 1.03-08 itself still gets wrong, and the per-call costs.
 
-    make vrom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
-    make vrom-test [ROM=S3VPP1.BIN]
+    make vplus-rom OUT=S3VPP1.BIN [VSIZE=64]       (32 KB; VSIZE=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
+    make vplus-rom-test [ROM=S3VPP1.BIN]
     make emu-test ROM=S3VPP1.BIN CHIP=vplus [LOGS=emu/vlogs]
-    make vref-compare ROM=S3VPP1.BIN
+    make vplus-ref-compare ROM=S3VPP1.BIN
 
 Square brackets in these lines mark options: type `VSIZE=64`, not `[VSIZE=64]`.
 
@@ -419,10 +419,10 @@ what 1.5-07 still gets wrong and the comparison of the base candidates. The ROM 
 86C764X** (Trio64 PnP, rated for a 70 MHz MCLK); on the earlier 86C764 build it with `MCLK=60` at most
 (docs/trio64-backport.md says why).
 
-    make trom OUT=S3T64P3.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
-    make trom-test [ROM=S3T64P3.BIN]
+    make trio64-rom OUT=S3T64P3.BIN [TSIZE=32] [MCLK=55]   (64 KB, the 32 KB twice; TSIZE=32: 32 KB)
+    make trio64-rom-test [ROM=S3T64P3.BIN]
     make emu-test ROM=S3T64P3.BIN CHIP=trio64 [LOGS=emu/tlogs]
-    make tref-compare ROM=S3T64P3.BIN
+    make trio64-ref-compare ROM=S3T64P3.BIN
 
 The 64 KB images of all three ROMs (Trio64, Trio64V+ and Trio64V2) carry the 32 KB twice, so a board
 finds the BIOS whichever half of its 64 KB EEPROM it maps; the PCI ROM header declares one 32 KB image,
@@ -449,13 +449,13 @@ The tests run as parallel jobs, one matrix row per chip and memory size, each na
 
 | Job | What it runs |
 | --- | --- |
-| Trio64V2 2 MB, patcher, EGA/CGA | `make rom`, `make rom-test`, `make emu-test` with 2 MB (without s3compat_full), `make ref-compare` |
+| Trio64V2 2 MB, patcher, EGA/CGA | `make v2-rom`, `make v2-rom-test`, `make emu-test` with 2 MB (without s3compat_full), `make v2-ref-compare` |
 | Trio64V2 2 MB s3compat_full | the longest test alone |
 | Trio64V2 4 MB | the tests tagged `vram` with 4 MB (without s3compat_full) |
 | Trio64V2 4 MB s3compat_full | s3compat_full with 4 MB |
-| Trio64V+ 2 MB, patcher, EGA/CGA | `make vrom`, `make vrom-test`, `make emu-test CHIP=vplus` with 2 MB, `make vref-compare` |
+| Trio64V+ 2 MB, patcher, EGA/CGA | `make vplus-rom`, `make vplus-rom-test`, `make emu-test CHIP=vplus` with 2 MB, `make vplus-ref-compare` |
 | Trio64V+ 4 and 1 MB | the `vram` tests with 4 and 1 MB |
-| Trio64 2 MB, patcher, EGA/CGA | `make trom`, `make trom-test`, `make emu-test CHIP=trio64` with 2 MB, `make tref-compare` |
+| Trio64 2 MB, patcher, EGA/CGA | `make trio64-rom`, `make trio64-rom-test`, `make emu-test CHIP=trio64` with 2 MB, `make trio64-ref-compare` |
 | Trio64 4 and 1 MB | the `vram` tests with 4 and 1 MB |
 | build-and-test | passes when every row passed (the check name branch rules can require) |
 
@@ -607,7 +607,7 @@ The ROM is the S3 Trio64V2/DX reference BIOS 2.04.07 with the changes below in t
 upper 32 KB is a copy of it ("ROM patcher"). The lower half checksums to 0. Every change keeps
 the standard VGA modes (00h-13h) and the VESA modes compatible, and the RAM stays in 1-cycle EDO mode.
 Video memory of 2 MB and 4 MB is supported (the 86C775 maximum). In the CGA, MDA and EGA modes the ROM
-behaves exactly like the reference (`make ref-compare`); the changes there only make it faster. About
+behaves exactly like the reference (`make v2-ref-compare`); the changes there only make it faster. About
 100 bytes of the lower 32 KB are free: 0x7CD9-7CFA, 0x7E36-7E3F, 0x7E59-7E5F, 0x7E79-7E7F,
 0x7F51-7F57, 0x7FB7-7FBF, 0x7FE3-7FFE.
 
@@ -973,7 +973,7 @@ machine, so neither bit is set by the ROM. The Trio64V+ datasheet (SR15 bit 7, "
   - Results: the MCLK line keeps judging the BIOS's POST clock (read before /M changes it) against
     the data book; an INFO line shows the clock /M set; the debug log records both (raw SR10/SR11).
     The VRAM test of S3COMPAT then runs at the /M clock, which is the point of the option.
-  - The ROM's own clock for a card is still set with `make rom MCLK=...`; /M is for testing.
+  - The ROM's own clock for a card is still set with `make v2-rom MCLK=...`; /M is for testing.
   - Until then: S3CTL (https://github.com/RetroLoom/S3ctl, GPL-3.0, a DOS tool for S3 ViRGE and Trio
     chips) sets the memory clock until reboot: `S3CTL --chip=trio mclk 50`, 30-60 MHz. From its source
     (30 October 2026): it searches M 0-127, N 0-31 and R 1/2/4/8 with the VCO in 135-270 MHz, writes

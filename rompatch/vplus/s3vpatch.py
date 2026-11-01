@@ -3,7 +3,7 @@
 
     python3 rompatch/vplus/s3vpatch.py 1_03_08.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
                                        [--nasm nasm] [-q]
-    make vrom OUT=S3VPP1.BIN [MCLK=55 [MEMTYPE=edo1]]
+    make vplus-rom OUT=S3VPP1.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02, as s3patch.py (the Trio64V2 build) does; it uses the
 assembler driver and the shared patch code of s3patch.py next to it.

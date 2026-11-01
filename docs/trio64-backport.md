@@ -14,8 +14,8 @@ verified: no 86C764 card at hand). On an 86C764 keep the default build (54.9 MHz
 `MCLK=60` at most. The tools do not tell the two apart (the same PCI ID), so S3TEST's and S3COMPAT's
 MCLK lines accept up to 70 MHz on both.
 
-The build and test commands are in README "Trio64 ROM" (`make trom`, `trom-test`, `emu-test CHIP=trio64`,
-`tref-compare`).
+The build and test commands are in README "Trio64 ROM" (`make trio64-rom`, `trio64-rom-test`, `emu-test CHIP=trio64`,
+`trio64-ref-compare`).
 
 Base: `reference/trio64/1_5_07.bin`, the CP764 build of Phoenix 1.5-07 (08/19/96, MCLK 54.9 MHz,
 SHA-256 6a28c6b2...). Every 1.5-07 build at hand has the same code from 1000h to 7EFFh; the patcher
@@ -129,12 +129,12 @@ through the save pointer table.
 
 ## Checked in the emulator (Trio64 model)
 
-`make trom-test`: the tables (no list starts with an interlaced entry, every kept entry unchanged), every
+`make trio64-rom-test`: the tables (no list starts with an interlaced entry, every kept entry unchanged), every
 other byte unchanged, another maker's timing bytes and MCLK kept, the MCLK option, the refusals.
 `make emu-test CHIP=trio64` with 2, 4 and 1 MB: `t64_patches` (defaults, removed modes, booster, Windows
 check, lock state, ATC flip-flop, sequencer index after 4F05 BH = 0 and 1, S3's fonts in AX=1130h and
 plane 2, 4F15 answers as 1.5-07's with BL=02h failing at once, 32-bit registers), `stores`, `s3test` (the Trio64 set) and the others;
-`make tref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07 with S3's fonts (`--fonts-only`); `make trom-test`
+`make trio64-ref-compare`: the CGA, MDA and EGA modes behave as in 1.5-07 with S3's fonts (`--fonts-only`); `make trio64-rom-test`
 checks the fonts against 1.03-08 byte for byte. S3COMPAT's VESA lines: every mode
 non-interlaced, 800x600 at 60.7 Hz. Test coverage (`make coverage CHIP=trio64`): README "Test coverage".
 
@@ -342,7 +342,7 @@ softer than on the Trio64V2 card: the analog output of the board, not the ROM.
 
 ## Pending
 
-- p3 at 60 MHz on the card (#82): `make trom OUT=S3T64P3.BIN MCLK=60`, then windowed video at
+- p3 at 60 MHz on the card (#82): `make trio64-rom OUT=S3T64P3.BIN MCLK=60`, then windowed video at
   800x600x16 under Windows 98, S3REGS32 /W for CR54 (expected 50h, M = 10, in 114h) and S3COMPAT's
   VRAM test (without /Q).
 - The S3/VESA mode set clear: Phoenix's graphics engine clear takes 157 ms for 2 MB on the card (39 ms
