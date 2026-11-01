@@ -234,6 +234,14 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
    640x400 and the VGA modes) one refresh per line gives 31500 per second; the DRAM's refresh need
    (cycles per ms of the V53C16256H and of EDO parts) is not in the project's notes. Which count should
    each mode use, and should the VGA modes keep IBM's CR11 bit 6 = 0 (3 per line) with CR3A bit 2 = 0?
+   Partly answered (1 November 2026): the DSP-3364P carries four Mosel Vitelic V53C16256H-50 (256K x
+   16 fast page DRAM, 50 ns); the family's data sheet (Mosel 1993 memory data book, V53C16256/18256)
+   asks for 512 refresh cycles in 8 ms, one every 15.6 us. Assuming one refresh per CRTC line,
+   blanking lines included, a mode needs at least line rate / 64 kHz cycles per line, rounded up: 3 at
+   31.5 kHz (2.03), 2 at 37.9 kHz (800x600, 1.69) and 48.4 kHz (1024x768, 1.32), 1 at 64 kHz and above
+   (1280x1024). One per line (CR3A = 15h) is below the data sheet in every mode under 64 kHz, as is
+   the data book's example at its 60 kHz (0.94). Still open: whether the chip refreshes on every line
+   including vertical blanking, and other boards' parts (EDO parts of the Trio64V+/V2 cards).
 6. **MQ-6** Does the M parameter act in the VGA modes on the Trio64 (MODE-148), and is M = 31 there safe
    on the card? The Vision968 book uses M in VGA modes only, the Trio64 book does not limit it.
 7. **MQ-7** CR40 bit 0 after a packed mode set: left 1 so a driver can use the graphics engine at once,

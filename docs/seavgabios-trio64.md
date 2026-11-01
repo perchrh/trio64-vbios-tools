@@ -4,6 +4,30 @@ How the slimmed SeaVGABIOS (branch `claude/slim-vgabios` of perchrh/seabios_fork
 VBE) becomes a video BIOS for the ExpertColor DSP-3364P (S3 86C764X Trio64, 2 MB fast page memory) under
 the clean-room rules of `docs/clean-room.md`. Written 1 November 2026; nothing here is started yet.
 
+## Changes of 1 November 2026
+
+- **Base under review.** The owner wants the ROM in the public domain (`docs/clean-room.md` "Scope,
+  base and licence"), which rules out building on SeaVGABIOS's LGPLv3 code, and wants the VGA functions
+  no slower than our Trio64 ROM p3 (CGA, EGA and MDA may be slower). SeaVGABIOS then becomes a source
+  of facts and a reference implementation to test against, and the clean side writes its own code,
+  probably in assembly. An emulator comparison of the slim SeaVGABIOS with p3 is running; the decision
+  follows its result. The milestones and the compatibility target below hold for either base.
+- **Compatibility target: FreeDOS 1.4** (the latest stable release, 5 April 2025). Everything its
+  distribution asks of the video BIOS is a requirement: MODE (25, 28, 43 and 50 lines, 40, 80 and
+  132 columns, the 132 columns through the VBE text modes), DISPLAY (code page fonts), CTMOUSE, the
+  installer, FreeCOM, NANSI, EDIT and the rest. A survey of the packages' video BIOS calls is running;
+  its requirements go into the specifications (`docs/cleanroom/`).
+
+## Milestones
+
+1. **Milestone 1: POST.** On the DSP-3364P (and in the emulator first) the ROM passes POST: the system
+   BIOS finds it, it initialises the chip and mode 03h, and DOS starts with readable text.
+2. **Milestone 2: FreeDOS 1.4 and the mouse.** FreeDOS 1.4 boots on the card with the ROM, and CTMOUSE
+   loads and drives the mouse cursor in text mode and in the graphics modes it supports.
+
+Later milestones (to be set): MODE with 132 columns and 50 lines, the VBE 1.2 modes with S3TEST,
+S3COMPAT and VSHOW, games, Windows 3.11 and Windows 9x.
+
 ## Scope of the first version
 
 - The standard VGA functions (INT 10h AH=00h-1Ch) from SeaVGABIOS as they are.
