@@ -14,7 +14,7 @@ must do, written from the datasheets alone.
 - **Sources.** A rule comes from a datasheet, quoted or paraphrased with its section or table. A rule
   from another public source (XFree86, VESA) is marked *derived* and is never a FAIL on its own.
   Nothing here may come from reading a BIOS image (its code, tables or strings): those findings belong
-  in README.md ("Features and changes", "Byte-level changes") and are implementation knowledge, not chip
+  in docs/775-rom.md ("Features and changes", "Byte-level changes") and are implementation knowledge, not chip
   rules. Keep the two apart, so the rules can be handed to someone who has never seen a BIOS image.
   The one exception is the section "S3 OEM functions (4F14h)": no datasheet describes them, so it is
   taken from BIOS images, says so, and its entries are not chip rules.
@@ -41,7 +41,7 @@ must do, written from the datasheets alone.
 | UV+ | S3 Trio64UV+ UMA Graphics/Video Accelerator, DB024-A, March 1996, with the update ER010-B (May 1996) |
 | XFree86 | XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c` |
 | V864 | S3 Vision864 Graphics Accelerator data book (`86c864_vision864_ocr.pdf`, an OCR scan with a text layer): the chip the Trio64 integrates with the RAMDAC and the clock synthesizer. Used for comparison, never as the source of a rule ("Related chip: the Vision864") |
-| V968 | S3 Vision968 Multimedia Accelerator, DB016-A, April 1995 (`86c968-vision968-...pdf`, a scan without text, 95 pages): the changes from the Vision964 only. Not a Trio64-family chip; used for comparison, never as the source of a rule ("Related chip: the Vision968") |
+| V968 | S3 Vision968 Multimedia Accelerator, DB016-A, April 1995 (a scan without text, 95 pages; removed from `datasheets/` on 1 November 2026): the changes from the Vision964 only. Not a Trio64-family chip; used for comparison, never as the source of a rule ("Related chip: the Vision968") |
 
 The datasheets are in `datasheets/`. `357_86c732-86c764_trio32_64.pdf` was compared with the
 March 1995 book on 28 October 2026: it is another scan of the same book (images only, no text; the
@@ -175,7 +175,7 @@ failed or unknown subfunction):
 | OEM-6 | BL=02h BH=03h mode information | CX = mode: EDI = XRes << 16 OR YRes, SI bits 7-0 = bits per pixel, as 4F01h (graphics modes) | S3COMPAT bit 4 |
 
 A program or driver may check the query's version (OEM-1) and expect this behaviour, so a BIOS for this
-card keeps it unchanged (README "Not taken: the S3 OEM functions (4F14h) of later BIOSes").
+card keeps it unchanged (docs/775-rom.md "Not used: the S3 OEM functions (4F14h) of later BIOSes").
 
 ## Related chip: the Vision864 (comparison, not rules)
 
@@ -191,7 +191,7 @@ What V864 adds to T64-MEM-1 and the FIFO M computation of our Trio64 ROM (#75, #
 - **S3's own example** (V864 table 9-4, 1024x768x8 at 75 Hz, 80 MHz DCLK): CR54 = 70h (M = 14), CR60 =
   FFh (N: fill the FIFO to full each time), CR3B = CR00 - 5. Our ROM gives 1024x768x8 at 60 Hz (65 MHz)
   M = 11 (55 MHz) to 16 (69.8 MHz): of the same order, lower at the lower clocks. Phoenix's Vision864
-  BIOSes write a fixed M per mode class (8 bpp 23, 800x600x16 11, docs/trio64-backport.md). [Leak review: observed behaviour of a reference BIOS, not a data book fact; to be judged before this file crosses to the clean side, `docs/cleanroom/README.md`.]
+  BIOSes write a fixed M per mode class (8 bpp 23, 800x600x16 11, docs/764-rom.md). [Leak review: observed behaviour of a reference BIOS, not a data book fact; to be judged before this file crosses to the clean side, `docs/cleanroom/README.md`.]
 - **The L parameter** (V864: CR61 bits 2-0 and CR62, enabled by CR61 bit 7): the 8-byte units of a
   line's fetch, after which FIFO filling stops until CR3B. The Trio64 has no L: T32/64 7.4 names two
   parameters, M and N, and says filling stops at the end of active display; its register list has no

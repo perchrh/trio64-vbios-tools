@@ -25,8 +25,11 @@ ifdef VER764
 DEFS += -DVER764="'$(VER764)'"
 endif
 
-all: build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-     build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT build/ZIP.EXE
+# make (or make tools): the DOS tools, S3REGS32.EXE and the batch files into build/
+TOOLS = build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
+        build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT build/ZIP.EXE
+all: tools
+tools: $(TOOLS)
 
 # runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D, then
 # RUNALL.ZIP with Info-ZIP's zip (DOS line ends); clean.bat deletes what a run leaves behind
@@ -141,7 +144,7 @@ MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 	python3 rompatch/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF775)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
-# reference/64vplus/1_03_08.bin (REF765), docs/vplus-backport.md
+# reference/64vplus/1_03_08.bin (REF765), docs/765-rom.md
 #   make 765-rom OUT=S3VPP1.BIN [REF765=...] [SIZE765=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; SIZE765=64: 64 KB, the 32 KB twice)
 #   make 765-rom-test [REF765=...] [ROM=S3VPP1.BIN]
 #   make 765-ref-compare ROM=S3VPP1.BIN [REF765=...]               (EGA/CGA behaviour against 1.03-08)
@@ -161,7 +164,7 @@ SIZE764 ?= 64
 	$(PYTHON) emu/refcompare.py --chip 765 --ref "$(REF765)" --rom "$(ROM)"
 
 # The Trio64 ROM (rompatch/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
-# (REF764; another card's 1.5-07 build is accepted too), docs/trio64-backport.md
+# (REF764; another card's 1.5-07 build is accepted too), docs/764-rom.md
 #   make 764x-rom OUT=S3T64P3.BIN [REF764=...] [SIZE764=32] [MCLK=55]   (64 KB, the 32 KB twice; SIZE764=32: 32 KB)
 #   make 764x-rom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
 #   make 764x-rom OUT=S3T64OC.BIN MCLK=85 OVERCLOCK=1   (above 70 MHz, at most 100 MHz)
@@ -207,4 +210,24 @@ roms:
 	for m in $(CLOCKS_764P); do $(MAKE) --no-print-directory 764p-rom OUT=$(ROMDIR_764P)/764PM$$m.BIN MCLK=$$m; done
 	@ls -lR build/roms
 
-.PHONY: all clean emu-test 775-rom roms 775-rom-test coverage 775-ref-compare 765-rom 765-rom-test 765-ref-compare 764x-rom 764p-rom 764-rom-test 764-ref-compare
+# The release zip, build/trio64-tools-<VERSION>.zip (VERSION from common/version.inc, or VERSION=...):
+# trio64/tools/ with the tools and Info-ZIP's licence (ZIP-LIC.TXT, which its licence asks to pass on
+# with ZIP.EXE). With ROMS=1 also trio64/roms/, every chip's ROM at its memory clocks (make roms); the
+# default leaves them out (README "Release zip").
+#   make dist [ROMS=1]
+DISTVER = $(or $(VERSION),$(shell sed -n "s/^%define VERSION '\(.*\)'.*/\1/p" common/version.inc))
+DISTZIP = build/trio64-tools-$(DISTVER).zip
+dist: tools $(if $(ROMS),roms)
+	rm -rf build/dist $(DISTZIP)
+	mkdir -p build/dist/trio64/tools
+	cp $(TOOLS) build/dist/trio64/tools/
+	cp infozip/LICENSE build/dist/trio64/tools/ZIP-LIC.TXT
+	$(if $(ROMS),cp -R build/roms build/dist/trio64/roms)
+	$(PYTHON) -m zipfile -c $(DISTZIP) build/dist/trio64
+	@$(PYTHON) -m zipfile -l $(DISTZIP)
+
+# the release version, for scripts (CI names its artifact with it)
+version:
+	@echo $(DISTVER)
+
+.PHONY: all tools dist version clean emu-test 775-rom roms 775-rom-test coverage 775-ref-compare 765-rom 765-rom-test 765-ref-compare 764x-rom 764p-rom 764-rom-test 764-ref-compare

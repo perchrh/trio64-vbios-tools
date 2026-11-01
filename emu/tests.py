@@ -2215,7 +2215,7 @@ DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 9
             'stores': 55, 's3compat_vga': 45}
 
 
-# Our Trio64V+ ROM keeps these failures of its base 1.03-08, outside the backport (docs/vplus-backport.md,
+# Our Trio64V+ ROM keeps these failures of its base 1.03-08, outside the backport (docs/765-rom.md,
 # "Left as in 1.03-08"); the unpatched 1.03-08 fails the same lines. A test of that ROM whose failure lines
 # all match passes with a note; any other line still fails it.
 VPLUS_BASE = {
@@ -2224,7 +2224,7 @@ VPLUS_BASE = {
 }
 
 
-# Our Trio64 ROM keeps these of its base Phoenix 1.5-07 (docs/trio64-backport.md, "Left as in 1.5-07"); the
+# Our Trio64 ROM keeps these of its base Phoenix 1.5-07 (docs/764-rom.md, "Left as in 1.5-07"); the
 # unpatched 1.5-07 gives the same lines.
 T64_BASE = {
     # with 1 MB Phoenix sets the modes that need more memory (107h, 112h, 115h-117h; the removed 118h-120h

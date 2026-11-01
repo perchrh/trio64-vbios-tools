@@ -21,7 +21,7 @@ Output
   the BIOS as well as one that maps the lower half (the ExpertColor DSP-3364P maps the upper half: with
   zeros there the card stayed dark at POST, #78); --size 32: the 32 KB alone, for a 32 KB EEPROM
 
-What is applied (docs/trio64-backport.md)
+What is applied (docs/764-rom.md)
   tables  the refresh entries that run interlaced are removed where the mode has non-interlaced rates
           (1024x768 and 1280x1024 at 8, 15 and 16 bpp, and the 2xxh modes of the same timings), so each
           mode defaults to its lowest non-interlaced rate; the modes that exist only interlaced on the
@@ -164,7 +164,7 @@ FONT_REFS = {0x1B29: 0x6E30, 0x1B39: 0x6E30, 0x2FBE: 0x6E30, 0x2FFD: 0x6E30, 0x3
              0x3164: 0x7E30, 0x477B: 0x7E30}
 FONT_REF_OP = {0x1B29: 0xBB, 0x1B39: 0xBB, 0x2FBE: 0xBE, 0x2FFD: 0xBE, 0x3119: 0xBE, 0x477B: 0xBE}
 FONT_TAB = (0x315A, '20 5f 20 57 20 5b 20 6d 30 6e 30 7e')
-# VDIF deleted from VBE 4F15 (31 October 2026, for space; docs/trio64-backport.md): BL=02h, read VDIF (a
+# VDIF deleted from VBE 4F15 (31 October 2026, for space; docs/764-rom.md): BL=02h, read VDIF (a
 # format VESA withdrew), fails with AH=01h. DDC1 and DDC2B stay as in 1.5-07 (DDC1 was deleted for a
 # while and put back the same day: monitors of the era that speak DDC1 alone keep their EDID).
 # (offset, old, new):

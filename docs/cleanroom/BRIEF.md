@@ -20,7 +20,7 @@ book rules with IDs), docs/bios-rules.md (standard function rules, the format to
   Phoenix, and our patched build) in the emulator (emu/vgaemu.py, Machine.chip = 'trio64', python at
   /home/user/trio64-vbios-tools/.venv/bin/python3; m = Machine(rom64k); m.post(); m.int10(ax, bx=..);
   registers in m.r['crtc'], m.r['seq'], m.r['gc'], m.r['atc'], m.r['misc'], memory m.mem(addr, n)),
-  and the card logs in README and docs/trio64-backport.md (S3REGS dumps). But do NOT copy the
+  and the card logs in README and docs/764-rom.md (S3REGS dumps). But do NOT copy the
   reference ROM's per-mode register bytes or tables into the specification: derive values from the
   standards and the data book, and put the observed reference values only into your part's ORACLE
   file (it stays on the dirty side and is used to check the clean ROM), saying where they agree or

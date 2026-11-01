@@ -2,7 +2,7 @@
 
 This file stays on the dirty side. It records what the reference ROM and our patched build do at POST
 and in the conventions of `spec-a-post.md`, observed in the emulator, and what the card logs in
-README.md and docs/trio64-backport.md show, and compares each with the rules. It is used to check the
+README.md and docs/764-rom.md show, and compares each with the rules. It is used to check the
 clean ROM; none of its values may be copied into the specification. Observed 1 November 2026.
 
 ## How it was observed
@@ -17,7 +17,7 @@ clean ROM; none of its values may be copied into the specification. Observed 1 N
   and CR36 answer fixed values, BAR0 is CR59/CR5A, no PLL, no missing memory, 9AE8h reads busy.
 - Tests: `emu/tests.py --chip 764 --tests post,windows,engine_init` and S3TEST run on the model
   (`Machine.run_com`) with the reference ROM.
-- Card: the S3REGS values quoted in docs/trio64-backport.md ("On the card", "The DSP-3364P's memory")
+- Card: the S3REGS values quoted in docs/764-rom.md ("On the card", "The DSP-3364P's memory")
   and README.md ("Windows 9x driver test"; that record is from the Trio64V2 card).
 
 ## POST of 1.5-07 in the emulator (2 MB)
@@ -126,7 +126,7 @@ call (open question 12 of the spec).
 
 - `emu/tests.py --chip 764 --tests windows` with the reference ROM: FAIL, one check: "4F06 set:
   upper halves changed: eax A55A4F06->0000004F, ecx 855A0400->00000400, edx 955A0000->00000800" (CONV-4;
-  docs/trio64-backport.md "Left as in 1.5-07" lists it). Every other check passes: CR59/CR5A stay
+  docs/764-rom.md "Left as in 1.5-07" lists it). Every other check passes: CR59/CR5A stay
   E000h after the driver's banked 4F02 calls (CONV-1), every call returns with IF = 0 and no tick
   (CONV-5), mode 03h after the driver is IBM's (CONV-7).
 - `engine_init` is skipped on `--chip 764` (the rule is tagged for the Trio64V+ family): the
@@ -154,7 +154,7 @@ its own.
 
 | Register | Card (DSP-3364P) | Source |
 | --- | --- | --- |
-| CR36 | 8Eh: 2 MB (BIOS-written), fast page, PCI | docs/trio64-backport.md "On the card" |
+| CR36 | 8Eh: 2 MB (BIOS-written), fast page, PCI | docs/764-rom.md "On the card" |
 | CR68 | 8Dh: 64-bit bus, RAS low 3.5, precharge 2.5, stretch 5 ns | same |
 | BAR0, CR6B | E0000000h, E0h | same |
 | SR10/SR11 | 22h 25h with the card's own BIOS (69.8 MHz); 41h 2Ch with p1 | same; README "MCLK build option" |
