@@ -18,8 +18,8 @@ number; the documentation also uses the market names.
 
 | Code | Market name | S3 part | PCI ID | Make targets | `--chip`, `CHIP=` | Version, reference, size variables |
 | --- | --- | --- | --- | --- | --- | --- |
-| 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775` |
 | 785 | Trio64V2/GX | 86C785 | 5333:8901 | `775-rom` (the same ROM: S3's 2.04.07 is the "86C775/86C785 Video BIOS"; the clock option has an `sgram` entry for the GX) | `775` | as 775 |
+| 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775` |
 | 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
 | 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
 | 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
