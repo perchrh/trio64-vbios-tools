@@ -66,7 +66,7 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08N'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   # 32 KB 1.03-08N image
-RESULT_SHA = 'b49fcdc4951f21521dd81f0dd3a62490fff94bf95ddb848d98424483704d8c62'  # 1.03-08-p3 (NASM 3.02), emulator tests passed
+RESULT_SHA = '8e0df50123813c81cd3c01d7c11e8e420fd039c50cdf3ea1f01e49cbc6a8fc09'  # 1.03-08N-p4 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
