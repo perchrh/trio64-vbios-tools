@@ -10,7 +10,7 @@ byte by byte.
 
 Tests
   build          1.03-08 gives the tested build: the SHA-256 pinned in s3vpatch.py (NASM 3.02), sign-on
-                 1.03-08-p1, 32 KB, byte-identical to --rom when given
+                 1.03-08-pN, 32 KB, byte-identical to --rom when given
   checksums      the 32 KB sum to 00 (byte 7FFFh makes it so) and have the 55AAh header with 32 KB size
   free_space     the bytes of the free block 7AE0-7FEF that no code uses are still 00, and 'Cardex1'
                  at 7FF0h is kept

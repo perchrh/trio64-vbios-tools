@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""s3vpatch.py - build the Trio64V+ ROM (1.03-08-p1) from the S3 Trio64V+ BIOS 1.03-08.
+"""s3vpatch.py - build the Trio64V+ ROM (1.03-08-pN, the level from common/version.inc VER765) from the S3 Trio64V+ BIOS 1.03-08.
 
     python3 rompatch/vplus/s3vpatch.py 1_03_08.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
                                        [--nasm nasm] [-q]
@@ -24,6 +24,8 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/vplus-backport.md)
                      linear window at A0000h in banked packed modes, on at the end of a banked 4F02
                      and at the first bank switch, not under Windows enhanced mode)
          vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry
+         vfix.asm    (p2) 4F02 refuses a mode that does not fit the video memory (4F01's rule), and the
+                     VBE dispatcher keeps the upper halves of the 32-bit registers (4F06 changed them)
          shared with the other builds (rompatch/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
@@ -54,7 +56,7 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '0da79703951db097b3cbb8f9d4041f72f6205db9a11760a58bc9820431e5dba6'   # 32 KB 1.03-08 image
-RESULT_SHA = '47418ec6f2bf21b51f0c860508f20ee6fbc6fb311a5130c5dd5ae7c240de26de'  # 1.03-08-p1 (NASM 3.02), emulator tests passed
+RESULT_SHA = '24c202666f7894b810f4d5089469b0a37ab18af632b65e2f4830d7dc3066d637'  # 1.03-08-p2 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -63,12 +65,14 @@ BLOCK_SHA = {
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
+    'vfix.asm': 'd165168af55f7599',
 }
 FREE_START, FREE_END = 0x7AE0, 0x7FF0   # free in 1.03-08 from 7AD9h (zeros); 7FF0h-7FF6h: 'Cardex1'
 
 # Patch sites in 1.03-08. The shared ones (clr ... ah09b) have the 2.04.07 signatures of s3patch.SIG,
 # byte for byte; the others are 1.03-08 code.
 SITES = dict(modetab=0x51DD, m4f02=0x48F9, w4f05=0x49A6, wfn=0x4996, int10=0x5217, cr59=0x102F,
+             fit=0x4924, vbecall=0x47CD,
              clr=0x0E50, vclr=0x1ABF, font=0x0B29, scr=0x207D, txfull=0x1D5D, txwmov=0x1D6C,
              txwfil=0x1D7E, plfull=0x1FAE, plwin=0x1FF9, ah09a=0x239A, ah09b=0x239E)
 SHARED_SIG = ('clr', 'vclr', 'font', 'scr', 'txfull', 'txwmov', 'txwfil', 'plfull', 'plwin', 'ah09a', 'ah09b')
@@ -78,6 +82,8 @@ SIG = dict({k: s3patch.SIG[k] for k in SHARED_SIG},
     wfn='80 ff 01 77 0a 74 05 e8 ?? ?? eb 03 e8 ?? ?? cb',  # window function (4F01 WinFuncPtr): BH=0 calls WSET
     int10='fb fc 80 fc 0e 74 ?? 80 fc 0c 74 ?? 80 fc 0d 74 ?? 50 53 51 52 56 57 55 06 1e 8b ec',
     cr59='b0 6b e8 ?? ?? b0 59 ef 32 e4 fe c0 ef',      # mode set: CR59 = CR6B, CR5A = 00h (not patched; hook relies on it)
+    fit='be 51 4c 03 f7 8a 1c 32 ff eb be',             # 4F02 after the lookup: SI = entry, BL = S3 mode, jmp 48EDh (p2)
+    vbecall='2e ff 94 8c 47 58 e8 ?? ?? c3',            # VBE dispatcher: call [cs:si+478Ch] / pop ax / call / ret (p2)
 )
 # MCLK (build option): POST picks the MCLK PLL pair (SR11 = M, then SR10 = N/R) by the strapped memory
 # type, CR36 bit 3 (code at 0A3Bh): 1-cycle EDO A8h (52.79 MHz in 1.03-08), 2-cycle EDO and fast page
@@ -93,7 +99,10 @@ SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
           ('MODESET', 'e8 ?? ?? 50 52 e8 ?? ?? b0 35 e8 ?? ?? 80 e4 cf ef'),
           ('INT_AH0E', 'e9 ?? ?? e9 ?? ?? e9 ?? ?? 8b c6 80 fc 4f'),
           ('SEG_SCR', '00 00 00 00 00 a0'),
-          ('WSET', '52 53 8b da ba c4 03 b0 04 e8')]
+          ('WSET', '52 53 8b da ba c4 03 b0 04 e8'),
+          ('MEMSIZE', '50 e8 ?? ?? e8 ?? ?? b0 36 e8 ?? ?? 80 e4 e0 b2 40'),   # p2: CR36 bits 7-5 -> DL
+          ('M4F02_SET', '32 e4 8a c3 f7 c1 00 80 74 02 0c 80 60'),          # p2
+          ('MODELIST', '68 b2 4c')]                                        # p2: the first entry, 100h
 
 # The new code: (file, ROM offset or the bios.inc symbol for it, bytes allowed there, labels the
 # patch sites use), assembled in this order (s3patch.assemble)
@@ -108,6 +117,7 @@ BLOCKS = [
     ('p13bfill.asm', 'BFILL', 0x7D0B - 0x7CF2, ('bfill0', 'bfill')),
     ('p13bfa.asm', 'P13C', 14, ('bfilla',)),               # dead: old font loop
     ('clear32.asm', 'CLEAR32', 0x7D2E - 0x7D0B, ('clear',)),
+    ('vfix.asm', 'VFIX', 0x7D80 - 0x7D2E, ('fit', 'vbe32')),          # p2
 ]
 
 
@@ -188,6 +198,14 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     a = site['m4f02'] + 6
     put(a, d[a:a + 3], call(a, lab['h4f02']), 'VBE 4F02: mode set via the hook, then the booster unless Windows runs')
     speed_sites(d, put, site, sym, lab, tags=False)
+    a = site['fit']
+    if a + 11 + struct.unpack_from('<b', d, a + 10)[0] != sym['M4F02_SET'] or struct.unpack_from('<H', d, a + 1)[0] != sym['MODELIST']:
+        raise PatchError('4F02 at %04X does not take its entry from MODELIST and go on to M4F02_SET' % a)
+    put(a, d[a:a + 11], jmp(a, lab['fit']) + b'\x90' * 8, 'VBE 4F02: refuse a mode that does not fit the memory (p2)')
+    a = site['vbecall']
+    if struct.unpack_from('<H', d, a + 3)[0] != sym['VBE_TAB']:
+        raise PatchError('the VBE dispatcher at %04X does not call through VBE_TAB' % a)
+    put(a, d[a:a + 5], call(a, lab['vbe32']) + b'\x90\x90', 'VBE dispatcher: keep the 32-bit registers (p2)')
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
                  known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first
