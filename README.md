@@ -399,8 +399,10 @@ In the emulator tests the ROM runs on the Trio64V+ model (`CHIP=765`): `765_patc
 patches, `stores` the 32-bit stores, and the tests for the 2.04.07 patches are skipped. On the STB
 Powergraph 64 and the Hercules Terminator 64 (1 November 2026, p1 at 50 MHz): S3TEST without a FAIL,
 S3COMPAT with the three FAILs 1.03-08 has, Windows 98 and video playback working (`docs/765-rom.md`, "On
-the cards"). p2 is checked in the emulator only; whether 10Dh-10Fh show a right picture with the halved
-dot clock is for the card to show.
+the cards"). 1.03-08N-p5 on the Hercules card (2 November 2026): S3TEST 26 PASS, 0 FAIL; S3COMPAT 138
+PASS, 0 FAIL, 2 WARN (AH=12h BL=20h, 106h at 108 MHz), 10Dh-10Fh at their rate with the halved dot clock
+of p2; Windows, video playback and the fonts look right ([docs/765-rom.md](docs/765-rom.md), "On the
+Hercules card: 1.03-08N-p5"). The picture of 10Dh-10Fh in VSHOW is still for a card to show.
 
 ## Trio64 ROM
 
