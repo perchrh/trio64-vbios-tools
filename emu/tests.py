@@ -1655,7 +1655,8 @@ def t_vgalog_post(c):
     check(len(dac) > 1000 and len(dac) < 13000, 'P2: %d OUTs to 3C8h traced of 13000, expected the trace to stop '
           'after 12288 events' % len(dac))
     _, o3, _, _, _ = res[2]
-    check((0x3C8, 7, 0) in o3 and (0x3C8, 8, 0) not in o3, 'P3: the trace did not stop before 0F 01h: %s' % o3[-4:])
+    check(o3[-1:] == [(0x3C8, 7, 0)], 'P3: the trace did not stop before 0F 01h (the program\'s last OUTs '
+          'traced: %s)' % o3[-4:])
     ru = m.run_com(com, '/U', seg=0x4000)
     check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
     return 'P1 %d OUTs, P2 %d of 13000 DAC OUTs before the stop, P3 stopped at 0F 01h' % (len(o1), len(dac))
