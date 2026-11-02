@@ -76,7 +76,9 @@ Tests
                    file and unhooks; /M and /T files carry the same block
   vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
                    registers in and out, SR10/SR11 and CR58-5A/6D after), /D writes them in call order,
-                   the S3 locks are put back, /U unhooks, /D afterwards is refused
+                   the S3 locks are put back, /U unhooks, /D afterwards is refused; /D commits the file
+                   and resets the disk before it says it is written (#158); a program's mode 07h and 03h
+                   (M7.COM) loaded where /D runs next are logged (#159)
   vgalog_trace     VGALOG /T: every OUT the BIOS makes in the mode sets AX=0003h and 4F02h 101h is in the
                    trace in order with its value, behind the marker of its call; other calls not traced,
                    INT 1 put back after each mode set, the trap flag clear on return
@@ -1409,7 +1411,9 @@ def t_dos_exe(c):
 def t_vgalog_mem(c):
     """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped, nested BIOS calls with their
     depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order, and with
-    no call yet it writes no file and says so. With another INT 10h hook after it (Windows in a DOS box)
+    no call yet it writes no file and says so. /D commits the file and resets the disk before it reports
+    success (#158); a program's mode sets (M7.COM) at the segment /D runs at next are in it (#159).
+    With another INT 10h hook after it (Windows in a DOS box)
     /D and the install check still find it, /U refuses."""
     com = c.tool('VGALOG.COM')
     m = c.machine()
@@ -1456,6 +1460,20 @@ def t_vgalog_mem(c):
     check(r07[26:31] == after7, 'mode 07h record: SR10/11 or CR58/59/5A wrong (CRTC read at the colour '
           'address?): %s (registers %s)' % (r07[26:31].hex(), after7.hex()))
     check(m.r['crtc'].get(0x38) != 0x48 or m.r['seq'].get(8) != 0x06, 'S3 registers left unlocked')
+    check('VGALOG.BIN' in rd.synced, '/D closed VGALOG.BIN without a commit (AH=68h) or disk reset (AH=0Dh): '
+          'a reset right after it lost the file (#158)')
+    # A program's own mode sets (M7.COM of #158: AX=0007h, AX=0003h, INT 20h), loaded at the segment /D
+    # runs at next, as DOS does: /D must run its own code there (#159) and log both calls
+    rp = m.run_com(bytes.fromhex('b80700cd10b80300cd10cd20'), seg=0x4000, name='M7.COM')
+    check(rp.exit == ('exit', 0), 'M7.COM ended with %s' % (rp.exit,))
+    r7 = m.run_com(com, '/D', seg=0x4000)
+    b7 = r7.files.get('VGALOG.BIN')
+    check(r7.exit == ('exit', 0) and b7 is not None and b'ring buffer written' in r7.stdout,
+          '/D after M7.COM: exit %s, files %s, output %r' % (r7.exit, sorted(r7.files), bytes(r7.stdout)[-80:]))
+    n7 = struct.unpack_from('<H', b7, 12)[0]
+    top7 = [struct.unpack_from('<H', b7, 50 + 32 * i)[0] for i in range(n7) if b7[48 + 32 * i + 23] == 0]
+    check(top7[-2:] == [0x0007, 0x0003], 'M7.COM calls at depth 0 not last in VGALOG.BIN: %s'
+          % ['%04X' % a for a in top7[-4:]])
     # Another program hooks INT 10h after VGALOG, as Windows 9x does in a DOS box: /D and the install
     # check find the resident copy through the MCB chain, /U (only as the last hook) refuses
     vec = m.mem(0x40, 4)
