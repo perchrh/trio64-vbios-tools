@@ -115,7 +115,10 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
    the General Input Port (port 3C8h, CR55 bit 2). Whether a driver reads the refresh indexes needs
    finding out.
 6. **Fonts.** Phoenix's and S3's font bitmaps are not ours to give away. A licensed or newly drawn
-   8x8, 8x14 and 8x16 set (with the 9-dot alternates) in the style of the era is needed.
+   8x8, 8x14 and 8x16 set (with the 9-dot alternates) in the style of the era is needed. Candidate since
+   2 November 2026: the five Joseph Gil public domain files in [`rompatch/fonts/`](../rompatch/fonts/) (#141), which give all
+   five tables. They equal IBM's glyphs, so their origin is still to settle ([`docs/cleanroom/README.md`](cleanroom/README.md)
+   "Font origin").
 7. **A card configuration table.** The values that differ from one card maker to the next (the
    MCLK, CR5C's General Output Port value, the timing bytes) as inputs of the build, like today's
    `MCLK=` option.
@@ -160,7 +163,9 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
   - FreeDOS cpidos 3.0 (Henrique Peron, GPL 2 or later): code page 437 at 8x8, 8x14 and 8x16;
     the 9-dot alternate glyphs we derive ourselves.
   - The fonts SeaVGABIOS carries come from Joseph Gil's FNTCOL16 collection, whose individual
-    fonts it calls public domain; they look like IBM's VGA font, so their origin is less clear.
+    fonts it calls public domain; they look like IBM's VGA font, so their origin is less clear. Our
+    patched ROMs build their fonts from Gil's files since #141 ([`rompatch/fonts/`](../rompatch/fonts/), with his notice and
+    the provenance); the 9-dot alternates come from the same collection, so none need deriving.
 - **Licence of the result:** LGPLv3 code and GPL-2-or-later fonts can both be used under GPL 3, so
   the ROM would be GPL 3 (or later). Code under GPL 2 only (DOSEMU, if its licence says so) cannot
   be combined with LGPLv3 or GPL 3 code: use it as a reference for facts only.
