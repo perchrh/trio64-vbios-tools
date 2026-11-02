@@ -153,9 +153,21 @@ where the two differ; that section is kept as the record of how the decision was
   integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
   1.01.04 are not on theretroweb yet.
-- **Not yet decided:** the frozen contract per milestone (the review's F5: the modes and functions of
-  each milestone, with the VBE text modes 108h-10Ch for FreeDOS MODE CON COLS=132 as a milestone of
-  its own).
+- **Scope: two milestones** (decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); this answers the review's F5 and
+  replaces the milestones of [`docs/seavgabios-trio64.md`](seavgabios-trio64.md)). Both are judged on the DSP-3364P:
+  1. **Milestone 1: the card posts.** The system BIOS finds and runs the ROM, and the monitor shows a
+     picture with readable text. Some graphical glitches are allowed. Nothing after POST is required.
+  2. **Milestone 2: MS-DOS 6.22 and EDIT.** MS-DOS 6.22 boots on the card; the MS-DOS EDIT program
+     starts, loads a file, edits it and saves it, without significant graphical glitches or other
+     problems.
+
+  Everything else is outside the current scope: the S3 mode set (part B), VBE (part C), 132 columns
+  and 50 lines, FreeDOS 1.4 ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md)), games and Windows. Those documents
+  are kept for later milestones; the clean side implements part A and the standard functions of
+  [`docs/bios-rules.md`](bios-rules.md) that the two milestones need. Which INT 10h calls MS-DOS 6.22 and EDIT make
+  is to be recorded on the card before milestone 2 starts (with `VGALOG /M` under a working ROM, then
+  `VGALOG /D`; the text output functions are not logged there, so a list of those comes from a trace
+  or from the standard), and the result goes to the clean side as the contract of milestone 2.
 
 ## Scope, base and licence (31 October 2026)
 
@@ -259,5 +271,6 @@ where the two differ; that section is kept as the record of how the decision was
 - Create the separate specification repository with the skeleton of items 1-9.
 - Review the emulator tests for expectations taken from the reference ROMs, and move the clean
   ones to the new repository.
-- The base (empty, our own code) and the font source (Gil's FNTCOL16 files) are decided
-  ("Decisions of 2 November 2026"); the frozen contract per milestone is not.
+- The base (empty, our own code), the font source (Gil's FNTCOL16 files) and the two milestones are
+  decided ("Decisions of 2 November 2026").
+- Record the INT 10h calls of MS-DOS 6.22 and EDIT on the card, as the contract of milestone 2.
