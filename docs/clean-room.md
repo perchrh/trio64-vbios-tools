@@ -153,7 +153,7 @@ where the two differ; that section is kept as the record of how the decision was
   integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
   1.01.04 are not on theretroweb yet.
-- **Scope: four milestones** (decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); this answers the review's F5 and
+- **Scope: four milestones, and a tentative fifth** (decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); this answers the review's F5 and
   replaces the milestones of [`docs/seavgabios-trio64.md`](seavgabios-trio64.md)). All are judged on the DSP-3364P, in order:
   1. **Milestone 1: the card posts.** The system BIOS finds and runs the ROM, and the monitor shows a
      picture with readable text. Some graphical glitches are allowed. Nothing after POST is required.
@@ -164,14 +164,18 @@ where the two differ; that section is kept as the record of how the decision was
      significant graphical glitches.
   4. **Milestone 4: Chris's 3D Benchmark.** Under MS-DOS, the benchmark loads and runs without
      significant graphical glitches in both its 320x200 mode and its 640x480 VESA mode.
+  5. **Milestone 5 (tentative): FreeDOS.** FreeDOS boots on the card
+     ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
 
   Milestone 4 is the first that needs VBE: the 640x480 VESA mode brings in part C (4F00, 4F01, 4F02,
   the window function 4F05 at least) and part B's mode set for that one mode. Which VESA mode number
   and colour depth the benchmark asks for (presumably 101h, 640x480 in 256 colours) is to be confirmed
   on the card with VGALOG, which logs 4F01 and 4F02. Everything else stays outside the current scope:
-  the other S3 and VESA modes, 132 columns and 50 lines, FreeDOS 1.4
-  ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md)), other games and Windows; those documents are kept for later
-  milestones. The contract of each milestone is recorded on the card before the clean side starts it:
+  the other S3 and VESA modes, 132 columns and 50 lines, other games and Windows; those documents are
+  kept for later milestones.
+- **Scope of the leak review:** a clean-room implementation of milestones 1-4. Only what the clean side
+  needs for them crosses now and is reviewed; milestone 5 and later get their own review when they are
+  set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review"). The contract of each milestone is recorded on the card before the clean side starts it:
   the INT 10h calls of MS-DOS 6.22 and EDIT (milestone 2), of 3D Bench (milestone 3) and of Chris's 3D
   Benchmark (milestone 4), with `VGALOG /M` under a working ROM, then `VGALOG /D`. The text output
   functions are not logged there, so a list of those comes from a trace or from the standard.

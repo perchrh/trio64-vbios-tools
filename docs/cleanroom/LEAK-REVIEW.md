@@ -93,6 +93,26 @@ Prepared by the dirty side (the author of the files under review); the review it
 is the reviewer's. Review the files as they are on `main` at the commit you start from, and name that
 commit in the record.
 
+### Scope of this review
+
+Decided by the owner on 2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)): the review covers a clean-room implementation of
+milestones 1-4 ([`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"): the card posts with readable
+text; MS-DOS 6.22 with EDIT; Superscape 3D Bench 1.0c; Chris's 3D Benchmark in 320x200 and 640x480
+VESA. What crosses now is what the clean side needs for these:
+
+- part A in full (POST, the conventions, the option ROM);
+- [`docs/bios-rules.md`](../bios-rules.md) and the rules of [`docs/chip-rules.md`](../chip-rules.md) the parts cite;
+- of part B: the return to the VGA modes, the VGA clocks (with the 25.175 MHz PLL pair) and the rules
+  for the one VESA mode of milestone 4 (640x480, presumably 101h; the mode number is to be confirmed on
+  the card with VGALOG);
+- of part C: 4F00h, 4F01h and 4F02h for that mode, the window function 4F05h, and the general rules
+  (return codes, index registers).
+
+Rules outside this scope (the other modes, 4F03h-4F08h beyond 4F05h if milestone 4 does not need
+them, 4F14h and the S3 mode numbers, the S3 OEM functions) are not reviewed now and are cut from the
+clean side's copy; the record names the rule IDs that crossed. [`freedos-1.4.md`](freedos-1.4.md) and
+[`freedos-reports.md`](freedos-reports.md) belong to milestone 5 (tentative) and are reviewed with it.
+
 ### Files to review
 
 | File | Crosses as | Notes |
@@ -102,8 +122,8 @@ commit in the record.
 | [`spec-c-vbe.md`](spec-c-vbe.md) | specification | first full review; 4F14h and the S3 mode numbers (step 5) |
 | [`docs/chip-rules.md`](../chip-rules.md) | the clean side's copy | the four `[Leak review: ...]` sentences (step 5); its section "S3 OEM functions (4F14h)" crosses only through part C |
 | [`docs/bios-rules.md`](../bios-rules.md) | public-source rules | its open-question lists, written while reading another vendor's BIOS source |
-| [`freedos-1.4.md`](freedos-1.4.md) | requirements | not in the first review. Its section "Our ROMs against these" measures our patched ROMs by level (1.5-07-p3, 1.03-08-p1, 2.04.07-p22): dirty-side material, to cut from the clean side's copy or keep with a reason (step 5) |
-| [`freedos-reports.md`](freedos-reports.md) | defect reports to FreeDOS | not in the first review. About FreeDOS's MORE and MODE; it names S3 BIOSes as a class (4F01h for mode 03h) |
+| [`freedos-1.4.md`](freedos-1.4.md) | requirements | not in this review (milestone 5); not in the first review either. Its section "Our ROMs against these" measures our patched ROMs by level (1.5-07-p3, 1.03-08-p1, 2.04.07-p22): dirty-side material, to cut from the clean side's copy or keep with a reason (step 5) |
+| [`freedos-reports.md`](freedos-reports.md) | defect reports to FreeDOS | not in this review (milestone 5); not in the first review either. About FreeDOS's MORE and MODE; it names S3 BIOSes as a class (4F01h for mode 03h) |
 
 What changed in these files since the first review (1 November 2026), from `git log`: file references
 became links (20b5502); [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md) are new; in
@@ -171,10 +191,11 @@ that one file, not the rest of `rompatch/`.
 ### Open items
 
 - [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
-  BIOSes, kept for compatibility (step 5), to be confirmed by the reviewer.
+  BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4, so left for a later
+  review.
 - [`spec-b-modeset.md`](spec-b-modeset.md): the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3).
 - [`docs/chip-rules.md`](../chip-rules.md): the four sentences marked `[Leak review: ...]` (step 5).
-- [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md): first review.
+- [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md): first review, with milestone 5.
 - The three specifications: the first review (1 November 2026) was the dirty side's own search; the
   full review by a second reader, steps 1-6, is still to be done.
 - Not to review now: the monitor sense decision of our ROMs (#134, #139) and the font change (#141)

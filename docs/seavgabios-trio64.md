@@ -41,11 +41,11 @@ The rest of this file is kept as the record of the experiment.
 ## Milestones
 
 Replaced on 2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), [`docs/clean-room.md`](clean-room.md) "Decisions of 2 November 2026") by four
-milestones for the ROM written from scratch: (1) the card posts and shows readable text, glitches
+milestones and a tentative fifth for the ROM written from scratch: (1) the card posts and shows readable text, glitches
 allowed, nothing required after POST; (2) MS-DOS 6.22 boots and MS-DOS EDIT loads, edits and saves a
 file without significant glitches; (3) Superscape 3D Bench 1.0c runs under MS-DOS without significant
 glitches; (4) Chris's 3D Benchmark runs under MS-DOS in 320x200 and in 640x480 VESA without
-significant glitches. The list below is the earlier plan's, kept as the record.
+significant glitches; (5, tentative) FreeDOS boots. The list below is the earlier plan's, kept as the record.
 
 1. **Milestone 1: POST.** On the DSP-3364P (and in the emulator first) the ROM passes POST: the system
    BIOS finds it, it initialises the chip and mode 03h, and DOS starts with readable text.

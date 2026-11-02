@@ -19,7 +19,10 @@ to implement from:
     EDIT loads, edits and saves a file without significant glitches. (3) Superscape 3D Bench 1.0c runs
     under MS-DOS without significant glitches. (4) Chris's 3D Benchmark runs under MS-DOS in 320x200
     and 640x480 VESA without significant glitches: the first milestone that needs parts B and C, for
-    its one VESA mode. The rest of parts B and C and [`freedos-1.4.md`](freedos-1.4.md) are for later milestones.
+    its one VESA mode. Milestone 5, tentative: FreeDOS boots ([`freedos-1.4.md`](freedos-1.4.md)). The rest of
+    parts B and C is for later milestones;
+  - the scope of the leak review: a clean-room implementation of milestones 1-4
+    ([`LEAK-REVIEW.md`](LEAK-REVIEW.md) "Scope of this review").
 - Added to part A since: PCI 2.3 section 6.3 as the source of the option ROM rules, and the DRAM
   power-up of the card (POST-41).
 - The test harness fixes (#143) are in place: `post` fails a POST that does not return, and
@@ -42,8 +45,8 @@ to implement from:
 | [`spec-a-post.md`](spec-a-post.md) | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
 | [`spec-b-modeset.md`](spec-b-modeset.md) | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
 | [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
-| [`freedos-1.4.md`](freedos-1.4.md) | goes across | what FreeDOS 1.4 asks of the video BIOS (a later milestone since 2 November 2026), from its sources |
-| [`freedos-reports.md`](freedos-reports.md) | goes across | drafts of the MORE and MODE defect reports to FreeDOS |
+| [`freedos-1.4.md`](freedos-1.4.md) | goes across with milestone 5 | what FreeDOS 1.4 asks of the video BIOS (milestone 5, tentative), from its sources |
+| [`freedos-reports.md`](freedos-reports.md) | goes across with milestone 5 | drafts of the MORE and MODE defect reports to FreeDOS |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | dirty only | the outside feasibility review of 2 November 2026: its findings, our checks and where each went |
 | [`oracle-a-post.md`](oracle-a-post.md), [`oracle-b-modeset.md`](oracle-b-modeset.md), [`oracle-c-vbe.md`](oracle-c-vbe.md) | dirty only | what the reference ROMs do in the emulator and on the card, compared with the specification; the expected values for checking the clean ROM, never handed over |
 
