@@ -5,10 +5,13 @@
 # books, standards or the bundled zip program alone, and cancels a run when a newer commit of the same
 # branch or pull request arrives.
 #
-# The job roms runs `make roms` first: every chip's ROM at its memory clocks (775, 765, 764X, 764P),
-# handed to the test jobs as the artifact `roms` (kept 1 day), and `make dist`: the tools as the artifact
-# trio64-tools-<VERSION> (kept 90 days; the download is trio64-tools-<VERSION>.zip with trio64/tools/ in it). The tests then run as parallel jobs on those images, one
-# matrix row per chip and memory clock: the slowest and the fastest image of each chip (column image).
+# No workflow uploads patched ROM images (#145): they carry S3's and Phoenix's code. Each test job builds
+# the one image it tests from the reference BIOS in reference/ (column target, at the memory clock of
+# column mclk) and keeps it in the runner's temporary folder only. The job roms runs `make roms` to show
+# that every chip's ROM builds at every memory clock (775, 765, 764X, 764P), without keeping them, and
+# `make dist`: the tools as the artifact trio64-tools-<VERSION> (kept 90 days; the download is
+# trio64-tools-<VERSION>.zip with trio64/tools/ in it, no ROM). The tests run as parallel jobs, one
+# matrix row per chip and memory clock: the slowest and the fastest clock of each chip.
 # Each row tests its image with 2 MB, then runs the tests tagged `vram` (the ones whose result depends on
 # the memory size) with 4 MB and with 1 MB. On the Trio64V2 the longest
 # test, s3compat_full, has rows of its own: 2 MB on the 50 MHz image, 4 MB on the 60 MHz one. Every job
@@ -16,8 +19,8 @@
 # also runs the patcher tests, which build the default ROM (without MCLK) and check it against the pinned
 # SHA-256, and the EGA/CGA comparison with the unpatched reference. The last job, build-and-test, passes
 # when every row passed and every ROM built (the check name branch rules can require). The job stock runs
-# the tools and tests on the three stock reference ROMs for their logs (artifact stock-logs-<chip>); its
-# failures are expected and it is not part of build-and-test. The coverage goal
+# the tools and tests on the three stock reference ROMs for their logs (artifact stock-logs-<chip>, logs
+# only); its failures are expected and it is not part of build-and-test. The coverage goal
 # has its own workflow, coverage.yml, which pull requests do not start.
 name: CI
 
@@ -42,34 +45,33 @@ env:
 jobs:
   test:
     name: ${{ matrix.chip }} ${{ matrix.part }}
-    needs: roms
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          # image: the ROM from the roms job this row tests (build/roms/<chip>-<level>/...)
+          # target and mclk: the ROM this row builds and tests (make <target> MCLK=<mclk>)
           # runs: one or more "VRAM|tests.py arguments" separated by ";"
-          - {chip: Trio64V2, part: '50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA', model: '775', image: '775-*/775M50.BIN', code: '775',
+          - {chip: Trio64V2, part: '50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA', model: '775', target: '775-rom', mclk: '50', code: '775',
              first: true, runs: '2|--skip s3compat_full;4|-t vram --skip s3compat_full;1|-t vram --skip s3compat_full'}
-          - {chip: Trio64V2, part: '60 MHz: 2, 4 and 1 MB', model: '775', image: '775-*/775M60.BIN', code: '775',
+          - {chip: Trio64V2, part: '60 MHz: 2, 4 and 1 MB', model: '775', target: '775-rom', mclk: '60', code: '775',
              runs: '2|--skip s3compat_full;4|-t vram --skip s3compat_full;1|-t vram --skip s3compat_full'}
-          - {chip: Trio64V2, part: '50 MHz: s3compat_full 2 MB', model: '775', image: '775-*/775M50.BIN', code: '775',
+          - {chip: Trio64V2, part: '50 MHz: s3compat_full 2 MB', model: '775', target: '775-rom', mclk: '50', code: '775',
              runs: '2|--tests s3compat_full'}
-          - {chip: Trio64V2, part: '60 MHz: s3compat_full 4 MB', model: '775', image: '775-*/775M60.BIN', code: '775',
+          - {chip: Trio64V2, part: '60 MHz: s3compat_full 4 MB', model: '775', target: '775-rom', mclk: '60', code: '775',
              runs: '4|--tests s3compat_full'}
-          - {chip: Trio64V+, part: '50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA', model: '765', image: '765-*/765M50.BIN',
+          - {chip: Trio64V+, part: '50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA', model: '765', target: '765-rom', mclk: '50',
              code: '765', first: true, runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64V+, part: '60 MHz: 2, 4 and 1 MB', model: '765', image: '765-*/765M60.BIN', code: '765',
+          - {chip: Trio64V+, part: '60 MHz: 2, 4 and 1 MB', model: '765', target: '765-rom', mclk: '60', code: '765',
              runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764X, part: '55 MHz: 2, 4 and 1 MB, patcher, EGA/CGA', model: '764x', image: '764X-*/764XM55.BIN',
+          - {chip: Trio64 764X, part: '55 MHz: 2, 4 and 1 MB, patcher, EGA/CGA', model: '764x', target: '764x-rom', mclk: '55',
              code: '764', first: true, runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764X, part: '70 MHz: 2, 4 and 1 MB', model: '764x', image: '764X-*/764XM70.BIN', code: '764',
+          - {chip: Trio64 764X, part: '70 MHz: 2, 4 and 1 MB', model: '764x', target: '764x-rom', mclk: '70', code: '764',
              runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764P, part: '50 MHz: 2, 4 and 1 MB', model: '764p', image: '764P-*/764PM50.BIN', code: '764',
+          - {chip: Trio64 764P, part: '50 MHz: 2, 4 and 1 MB', model: '764p', target: '764p-rom', mclk: '50', code: '764',
              runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764P, part: '60 MHz: 2, 4 and 1 MB', model: '764p', image: '764P-*/764PM60.BIN', code: '764',
+          - {chip: Trio64 764P, part: '60 MHz: 2, 4 and 1 MB', model: '764p', target: '764p-rom', mclk: '60', code: '764',
              runs: '2|;4|-t vram;1|-t vram'}
     steps:
       - uses: actions/checkout@v5
@@ -110,19 +112,9 @@ jobs:
       - name: Install the emulator test dependencies
         run: pip install '.[coverage]'
 
-      - name: The ROMs built by make roms
-        uses: actions/download-artifact@v4
-        with:
-          name: roms
-          path: build/roms
-
-      - name: ${{ matrix.chip }} ROM ${{ matrix.image }}
+      - name: ${{ matrix.chip }} ROM at ${{ matrix.mclk }} MHz (make ${{ matrix.target }}, not uploaded)
         id: rom
-        run: |
-          set -- build/roms/${{ matrix.image }}
-          test -f "$1"
-          echo "$1"
-          cp "$1" "$RUNNER_TEMP/ROM.BIN"
+        run: make ${{ matrix.target }} NASM=$HOME/nasm/nasm MCLK=${{ matrix.mclk }} OUT="$RUNNER_TEMP/ROM.BIN"
 
       - name: ${{ matrix.chip }} ROM patcher tests
         if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
@@ -194,15 +186,8 @@ jobs:
           mkdir -p ~/nasm
           cp nasm ~/nasm/
 
-      - name: Every chip's ROM at its memory clocks
+      - name: Every chip's ROM at its memory clocks (built, not uploaded)
         run: make roms NASM=$HOME/nasm/nasm
-
-      - name: Upload the ROMs for the test jobs
-        uses: actions/upload-artifact@v4
-        with:
-          name: roms
-          path: build/roms/
-          retention-days: 1
 
       - name: The release zip (make dist, the tools)
         id: dist

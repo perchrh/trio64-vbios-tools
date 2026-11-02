@@ -8,6 +8,11 @@ from the Trio32/Trio64 data book, VESA DMT, the IBM VGA references and VGADOC; n
 a BIOS image or BIOS source. Every value is a rule or the result of a formula given here; the tables
 of derived values can be recomputed from the rules.
 
+**Base (2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)):** the clean ROM is written from scratch, with no base code
+([`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"). Where this part mentions SeaVGABIOS, it is a
+comparison implementation: its behaviour is a fact to compare with, not code the ROM builds on. The
+rules describe behaviour and hold unchanged for the ROM written from scratch.
+
 ## Conventions
 
 - **Format** as [`docs/bios-rules.md`](../bios-rules.md): | ID | Rule | Source | Strength | Checked by |.

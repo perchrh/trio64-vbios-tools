@@ -1,10 +1,12 @@
 # Brief: the clean-room specification of a Trio64 video BIOS (dirty side)
 
 You write one part of the behaviour specification that a separate "clean side" will implement a
-Trio64 (S3 86C764X) video BIOS from, on top of SeaVGABIOS (LGPLv3, branch claude/slim-vgabios of
-/home/user/seabios_fork; read its vgasrc/ to see what already exists: the standard VGA functions and
-a VBE core in vbe.c). Read first, in /home/user/trio64-vbios-tools: [AGENTS.md](../../AGENTS.md), [docs/clean-room.md](../clean-room.md),
-[docs/seavgabios-trio64.md](../seavgabios-trio64.md) (the plan; your part is one of its items 1-6), [docs/chip-rules.md](../chip-rules.md) (data
+Trio64 (S3 86C764X) video BIOS from. The clean ROM is written from scratch, with no base code (decided
+2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); [docs/clean-room.md](../clean-room.md) "Decisions of 2 November 2026"):
+specify the whole behaviour, the standard VGA functions included. SeaVGABIOS (LGPLv3, branch
+claude/slim-vgabios of /home/user/seabios_fork) is a comparison implementation only: its vgasrc/ may
+be read for facts, never as a base. Read first, in /home/user/trio64-vbios-tools: [AGENTS.md](../../AGENTS.md), [docs/clean-room.md](../clean-room.md),
+[docs/seavgabios-trio64.md](../seavgabios-trio64.md) (the earlier plan; your part is one of its items 1-6), [docs/chip-rules.md](../chip-rules.md) (data
 book rules with IDs), [docs/bios-rules.md](../bios-rules.md) (standard function rules, the format to follow).
 
 ## Rules (hard)

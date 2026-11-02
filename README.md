@@ -535,15 +535,16 @@ Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted run
 changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or `infozip/` do not start
 a run, and a newer commit on the same branch cancels the running one.
 
-First the job "All ROMs (make roms) and the release zip" builds every chip's ROM at its memory clocks and
-the release zip (`make dist`). The tests then run
-as parallel jobs on the slowest and the fastest image of each chip. Each job tests its image with 2 MB of
+The job "All ROMs (make roms) and the release zip" builds every chip's ROM at its memory clocks, to show
+that they all build, and the release zip (`make dist`). Next to it the tests run
+as parallel jobs on the slowest and the fastest memory clock of each chip; each job builds the one image it
+tests (`make 775-rom MCLK=50` and so on). Each job tests its image with 2 MB of
 video memory, then runs the tests tagged `vram` (the ones whose result depends on the memory size) with
 4 MB and with 1 MB; the other tests do not run again at the other sizes:
 
 | Job | What it runs |
 | --- | --- |
-| All ROMs (make roms) and the release zip | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), handed to the test jobs as the artifact `roms` (kept 1 day); `make dist`: the artifact `trio64-tools-<VERSION>` (kept 90 days) |
+| All ROMs (make roms) and the release zip | `make roms`: every chip's ROM at its memory clocks (775, 765, 764X, 764P), built and not kept; `make dist`: the artifact `trio64-tools-<VERSION>` (kept 90 days, tools only) |
 | Trio64V2 50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `775M50.BIN`; `make 775-rom-test` (builds the default ROM and checks its pinned SHA-256), `make 775-ref-compare` |
 | Trio64V2 60 MHz: 2, 4 and 1 MB | `775M60.BIN` |
 | Trio64V2 50 MHz: s3compat_full 2 MB | `775M50.BIN`: the longest test alone |
@@ -556,12 +557,14 @@ video memory, then runs the tests tagged `vram` (the ones whose result depends o
 | Stock ROM 775, 765, 764x (informational) | `make stock-test`: every tool and emulator test, the ones tagged `patch` too (tests.py `--stock`), on the stock reference ROM; failures are expected and do not fail the run; the logs are the artifact `stock-logs-<chip>` (14 days) |
 | build-and-test | passes when every row passed and every ROM built (the check name branch rules can require); the stock jobs are not part of it |
 
-Every job builds NASM 3.02 from its release source (cached between runs) and the tools with `make`, and
-takes its ROM from the `roms` artifact; the patcher tests build the default ROM (without `MCLK`) and check
+Every job builds NASM 3.02 from its release source (cached between runs), the tools with `make` and its
+ROM from the reference BIOS in `reference/`; the patcher tests build the default ROM (without `MCLK`) and check
 it against the pinned SHA-256. The split uses `make emu-test VRAM=... EMUARGS=...` (tests.py `--tests`,
 `--skip`, `-t vram`), which works by hand too. The first step of the ROM job, and of the coverage
 workflow, is `python3 emu/similarity.py --self-test` (a second). A job that fails keeps its emulator logs as an artifact
-`emu-logs-<job>` (without .BIN files) for 7 days. The one artifact meant to be kept is the release zip
+`emu-logs-<job>` (without .BIN files) for 7 days. No workflow uploads a patched ROM image (decided 2 November 2026,
+[#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)): the images carry S3's and Phoenix's code, so
+each job builds its image and keeps it in the runner's temporary folder. The one artifact meant to be kept is the release zip
 (`trio64-tools-<VERSION>`, "Release zip"). The hardware logs remain the final word, as for the emulator
 tests run by hand.
 
@@ -720,7 +723,9 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
   and the tests then take the files from where the user saved them. CI downloads them once and keeps
   them in its cache for as long as the cache allows (a key on the SHA-256 values, so the files are
   fetched again only when the list changes), so no run depends on theretroweb being reachable.
-  Decided 1 November 2026, to be done later. Status of 1 November 2026: the Trio64 reference is on
+  Decided 1 November 2026, to be done later; confirmed 2 November 2026
+  ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)): the reference files stay in `reference/`
+  until then, and are then removed and replaced with the downloads. Status of 1 November 2026: the Trio64 reference is on
   theretroweb (DataExpert CP764, [docs/764-rom.md](docs/764-rom.md)), and since 2 November 2026 the
   test card's own BIOS too ([DataExpert DSP-3364P](https://theretroweb.com/expansioncards/s/dataexpert-dsp3364p),
   SHA-256 1056fcee..., not a build base); the Trio64V+ reference is its
