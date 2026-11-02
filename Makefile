@@ -225,6 +225,26 @@ roms:
 	for m in $(CLOCKS_764P); do $(MAKE) --no-print-directory 764p-rom OUT=$(ROMDIR_764P)/764PM$$m.BIN MCLK=$$m; done
 	@ls -lR build/roms
 
+# Every ROM and every emulator test in one go: make roms, then make emu-test on each image it built, with
+# the chip model of its folder (775, 765, 764x, 764p) and the memory sizes emu-test uses for that chip
+# (2 and 4 MB, and 1 MB). The logs go to emu/all/<image>, for example emu/all/775M60 (2 MB), emu/all/775M604
+# (4 MB) and emu/all/775M601 (1 MB). A failing image does not stop the others; the summary names every
+# failed image and make fails when there is one. The CLOCKS_* variables of make roms choose the images
+# (CLOCKS_775=60 tests one Trio64V2 image), JOBS and EMUARGS pass on to emu-test.
+#   make test-all [CLOCKS_775=...] [CLOCKS_765=...] [CLOCKS_764X=...] [CLOCKS_764P=...] [EMUARGS=...]
+test-all: all roms
+	@fail=""; \
+	for e in $(foreach m,$(CLOCKS_775),775:$(ROMDIR_775)/775M$(m).BIN) \
+	         $(foreach m,$(CLOCKS_765),765:$(ROMDIR_765)/765M$(m).BIN) \
+	         $(foreach m,$(CLOCKS_764X),764x:$(ROMDIR_764X)/764XM$(m).BIN) \
+	         $(foreach m,$(CLOCKS_764P),764p:$(ROMDIR_764P)/764PM$(m).BIN); do \
+	  c=$${e%%:*}; r=$${e#*:}; n=$$(basename $$r .BIN); \
+	  echo "== test-all: $$r (CHIP=$$c)"; \
+	  $(MAKE) --no-print-directory emu-test ROM=$$r CHIP=$$c LOGS=emu/all/$$n || fail="$$fail $$n"; \
+	done; \
+	if [ -n "$$fail" ]; then echo "test-all: FAIL:$$fail (logs in emu/all/)"; exit 1; fi; \
+	echo "test-all: every image passed (logs in emu/all/)"
+
 # The release zip, build/trio64-tools-<VERSION>.zip (VERSION from common/version.inc, or VERSION=...):
 # trio64/tools/ with the tools and Info-ZIP's licence (ZIP-LIC.TXT, which its licence asks to pass on
 # with ZIP.EXE). With ROMS=1 also trio64/roms/, every chip's ROM at its memory clocks (make roms); the
@@ -245,4 +265,4 @@ dist: tools $(if $(ROMS),roms)
 version:
 	@echo $(DISTVER)
 
-.PHONY: all tools dist version clean emu-test stock-test 775-rom roms 775-rom-test coverage 775-ref-compare 765-rom 765-rom-test 765-ref-compare 764x-rom 764p-rom 764-rom-test 764-ref-compare
+.PHONY: all tools dist version clean emu-test test-all stock-test 775-rom roms 775-rom-test coverage 775-ref-compare 765-rom 765-rom-test 765-ref-compare 764x-rom 764p-rom 764-rom-test 764-ref-compare

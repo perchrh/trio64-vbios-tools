@@ -19,6 +19,7 @@ emu/tlogs/
 emu/tlogs4/
 emu/tlogs1/
 emu/stock-*/
+emu/all/
 *.untested
 nasm/
 poetry.lock

@@ -190,6 +190,17 @@ runs them one after the other, `python3 emu/tests.py -j N` sets the number. The 
 environment works as well. ROM images (`*.bin`, `*.BIN`) are ignored by git, so the image can sit in
 the working copy without being committed.
 
+Every ROM and every emulator test in one go:
+
+    make test-all NASM=nasm/nasm-3.02/nasm [CLOCKS_775=60] [CLOCKS_765=...] [CLOCKS_764X=...] [CLOCKS_764P=...]
+
+`make test-all` builds every chip's ROM at its memory clocks (`make roms`, "MCLK build option") and runs
+`make emu-test` on each image with the chip model of its folder (775, 765, 764x, 764p) and the memory
+sizes emu-test uses for that chip. The logs go to `emu/all/<image>` (for example `emu/all/775M60`, with
+`emu/all/775M604` for 4 MB and `emu/all/775M601` for 1 MB). A failing image does not stop the others; the
+last line names every image that failed, and make then fails. The `CLOCKS_*` variables choose the images,
+as for `make roms`; with the defaults that is twelve images, each at least as long as one `make emu-test`.
+
 The patches are checked by S3TEST, which the `s3test` emulator test runs
 and which also runs on the card: run against the stock image it fails 25 lines (signature, MCLK,
 pedestal, 60 Hz defaults, refresh and line length of the patched timings, booster and LFB base,
