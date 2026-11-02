@@ -66,6 +66,12 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08N'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   # 32 KB 1.03-08N image
+# SHA-256 of 0100h-7FFDh of the input: the code and tables, the same in 1.03-08N, the earlier 1.03-08
+# and the 1.03-08 in the upper half of the Gainward GW503A ROM (those differ only below 0100h, the OEM
+# area with the sign-on and MCLK entries, and at 7FFEh-7FFFh). The byte assertions check the patch sites
+# only; this refuses an image with a changed byte anywhere else (#143)
+CODE_SHA = 'd715365c584d4592277d65fd16dcf8a46b801d6b79c95d585bfd4d70e4652b40'
+CODE_RANGE = (0x0100, 0x7FFE)
 RESULT_SHA = 'cde0867365326366f257ac188dfa838c6c425fae31c796a1f2d61474ef08dcec'  # 1.03-08N-p5 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
@@ -197,6 +203,9 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
         raise PatchError('no 55AAh ROM header with 32 KB size at offset 0')
     if bytes(d[FREE_START - 7:FREE_END]) != bytes(FREE_END - FREE_START + 7):
         raise PatchError('%04X-%04X is not free (already patched?)' % (FREE_START, FREE_END - 1))
+    if s3patch.code_sha(d, CODE_RANGE) != CODE_SHA:
+        raise PatchError('%04X-%04X is not the code of %s (another build, or changed?)'
+                         % (CODE_RANGE[0], CODE_RANGE[1] - 1, VERSION))
     sym = s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
     site = SITES
 
@@ -352,11 +361,19 @@ def main():
         new_lo, log = patch(lo, a.nasm, a.mclk, a.memtype)
         img = new_lo * (2 if a.size == 64 else 1)
         errs = verify(img, a.size)
-        known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None
+        base = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA
+        known = base and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 of the 32 KB %s, expected %s)' % (out_sha, RESULT_SHA))
             errs += diagnose(a.nasm, a.output, img)
+        mclk_ok = False
+        if base and a.mclk is not None:     # compare with the default build of the same input (#143)
+            e = MCLK_ENTRY[a.memtype]
+            default_lo, _ = patch(lo, a.nasm, None, a.memtype)
+            mclk_errs = s3patch.mclk_build_errors(default_lo, new_lo, {e, e + 1, 0x7FFF}, RESULT_SHA)
+            errs += mclk_errs + (diagnose(a.nasm, a.output, img) if mclk_errs else [])
+            mclk_ok = not mclk_errs
         if errs:
             raise PatchError('result check failed:\n  ' + '\n  '.join(errs))
     except (PatchError, OSError) as e:
@@ -372,8 +389,7 @@ def main():
     print('%s: %s-%s, %d KB, checksum %02X (the lower 32 KB sums to 00), SHA-256 of the 32 KB %s%s'
           % (a.output, VERSION, LEVEL, a.size, img[0x7FFF], out_sha,
              ', identical to the tested build' if known or out_sha == RESULT_SHA else
-             ', MCLK build option: the code is the tested build, the MCLK is yours to check on the card'
-             if a.mclk is not None else ''))
+             s3patch.mclk_note(mclk_ok, a.mclk)))
     return 0
 
 

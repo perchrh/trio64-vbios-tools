@@ -157,7 +157,7 @@ isr:    cmp byte [cs:mmode],0
         mov [rec+10],ax
         push ax
         push dx
-        mov dx,0x3D4
+        call crtcp                      ; DX = the CRTC index port (3B4h or 3D4h, #144)
         in al,dx                        ; keep the CRTC index
         push ax
         mov al,0x67
@@ -326,7 +326,7 @@ s3regs: push ax
         out dx,ax
         mov al,bl
         out dx,al
-        mov dx,0x3D4
+        call crtcp                      ; DX = the CRTC index port (3B4h or 3D4h, #144)
         in al,dx
         mov bl,al                       ; BL = CR index
         mov al,0x38
@@ -436,6 +436,9 @@ i1:     push bp
         push si                         ; [bp-4] SI
         push ax                         ; [bp-6] AX
         push bx                         ; [bp-8] BX
+        cld                             ; the decoder's LODSB walks forward whatever DF the traced code
+                                        ; left (the trap does not clear DF; IRET restores the caller's
+                                        ; flags), #144
         cmp byte [cs:tpend],0
         je .dec
         mov bx,[cs:tpport]              ; the IN that just ran
@@ -607,6 +610,17 @@ tput:   push es
         pop di
         pop es
         ret
+
+; The CRTC index port of the current mode: 3B4h when MISC bit 0 (I/O address select, read at 3CCh) is 0
+; (the monochrome modes, 07h and 0Fh), else 3D4h. A fixed 3D4h read FFh in mode 07h (#144). Out: DX.
+; Changes AL.
+crtcp:  mov dx,0x3CC
+        in al,dx
+        mov dx,0x3B4
+        test al,1
+        jz .r
+        mov dl,0xD4
+.r:     ret
 
 rd:     out dx,al                       ; CRTC register AL -> AH
         inc dx
@@ -1019,7 +1033,7 @@ getinfo:
         push es
         mov si,info + 6 - 26            ; s3regs: SR10 SR11 -> info+6/+7 (and CR58-CR6D -> +8..+11,
         call s3regs                     ; overwritten by the version below)
-        mov dx,0x3D4
+        call crtcp                      ; DX = the CRTC index port (3B4h or 3D4h, #144)
         in al,dx
         mov bl,al                       ; BL = CR index
         mov al,0x38

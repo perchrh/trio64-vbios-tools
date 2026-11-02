@@ -156,6 +156,13 @@ VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN in the current folder, and S3REGS.TXT an
 monitor that takes 91 kHz or refuses it (an LCD). `common/` holds the /V debug log code the test tools
 share.
 
+RUNALL.BAT works the same on a card with its stock BIOS, and the logs then describe that BIOS and card:
+S3TEST fails its ROM signature (the line shows the version found) and the tests of our changes where
+the stock BIOS lacks them (the refresh rates and the register values are in the FAIL lines), while the
+MCLK, memory type, chip ID, timings, S3COMPAT, VSHOW, S3REGS and VGALOG results are as useful as on our
+ROM. `S3TEST /C` runs only the tests that apply to any ROM, for a short pass/fail answer.
+In the emulator, `make stock-test` does the same with the three stock reference ROMs (below).
+
 ## Emulator tests
 
 `emu/` runs the video BIOS and the DOS tools in an emulated PC, so changes can be checked before a
@@ -355,7 +362,8 @@ candidate (`docs/clean-room.md`).
 
 `rompatch/` holds the code the ROM carries and `s3patch.py`, which applies the current change set
 (level p24) to the S3 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin`, with byte assertions at
-every patch site and the SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
+every patch site, the SHA-256 of the input's code outside the OEM area (CODE_SHA, 0100h-7FFDh) and the
+SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
 patched 32 KB twice. It needs python3 (no packages) and NASM 3.02:
 
     make 775-rom OUT=S3V2P24.BIN
@@ -482,8 +490,9 @@ the card owner's choice, never a default; the build says OVERCLOCK in its result
 The Trio64V+ feature list names 50 MHz for EDO and 1-cycle EDO; the timing table allows 60 MHz, which
 S3COMPAT checks (MEM-1); 1.03-08N runs 50.11 MHz, 1.03-08 52.79 MHz. Below 40 MHz the option refuses (the data
 books give no minimum; it guards against typing errors). Without `MCLK` the build is the tested one and
-its SHA-256 is checked; with it the code is the same and only the MCLK entry and the checksum differ,
-so the clock is judged on the card: S3TEST's MCLK line and S3COMPAT's POST line compare it with the
+its SHA-256 is checked; with it the patcher also makes the default build, checks that one's SHA-256,
+and refuses the result if it differs anywhere but the MCLK entry, the constant the Trio64's FIFO code
+derives from the MCLK and the checksum (#143). The clock itself is judged on the card: S3TEST's MCLK line and S3COMPAT's POST line compare it with the
 data book limit for the strapped type, and S3COMPAT's VRAM test (without /Q) shows whether the memory
 keeps up. Which clock a given card's memory runs at is not a data book question: start at the default
 and go down if the VRAM test shows errors.
@@ -528,12 +537,14 @@ video memory, then runs the tests tagged `vram` (the ones whose result depends o
 | Trio64 764X 55 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `764XM55.BIN`; `make 764-rom-test`, `make 764-ref-compare` |
 | Trio64 764X 70 MHz: 2, 4 and 1 MB | `764XM70.BIN` |
 | Trio64 764P 50 MHz and 60 MHz: 2, 4 and 1 MB | `764PM50.BIN`, `764PM60.BIN` (one job each) |
-| build-and-test | passes when every row passed and every ROM built (the check name branch rules can require) |
+| Stock ROM 775, 765, 764x (informational) | `make stock-test`: every tool and emulator test, the ones tagged `patch` too (tests.py `--stock`), on the stock reference ROM; failures are expected and do not fail the run; the logs are the artifact `stock-logs-<chip>` (14 days) |
+| build-and-test | passes when every row passed and every ROM built (the check name branch rules can require); the stock jobs are not part of it |
 
 Every job builds NASM 3.02 from its release source (cached between runs) and the tools with `make`, and
 takes its ROM from the `roms` artifact; the patcher tests build the default ROM (without `MCLK`) and check
 it against the pinned SHA-256. The split uses `make emu-test VRAM=... EMUARGS=...` (tests.py `--tests`,
-`--skip`, `-t vram`), which works by hand too. A job that fails keeps its emulator logs as an artifact
+`--skip`, `-t vram`), which works by hand too. The first step of the ROM job, and of the coverage
+workflow, is `python3 emu/similarity.py --self-test` (a second). A job that fails keeps its emulator logs as an artifact
 `emu-logs-<job>` (without .BIN files) for 7 days. The one artifact meant to be kept is the release zip
 (`trio64-tools-<VERSION>`, "Release zip"). The hardware logs remain the final word, as for the emulator
 tests run by hand.
@@ -688,7 +699,8 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
 ## To do
 
 - Replace the stock BIOSes in `reference/` with links to their pages on theretroweb.com plus their
-  SHA-256, which the patchers check (the byte assertions already refuse any other image); `make roms`
+  SHA-256, which the patchers check (today they refuse an image whose code differs from the reference's:
+  the byte assertions at the patch sites, and CODE_SHA over the rest, #143); `make roms`
   and the tests then take the files from where the user saved them. CI downloads them once and keeps
   them in its cache for as long as the cache allows (a key on the SHA-256 values, so the files are
   fetched again only when the list changes), so no run depends on theretroweb being reachable.

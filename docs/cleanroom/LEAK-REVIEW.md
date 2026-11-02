@@ -12,6 +12,8 @@ advice; the lawyer of [`docs/clean-room.md`](../clean-room.md) judges the proces
   the file under review.
 - Never with the Phoenix VGA BIOS source material or riplin's disassembly open: the reviewer compares
   against the reference ROMs' observed behaviour and bytes, not against anyone's source.
+- What the reviewer may read and what not is listed under "What the reviewer may read, and what not"
+  below.
 
 ## What is reviewed
 
@@ -126,18 +128,42 @@ and the far pointers of the IBM tables and the VBE blocks, which the IBM referen
 nearly all of bios-rules.md's 208 lines are of this kind. Read them anyway: a ROM offset (C000:xxxx, or
 a four-digit hex address inside the 32 KB image) among them is a finding.
 
-### What the reviewer may and may not open
+### What the reviewer may read, and what not
 
-- May open, to compare with: the reference ROMs in [`reference/`](../../reference/) (`trio64/1_5_07.bin`,
-  `64vplus/1_03_08n.bin` (S3's 1.03-08N since 2 November 2026; the first review knew it as
-  `1_03_08.bin`), `v2/2_04_07.bin`), the oracle files, [`docs/764-rom.md`](../764-rom.md), the emulator and its tests.
-- Must not open: the Phoenix VGA BIOS source material and riplin's disassembly (see "Who reviews").
-- Step 6: `python3 emu/similarity.py FILE --min 16` compares with the three reference ROMs above by
-  default. The text mode fonts are a known match: the tables our ROMs now build from Joseph Gil's
-  public domain collection ([`rompatch/fonts/`](../../rompatch/fonts/), #141) are byte for byte S3's, and S3's equal IBM's
-  VGA font. A font table in a file under review is therefore reported as a long run; pass its range
-  with `--fonts START-END` and judge its source (Gil's files, or the reference ROM) rather than the
-  match.
+The lists name files and folders of this repository at the commit under review. A file in neither list
+is not read: ask the owner first. Reading a forbidden file by mistake ends the session as a reviewer:
+say so in the record, and the review is done again by another session.
+
+**May read.**
+
+| What | Why |
+| --- | --- |
+| The files under review (the table above) | the object of the review |
+| This file, [`docs/clean-room.md`](../clean-room.md), [`README.md`](README.md) of this folder | the process and the rules |
+| The reference ROMs: [`reference/trio64/1_5_07.bin`](../../reference/trio64/1_5_07.bin), [`reference/64vplus/1_03_08n.bin`](../../reference/64vplus/1_03_08n.bin) (the first review knew it as `1_03_08.bin`), [`reference/v2/2_04_07.bin`](../../reference/v2/2_04_07.bin) | to compare bytes and behaviour with (steps 3 and 6) |
+| The oracle files: [`oracle-a-post.md`](oracle-a-post.md), [`oracle-b-modeset.md`](oracle-b-modeset.md), [`oracle-c-vbe.md`](oracle-c-vbe.md) | what the dirty side observed, to tell observation from copying |
+| [`docs/764-rom.md`](../764-rom.md), [`docs/765-rom.md`](../765-rom.md), [`docs/775-rom.md`](../775-rom.md), except the section "Cross-check with riplin's annotated disassembly" of [`docs/764-rom.md`](../764-rom.md) | measurements of the reference ROMs and the cards |
+| The emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py) and [`emu/similarity.py`](../../emu/similarity.py) (step 6) to read and run; [`emu/tests.py`](../../emu/tests.py) to run, not to read | to run a reference ROM and observe it; the test file's comments describe our patches from the inside (see below) |
+| The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
+| [`review-2026-11-02.md`](review-2026-11-02.md) | which places changed after the outside review |
+
+**Must not read.**
+
+| What | Why |
+| --- | --- |
+| The Phoenix VGA BIOS source material (an `SRC/phx` folder or similar, wherever found) | a vendor's source: the review compares with the ROMs' observed bytes and behaviour, not with anyone's source |
+| riplin's annotated disassembly ([hag](https://github.com/riplin/hag) `research/s3/bios/86c764x.asm`), and the section of [`docs/764-rom.md`](../764-rom.md) that cites it | the same: an expression of the Phoenix code, with names for its routines |
+| Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others) | the same; and a reviewer who has read it cannot tell what a file under review took from it |
+| Our patch code and patchers: [`rompatch/`](../../rompatch/) (its `bios.inc` files map routines of the reference ROMs), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour |
+| [`BRIEF.md`](BRIEF.md) | the clean implementer's brief, not dirty material, but the reviewer has no use for it and must not write to the clean side |
+
+Step 6: `python3 emu/similarity.py FILE --min 16` compares with the three reference ROMs above by
+default. The text mode fonts are a known match: the tables our ROMs now build from Joseph Gil's public
+domain collection (#141) are byte for byte S3's, and S3's equal IBM's VGA font. A font table in a file
+under review is therefore reported as a long run; pass its range with `--fonts START-END` and judge its
+source (Gil's files, or the reference ROM) rather than the match. The fonts' origin is documented in
+`rompatch/fonts/README.md`; the reviewer takes it from there only if a font table turns up, and reads
+that one file, not the rest of `rompatch/`.
 
 ### Open items
 

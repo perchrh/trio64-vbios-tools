@@ -33,6 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: similarity.py self-test (first, it takes a second)
+        run: python3 emu/similarity.py --self-test
+
       - name: Cache NASM
         id: nasm-cache
         uses: actions/cache@v4

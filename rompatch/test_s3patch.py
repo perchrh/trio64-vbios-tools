@@ -26,8 +26,10 @@ Tests
                  0.5 MHz in that memory type's entry and change nothing else but the checksum; 61 MHz for
                  1-cycle EDO, 67 MHz for fast page and 39 MHz are refused (V2-MEM-1)
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte
-                 changed at a patch site (p12, p13 and p14 sites, with the checksum corrected), a wrong
-                 checksum, another BIOS version (the stock 2.04.11, with --stock)
+                 changed at a patch site (p12, p13 and p14 sites, with the checksum corrected), one code
+                 byte changed away from every patch site (CODE_SHA, 0100h-7FFDh; the byte assertions alone
+                 let it through, #143), a wrong checksum, another BIOS version (the stock 2.04.11, with
+                 --stock)
 Exit code 0 when every test passed.
 """
 import argparse, hashlib, os, subprocess, sys, tempfile
@@ -78,6 +80,11 @@ def pll_bad(img):
 
 def vco_out(img, lo=135):
     return [e for e in s3patch.refresh_entries(img) if not lo <= s3patch.pll(img[e + 4], img[e + 5])[0] <= 340]
+
+
+def untouched(ref, img):
+    """A code offset at least 16 bytes from any byte the build changes: no byte assertion covers it."""
+    return next(i for i in range(0x3000, 0x7000) if ref[i - 16:i + 16] == img[i - 16:i + 16])
 
 
 def corrupt(img, off):
@@ -167,6 +174,7 @@ def main():
              ('p12 site (INT 10h entry)', corrupt(ref, s['int10'] + 2)),
              ('p13 site (text scroll fill)', corrupt(ref, s['txfull'] + 7)),
              ('p14 site (VGA clear)', corrupt(ref, s['vclr'] + 10)),
+             ('code byte away from the sites', corrupt(ref, untouched(ref, img[:0x8000]))),
              ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]))]
     if stock and len(stock) == 0x10000:
         cases.append(('stock 2.04.11', stock[:0x8000]))

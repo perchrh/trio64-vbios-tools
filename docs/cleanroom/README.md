@@ -55,10 +55,12 @@ notes), and anything from another vendor's BIOS source.
 ## Checking the clean ROM (on the dirty side)
 
 1. **Emulator**: `make emu-test ROM=CLEAN.BIN CHIP=764` with 2, 4 and 1 MB. The tests tagged `patch`
-   are skipped for a ROM that is not ours, and S3TEST is one of them: there is no clean-ROM profile
-   yet (corrected 2 November 2026; this said S3TEST ran its set for other BIOSes, which the runner
-   does not do, and S3TEST on a Trio64 expects our ROM's signature; #143). S3COMPAT and VSHOW run in
-   full. Also, `t_post` does not yet notice a POST that never returns (#143).
+   (our ROMs' patches, and `s3test` with our ROM's signature) are skipped for a ROM that is not ours.
+   `s3test_any` runs `S3TEST /C` instead: the set that needs no ROM of ours (checksum, MCLK, VGA
+   clear, font load, the scrolls, AH=09h, timings), on any chip, with the version as INFO (#143).
+   It is 8 result lines: the mode list and the VBE checks of S3TEST are our ROMs' and have no clean
+   counterpart yet. S3COMPAT and VSHOW run in full. `post` checks the ROM header without running it
+   and fails a POST that does not return (#143). On the card, run `S3TEST /C`.
 2. **The oracle**: the register state after POST and after each mode set compared with
    [`oracle-a-post.md`](oracle-a-post.md) and [`oracle-b-modeset.md`](oracle-b-modeset.md), the 4F00/4F01 blocks with [`oracle-c-vbe.md`](oracle-c-vbe.md). Where the
    oracle notes a reference value that the specification deliberately does not follow (non-DMT

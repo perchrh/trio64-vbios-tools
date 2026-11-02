@@ -49,6 +49,9 @@ Tests
   s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
                    (banked memory, throughput); with /V the output is the same (except the Time spent
                    line) and S3TEST.DBG is well formed
+  s3test_any       S3TEST /C (any ROM: a stock BIOS, a clean ROM) on every ROM and chip: the version is
+                   INFO, our ROM's tests SKIP with the /C reason, every other check passes but the two
+                   the model cannot judge (#143)
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
                    monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT, shown once
                    before the VSHOW /I list, and S3TEST, S3COMPAT and VSHOW (a mode, /A) print it on
@@ -289,10 +292,65 @@ def t_version(c):
     return want
 
 
+def rom_header_errors(rom):
+    """What is wrong with the option ROM header, read without running a byte of the ROM (PCI Local Bus
+    Specification 2.3, 6.3.1): 55AAh, the size in 512-byte units, a byte sum of 0 over that size, and a
+    PCI data structure ('PCIR', S3's vendor ID 5333h, an image length equal to the size byte, code type 0,
+    x86). The class code is not checked: S3's ROMs store it as 03h 00h 00h, base class first, against
+    the specification's order (2.04.07, 1.03-08N and 1.5-07 alike)."""
+    errs = []
+    if rom[:2] != b'\x55\xAA':
+        return ['no 55AAh signature']
+    size = rom[2] * 512
+    if size == 0 or size > len(rom):
+        return ['size byte %02Xh: %d bytes, the image has %d' % (rom[2], size, len(rom))]
+    if sum(rom[:size]) & 0xFF:
+        errs.append('byte sum over %d bytes is %02Xh, not 00h' % (size, sum(rom[:size]) & 0xFF))
+    pcir = struct.unpack_from('<H', rom, 0x18)[0]
+    if pcir + 24 > size or rom[pcir:pcir + 4] != b'PCIR':
+        return errs + ['no PCIR structure at %04Xh' % pcir]
+    vendor, _dev = struct.unpack_from('<HH', rom, pcir + 4)
+    if vendor != 0x5333:
+        errs.append('PCIR vendor %04Xh, not 5333h' % vendor)
+    if struct.unpack_from('<H', rom, pcir + 0x10)[0] * 512 != size:
+        errs.append('PCIR image length %d bytes, the size byte says %d'
+                    % (struct.unpack_from('<H', rom, pcir + 0x10)[0] * 512, size))
+    if rom[pcir + 0x14] != 0:
+        errs.append('PCIR code type %02Xh, not 00h (x86)' % rom[pcir + 0x14])
+    return errs
+
+
+def hang_rom():
+    """A 32 KB option ROM that hooks INT 10h, as a real one does early in POST, and then loops forever:
+    POST must not count as passed for it (#143)."""
+    code = (b'\xFA'                                     # cli
+            b'\x31\xC0\x8E\xD8'                         # xor ax,ax ; mov ds,ax
+            b'\xC7\x06\x40\x00\x00\x01'                 # mov word [40h],0100h
+            b'\xC7\x06\x42\x00\x00\xC0'                 # mov word [42h],C000h
+            b'\xEB\xFE')                                 # jmp $
+    rom = bytearray(0x8000)
+    rom[0:3] = b'\x55\xAA\x40'
+    rom[3:5] = b'\xEB\x1B'                                 # jmp 0020h
+    rom[0x20:0x20 + len(code)] = code
+    rom[0x100] = 0xCF                                       # the hooked INT 10h: iret
+    rom[-1] = -sum(rom) & 0xFF
+    return bytes(rom) + bytes(0x8000)
+
+
 def t_post(c):
+    """The ROM header is valid without running it, POST returns to its caller and leaves INT 10h at
+    C000h; and a ROM that hooks INT 10h and then hangs fails POST here (#143)."""
+    errs = rom_header_errors(c.rom)
+    check(not errs, 'ROM header: ' + '; '.join(errs))
     m = Machine(c.rom)
     seg, off = m.post()
     check(seg == 0xC000, 'INT 10h vector %04X:%04X, expected C000:xxxx' % (seg, off))
+    try:
+        Machine(hang_rom()).post(limit=200_000)
+    except RuntimeError as e:
+        check('did not return' in str(e) and 'C000:0031' in str(e), 'hanging ROM: unexpected error %s' % e)
+    else:
+        raise AssertionError('a ROM that hooks INT 10h and then loops passed POST')
 
 
 def t_vga_registers(c):
@@ -962,6 +1020,30 @@ def t_s3test(c):
     return 'exit code %d' % r1.exit[1]
 
 
+def t_s3test_any(c):
+    """S3TEST /C, the set for a ROM that is not ours (a stock BIOS, a clean ROM, #143), runs on every ROM
+    and chip: the version found is INFO, the tests of our ROM are SKIP with the /C reason, and every
+    test that needs no ROM of ours passes except the two the model cannot judge."""
+    com = c.tool('S3TEST.COM')
+    r = c.machine().run_com(com, '/C /S')
+    c.save('S3TESTC', r)
+    check(r.exit and r.exit[0] == 'exit', 'S3TEST /C did not end: %s' % (r.exit,))
+    out = r.stdout.decode('latin1')
+    check('Passed:' in out, 'no summary line')
+    tl = tagged(out, 'S3TEST')
+    skips = skips_counted(out, 'S3TEST')
+    sig = [l for cat, l in tl if cat == 'ROM' and 'ROM version (/C: any ROM)' in l]
+    check(len(sig) == 1 and sig[0].rstrip().endswith('INFO'), 'S3TEST /C: no INFO version line: %s' % sig)
+    check(not any('ROM signature' in l for _, l in tl), 'S3TEST /C: the signature of our ROM was tested')
+    check(skips and all('no ROM of ours' not in l for l in skips) and any('/C: a test of our ROM only' in l
+          for l in skips), 'S3TEST /C: SKIP lines without the /C reason')
+    results = [l for cat, l in tl if l.endswith(('PASS', 'FAIL'))]
+    check(len(results) >= 8, 'only %d result lines' % len(results))   # the set without a ROM of ours
+    bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
+    check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    return '%d results, %d SKIP' % (len(results), len(skips))
+
+
 def t_vshow(c):
     com = c.tool('VSHOW.COM')
     v = ' /V' if has_verbose() else ''
@@ -1338,7 +1420,7 @@ def t_vgalog_mem(c):
           and b'No events registered, not writing output file' in r0.stdout,
           '/D with no calls: exit %s, files %s, output %r' % (r0.exit, sorted(r0.files), r0.stdout[-80:]))
     calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=2)),
-             (0x1130, dict(bx=0x0200)), (0x0003, {})]
+             (0x1130, dict(bx=0x0200)), (0x0007, {}), (0x0003, {})]
     ret = {}
     for ax, kw in calls:
         res = m.int10(ax, **kw)
@@ -1347,6 +1429,9 @@ def t_vgalog_mem(c):
         if ax == 0x4F02:                # what the record of this call must hold: the registers after it
             sr, cr = m.r['seq'], m.r['crtc']
             after = bytes([sr.get(0x10, 0), sr.get(0x11, 0), cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0)])
+        if ax == 0x0007:                # mono: the CRTC is at 3B4h now, VGALOG must follow MISC bit 0 (#144)
+            sr, cr = m.r['seq'], m.r['crtc']
+            after7 = bytes([sr.get(0x10, 0), sr.get(0x11, 0), cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0)])
     check(ret[0x1130]['es'] == 0xC000 and ret[0x1130]['cx'] == 16, 'AX=1130h result changed by VGALOG: %s' % ret[0x1130])
     rd = m.run_com(com, '/D', seg=0x4000)
     check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
@@ -1358,7 +1443,7 @@ def t_vgalog_mem(c):
     recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
     check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
     top = [struct.unpack_from('<H', x, 2)[0] for x in recs if x[23] == 0]
-    check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
+    check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0007, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
           % ['%04X' % a for a in top])
     nested = [x for x in recs if x[23] > 0]
     # the 2.04.07 BIOS calls AX=1130h itself in the mode set; another BIOS need not nest a call at all
@@ -1367,6 +1452,9 @@ def t_vgalog_mem(c):
     r101 = [x for x in recs if struct.unpack_from('<HH', x, 2) == (0x4F02, 0x0101)][0]
     check(struct.unpack_from('<H', r101, 14)[0] == 0x004F and r101[26:31] == after,
           '4F02 101h record: AX out, SR10/11 or CR58/59/5A wrong: %s (registers %s)' % (r101.hex(), after.hex()))
+    r07 = [x for x in recs if x[23] == 0 and struct.unpack_from('<H', x, 2)[0] == 0x0007][0]
+    check(r07[26:31] == after7, 'mode 07h record: SR10/11 or CR58/59/5A wrong (CRTC read at the colour '
+          'address?): %s (registers %s)' % (r07[26:31].hex(), after7.hex()))
     check(m.r['crtc'].get(0x38) != 0x48 or m.r['seq'].get(8) != 0x06, 'S3 registers left unlocked')
     # Another program hooks INT 10h after VGALOG, as Windows 9x does in a DOS box: /D and the install
     # check find the resident copy through the MCB chain, /U (only as the last hook) refuses
@@ -2243,7 +2331,7 @@ def t_stores(c):
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -2260,7 +2348,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
@@ -2271,7 +2359,7 @@ TAGS = {
 
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
-DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 'windows': 60,
+DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 's3test_any': 60, 'windows': 60,
             'stores': 55, 's3compat_vga': 45}
 
 
@@ -2307,13 +2395,18 @@ def base_only(c, name, msg):
     return len(lines) if ok else 0
 
 
+# --stock: the tests tagged patch run on a ROM that is not ours too (a stock BIOS). They then fail where
+# the stock BIOS lacks our changes; what they find, and the tool logs, describe the stock BIOS
+STOCK = False
+
+
 def run_test(c, name, fn, verbose):
     """One test: returns (result text, failed, seconds)."""
     t0 = time.time()
     bad = False
     try:
         tags = TAGS[name].split()
-        if 'patch' in tags and not (c.ours or c.vours and '765' in tags or c.tours and '764' in tags):
+        if 'patch' in tags and not (STOCK or c.ours or c.vours and '765' in tags or c.tours and '764' in tags):
             raise Skip('not our patched BIOS')
         note = fn(c)
         res = 'PASS' + ('  (%s)' % note if note else '')
@@ -2381,6 +2474,8 @@ def main():
     ap.add_argument('--skip', default='', help='comma list: leave these tests out (CI runs the longest ones in a '
                     'job of their own)')
     ap.add_argument('-x', action='store_true', help='stop at the first failure')
+    ap.add_argument('--stock', action='store_true', help='run the tests tagged patch on a ROM that is not ours '
+                    '(a stock BIOS) too: failures are expected, the logs describe that BIOS')
     ap.add_argument('--noop', default='', metavar='SPEC',
                     help='mutation test: INT 10h calls matching SPEC do nothing, e.g. "ah=06" or '
                          '"ax=4F14,bl=02" (hex values; several patterns separated by ";"), see emu/mutants.py')
@@ -2444,10 +2539,16 @@ def main():
         tests = [(t, byname[t]) for t in a.tests.split(',')]
     tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))
              and n not in a.skip.split(',')]
-    if not c.ours:
+    global STOCK
+    STOCK = a.stock
+    if not c.ours and STOCK:
+        print('--stock: the tests tagged patch run although the ROM is not our Trio64V2 build; failures where '
+              'the ROM lacks our changes are expected')
+    elif not c.ours:
         print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped'
               + (' unless tagged 765 (our Trio64V+ ROM 1.03-08N-pN)' if c.vours else
-                 ' unless tagged 764 (our Trio64 ROM 1.5-07-pN)' if c.tours else ''))
+                 ' unless tagged 764 (our Trio64 ROM 1.5-07-pN)' if c.tours else '')
+              + ' (--stock runs them)')
 
     if a.j > 1 and not (a.coverage or a.profile or a.calls):
         failed = run_parallel(c, tests, a)

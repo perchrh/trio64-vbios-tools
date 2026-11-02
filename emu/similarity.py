@@ -34,20 +34,28 @@ def rom32(path):
 
 
 def runs(cand, ref, k, minlen):
-    """Maximal common runs: index every k-byte window of ref, extend matches both ways."""
+    """Every maximal common run of minlen bytes or more (one value repeated, padding, excepted).
+
+    Exhaustive (#144: an earlier version kept only the first 32 places of each k-byte window of ref and
+    could miss a run): every place of every window is indexed, and a match is extended both ways along
+    its diagonal (ref offset - candidate offset) once; later seeds inside a run already found on that
+    diagonal are skipped, so repeated windows do not make the search quadratic. A run of minlen >= k
+    bytes always has a k-byte window that is not one repeated value unless the whole run is one value.
+    For each stretch of the candidate the longest run is reported; a run whose candidate bytes lie
+    wholly inside a longer reported one is left out. Returns [(cand start, ref start, cand end)]."""
     index = {}
     for i in range(len(ref) - k + 1):
         w = ref[i:i + k]
         if w.count(w[0]) == k:                  # one byte value: padding, never the start of a run
             continue
-        lst = index.setdefault(w, [])
-        if len(lst) < 32:                       # a window repeated more often is table filler
-            lst.append(i)
-    found = {}
-    i = 0
-    while i <= len(cand) - k:
-        best = None
+        index.setdefault(w, []).append(i)
+    done = {}                                   # diagonal -> candidate end of the last run found on it
+    allruns = []
+    for i in range(len(cand) - k + 1):
         for j in index.get(cand[i:i + k], ()):
+            d = j - i
+            if done.get(d, -1) > i:
+                continue
             a, b = i, j
             while a > 0 and b > 0 and cand[a - 1] == ref[b - 1]:
                 a -= 1
@@ -56,18 +64,54 @@ def runs(cand, ref, k, minlen):
             while e < len(cand) and f < len(ref) and cand[e] == ref[f]:
                 e += 1
                 f += 1
-            if best is None or e - a > best[2] - best[0]:
-                best = (a, b, e)
-        if best and best[2] - best[0] >= minlen and len(set(cand[best[0]:best[2]])) > 1:
-            if best[0] not in found or found[best[0]][2] < best[2]:
-                found[best[0]] = best
-            i = best[2]
+            done[d] = e
+            if e - a >= minlen and len(set(cand[a:e])) > 1:
+                allruns.append((a, b, e))
+    out = []
+    for a, b, e in sorted(allruns, key=lambda r: (r[0] - r[2], r[0])):
+        if not any(s <= a and e <= t for s, _, t in out):
+            out.append((a, b, e))
+    return sorted(out)
+
+
+def merge(ranges):
+    """Overlapping or touching (start, end) ranges, end inclusive, joined (#144: the coverage test
+    counted an overlap twice)."""
+    out = []
+    for lo, hi in sorted(ranges):
+        if out and lo <= out[-1][1] + 1:
+            out[-1] = (out[-1][0], max(out[-1][1], hi))
         else:
-            i += 1
-    return sorted(found.values())
+            out.append((lo, hi))
+    return out
+
+
+def self_test():
+    """The case the window cap missed (#144): every 16-byte window of a 32-byte run occurs 33 times
+    earlier in the reference (two families of copies, each with one byte changed at an end), the run
+    itself once at the end; and overlapping exclusion ranges. Returns the number of failures."""
+    import random
+    rnd = random.Random(2)
+    run = bytearray(rnd.randrange(1, 255) for _ in range(32))
+    fa, fb = bytearray(run), bytearray(run)
+    fa[31] ^= 0xFF
+    fb[0] ^= 0xFF
+    ref = bytes((fa + b'\0') * 33 + (fb + b'\0') * 33) + bytes(5) + bytes(run) + bytes(5)
+    cand = b'\x77' * 300 + bytes(run) + b'\x77' * 300
+    fails = 0
+    if runs(cand, ref, 16, 32) != [(300, 2183, 332)]:
+        print('self-test: the run behind 66 near copies was not found')
+        fails += 1
+    if merge([(0x10, 0x30), (0x20, 0x40), (0x41, 0x50), (0x60, 0x70)]) != [(0x10, 0x50), (0x60, 0x70)]:
+        print('self-test: ranges not merged')
+        fails += 1
+    print('self-test: %d failed' % fails)
+    return fails
 
 
 def main():
+    if sys.argv[1:] == ['--self-test']:
+        return 1 if self_test() else 0
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('candidate')
     ap.add_argument('--min', type=int, default=32, help='shortest run to report (bytes, default 32)')
@@ -78,8 +122,8 @@ def main():
                     help='hex offset range of a table a public standard defines (repeatable)')
     a = ap.parse_args()
     cand = rom32(a.candidate)
-    fonts = [tuple(int(x, 16) for x in r.split('-')) for r in a.fonts]
-    tables = [tuple(int(x, 16) for x in r.split('-')) for r in a.tables]
+    fonts = merge([tuple(int(x, 16) for x in r.split('-')) for r in a.fonts])
+    tables = merge([tuple(int(x, 16) for x in r.split('-')) for r in a.tables])
 
     def inside(s, e, ranges):
         return sum(max(0, min(e, hi + 1) - max(s, lo)) for lo, hi in ranges) >= 0.9 * (e - s)
