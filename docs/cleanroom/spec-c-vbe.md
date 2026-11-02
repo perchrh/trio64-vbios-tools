@@ -1,12 +1,17 @@
 # Clean-room specification, part C: VBE 1.2 and the S3 extensions (Trio64)
 
-This part specifies the VESA BIOS Extension of the Trio64 (S3 86C764X) video BIOS built on SeaVGABIOS:
+This part specifies the VESA BIOS Extension of the Trio64 (S3 86C764X) clean-room video BIOS:
 functions 4F00h-4F08h as VBE 1.2 (VS911022) defines them, the mode list and the mode information of
 each mode, the window (bank) function, the logical scan line and display start functions, the DAC
 width, and, as a second step, the S3 mode numbers reachable through INT 10h AH=00h and the S3 OEM
 function 4F14h. It covers items 3 and 5 of [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md). The register timings of each
 mode (CRTC, PLL, FIFO) belong to item 2 and are referred to, not repeated; the standard INT 10h
 functions are in [`docs/bios-rules.md`](../bios-rules.md); the data book rules in [`docs/chip-rules.md`](../chip-rules.md).
+
+**Base (2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)):** the clean ROM is written from scratch, with no base code
+([`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"). Where this part mentions SeaVGABIOS, it is a
+comparison implementation: its behaviour is a fact to compare with, not code the ROM builds on. The
+rules describe behaviour and hold unchanged for the ROM written from scratch.
 
 Written 1 November 2026 from the sources below. Everything here is behaviour: inputs, outputs, register
 values or formulas, error cases. The observed results of the reference ROM are kept apart, in
@@ -378,10 +383,11 @@ Trio64 BIOSes examined there offers 4F14h.
 - **The no-clear bit.** VBE12 4 and 6.4 use bit 15; Haakenson reports 1.2 programs that used bit 7.
   VBE-40 follows the standard; bit 7 with BH = 0 is open question 5.
 
-## What changes in SeaVGABIOS's vbe.c (for the clean side)
+## How SeaVGABIOS's vbe.c differs (the comparison implementation)
 
 Behaviour differences between SeaVGABIOS's VBE (branch `claude/slim-vgabios`, public LGPLv3 code) and
-this part, so the clean side knows what to change: 4F00h reports 0300h (VBE-22: 0102h), writes the
+this part. Written when SeaVGABIOS was to be the base; since 2 November 2026 it is a comparison
+implementation, so this list says where its answers differ from this part's, not what to change in it: 4F00h reports 0300h (VBE-22: 0102h), writes the
 VBE 2.0 strings and 512 bytes for a 'VBE2' caller (VBE-21) and builds the mode list in the caller's
 Reserved field (VBE-25); 4F01h sets ModeAttributes bit 5 "not VGA compatible" (VBE-31: reserved in
 1.2), WinBSegment 0 (as here), computes the image pages with 64 KB rounding (VBE-34), sets

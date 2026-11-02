@@ -1,6 +1,7 @@
 # FreeDOS 1.4: what it asks of the video BIOS
 
-The compatibility target of the clean ROM ([`docs/seavgabios-trio64.md`](../seavgabios-trio64.md), milestone 2). From a reading of the
+The compatibility target of the clean ROM's earlier milestone 2 ([`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)); since 2 November 2026 a
+milestone 5, tentative ([`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"). From a reading of the
 FreeDOS 1.4 sources (GitLab group FreeDOS, tag `FreeDOS-v1.4` where it exists; the installer FDI and its
 language scripts from their default branches; EDIT's console code from its `unstable` branch, since the
 1.4 tag lacks it), 1 November 2026. Nothing was built or run. The sources are GPL, BSD or MIT: their
@@ -87,4 +88,4 @@ Trio64 one fails its pinned SHA, the others are MCLK=55 builds), Trio64/V+/V2 re
 | AH=F4h in mode 12h | AX, BX, CX, DX returned as given | FD-19: met |
 
 Not checked here: the cursor emulation, AH=12h BL=30h with 1112h, and everything on a card. The card check
-of milestone 2 is FreeDOS 1.4 itself.
+of that milestone is FreeDOS 1.4 itself.

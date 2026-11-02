@@ -1,21 +1,41 @@
 # The clean-room package
 
-What the clean side gets for writing the S3 Trio64 module of SeaVGABIOS (the plan:
-[`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)), what stays on the dirty side, and how the result is checked. The process
+What the clean side gets for writing a Trio64 video BIOS from scratch (decided 2 November 2026,
+[#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); the earlier plan built on SeaVGABIOS: [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)), what stays on the dirty side, and how the result is checked. The process
 and its reasons are in [`docs/clean-room.md`](../clean-room.md). Prepared 1 November 2026. The first leak review (1 November) removed the references to dirty-side
 documents from [`spec-a-post.md`](spec-a-post.md); what remains for a second reader is listed under "Leak review".
 
 **Status, 2 November 2026.** An outside review ([`review-2026-11-02.md`](review-2026-11-02.md)) found the package not yet ready
 to implement from:
 - MODE-130's refresh count and POST-23's example are corrected since.
-- Open, for the owner and #145:
-  - the base;
-  - a frozen mode list per milestone;
-  - release terms and the export of a reviewed allowlist;
+- Decided by the owner on 2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), [`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"):
+  - the base: empty, a full new BIOS written from scratch, with the fonts of [`rompatch/fonts/`](../../rompatch/fonts/);
+  - SeaVGABIOS kept as a comparison implementation;
+  - the size budget: the whole 32 KB, about 9.7 KB of fonts, about 23 KB for code and tables;
+  - release terms: the MIT licence;
+  - no patched ROM images uploaded by CI; the reference ROMs stay in the repository for now;
+  - the scope: four milestones on the DSP-3364P. (1) The card posts and shows a picture with readable
+    text; glitches are allowed and nothing after POST is required. (2) MS-DOS 6.22 boots, and MS-DOS
+    EDIT loads, edits and saves a file without significant glitches. (3) Superscape 3D Bench 1.0c runs
+    under MS-DOS without significant glitches. (4) Chris's 3D Benchmark runs under MS-DOS in 320x200
+    and 640x480 VESA without significant glitches: the first milestone that needs parts B and C, for
+    its one VESA mode. Milestone 5, tentative: FreeDOS boots ([`freedos-1.4.md`](freedos-1.4.md)). The rest of
+    parts B and C is for later milestones;
+  - the scope of the leak review: a clean-room implementation of milestones 1-4
+    ([`LEAK-REVIEW.md`](LEAK-REVIEW.md) "Scope of this review").
+- Added to part A since: PCI 2.3 section 6.3 as the source of the option ROM rules, and the DRAM
+  power-up of the card (POST-41).
+- The test harness fixes (#143) are in place: `post` fails a POST that does not return, and
+  `S3TEST /C` with the emulator test `s3test_any` runs the set that needs no ROM of ours.
+- Still open:
+  - the record of the INT 10h calls MS-DOS 6.22 and EDIT make on the card (the contract of milestone
+    2; milestones 3 and 4 are recorded in [`milestone-calls.md`](milestone-calls.md));
+  - how Chris's 3D Benchmark changes the bank in mode 101h (no INT 10h 4F05h call was logged);
+  - the licence file and the asset manifest;
+  - the export of a reviewed allowlist at a fixed commit to a separate repository;
   - the second-reader leak review, whose handover is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md).
-- Open in the test harness (#143).
 
-**On the base:** the owner's public domain wish ([`docs/clean-room.md`](../clean-room.md)) rules out SeaVGABIOS's code in the ROM. The specifications still say "built on SeaVGABIOS" in their introductions; their rules describe behaviour and hold for an original ROM as well.
+**On the base:** the specifications describe behaviour; their rules hold for the ROM written from scratch. Their introductions say so, and where they mention SeaVGABIOS it is the comparison implementation.
 
 ## Files here
 
@@ -26,8 +46,9 @@ to implement from:
 | [`spec-a-post.md`](spec-a-post.md) | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
 | [`spec-b-modeset.md`](spec-b-modeset.md) | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
 | [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
-| [`freedos-1.4.md`](freedos-1.4.md) | goes across | what FreeDOS 1.4 asks of the video BIOS (milestone 2), from its sources |
-| [`freedos-reports.md`](freedos-reports.md) | goes across | drafts of the MORE and MODE defect reports to FreeDOS |
+| [`milestone-calls.md`](milestone-calls.md) | its contract part goes across after the leak review | the INT 10h calls of the programs of milestones 3 and 4, recorded on a card |
+| [`freedos-1.4.md`](freedos-1.4.md) | goes across with milestone 5 | what FreeDOS 1.4 asks of the video BIOS (milestone 5, tentative), from its sources |
+| [`freedos-reports.md`](freedos-reports.md) | goes across with milestone 5 | drafts of the MORE and MODE defect reports to FreeDOS |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | dirty only | the outside feasibility review of 2 November 2026: its findings, our checks and where each went |
 | [`oracle-a-post.md`](oracle-a-post.md), [`oracle-b-modeset.md`](oracle-b-modeset.md), [`oracle-c-vbe.md`](oracle-c-vbe.md) | dirty only | what the reference ROMs do in the emulator and on the card, compared with the specification; the expected values for checking the clean ROM, never handed over |
 
@@ -41,7 +62,8 @@ to implement from:
   which is taken from BIOS images and goes only through [`spec-c-vbe.md`](spec-c-vbe.md).
 - [`docs/bios-rules.md`](../bios-rules.md), after a leak review of its open questions: its rules rest on public sources, but
   its open-question lists were written while reading another vendor's BIOS source.
-- SeaVGABIOS (branch `claude/slim-vgabios` of perchrh/seabios_fork), under its LGPLv3.
+- SeaVGABIOS (branch `claude/slim-vgabios` of perchrh/seabios_fork), under its LGPLv3, as a comparison
+  implementation and a source of facts: none of its code goes into the ROM.
 - The test tools as programs and their result lines (S3TEST, S3COMPAT, VSHOW, VGALOG, S3REGS): what
   they check is stated in their headers from public sources.
 
@@ -74,7 +96,8 @@ notes), and anything from another vendor's BIOS source.
 
        python3 emu/similarity.py slim.bin --fonts 409E-509D --fonts 509E-5E9D --fonts 5E9E-669D --tables 38B8-4053
 
-4. **On the card**: [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) "Clean-room steps", step 4.
+4. **On the card**: [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) "Clean-room steps", step 4 (written for the SeaVGABIOS
+   plan; the card steps hold for the ROM written from scratch).
 
 ## Leak review
 

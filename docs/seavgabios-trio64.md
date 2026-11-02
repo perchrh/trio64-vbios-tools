@@ -6,11 +6,16 @@ the clean-room rules of [`docs/clean-room.md`](clean-room.md). Written 1 Novembe
 
 ## Status, 2 November 2026
 
-This plan is not the implementation plan of the clean ROM any more. The owner's public domain wish
-([`docs/clean-room.md`](clean-room.md)) rules out SeaVGABIOS's LGPLv3 code in the ROM, so the clean ROM is to be written in
-full, with SeaVGABIOS kept as a comparison implementation and a source of facts. That is the outside
-review's finding F4 ([`docs/cleanroom/review-2026-11-02.md`](cleanroom/review-2026-11-02.md)); the owner confirms the base in #145.
-- **Size:** the size budget below (26,320 bytes plus an S3 module) does not estimate a whole BIOS. The review's figure for an original ROM is 32 KB less about 9.7 KB of fonts, about 23 KB for code and tables, not yet measured.
+This plan is not the implementation plan of the clean ROM any more. The outside review's finding F4
+([`docs/cleanroom/review-2026-11-02.md`](cleanroom/review-2026-11-02.md)) found it still budgeting SeaVGABIOS as the base. The owner
+decided on 2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), [`docs/clean-room.md`](clean-room.md) "Decisions of 2 November 2026"):
+- **Base:** empty. The clean ROM is a full new video BIOS written from scratch, under the MIT licence,
+  with the fonts of [`rompatch/fonts/`](../rompatch/fonts/) (Joseph Gil's FNTCOL16 files).
+- **SeaVGABIOS** is kept as a comparison implementation and a source of facts; none of its LGPLv3
+  code goes into the ROM.
+- **Size:** the size budget below (26,320 bytes plus an S3 module) does not estimate a whole BIOS. The
+  budget of the clean ROM is the whole 32 KB: about 9.7 KB of fonts, which leaves about 23 KB for code
+  and tables, not yet measured.
 - **Fitting VBE:** the slim build shows that SeaVGABIOS with VBE fits 32 KB; earlier statements that it cannot are superseded.
 
 The rest of this file is kept as the record of the experiment.
@@ -34,6 +39,13 @@ The rest of this file is kept as the record of the experiment.
   how our three ROMs meet them today: [`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md).
 
 ## Milestones
+
+Replaced on 2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), [`docs/clean-room.md`](clean-room.md) "Decisions of 2 November 2026") by four
+milestones and a tentative fifth for the ROM written from scratch: (1) the card posts and shows readable text, glitches
+allowed, nothing required after POST; (2) MS-DOS 6.22 boots and MS-DOS EDIT loads, edits and saves a
+file without significant glitches; (3) Superscape 3D Bench 1.0c runs under MS-DOS without significant
+glitches; (4) Chris's 3D Benchmark runs under MS-DOS in 320x200 and in 640x480 VESA without
+significant glitches; (5, tentative) FreeDOS boots. The list below is the earlier plan's, kept as the record.
 
 1. **Milestone 1: POST.** On the DSP-3364P (and in the emulator first) the ROM passes POST: the system
    BIOS finds it, it initialises the chip and mode 03h, and DOS starts with readable text.

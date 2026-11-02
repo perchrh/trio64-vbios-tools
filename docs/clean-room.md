@@ -115,9 +115,9 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
    the General Input Port (port 3C8h, CR55 bit 2). Whether a driver reads the refresh indexes needs
    finding out.
 6. **Fonts.** Phoenix's and S3's font bitmaps are not ours to give away. A licensed or newly drawn
-   8x8, 8x14 and 8x16 set (with the 9-dot alternates) in the style of the era is needed. Candidate since
-   2 November 2026: the five Joseph Gil public domain files in [`rompatch/fonts/`](../rompatch/fonts/) (#141), which give all
-   five tables. They equal IBM's glyphs, so their origin is still to settle ([`docs/cleanroom/README.md`](cleanroom/README.md)
+   8x8, 8x14 and 8x16 set (with the 9-dot alternates) in the style of the era is needed. Chosen on
+   2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)): the five Joseph Gil public domain files of his FNTCOL16 collection in
+   [`rompatch/fonts/`](../rompatch/fonts/) (#141), which give all five tables and which our patched ROMs use already. They equal IBM's glyphs, so their origin is still to settle ([`docs/cleanroom/README.md`](cleanroom/README.md)
    "Font origin").
 7. **A card configuration table.** The values that differ from one card maker to the next (the
    MCLK, CR5C's General Output Port value, the timing bytes) as inputs of the build, like today's
@@ -126,6 +126,62 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
    (32-bit stores, the booster), and the [AGENTS.md](../AGENTS.md) hard rules for the ROM.
 9. **A traceability matrix.** Each specification item mapped to the test that checks it, so the
    clean side knows when it is done and the dirty side can see what is untested.
+
+## Decisions of 2 November 2026 (#145)
+
+The owner's answers to the outside review ([`docs/cleanroom/review-2026-11-02.md`](cleanroom/review-2026-11-02.md),
+[#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)). They replace what the section "Scope, base and licence" below says
+where the two differ; that section is kept as the record of how the decision was reached.
+
+- **Base: empty.** The clean ROM is a full new video BIOS, written from scratch by the clean side from
+  the specification, the public standards and the data book. No code of SeaVGABIOS, the Bochs VGABios,
+  an emulator or a vendor BIOS goes into it.
+- **SeaVGABIOS** stays a comparison implementation: a source of facts and a ROM to test the
+  specification and the tests against ([`docs/seavgabios-trio64.md`](seavgabios-trio64.md)), not a base.
+- **Fonts:** Joseph Gil's FNTCOL16 files in [`rompatch/fonts/`](../rompatch/fonts/), as our patched ROMs use them since
+  #141. Their origin question (the bytes equal IBM's VGA font) stays with the lawyer.
+- **Size budget:** the whole BIOS in 32 KB. The fonts take about 9.7 KB (8x8 2048, 8x14 3584 and 8x16
+  4096 bytes, plus the 9-dot alternates), which leaves about 23 KB for code and tables. Not measured
+  yet; a milestone that does not fit says so before the next one starts.
+- **Release terms: the MIT licence** for our original code, tests and specifications, and for the clean
+  ROM. This replaces the public domain wish of 1 November 2026 (below). An MIT ROM can carry the public
+  domain fonts; it cannot carry LGPL or GPL code, which stays a source of facts only, as before. A
+  manifest of incorporated assets (today: the fonts, with Gil's notice) goes with every release. The
+  licence file itself is still to be added; settle the wording with the lawyer before anything is
+  distributed.
+- **Distribution:** no workflow uploads a patched ROM image any more (README "Continuous
+  integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
+  fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
+  1.01.04 are not on theretroweb yet.
+- **Scope: four milestones, and a tentative fifth** (decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); this answers the review's F5 and
+  replaces the milestones of [`docs/seavgabios-trio64.md`](seavgabios-trio64.md)). All are judged on the DSP-3364P, in order:
+  1. **Milestone 1: the card posts.** The system BIOS finds and runs the ROM, and the monitor shows a
+     picture with readable text. Some graphical glitches are allowed. Nothing after POST is required.
+  2. **Milestone 2: MS-DOS 6.22 and EDIT.** MS-DOS 6.22 boots on the card; the MS-DOS EDIT program
+     starts, loads a file, edits it and saves it, without significant graphical glitches or other
+     problems.
+  3. **Milestone 3: Superscape 3D Bench 1.0c.** Under MS-DOS, the benchmark loads and runs without
+     significant graphical glitches.
+  4. **Milestone 4: Chris's 3D Benchmark.** Under MS-DOS, the benchmark loads and runs without
+     significant graphical glitches in both its 320x200 mode and its 640x480 VESA mode.
+  5. **Milestone 5 (tentative): FreeDOS.** FreeDOS boots on the card
+     ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
+
+  Milestone 3 needs only standard VGA: mode 13h and the DAC block load AX=1012h. Milestone 4 is the
+  first that needs VBE: VESA mode 101h (640x480 in 256 colours, banked; recorded on a card on
+  2 November 2026, [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)). It brings in part C (4F00h, 4F01h for 100h
+  and 101h, 4F02h, the window function, which the program reaches without an INT 10h call) and part
+  B's mode set for that one mode. Everything else stays outside the current scope: the other S3 and
+  VESA modes, 132 columns and 50 lines, other games and Windows; those documents are kept for later
+  milestones.
+- **The contract of each milestone** is recorded on the card before the clean side starts it: the
+  INT 10h calls of its programs, with `VGALOG /M` under a working ROM, then `VGALOG /D`. The text
+  output functions are not logged there, so a list of those comes from a trace or from the standard.
+  Milestones 3 and 4 are recorded ([`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)); milestone 2 (MS-DOS 6.22 and
+  EDIT) is not yet.
+- **Scope of the leak review:** a clean-room implementation of milestones 1-4. Only what the clean side
+  needs for them crosses now and is reviewed; milestone 5 and later get their own review when they are
+  set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review").
 
 ## Scope, base and licence (31 October 2026)
 
@@ -169,7 +225,9 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
 - **Licence of the result:** LGPLv3 code and GPL-2-or-later fonts can both be used under GPL 3, so
   the ROM would be GPL 3 (or later). Code under GPL 2 only (DOSEMU, if its licence says so) cannot
   be combined with LGPLv3 or GPL 3 code: use it as a reference for facts only.
-- **The owner's wish (1 November 2026): public domain, no licence at all.** What follows from it:
+- **The owner's wish (1 November 2026): public domain, no licence at all.** Replaced on 2 November
+  2026 by the MIT licence ("Decisions of 2 November 2026" above); what it led to still holds, except
+  the release terms. What follows from it:
   - No code from SeaBIOS (LGPLv3), the FreeDOS fonts (GPL) or any emulator may go into the ROM; they
     stay sources of facts only, like the standards. The ROM is then written in full by the clean side,
     probably in assembly: the owner also wants the VGA functions no slower than our Trio64 ROM p3,
@@ -203,7 +261,7 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
 
   | Source | Licence | Use |
   | --- | --- | --- |
-  | SeaBIOS and SeaVGABIOS (the base, branch `claude/slim-vgabios` of perchrh/seabios_fork) | LGPLv3 | The PCI option ROM call (AX = bus, device and function) and the "PCIR" data structure its build script writes; the standard INT 10h functions and IBM's parameter tables; its code is used under its licence |
+  | SeaBIOS and SeaVGABIOS (the comparison implementation, branch `claude/slim-vgabios` of perchrh/seabios_fork) | LGPLv3 | The PCI option ROM call (AX = bus, device and function) and the "PCIR" data structure its build script writes; the standard INT 10h functions and IBM's parameter tables; facts only, no code goes into the ROM (decision of 2 November 2026) |
   | DOSBox-X (`src/hardware/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (file headers) | The emulator to read first (decision of 1 November 2026): cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions. Closer to our chips than DOSBox Staging: it models the Vision864, Trio32/Trio64 and Trio64V+ as separate cards (CR2E 11h for the Trio64, revision 40h for the Trio64V+) and cites the Vision864 and Trio32/Trio64 data books in its comments; condition 3 for its mode tables |
   | DOSBox Staging (`src/hardware/video/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (SPDX header) | Lower tier: read only where DOSBox-X says nothing. Cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions; condition 3 for its mode tables |
   | X.Org server `hw/xfree86/common/vesamodes` | XFree86 Project licence (MIT style) | 34 modelines "distilled from" VESA DMT 1.0 Rev. 0.8 (1998): pixel clock, horizontal and vertical totals, sync positions and polarities, for example 640x480 at 60 Hz (25.175 MHz, 800 x 525), 800x600 at 60 Hz (40 MHz, 1056 x 628), 1024x768 at 60 Hz (65 MHz, 1344 x 806). A stand-in for DMT until DMT itself is at hand |
@@ -221,9 +279,15 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
 
 ## Next steps (when started)
 
-- The plan for basing it on the slim SeaVGABIOS: [`docs/seavgabios-trio64.md`](seavgabios-trio64.md).
+- The earlier plan for basing it on the slim SeaVGABIOS, now a comparison implementation:
+  [`docs/seavgabios-trio64.md`](seavgabios-trio64.md).
 
 - Create the separate specification repository with the skeleton of items 1-9.
 - Review the emulator tests for expectations taken from the reference ROMs, and move the clean
   ones to the new repository.
-- Decide the base (SeaVGABIOS or our own code) and the font source (above).
+- The base (empty, our own code), the font source (Gil's FNTCOL16 files) and the four milestones are
+  decided ("Decisions of 2 November 2026").
+- Record the INT 10h calls of MS-DOS 6.22 and EDIT on the card, as the contract of milestone 2
+  (milestones 3 and 4: [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
+- Find out how Chris's 3D Benchmark changes the bank in mode 101h (the far window function or the
+  chip's bank register): a port trace of its drawing.
