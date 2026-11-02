@@ -53,7 +53,7 @@ Written 1 November 2026.
 | 640x480 in 15/16 bpp | HT 200 CC (800 pixels), VT 525 | 199 CC (796 pixels), VT 526 | the same as 1.5-07 | Phoenix's 15/16 bpp table is one character clock short and one line long; 59.84 Hz |
 | Horizontal sync start | DMT position (CR04 = HSS) | one character clock later in 640x480 (53h for 52h) and 800x600x16 (D3h for D2h); 640x400 two later (54h, IBM's value) | as 1.5-07 | pipeline offset or Phoenix's choice (MQ-3) |
 | Horizontal blank | HA to HT - 1 | IBM-style values in the 640 modes (100h: IBM's 13h values, CR03 82h, CR05 80h); in 115h the end is counter 128 plus CR5D bit 3 (+64 DCLKs = 8 CC), past HT = 132 | as 1.5-07, and the same in p3's 103h (60 Hz entry) | read literally, the 103h/115h extension reaches 4 CC into the next line; no picture fault is reported on the card |
-| Vertical blank | Vactive - 1 to Vtotal - 1 | IBM-style border values (E7h/04h in 640x480) | as 1.5-07 | IBM's 640x480 values; DMT has no border |
+| Vertical blank | Vactive - 1 to Vtotal - 1 | IBM-style border values (E7h/04h in 640x480) | as 1.5-07 | IBM's 640x480 values, which are also DMT's vertically: DMT 1.0 Rev. 10 gives 640x480 at 60 Hz an 8-line border, blank from line 488 for 29 lines (spec-b MQ-16). Corrected 2 November 2026; this said "DMT has no border" |
 | CR3B | CR00 - 5 | CR00 - 7 | CR00 - 7 | Phoenix's choice ([docs/chip-rules.md](../chip-rules.md) "Related chip: the Vision864"); both lie in the blank |
 | Line compare bit 10 (CR5E bit 6) | 1 (7FFh) | 0 (3FFh) | 0, except 107h (1) | 3FFh is above every line of the 1.5-07 modes but the last of 1280x1024; p3 sets bit 6 in 107h |
 | CR50 bit 1 (reserved) | 0 | 1 in 113h, 114h, 115h | 1 also in 103h | Phoenix's table byte |

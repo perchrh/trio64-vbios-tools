@@ -111,7 +111,10 @@ became links (20b5502); [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports
 and the Trio64V2 DCLK VCO range became the data book's 135-340 MHz (c22779d). On 2 November 2026,
 after an outside review ([`review-2026-11-02.md`](review-2026-11-02.md)), MODE-130 of part B (the refresh count per line,
 now derived from the DRAM data sheet), MQ-5 and its worked example, and the 55 MHz example of POST-23
-in part A were corrected: read these three places as new.
+in part A were corrected: read these three places as new. Later on 2 November 2026 part B's source note
+was changed from DMT rev. 0.7 to rev. 10 (the revision at hand; its timings of this part were checked
+against the specification's table and agree), and MQ-16 (the DMT border of 640x480) was added; the oracle
+file's "DMT has no border" was corrected.
 
 ### The searches, run by the author as a pre-check (counts of lines, not findings)
 

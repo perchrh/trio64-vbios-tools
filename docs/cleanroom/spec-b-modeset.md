@@ -270,6 +270,19 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
     must a Trio64 mode set wait before it writes CR54/CR60? The Trio64 book is silent.
 15. **MQ-15** Answered by part C: 4F01 BitsPerPixel of 112h and 115h is 32 with an 8-bit reserved
     field (the 4-byte memory format; the Trio64 has no packed 24-bit mode).
+16. **MQ-16** The DMT border of 640x480 at 60 Hz (checked against DMT 1.0 Rev. 10, 2 November 2026).
+    DMT gives this timing an 8-pixel right and left border and an 8-line bottom and top border inside
+    the totals: horizontal blanking from pixel 648 for 144 pixels (to 791), vertical blanking from line
+    488 for 29 lines (to 516); the 640x480 at 72 Hz entry has the same borders, no other DMT timing of
+    this part has any. The porches, sync positions and totals of the timing table above are DMT's
+    (front porch 16 and back porch 48 include the 8-pixel borders). MODE-112 and MODE-115 instead blank
+    from the edge of the active area (CR02 = HA, CR15 = Vactive - 1), so the border shows black, not the
+    overscan colour. IBM's mode 12h ([`docs/bios-rules.md`](../bios-rules.md), VGATEST) follows DMT
+    vertically and not horizontally: CR15 = E7h with CR07 bit 3 (line 487) and CR16 = 04h (516), DMT's
+    border; but CR02 = 50h (blanking from pixel 640) to counter value 98 (CR03 82h, CR05 bit 7 = 1), the
+    same 144 pixels 8 pixels earlier than DMT. Which to follow for 101h and 110h-112h: DMT both ways,
+    IBM's mix, or the specification's no border? Recommended: the vertical border (DMT and IBM agree);
+    horizontally either is a valid choice for a monitor, IBM's has the VGA's own register values.
 
 ## Sources disagree
 
