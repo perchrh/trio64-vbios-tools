@@ -379,7 +379,10 @@ Trio64 BIOSes examined there offers 4F14h.
   for a request below 6 there is none. VBE-80 returns 6.
 - **CR35 units.** T32/64 CR35 calls bits 3-0 "CPU Base Address bits 17-14" and says they "define the CPU
   address base in 64 KByte units"; CR6A gives its bits as 19-14 "via 64K pages". This specification
-  uses CR6A and keeps CR35 bits 3-0 at 0 (VBE-53), so the units of CR35 do not matter.
+  uses CR6A and keeps CR35 bits 3-0 at 0 (VBE-53). The units matter to programs that bank through
+  CR35 themselves: the S3 driver of milestone 4's benchmark writes the 64 KB bank number there, with
+  CR31 bits 0 and 3 set by itself ([`milestone-calls.md`](milestone-calls.md)), and draws correctly
+  on the card, so 64 KB units hold in practice. VBE-53's CR6A = 0 after 4F02h is what lets it work.
 - **The no-clear bit.** VBE12 4 and 6.4 use bit 15; Haakenson reports 1.2 programs that used bit 7.
   VBE-40 follows the standard; bit 7 with BH = 0 is open question 5.
 
