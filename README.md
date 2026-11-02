@@ -130,8 +130,8 @@ folder `nasm/` is ignored by git):
 
     make NASM=nasm/nasm-3.02/nasm
     set NASM=nasm\nasm-3.02\nasm.exe & build.bat
-    make 775-rom OUT=S3V2P23.BIN NASM=nasm/nasm-3.02/nasm
-    make emu-test ROM=S3V2P23.BIN NASM=nasm/nasm-3.02/nasm
+    make 775-rom OUT=S3V2P24.BIN NASM=nasm/nasm-3.02/nasm
+    make emu-test ROM=S3V2P24.BIN NASM=nasm/nasm-3.02/nasm
 
 Every target uses it: the tools, the ROM build (`775-rom`, `775-rom-test`) and the emulator tests, which
 assemble code themselves too (`emu/tests.py --nasm`, `emu/mutants.py --nasm`; both also read the
@@ -164,7 +164,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
 
     python3 -m venv .venv
     .venv/bin/pip install .
-    make emu-test ROM=path/to/S3V2P23.BIN
+    make emu-test ROM=path/to/S3V2P24.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
 the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
@@ -307,7 +307,7 @@ summary counts the SKIP lines.
 ### Test coverage
 
     pip install .[coverage]          (capstone, for emu/codemap.py)
-    make coverage ROM=path/to/S3V2P23.BIN
+    make coverage ROM=path/to/S3V2P24.BIN
 
 runs every emulator test while recording which ROM bytes execute, then `emu/codemap.py` finds the
 code of the lower 32 KB by recursive descent from the POST entry, every executed block and every
@@ -322,7 +322,7 @@ of p2 and p3 came after that measurement.
 
 ### EGA/CGA against the reference BIOS
 
-    make 775-ref-compare ROM=S3V2P23.BIN
+    make 775-ref-compare ROM=S3V2P24.BIN
 
 runs 2389 INT 10h calls in the CGA, MDA and EGA modes (00h-07h, 0Dh-10h) on the unpatched reference
 BIOS and on the ROM (mode sets at 200, 350 and 400 lines, scrolls with random windows, text and pixel
@@ -354,14 +354,14 @@ candidate (`docs/clean-room.md`).
 ## Trio64V2/DX ROM
 
 `rompatch/` holds the code the ROM carries and `s3patch.py`, which applies the current change set
-(level p23) to the S3 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin`, with byte assertions at
+(level p24) to the S3 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin`, with byte assertions at
 every patch site and the SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
 patched 32 KB twice. It needs python3 (no packages) and NASM 3.02:
 
-    make 775-rom OUT=S3V2P23.BIN
-    make 775-rom-test [STOCK=STOCK.BIN] [ROM=S3V2P23.BIN]
-    make emu-test ROM=S3V2P23.BIN
-    make 775-ref-compare ROM=S3V2P23.BIN
+    make 775-rom OUT=S3V2P24.BIN
+    make 775-rom-test [STOCK=STOCK.BIN] [ROM=S3V2P24.BIN]
+    make emu-test ROM=S3V2P24.BIN
+    make 775-ref-compare ROM=S3V2P24.BIN
 
 What the ROM changes, each with its issue: [docs/775-changes.md](docs/775-changes.md). The byte-level
 changes, what was borrowed and what was left out: [docs/775-rom.md](docs/775-rom.md), with the build and
@@ -374,10 +374,10 @@ the patcher tests in its section "The build".
 1.03-08's own faults, each with its issue in [docs/765-changes.md](docs/765-changes.md). The build, what
 does not apply to the Trio64V+ and the per-call costs: [docs/765-rom.md](docs/765-rom.md).
 
-    make 765-rom OUT=S3VPP4.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
-    make 765-rom-test [ROM=S3VPP4.BIN]
-    make emu-test ROM=S3VPP4.BIN CHIP=765 [LOGS=emu/vlogs]
-    make 765-ref-compare ROM=S3VPP4.BIN
+    make 765-rom OUT=S3VPP5.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
+    make 765-rom-test [ROM=S3VPP5.BIN]
+    make emu-test ROM=S3VPP5.BIN CHIP=765 [LOGS=emu/vlogs]
+    make 765-ref-compare ROM=S3VPP5.BIN
 
 Square brackets in these lines mark options: type `SIZE765=64`, not `[SIZE765=64]`.
 
@@ -399,15 +399,15 @@ dot clock is for the card to show.
 `reference/trio64/1_5_07.bin` (the CP764 build), the reference BIOS S3 gave the card makers for the
 Trio64, as far as the 14 Trio64 images at hand show (no S3-built one among them). Its changes, each with
 its issue: [docs/764-changes.md](docs/764-changes.md) (backports of the Trio64V2 ROM's speed patches and
-fixes, no interlaced timings, S3's fonts, the display FIFO M from the memory bandwidth). The build, the
+fixes, no interlaced timings, S3's font layout from public domain sources (`rompatch/fonts`), the display FIFO M from the memory bandwidth). The build, the
 space map, what 1.5-07 still gets wrong and the base candidates: [docs/764-rom.md](docs/764-rom.md). The
 ROM is for the **S3 86C764X** (Trio64 PnP, rated for a 70 MHz MCLK); for the earlier 86C764-P use
 `make 764p-rom` (50-60 MHz).
 
-    make 764x-rom OUT=S3T64P4.BIN [SIZE764=32] [MCLK=55]   (64 KB, the 32 KB twice; SIZE764=32: 32 KB)
-    make 764-rom-test [ROM=S3T64P4.BIN]
-    make emu-test ROM=S3T64P4.BIN CHIP=764 [LOGS=emu/tlogs]
-    make 764-ref-compare ROM=S3T64P4.BIN
+    make 764x-rom OUT=S3T64P5.BIN [SIZE764=32] [MCLK=55]   (64 KB, the 32 KB twice; SIZE764=32: 32 KB)
+    make 764-rom-test [ROM=S3T64P5.BIN]
+    make emu-test ROM=S3T64P5.BIN CHIP=764 [LOGS=emu/tlogs]
+    make 764-ref-compare ROM=S3T64P5.BIN
 
 The 64 KB images of all three ROMs (Trio64, Trio64V+ and Trio64V2) carry the 32 KB twice, so a board
 finds the BIOS whichever half of its 64 KB EEPROM it maps; the PCI ROM header declares one 32 KB image,
@@ -431,18 +431,18 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
-| 775 (Trio64V2/DX) | `775-P23/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p23, 64 KB, the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P4/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p4, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
-| 764X (Trio64 PnP) | `764X-P4/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p4, 64 KB |
-| 764P (86C764-P) | `764P-P4/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p4, 64 KB |
+| 775 (Trio64V2/DX) | `775-P24/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p24, 64 KB, the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P5/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p5, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
+| 764X (Trio64 PnP) | `764X-P5/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p5, 64 KB |
+| 764P (86C764-P) | `764P-P5/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p5, 64 KB |
 
 The two Trio64 models get the same ROM; `make 764x-rom` and `make 764p-rom` differ only in the MCLK range
 the build option accepts: 55-70 MHz on the 86C764X, 50-60 MHz on the 86C764-P (T64-MEM-7; above it only
 with `OVERCLOCK=1`).
 
 
-    make 775-rom OUT=S3V2P23-55.BIN MCLK=55 [MEMTYPE=edo1]
-    make 765-rom OUT=S3VPP4-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make 775-rom OUT=S3V2P24-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make 765-rom OUT=S3VPP5-55.BIN MCLK=55 [MEMTYPE=edo1]
 
 Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
 for (CR36 bits 3-2, set by resistors on the board and kept by the BIOS). `MCLK` sets the entry of
@@ -452,18 +452,18 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 
 | Chip, ROM | MEMTYPE | Entry | Default | Data book maximum |
 | --- | --- | --- | --- | --- |
-| Trio64V2, 2.04.07-p23 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
+| Trio64V2, 2.04.07-p24 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | C9h | 59.96 MHz | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
-| Trio64V+, 1.03-08N-p4 | edo1 | A8h | 50.11 MHz (1.03-08: 52.79) | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
+| Trio64V+, 1.03-08N-p5 | edo1 | A8h | 50.11 MHz (1.03-08: 52.79) | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
-| Trio64, 1.5-07-p4 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
+| Trio64, 1.5-07-p5 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
 
 On the Trio64 ROM `MCLK` goes up to 70 MHz, above the data book's 60 MHz: our tools take 70 MHz as the
 Trio64's limit (T64-MEM-7), the clock card databases give for the 86C764X (vgamuseum), and the ExpertColor DSP-3364P runs it (its own
 BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"):
 
-    make 764x-rom OUT=S3T64P4.BIN MCLK=69.8
+    make 764x-rom OUT=S3T64P5.BIN MCLK=69.8
 
 The display FIFO M follows the build's clock (since p2, [#75](https://github.com/perchrh/trio64-vbios-tools/issues/75); docs/764-rom.md): windowed video on
 that card, which streaked at 54.9 MHz with Phoenix's values, was clean with p2 at 55 and 69.8 MHz; the

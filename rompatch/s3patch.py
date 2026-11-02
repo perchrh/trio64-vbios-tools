@@ -84,7 +84,7 @@ def rom_level(name, version):
 VERSION = '2.04.07'
 LEVEL = rom_level('VER775', VERSION)            # the sign-on level: common/version.inc VER775
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = '6d32c498cfe8f7760cbc98d4e58c8991de1566a19787dbfbadac54a54547ad3c'  # 2.04.07-p23 (NASM 3.02), emulator tests passed;
+RESULT_SHA = '59a38032d933f7ef9fc790689793c988195e6278ad53923ab1e98354d9f26c2e'  # 2.04.07-p24 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
@@ -102,6 +102,8 @@ BLOCK_SHA = {
 TESTED_NASM = '3.02'
 FREE_START, FREE_END = 0x7C8B, 0x7FE3   # free space the new code uses (end exclusive); 7C89-7C8A: the word count of the descender glyph load at 3FC7
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, 'fonts'))
+import fonts  # noqa: E402  (rompatch/fonts: the font tables of all three ROMs, #141)
 
 
 class PatchError(Exception):
@@ -169,6 +171,10 @@ SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
                       '8b f8 9c fa b0 86 e6 43 e4 80 b0 00 e6 42 e6 42 e4 80 9d e8 29 00 8b d0 e8 24 00 f7 d8 '
                       '03 c2 3b c3 72 f5 b0 86 e6 43 e4 80 8b c7 e6 42 86 c4 e6 42 e4 80 ba 61 00 8a c1 ee 5f '
                       '5a 59 5b 58 c3 9c fa b0 80 e6 43 e4 80 e4 42 86 c4 e4 42 86 c4 9d c3')]
+
+# Font tables, from rompatch/fonts (p24, #141): (name, table of fonts.py, address). 2.04.07 has no 8x14
+# font (AX=1130h BH=2 returns the 8x16) and one alternate table, the 9x16 one, for both heights.
+FONT_TABLES = [('8x8', 'F8', 0x62E0), ('8x16', 'F16', 0x6AE0), ('9x16 alternate', 'ALT16', 0x7AE0)]
 
 # Data patches: (offset, old, new, purpose)
 DATA = [
@@ -420,6 +426,25 @@ def mclk_pll(target, fmax, fmin=MCLK_MIN, known=()):
     return best[1:] + ('computed',)
 
 
+def put_fonts_in_place(d, tables, log):
+    """Write the font tables of rompatch/fonts over the base BIOS's own, at the same places (2.04.07,
+    1.03-08N). tables: (name, table of fonts.py, address). Each place must hold that very table already
+    (Gil's public domain fonts are the bytes S3's BIOSes carry), so another base, or a table at another
+    address, is refused rather than overwritten; the ROM's fonts then come from our source files (p24/p5,
+    #141)."""
+    bad = fonts.check()
+    if bad:
+        raise PatchError('rompatch/fonts: %s not as pinned' % ' '.join(bad))
+    for name, tab, at in tables:
+        t = getattr(fonts, tab)
+        if bytes(d[at:at + len(t)]) != t:
+            raise PatchError('%04X: the %s font is not the table rompatch/fonts builds (another base BIOS?)'
+                             % (at, name))
+        d[at:at + len(t)] = t
+        log.append('%04X-%04X  %s font: rompatch/fonts (Gil, public domain), %d bytes' % (at, at + len(t) - 1,
+                                                                                        name, len(t)))
+
+
 def mclk_put(d, put, entries, memtype, mhz, fmax, known=()):
     """Set the MCLK entry of memtype to mhz (all three patchers; known: see mclk_pll). Returns the MHz."""
     m, nr, f, vco, src = mclk_pll(mhz, fmax, known=known)
@@ -559,6 +584,7 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     # 2. data
     for off, old, new, why in DATA:
         put(off, old, new, why)
+    put_fonts_in_place(d, FONT_TABLES, log)
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype])
 

@@ -44,11 +44,11 @@ What is applied (docs/764-rom.md)
           lowered in the packed modes to what the memory bandwidth allows, (t - 23) / 6 (p3, #82; p2: / 5) with
           t = 112 x MCLK / (DCLK x bytes per pixel); 112 x MCLK in kHz is written into the code (kmclk)
           from the final MCLK pair at 3B5h, so --mclk builds follow
-  fonts   S3's fonts from the Trio64V+ BIOS 1.03-08 (--fonts, default reference/64vplus/1_03_08n.bin; the
-          same bytes as in 2.04.07) in place of Phoenix's, all five tables whole: S3's 9-dot alternate
-          tables are 63 bytes longer, so the 8x16 font and the 9x16 table move up (S3FONTS) and the eight
-          references to them are rewritten (FONT_REFS); --fonts-only applies only these, the reference
-          of make 764-ref-compare
+  fonts   the five tables of rompatch/fonts (built from Joseph Gil's public domain collection; the same
+          bytes as S3's fonts in 1.03-08 and 2.04.07, p5, #141) in place of Phoenix's, all five tables
+          whole: these 9-dot alternate tables are 63 bytes longer than Phoenix's, so the 8x16 font and
+          the 9x16 table move up (FONT_TABLES) and the eight references to them are rewritten
+          (FONT_REFS); --fonts-only applies only these, the reference of make 764-ref-compare
   DDC     VBE 4F15 without VDIF (DDC_SITES, DDC_FREED): 97 bytes free, DDC1 and DDC2B kept
   MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 70 MHz (MCLK_MAX); without it
           the build's own clock stays (54.9 MHz in the reference build). The data book gives 60 MHz
@@ -80,12 +80,13 @@ SHARED = os.path.dirname(HERE)
 sys.path.insert(0, SHARED)
 import s3patch  # noqa: E402
 from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, mclk_put  # noqa: E402
+import fonts  # noqa: E402  (rompatch/fonts, on the path s3patch sets)
 
 VERSION = '1.5-07'
 LEVEL = s3patch.rom_level('VER764', VERSION)   # the sign-on level: common/version.inc VER764
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = 'c6b3ed3d8d7c9fd4f6a5f197a8879175730e7d1f588a8aa7a37b1d1e9bbc066b'  # 1.5-07-p4 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = '1f81b9acbb0e8f6942155fb8aed265647047e682ee27acd0c1d514239cc456b0'  # 1.5-07-p5 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
     'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',
@@ -142,20 +143,14 @@ SYMSIG = [('GETCRTC', '50 ba cc 03 ec ba b4 03 a8 01 74 03 ba d4 03 58 c3'),
           ('SEG_SCR', '00 00 00 00 00 a0'),
           ('WSET', '52 53 b8 4f 01 80 ff 00 75 18 8b da ba c4 03 b0 04 e8 ?? ?? f6 c4 08 75 03 c1 e3 02 e8'),
           ('GWIN', '53 b8 4f 01 80 ff 01 75 24 e8 ?? ?? b0 6a e8 ?? ?? 8a dc 80 e3 7f ba c4 03 b0 04 e8 ?? ?? 33 d2')]
-# S3's fonts, taken from the Trio64V+ BIOS 1.03-08 (the same bytes as in 2.04.07, on the Trio64V2 card):
-# (name, offset in 1.03-08, length, SHA-256 there, address here). They replace Phoenix's fonts, which
-# take 5720h-7F51h, and lie end to end from 5720h to 7F90h: S3's 9-dot alternate tables have 20 and 19
-# entries, Phoenix's 18 and 17, so the 9x14 table grows into the 8x16 font's place and the 8x16 font
-# and the 9x16 table move up by 29 and 63 bytes, into the zeros after the 9x16 table (UNUSED, checked).
-# The 8x8 and 8x14 fonts and the 9x14 table keep their addresses.
-FONT_SRC = os.path.join(os.path.dirname(SHARED), 'reference', '64vplus', '1_03_08n.bin')
-S3FONTS = [
-    ('8x8', 0x526C, 0x0800, '75c79a7e7fa423dda67ec6d6d76cec86b63f85677726368750c75b0920ddf319', 0x5720),
-    ('8x14', 0x5A6C, 0x0E00, '657ca6588b6bf729f0ed71a3d3c781a465bd30cdfb11eb5fc7e27594c0717ea1', 0x5F20),
-    ('9x14 alternate', 0x686C, 301, 'eeca821495071577f416370bb31f075aff1344d2170a1696901e708b8ac61b17', 0x6D20),
-    ('8x16', 0x6998, 0x1000, 'a8bad6fd78475a6bc2a05438c19207a9bb8c0f4f4099f60384e158cdc3eba580', 0x6E4D),
-    ('9x16 alternate', 0x7998, 324, 'ebaabb3ef79a22c92935d68766b4543b3851289921b7806a0e82345635c8e224', 0x7E4D),
-]
+# The fonts, from rompatch/fonts (p5, #141: Joseph Gil's public domain collection; up to p4 the same
+# bytes were taken from S3's Trio64V+ BIOS 1.03-08): (name, table of fonts.py, address here). They
+# replace Phoenix's fonts, which take 5720h-7F51h, and lie end to end from 5720h to 7F90h: these 9-dot
+# alternate tables have 20 and 19 entries, Phoenix's 18 and 17, so the 9x14 table grows into the 8x16
+# font's place and the 8x16 font and the 9x16 table move up by 29 and 63 bytes, into the zeros after the
+# 9x16 table (UNUSED, checked). The 8x8 and 8x14 fonts and the 9x14 table keep their addresses.
+FONT_TABLES = [('8x8', 'F8', 0x5720), ('8x14', 'F14', 0x5F20), ('9x14 alternate', 'ALT14', 0x6D20),
+               ('8x16', 'F16', 0x6E4D), ('9x16 alternate', 'ALT16', 0x7E4D)]
 FONTS = (0x5720, 0x7F91)                        # where S3's fonts lie, end to end
 PHX_FONTS = (0x5720, 0x7F52)                    # Phoenix's fonts (the code area's, CODE_SHA; then ALT916)
 # Phoenix's references to the two tables that move (riplin's disassembly names these and no others; a
@@ -310,13 +305,12 @@ def edit_tables(d, log):
     return free + DROPPED
 
 
-def put_fonts(d, src, log):
-    """Replace Phoenix's fonts in d by S3's from src (1.03-08) and point Phoenix's references to the
-    moved tables (FONT_REFS) at their new places; every table and reference is checked first."""
-    new = {}
-    for name, so, ln, sha, at in S3FONTS:
-        if hashlib.sha256(bytes(src[so:so + ln])).hexdigest() != sha:
-            raise PatchError('font source: the %s font at %04X is not that of 1.03-08' % (name, so))
+def put_fonts(d, log):
+    """Replace Phoenix's fonts in d by the tables of rompatch/fonts and point Phoenix's references to
+    the moved tables (FONT_REFS) at their new places; every table and reference is checked first."""
+    bad = fonts.check()
+    if bad:
+        raise PatchError('rompatch/fonts: %s not as pinned' % ' '.join(bad))
     if bytes(d[FONT_TAB[0]:FONT_TAB[0] + 12]) != bytes.fromhex(FONT_TAB[1]):
         raise PatchError('the AX=1130h font table at %04X is not 1.5-07\'s' % FONT_TAB[0])
     for a, old in FONT_REFS.items():
@@ -326,23 +320,25 @@ def put_fonts(d, src, log):
         raise PatchError('%04X-%04X, where the fonts grow, is not free' % (PHX_FONTS[1], FONTS[1] - 1))
     d[FONTS[0]:FONTS[1]] = bytes(FONTS[1] - FONTS[0])
     end = FONTS[0]
-    for name, so, ln, sha, at in S3FONTS:
+    for name, tab, at in FONT_TABLES:
         if at != end:
             raise PatchError('font %s at %04X, expected %04X (end to end)' % (name, at, end))
-        d[at:at + ln] = src[so:so + ln]
-        end = at + ln
-        log.append('%04X-%04X  %s font: S3\'s (1.03-08)' % (at, end - 1, name))
+        t = getattr(fonts, tab)
+        d[at:at + len(t)] = t
+        end = at + len(t)
+        log.append('%04X-%04X  %s font: rompatch/fonts (Gil, public domain)' % (at, end - 1, name))
     if end != FONTS[1]:
         raise PatchError('the fonts end at %04X, expected %04X' % (end, FONTS[1]))
-    moved = {0x6E30: [x[4] for x in S3FONTS if x[0] == '8x16'][0], 0x7E30: [x[4] for x in S3FONTS if x[0] == '9x16 alternate'][0]}
+    moved = {0x6E30: [x[2] for x in FONT_TABLES if x[0] == '8x16'][0],
+             0x7E30: [x[2] for x in FONT_TABLES if x[0] == '9x16 alternate'][0]}
     for a, old in sorted(FONT_REFS.items()):
         struct.pack_into('<H', d, a, moved[old])
         log.append('%04X  %04X -> %04X  font reference (%s)' % (a, old, moved[old],
                    'AX=1130h table' if a not in FONT_REF_OP else 'mov %s' % ('bx' if FONT_REF_OP[a] == 0xBB else 'si')))
 
 
-def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False, model='764x'):
-    """lo: the 32 KB 1.5-07 image, fonts: the 1.03-08 image (default FONT_SRC). Returns (new 32 KB,
+def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
+    """lo: the 32 KB 1.5-07 image. Returns (new 32 KB,
     log lines)."""
     d = bytearray(lo)
     log = []
@@ -414,7 +410,7 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False, model='764x')
     d[s:s + len(txt) + 1] = txt + b'\x00'
     log.append('%04X  sign-on "%s"' % (s, txt.split(b'\r')[0].decode()))
 
-    put_fonts(d, open(FONT_SRC, 'rb').read() if fonts is None else fonts, log)
+    put_fonts(d, log)
 
     for lo_, hi, sig in DDC_FREED:                  # the VDIF code: zeroed first, tfifo.asm goes there
         if not sig_match(d, lo_, sig):
@@ -538,8 +534,6 @@ def main():
     ap.add_argument('--overclock', action='store_true', help='allow --mclk above %g MHz, up to %g MHz: an overclock, '
                     'the card owner\'s choice' % (MCLK_MAX, OVERCLOCK_MAX))
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
-    ap.add_argument('--fonts', default=FONT_SRC, help='the Trio64V+ BIOS 1.03-08 to take S3\'s fonts from '
-                    '(default reference/64vplus/1_03_08n.bin)')
     ap.add_argument('--fonts-only', action='store_true', help='apply the fonts only (and the checksum): the '
                     'reference make 764-ref-compare compares our ROM with')
     ap.add_argument('-q', '--quiet', action='store_true', help='print only the result line')
@@ -549,21 +543,20 @@ def main():
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]
-        fonts = open(a.fonts, 'rb').read()
         if a.fonts_only:
             d, log = bytearray(lo), []
             if sum(d) & 0xFF or hashlib.sha256(bytes(d[0x1000:0x7F00])).hexdigest() != CODE_SHA:
                 raise PatchError('not a clean %s image (checksum or the code 1000h-7EFFh)' % VERSION)
-            put_fonts(d, fonts, log)
+            put_fonts(d, log)
             d[0x7FFF] = 0
             d[0x7FFF] = (-sum(d)) & 0xFF
             with open(a.output, 'wb') as f:
                 f.write(bytes(d) * (2 if a.size == 64 else 1))
-            print('%s: %s with S3\'s fonts only (the 764-ref-compare reference)' % (a.output, VERSION))
+            print('%s: %s with the fonts of rompatch/fonts only (the 764-ref-compare reference)' % (a.output, VERSION))
             return 0
         if a.overclock and a.mclk is None:
             raise PatchError('--overclock needs --mclk')
-        new_lo, log = patch(lo, a.nasm, a.mclk, fonts, a.overclock, a.model)
+        new_lo, log = patch(lo, a.nasm, a.mclk, a.overclock, a.model)
         img = new_lo * (2 if a.size == 64 else 1)
         errs = verify(img, a.size)
         known = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA and a.mclk is None
