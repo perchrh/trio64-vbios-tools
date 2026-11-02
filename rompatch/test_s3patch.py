@@ -14,6 +14,7 @@ Tests
                  as p15-p21 were built, compares by its lower 32 KB)
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
                  32 KB size, the upper 32 KB is a copy of the lower (#78)
+  size32         --size 32 gives the lower 32 KB alone
   vco            every DCLK refresh entry runs its VCO in 135-340 MHz (the data book's range, V2-PLL-1)
   pllcodes       every DCLK refresh entry has M 1-127, N 1-31 and an R code the datasheet defines (SR12
                  bits 7-5: with bit 7 set only 100b), docs/chip-rules.md PLL-2 and V2-PLL-3
@@ -148,6 +149,8 @@ def main():
         return 1
     errs = image_checks(img)
     result('checksums', not errs, '; '.join(errs) or 'lower %02X, upper 32 KB a copy' % img[0x7FFF])
+    rc, small, err = run(tmp, ref, ['--size', '32'])
+    result('size32', rc == 0 and small == img[:0x8000], err or '--size 32: the lower 32 KB alone')
     bad = vco_out(img)
     result('vco', not bad, ', '.join('%04X' % e for e in bad) or 'all entries in 135-340 MHz')
     bad = pll_bad(img)

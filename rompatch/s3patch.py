@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """s3patch.py - build the current ROM (2.04.07-p22) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P22.BIN [--no-vco-fix] [--mclk MHZ [--memtype edo1|fpm|sgram]]
-                                [--nasm nasm] [-q]
+    python3 rompatch/s3patch.py REF2047.BIN -o S3V2P22.BIN [--size 64|32] [--no-vco-fix]
+                                [--mclk MHZ [--memtype edo1|fpm|sgram]] [--nasm nasm] [-q]
     make 775-rom IN=REF2047.BIN OUT=S3V2P22.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
@@ -16,7 +16,7 @@ Output
   the BIOS as well as one that maps the lower half, as the Trio64 and Trio64V+ ROMs do (#78). The
   Gainward GW503A maps the lower half. The PCI ROM header declares one 32 KB image, the last one, so
   firmware that reads the ROM through PCI ignores the copy. (p15 to p21 had zeros in the upper half,
-  p14 and earlier the card's Trio64V+ BIOS 1.03-08.)
+  p14 and earlier the card's Trio64V+ BIOS 1.03-08.) --size 32: the 32 KB alone, for a 32 KB EEPROM.
 
 What is applied (trio64-vbios-tools docs/775-changes.md, each change with its issue, and docs/775-rom.md "Byte-level changes")
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
@@ -676,13 +676,13 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     return bytes(d), log
 
 
-def verify(img, vcofix):
+def verify(img, vcofix, size=64):
     errs = []
-    if len(img) != 0x10000:
-        errs.append('image is %d bytes, not 65536' % len(img))
+    if len(img) != size * 1024:
+        errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
     if sum(img[:0x8000]) & 0xFF:
         errs.append('lower 32 KB checksum is not 00')
-    if img[0x8000:] != img[:0x8000]:
+    if len(img) > 0x8000 and img[0x8000:] != img[:0x8000]:
         errs.append('upper 32 KB is not a copy of the lower 32 KB')
     if img[0:2] != b'\x55\xAA' or img[2] != 0x40:
         errs.append('ROM header 55AAh with 32 KB size missing')
@@ -732,6 +732,8 @@ def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 reference BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
+    ap.add_argument('--size', type=int, choices=(32, 64), default=64,
+                    help='output size in KB (default 64: the 32 KB twice; 32 for a 32 KB EEPROM)')
     ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype (default: 59.96 '
                     'for 1-cycle EDO and for fast page/2-cycle EDO, 66.2 for SGRAM, as the default build)')
@@ -747,8 +749,8 @@ def main():
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]                       # a 64 KB input: only its lower half is used
         new_lo, log = patch(lo, a.nasm, not a.no_vco_fix, a.mclk, a.memtype)
-        img = new_lo * 2                        # the 32 KB twice (#78)
-        errs = verify(img, not a.no_vco_fix)
+        img = new_lo * (2 if a.size == 64 else 1)   # 64 KB: the 32 KB twice (#78)
+        errs = verify(img, not a.no_vco_fix, a.size)
         base = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA
         known = base and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()
@@ -774,8 +776,8 @@ def main():
         print('base %s%s' % (VERSION, ' (the known reference image)' if ref else ''))
         for line in log:
             print('  ' + line)
-    print('%s: %s-%s, 64 KB (the 32 KB twice), checksum %02X (the 32 KB sum to 00), SHA-256 of the 32 KB %s%s'
-          % (a.output, VERSION, LEVEL, img[0x7FFF], out_sha,
+    print('%s: %s-%s, %s, checksum %02X (the 32 KB sum to 00), SHA-256 of the 32 KB %s%s'
+          % (a.output, VERSION, LEVEL, '64 KB (the 32 KB twice)' if a.size == 64 else '32 KB', img[0x7FFF], out_sha,
              ', identical to the tested build' if known or out_sha == RESULT_SHA else
              mclk_note(mclk_ok, a.mclk)))
     return 0
