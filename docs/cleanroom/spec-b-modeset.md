@@ -283,6 +283,8 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
     same 144 pixels 8 pixels earlier than DMT. Which to follow for 101h and 110h-112h: DMT both ways,
     IBM's mix, or the specification's no border? Recommended: the vertical border (DMT and IBM agree);
     horizontally either is a valid choice for a monitor, IBM's has the VGA's own register values.
+    VESA CVT 1.2 (2013, section 5.2; it does not redefine DMT timings) has the same model as DMT: a
+    margin is part of the total active pixels and lines, and blanking lies outside it.
 
 ## Sources disagree
 
