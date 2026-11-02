@@ -706,7 +706,9 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
   them in its cache for as long as the cache allows (a key on the SHA-256 values, so the files are
   fetched again only when the list changes), so no run depends on theretroweb being reachable.
   Decided 1 November 2026, to be done later. Status of 1 November 2026: the Trio64 reference is on
-  theretroweb (DataExpert CP764, [docs/764-rom.md](docs/764-rom.md)); the Trio64V+ reference is its
+  theretroweb (DataExpert CP764, [docs/764-rom.md](docs/764-rom.md)), and since 2 November 2026 the
+  test card's own BIOS too ([DataExpert DSP-3364P](https://theretroweb.com/expansioncards/s/dataexpert-dsp3364p),
+  SHA-256 1056fcee..., not a build base); the Trio64V+ reference is its
   1.03-08N (from p4, [#129](https://github.com/perchrh/trio64-vbios-tools/issues/129), [docs/765-rom.md](docs/765-rom.md)); the Trio64V2 2.04.07 and
   2.04.11 are not there yet.
 - Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
