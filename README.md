@@ -156,6 +156,13 @@ VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN in the current folder, and S3REGS.TXT an
 monitor that takes 91 kHz or refuses it (an LCD). `common/` holds the /V debug log code the test tools
 share.
 
+RUNALL.BAT works the same on a card with its stock BIOS, and the logs then describe that BIOS and card:
+S3TEST fails its ROM signature (the line shows the version found) and the tests of our changes where
+the stock BIOS lacks them (the refresh rates and the register values are in the FAIL lines), while the
+MCLK, memory type, chip ID, timings, S3COMPAT, VSHOW, S3REGS and VGALOG results are as useful as on our
+ROM. `S3TEST /C` runs only the tests that apply to any ROM, for a short pass/fail answer.
+In the emulator, `make stock-test` does the same with the three stock reference ROMs (below).
+
 ## Emulator tests
 
 `emu/` runs the video BIOS and the DOS tools in an emulated PC, so changes can be checked before a
@@ -530,12 +537,14 @@ video memory, then runs the tests tagged `vram` (the ones whose result depends o
 | Trio64 764X 55 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `764XM55.BIN`; `make 764-rom-test`, `make 764-ref-compare` |
 | Trio64 764X 70 MHz: 2, 4 and 1 MB | `764XM70.BIN` |
 | Trio64 764P 50 MHz and 60 MHz: 2, 4 and 1 MB | `764PM50.BIN`, `764PM60.BIN` (one job each) |
-| build-and-test | passes when every row passed and every ROM built (the check name branch rules can require) |
+| Stock ROM 775, 765, 764x (informational) | `make stock-test`: every tool and emulator test, the ones tagged `patch` too (tests.py `--stock`), on the stock reference ROM; failures are expected and do not fail the run; the logs are the artifact `stock-logs-<chip>` (14 days) |
+| build-and-test | passes when every row passed and every ROM built (the check name branch rules can require); the stock jobs are not part of it |
 
 Every job builds NASM 3.02 from its release source (cached between runs) and the tools with `make`, and
 takes its ROM from the `roms` artifact; the patcher tests build the default ROM (without `MCLK`) and check
 it against the pinned SHA-256. The split uses `make emu-test VRAM=... EMUARGS=...` (tests.py `--tests`,
-`--skip`, `-t vram`), which works by hand too. A job that fails keeps its emulator logs as an artifact
+`--skip`, `-t vram`), which works by hand too. The first step of the ROM job, and of the coverage
+workflow, is `python3 emu/similarity.py --self-test` (a second). A job that fails keeps its emulator logs as an artifact
 `emu-logs-<job>` (without .BIN files) for 7 days. The one artifact meant to be kept is the release zip
 (`trio64-tools-<VERSION>`, "Release zip"). The hardware logs remain the final word, as for the emulator
 tests run by hand.

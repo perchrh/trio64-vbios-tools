@@ -2395,13 +2395,18 @@ def base_only(c, name, msg):
     return len(lines) if ok else 0
 
 
+# --stock: the tests tagged patch run on a ROM that is not ours too (a stock BIOS). They then fail where
+# the stock BIOS lacks our changes; what they find, and the tool logs, describe the stock BIOS
+STOCK = False
+
+
 def run_test(c, name, fn, verbose):
     """One test: returns (result text, failed, seconds)."""
     t0 = time.time()
     bad = False
     try:
         tags = TAGS[name].split()
-        if 'patch' in tags and not (c.ours or c.vours and '765' in tags or c.tours and '764' in tags):
+        if 'patch' in tags and not (STOCK or c.ours or c.vours and '765' in tags or c.tours and '764' in tags):
             raise Skip('not our patched BIOS')
         note = fn(c)
         res = 'PASS' + ('  (%s)' % note if note else '')
@@ -2469,6 +2474,8 @@ def main():
     ap.add_argument('--skip', default='', help='comma list: leave these tests out (CI runs the longest ones in a '
                     'job of their own)')
     ap.add_argument('-x', action='store_true', help='stop at the first failure')
+    ap.add_argument('--stock', action='store_true', help='run the tests tagged patch on a ROM that is not ours '
+                    '(a stock BIOS) too: failures are expected, the logs describe that BIOS')
     ap.add_argument('--noop', default='', metavar='SPEC',
                     help='mutation test: INT 10h calls matching SPEC do nothing, e.g. "ah=06" or '
                          '"ax=4F14,bl=02" (hex values; several patterns separated by ";"), see emu/mutants.py')
@@ -2532,10 +2539,16 @@ def main():
         tests = [(t, byname[t]) for t in a.tests.split(',')]
     tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))
              and n not in a.skip.split(',')]
-    if not c.ours:
+    global STOCK
+    STOCK = a.stock
+    if not c.ours and STOCK:
+        print('--stock: the tests tagged patch run although the ROM is not our Trio64V2 build; failures where '
+              'the ROM lacks our changes are expected')
+    elif not c.ours:
         print('The ROM is not our patched BIOS (no 2.04.07-pN sign-on): the tests tagged patch are skipped'
               + (' unless tagged 765 (our Trio64V+ ROM 1.03-08N-pN)' if c.vours else
-                 ' unless tagged 764 (our Trio64 ROM 1.5-07-pN)' if c.tours else ''))
+                 ' unless tagged 764 (our Trio64 ROM 1.5-07-pN)' if c.tours else '')
+              + ' (--stock runs them)')
 
     if a.j > 1 and not (a.coverage or a.profile or a.calls):
         failed = run_parallel(c, tests, a)

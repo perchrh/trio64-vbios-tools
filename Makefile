@@ -113,6 +113,20 @@ coverage: all
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs emu/logs --chip $(CHIP) --coverage emu/logs/COVER.BIN
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
+# The tools and the emulator tests on the stock reference ROMs (#143): every test, the ones tagged patch too
+# (tests.py --stock), so S3TEST, S3COMPAT, VSHOW, VGALOG and S3REGS run on S3's and Phoenix's own BIOSes
+# and leave their logs in emu/stock-775, emu/stock-765 and emu/stock-764x (2 MB). Failures are expected
+# (a stock BIOS lacks our changes) and do not stop make; the logs are the result.
+#   make stock-test [STOCK_CHIPS="775 765 764x"] [EMUARGS=...]
+STOCK_CHIPS ?= 775 765 764x
+stock-test: all
+	@for c in $(STOCK_CHIPS); do \
+	  case $$c in 775) r="$(REF775)";; 765) r="$(REF765)";; *) r="$(REF764)";; esac; \
+	  echo "== stock $$c: $$r"; \
+	  $(PYTHON) emu/tests.py --stock --nasm "$(NASMBIN)" --rom "$$r" --build build --logs emu/stock-$$c \
+	    -j $(JOBS) --chip $$c $(EMUARGS) || true; \
+	done; echo "stock-test: logs in emu/stock-*; failures are expected on a stock BIOS"
+
 # The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF775 of 775-ref-compare and 775-rom-test
 # and the default IN of 775-rom; give REF775=... or IN=... for another copy
 REF775 ?= reference/v2/2_04_07.bin
@@ -230,4 +244,4 @@ dist: tools $(if $(ROMS),roms)
 version:
 	@echo $(DISTVER)
 
-.PHONY: all tools dist version clean emu-test 775-rom roms 775-rom-test coverage 775-ref-compare 765-rom 765-rom-test 765-ref-compare 764x-rom 764p-rom 764-rom-test 764-ref-compare
+.PHONY: all tools dist version clean emu-test stock-test 775-rom roms 775-rom-test coverage 775-ref-compare 765-rom 765-rom-test 765-ref-compare 764x-rom 764p-rom 764-rom-test 764-ref-compare
