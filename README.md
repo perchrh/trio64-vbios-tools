@@ -355,7 +355,8 @@ candidate (`docs/clean-room.md`).
 
 `rompatch/` holds the code the ROM carries and `s3patch.py`, which applies the current change set
 (level p24) to the S3 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin`, with byte assertions at
-every patch site and the SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
+every patch site, the SHA-256 of the input's code outside the OEM area (CODE_SHA, 0100h-7FFDh) and the
+SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
 patched 32 KB twice. It needs python3 (no packages) and NASM 3.02:
 
     make 775-rom OUT=S3V2P24.BIN
@@ -482,8 +483,9 @@ the card owner's choice, never a default; the build says OVERCLOCK in its result
 The Trio64V+ feature list names 50 MHz for EDO and 1-cycle EDO; the timing table allows 60 MHz, which
 S3COMPAT checks (MEM-1); 1.03-08N runs 50.11 MHz, 1.03-08 52.79 MHz. Below 40 MHz the option refuses (the data
 books give no minimum; it guards against typing errors). Without `MCLK` the build is the tested one and
-its SHA-256 is checked; with it the code is the same and only the MCLK entry and the checksum differ,
-so the clock is judged on the card: S3TEST's MCLK line and S3COMPAT's POST line compare it with the
+its SHA-256 is checked; with it the patcher also makes the default build, checks that one's SHA-256,
+and refuses the result if it differs anywhere but the MCLK entry, the constant the Trio64's FIFO code
+derives from the MCLK and the checksum (#143). The clock itself is judged on the card: S3TEST's MCLK line and S3COMPAT's POST line compare it with the
 data book limit for the strapped type, and S3COMPAT's VRAM test (without /Q) shows whether the memory
 keeps up. Which clock a given card's memory runs at is not a data book question: start at the default
 and go down if the VRAM test shows errors.
@@ -688,7 +690,8 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
 ## To do
 
 - Replace the stock BIOSes in `reference/` with links to their pages on theretroweb.com plus their
-  SHA-256, which the patchers check (the byte assertions already refuse any other image); `make roms`
+  SHA-256, which the patchers check (today they refuse an image whose code differs from the reference's:
+  the byte assertions at the patch sites, and CODE_SHA over the rest, #143); `make roms`
   and the tests then take the files from where the user saved them. CI downloads them once and keeps
   them in its cache for as long as the cache allows (a key on the SHA-256 values, so the files are
   fetched again only when the list changes), so no run depends on theretroweb being reachable.

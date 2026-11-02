@@ -24,8 +24,9 @@ Tests
                  0.5 MHz in that memory type's entry and change nothing else but the checksum; 61 MHz and
                  39 MHz are refused (MEM-1: 60 MHz on the Trio64V+)
   refusals       nothing is written and the exit code is 1 for: an already patched image, one byte
-                 changed at a patch site (INT 10h entry, text scroll fill, VGA clear), a wrong checksum,
-                 the Trio64V2 reference 2.04.07
+                 changed at a patch site (INT 10h entry, text scroll fill, VGA clear), one code byte
+                 changed away from every patch site (CODE_SHA, 0100h-7FFDh; the byte assertions alone let
+                 it through, #143), a wrong checksum, the Trio64V2 reference 2.04.07
 Exit code 0 when every test passed.
 """
 import argparse, hashlib, os, subprocess, sys, tempfile
@@ -54,6 +55,11 @@ def run(tmp, data, args=()):
     cmd = [sys.executable, os.path.join(HERE, 's3vpatch.py'), inp, '-o', out, '-q', '--nasm', NASM] + list(args)
     r = subprocess.run(cmd, capture_output=True, text=True)
     return r.returncode, (open(out, 'rb').read() if os.path.exists(out) else None), r.stderr.strip()
+
+
+def untouched(ref, img):
+    """A code offset at least 16 bytes from any byte the build changes: no byte assertion covers it."""
+    return next(i for i in range(0x3000, 0x7000) if ref[i - 16:i + 16] == img[i - 16:i + 16])
 
 
 def corrupt(img, off):
@@ -160,6 +166,7 @@ def main():
              ('INT 10h entry', corrupt(ref, s['int10'] + 2)),
              ('text scroll fill', corrupt(ref, s['txfull'] + 7)),
              ('VGA clear', corrupt(ref, s['vclr'] + 10)),
+             ('code byte away from the sites', corrupt(ref, untouched(ref, img))),
              ('bad checksum', ref[:0x7FFF] + bytes([ref[0x7FFF] ^ 0x55]))]
     if os.path.exists(a.ref775):
         cases.append(('Trio64V2 2.04.07', open(a.ref775, 'rb').read()[:0x8000]))

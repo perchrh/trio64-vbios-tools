@@ -289,10 +289,65 @@ def t_version(c):
     return want
 
 
+def rom_header_errors(rom):
+    """What is wrong with the option ROM header, read without running a byte of the ROM (PCI Local Bus
+    Specification 2.3, 6.3.1): 55AAh, the size in 512-byte units, a byte sum of 0 over that size, and a
+    PCI data structure ('PCIR', S3's vendor ID 5333h, an image length equal to the size byte, code type 0,
+    x86). The class code is not checked: S3's ROMs store it as 03h 00h 00h, base class first, against
+    the specification's order (2.04.07, 1.03-08N and 1.5-07 alike)."""
+    errs = []
+    if rom[:2] != b'\x55\xAA':
+        return ['no 55AAh signature']
+    size = rom[2] * 512
+    if size == 0 or size > len(rom):
+        return ['size byte %02Xh: %d bytes, the image has %d' % (rom[2], size, len(rom))]
+    if sum(rom[:size]) & 0xFF:
+        errs.append('byte sum over %d bytes is %02Xh, not 00h' % (size, sum(rom[:size]) & 0xFF))
+    pcir = struct.unpack_from('<H', rom, 0x18)[0]
+    if pcir + 24 > size or rom[pcir:pcir + 4] != b'PCIR':
+        return errs + ['no PCIR structure at %04Xh' % pcir]
+    vendor, _dev = struct.unpack_from('<HH', rom, pcir + 4)
+    if vendor != 0x5333:
+        errs.append('PCIR vendor %04Xh, not 5333h' % vendor)
+    if struct.unpack_from('<H', rom, pcir + 0x10)[0] * 512 != size:
+        errs.append('PCIR image length %d bytes, the size byte says %d'
+                    % (struct.unpack_from('<H', rom, pcir + 0x10)[0] * 512, size))
+    if rom[pcir + 0x14] != 0:
+        errs.append('PCIR code type %02Xh, not 00h (x86)' % rom[pcir + 0x14])
+    return errs
+
+
+def hang_rom():
+    """A 32 KB option ROM that hooks INT 10h, as a real one does early in POST, and then loops forever:
+    POST must not count as passed for it (#143)."""
+    code = (b'\xFA'                                     # cli
+            b'\x31\xC0\x8E\xD8'                         # xor ax,ax ; mov ds,ax
+            b'\xC7\x06\x40\x00\x00\x01'                 # mov word [40h],0100h
+            b'\xC7\x06\x42\x00\x00\xC0'                 # mov word [42h],C000h
+            b'\xEB\xFE')                                 # jmp $
+    rom = bytearray(0x8000)
+    rom[0:3] = b'\x55\xAA\x40'
+    rom[3:5] = b'\xEB\x1B'                                 # jmp 0020h
+    rom[0x20:0x20 + len(code)] = code
+    rom[0x100] = 0xCF                                       # the hooked INT 10h: iret
+    rom[-1] = -sum(rom) & 0xFF
+    return bytes(rom) + bytes(0x8000)
+
+
 def t_post(c):
+    """The ROM header is valid without running it, POST returns to its caller and leaves INT 10h at
+    C000h; and a ROM that hooks INT 10h and then hangs fails POST here (#143)."""
+    errs = rom_header_errors(c.rom)
+    check(not errs, 'ROM header: ' + '; '.join(errs))
     m = Machine(c.rom)
     seg, off = m.post()
     check(seg == 0xC000, 'INT 10h vector %04X:%04X, expected C000:xxxx' % (seg, off))
+    try:
+        Machine(hang_rom()).post(limit=200_000)
+    except RuntimeError as e:
+        check('did not return' in str(e) and 'C000:0031' in str(e), 'hanging ROM: unexpected error %s' % e)
+    else:
+        raise AssertionError('a ROM that hooks INT 10h and then loops passed POST')
 
 
 def t_vga_registers(c):

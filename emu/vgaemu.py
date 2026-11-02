@@ -653,10 +653,23 @@ class Machine:
         self._ret_cf(uc, cf)
 
     # ------------------------------------------------------------------ BIOS
-    def post(self):
-        """Run the ROM initialisation; returns the INT 10h vector (segment, offset)."""
+    post_limit = 50_000_000                             # instructions the ROM initialisation may take
+
+    def post(self, limit=None):
+        """Run the ROM initialisation; returns the INT 10h vector (segment, offset). Raises RuntimeError
+        when the ROM does not return to the caller's far call: a run that stops anywhere else (a loop
+        that used up the budget, a HLT) is not a POST that passed (#143)."""
+        limit = limit or Machine.post_limit
         self.mu.mem_write(STUB, b'\x9A\x03\x00\x00\xC0\xF4')          # call far C000:0003 ; hlt
-        self._start(0, STUB, STUB + 5, 50_000_000)
+        self._start(0, STUB, STUB + 5, limit)
+        cs, ip = self._reg(UC_X86_REG_CS), self._reg(UC_X86_REG_IP)
+        if cs != 0 or ip != STUB + 5:
+            where = '%04X:%04X' % (cs, ip)
+            if self.mu.mem_read((cs * 16 + ip - 1) & 0xFFFFF, 1) == b'\xF4':
+                raise RuntimeError('POST did not return to its caller: it halted (HLT) at %s' % where)
+            raise RuntimeError('POST did not return to its caller: ' +
+                               budget_msg('the ROM initialisation (call far C000:0003)', limit,
+                                          'Machine.post_limit', where))
         off, seg = struct.unpack('<HH', self.mu.mem_read(0x40, 4))
         if Machine.noop or Machine.calls is not None:
             self._noop_hook(seg * 16 + off)

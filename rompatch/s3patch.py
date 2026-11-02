@@ -56,8 +56,9 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
          31-16 = 0000h
   MCLK   (only with --mclk) the MCLK PLL entry POST uses for --memtype, the memory type the card is
          strapped for (CR36 bits 3-2): edo1 at most 60 MHz, fpm (fast page and 2-cycle EDO) and sgram at
-         most 66.67 MHz (V2-MEM-1); without it 59.96 MHz for edo1 and fpm, 66.2 MHz for sgram. The code
-         is the tested build either way; the result SHA-256 is checked only without --mclk
+         most 66.67 MHz (V2-MEM-1); without it 59.96 MHz for edo1 and fpm, 66.2 MHz for sgram. A --mclk
+         build of the reference image is built a second time without --mclk, that build is checked
+         against the pinned SHA-256, and the two may differ only in the MCLK entry and the checksum
   sign-on "2.04.07-p22", checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
@@ -84,6 +85,11 @@ def rom_level(name, version):
 VERSION = '2.04.07'
 LEVEL = rom_level('VER775', VERSION)            # the sign-on level: common/version.inc VER775
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
+# SHA-256 of 0100h-7FFDh of the input: the code and tables of 2.04.07, outside the OEM area below 0100h
+# (sign-on text, MCLK entries) and the two last bytes (7FFEh, the checksum at 7FFFh). The byte assertions
+# check the patch sites only; this refuses an image with a changed byte anywhere else (#143)
+CODE_SHA = '64f716e96fb3e8dd0fbdcf5de41df732b95852d373b0ade541d522026a5442a2'
+CODE_RANGE = (0x0100, 0x7FFE)
 RESULT_SHA = '59a38032d933f7ef9fc790689793c988195e6278ad53923ab1e98354d9f26c2e'  # 2.04.07-p24 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
@@ -445,6 +451,28 @@ def put_fonts_in_place(d, tables, log):
                                                                                         name, len(t)))
 
 
+def code_sha(d, rng):
+    """SHA-256 of d[rng[0]:rng[1]], the part of an input image that every accepted build has in common."""
+    return hashlib.sha256(bytes(d[rng[0]:rng[1]])).hexdigest()
+
+
+def mclk_build_errors(default_lo, new_lo, allowed, result_sha):
+    """Whether a --mclk build is the tested build with another MCLK (all three patchers, #143): the
+    default build of the same input must be the tested one (result_sha), and the --mclk build may differ
+    from it only at the offsets in allowed (the MCLK entry, a constant the code derives from the MCLK,
+    the checksum). Returns the problems; none means the claim holds."""
+    errs = []
+    sha = hashlib.sha256(default_lo).hexdigest()
+    if sha != result_sha:
+        errs.append('the default build of this input differs from the tested build (SHA-256 %s, expected %s)'
+                    % (sha, result_sha))
+    other = [i for i in range(len(new_lo)) if new_lo[i] != default_lo[i] and i not in allowed]
+    if other:
+        errs.append('the --mclk build differs from the default build outside the MCLK entry, the MCLK '
+                    'constants and the checksum: %s' % ' '.join('%04X' % i for i in other[:16]))
+    return errs
+
+
 def mclk_put(d, put, entries, memtype, mhz, fmax, known=()):
     """Set the MCLK entry of memtype to mhz (all three patchers; known: see mclk_pll). Returns the MHz."""
     m, nr, f, vco, src = mclk_pll(mhz, fmax, known=known)
@@ -535,6 +563,9 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
         raise PatchError('no 55AAh ROM header at offset 0')
     if bytes(d[FREE_START:FREE_END]) != bytes(FREE_END - FREE_START) or d[FREE_START - 1] != 0:
         raise PatchError('%04X-%04X is not free (already patched?)' % (FREE_START, FREE_END - 1))
+    if code_sha(d, CODE_RANGE) != CODE_SHA:
+        raise PatchError('%04X-%04X is not the code of %s (another build, or changed?)'
+                         % (CODE_RANGE[0], CODE_RANGE[1] - 1, VERSION))
     sym, site = bios_symbols(), SITES
 
     # 1. the original code must be where bios.inc and SITES say
@@ -687,6 +718,16 @@ def diagnose(nasm, output, img):
     return out
 
 
+def mclk_note(checked, mhz):
+    """The end of the result line of a --mclk build (all three patchers)."""
+    if mhz is None:
+        return ''
+    if checked:
+        return (', MCLK build option: the tested build with only the MCLK entry, the MCLK constants and the '
+                'checksum changed (compared byte for byte); the MCLK is yours to check on the card')
+    return ', MCLK build option on an input other than the reference image: not compared with the tested build'
+
+
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 reference BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
@@ -708,11 +749,19 @@ def main():
         new_lo, log = patch(lo, a.nasm, not a.no_vco_fix, a.mclk, a.memtype)
         img = new_lo * 2                        # the 32 KB twice (#78)
         errs = verify(img, not a.no_vco_fix)
-        known = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA and a.mclk is None
+        base = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA
+        known = base and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()
         if known and out_sha != RESULT_SHA:
             errs.append('result differs from the tested build (SHA-256 %s, expected %s)' % (out_sha, RESULT_SHA))
             errs += diagnose(a.nasm, a.output, img)
+        mclk_ok = False
+        if base and a.mclk is not None:     # compare with the default build of the same input (#143)
+            e = MCLK_ENTRY[a.memtype]
+            default_lo, _ = patch(lo, a.nasm, True, None, a.memtype)
+            mclk_errs = mclk_build_errors(default_lo, new_lo, {e, e + 1, 0x7FFF}, RESULT_SHA)
+            errs += mclk_errs + (diagnose(a.nasm, a.output, img) if mclk_errs else [])
+            mclk_ok = not mclk_errs
         if errs:
             raise PatchError('result check failed:\n  ' + '\n  '.join(errs))
     except (PatchError, OSError) as e:
@@ -728,8 +777,7 @@ def main():
     print('%s: %s-%s, 64 KB (the 32 KB twice), checksum %02X (the 32 KB sum to 00), SHA-256 of the 32 KB %s%s'
           % (a.output, VERSION, LEVEL, img[0x7FFF], out_sha,
              ', identical to the tested build' if known or out_sha == RESULT_SHA else
-             ', MCLK build option: the code is the tested build, the MCLK is yours to check on the card'
-             if a.mclk is not None else ''))
+             mclk_note(mclk_ok, a.mclk)))
     return 0
 
 
