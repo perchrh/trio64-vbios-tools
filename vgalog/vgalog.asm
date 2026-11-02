@@ -19,6 +19,16 @@
 ;                    events), in program order: the port, the value and whether it was read or written.
 ;                    Needs about 100 KB of conventional memory. A mode set runs slower while traced (a
 ;                    trap per instruction: about half a second for a 256 KB clear on a 386).
+;   VGALOG /W        memory mode with the window function hook: as /M, and the WinFuncPtr that a 4F01h
+;                    call returns (mode information +0Ch) is replaced in the caller's buffer by the
+;                    address of a VGALOG routine, which logs the program's far calls through it and then
+;                    jumps to the BIOS's routine. Shows whether a program changes the bank with the
+;                    window function (VBE 1.2), with INT 10h 4F05h (logged by /M anyway) or with its own
+;                    port writes (neither). Only the first 64 far calls are logged as records, so the
+;                    mode sets before them stay in the ring; all of them are counted (chip and ROM block
+;                    +24). Only the routine of the first 4F01h that has one is hooked: a 4F01h that
+;                    returns another address keeps it (the S3 BIOSes return one routine for all modes).
+;                    Unload only after the program has ended (it keeps the hooked address).
 ;   VGALOG /D        memory mode: write the ring buffer to VGALOG.BIN (oldest call first); the buffer
 ;                    is kept, so /D can be repeated. With no call logged yet it writes no file and says
 ;                    "No events registered, not writing output file" (exit code 0). The file is committed
@@ -41,7 +51,8 @@
 ;   +6  SR10, +7 SR11 (the memory clock PLL the POST set)
 ;   +8  the ROM version: the word after "Version" or "Vers." in C000:0000-00FFh (for our ROMs
 ;       "2.04.07-p21", "1.03-08N-p4", "1.5-07-p2"), up to 15 characters, zero-padded
-;   +24 8 bytes 0 (reserved)
+;   +24 dd the far calls through the hooked window function (/W; 0 otherwise), at /D
+;   +28 dd the BIOS's window function (offset, segment) that /W hooked, at /D (0 when none was hooked)
 ;
 ; File mode: a 16-byte header 'VGALOGF1' and 8 bytes 0, the chip and ROM block, then the records.
 ; Record format, 16 bytes per record, two records per call
@@ -54,7 +65,7 @@
 ;
 ; Memory mode (/M, dumped with /D): a 48-byte file header, then 32 bytes per call, oldest first
 ;   header  'VGALOGM2', dd calls logged in total, dw records in the file, dw flags (bit 0 = the trace
-;           part follows), then the chip and ROM block (32 bytes); the calls start at file offset 48.
+;           part follows, bit 1 = /W: window function calls are logged), then the chip and ROM block (32 bytes); the calls start at file offset 48.
 ;           ('VGALOGM1', before 1 November 2026: no flags, no block, the calls at offset 16.)
 ;   +0  dw call number (low 16 bits of the total)
 ;   +2  AX, +4 BX, +6 CX, +8 DX, +10 ES, +12 DI as the caller gave them
@@ -64,6 +75,10 @@
 ;   +24 BIOS tick (0040:006C) low word at the call
 ;   +26 SR10, +27 SR11 (memory clock PLL), +28 CR58, +29 CR59, +30 CR5A, +31 CR6D after the call
 ;       (read with the S3 registers unlocked; SR08, CR38, CR39 and the indexes are put back)
+;   A far call through the window function (/W) is a record of its own: +2 AX = 4F05h, +4 BX, +6 CX,
+;   +8 DX as the program gave them, +10 and +12 the caller's return address (CS, IP), +14 to +22 0
+;   (VGALOG does not see the return), +23 80h + the nesting depth (bit 7 set: a far call, not INT 10h),
+;   +24 the tick, +26 to +31 0.
 ;   Not logged in memory mode (they would fill the buffer): AH=02h, 03h, 08h, 09h, 0Ah, 0Ch, 0Dh, 0Eh,
 ;   13h. Under Windows the calls of DOS boxes may see virtual register values (the display driver
 ;   traps their VGA ports); the calls the driver makes itself run with the real ones.
@@ -123,6 +138,11 @@ tnext   dw 0                    ; byte offset of the next event in tseg
 tlast   dw 0                    ; byte offset of the last event
 ttotal  dd 0                    ; events in total
 oldi1   dd 0                    ; INT 1 vector while a mode set is traced
+wflag   db 0                    ; 1 = window function hook (/W)
+wfold   dd 0                    ; the BIOS's window function (offset, segment) once hooked
+wfcnt   dd 0                    ; far calls through the hook in total
+wflog   dw 0                    ; of them logged as records (at most WFMAX)
+WFMAX   equ 64
 info    times 32 db 0           ; the chip and ROM block (see the header), filled at install
 
 ; resident INT 10h handler
@@ -218,17 +238,7 @@ misr:   cmp ah,0x02
         push si
         push cs
         pop ds
-        mov si,[rnext]                  ; take the next slot: SI = its offset
-        inc word [rnext]
-        and word [rnext],RBN-1
-        shl si,5
-        add si,ring
-        push ax
-        mov ax,[rtotal]
-        mov [si],ax
-        add word [rtotal],1
-        adc word [rtotal+2],0
-        pop ax
+        call slot                       ; SI = the next slot, its call number set
         mov [si+2],ax
         mov [si+4],bx
         mov [si+6],cx
@@ -238,12 +248,7 @@ misr:   cmp ah,0x02
         push ax
         mov al,[depth]
         mov [si+23],al
-        push es
-        xor ax,ax
-        mov es,ax
-        mov ax,[es:0x46C]
-        pop es
-        mov [si+24],ax
+        call tick
         pop ax
         call tstart                     ; /T: a mode set, or a call inside one: trace it
         inc byte [depth]
@@ -278,6 +283,7 @@ misr:   cmp ah,0x02
         mov ax,[bp+2]
         mov [si+22],al
         call s3regs                     ; SR10 SR11 CR58 CR59 CR5A CR6D -> [si+26..31]
+        call wfhook                     ; /W: a 4F01h's window function to ours
         call tstop                      ; the traced mode set ended: INT 1 back
         dec byte [depth]
         mov ax,[bp+2]                   ; the BIOS result flags with the caller's interrupt and trap
@@ -294,6 +300,123 @@ misr:   cmp ah,0x02
         pop bp                          ; BP as the BIOS returned it (AX=1130h returns ES:BP)
         add sp,8                        ; result flags, slot, DS, BP
         iret
+
+; The next ring slot (DS = CS): SI = its offset, +0 its call number (the low word of rtotal), rtotal
+; counted. Keeps the other registers.
+slot:   mov si,[rnext]
+        inc word [rnext]
+        and word [rnext],RBN-1
+        shl si,5
+        add si,ring
+        push ax
+        mov ax,[rtotal]
+        mov [si],ax
+        add word [rtotal],1
+        adc word [rtotal+2],0
+        pop ax
+        ret
+
+; The BIOS tick (0040:006C low word) into [SI+24] (DS = CS). Keeps all registers.
+tick:   push es
+        push ax
+        xor ax,ax
+        mov es,ax
+        mov ax,[es:0x46C]
+        mov [si+24],ax
+        pop ax
+        pop es
+        ret
+
+; /W, after a call (DS = CS, SI = its slot, the registers in [SI+2..12] and out [SI+14..20]): when it
+; was 4F01h and returned 004Fh, the WinFuncPtr in the caller's buffer (ES:DI + 0Ch) is replaced by
+; wfn, and the BIOS's routine kept in wfold. Not when it is 0 (no window function), already ours, or
+; another routine than the one hooked first. Keeps all registers.
+wfhook: cmp byte [wflag],0
+        je .r
+        cmp word [si+2],0x4F01
+        jne .r
+        cmp word [si+14],0x004F
+        jne .r
+        push es
+        push di
+        push ax
+        push dx
+        mov es,[si+10]
+        mov di,[si+12]
+        mov ax,[es:di+0x0C]             ; AX:DX = offset, segment
+        mov dx,[es:di+0x0E]
+        mov di,ax
+        or di,dx
+        jz .x                           ; no window function
+        cmp ax,wfn
+        jne .n
+        mov di,cs
+        cmp dx,di
+        je .x                           ; ours already
+.n:     mov di,[wfold]
+        or di,[wfold+2]
+        jz .k                           ; the first: keep it
+        cmp ax,[wfold]
+        jne .x                          ; another routine: left as it is
+        cmp dx,[wfold+2]
+        jne .x
+.k:     mov [wfold],ax
+        mov [wfold+2],dx
+        mov di,[si+12]
+        mov word [es:di+0x0C],wfn
+        mov [es:di+0x0E],cs
+.x:     pop dx
+        pop ax
+        pop di
+        pop es
+.r:     ret
+
+; /W: the window function as the program sees it (far call; VBE 1.2: BH = 0 set, 1 get, BL = the
+; window, DX = the position in granules). Counts the call, logs the first WFMAX as records (header,
+; "A far call through the window function"), then jumps to the BIOS's routine, whose RETF returns to
+; the program. Keeps all registers and the flags.
+wfn:    pushf
+        push ds
+        push si
+        push ax
+        push cs
+        pop ds
+        cli                             ; the slot and the counters in one piece
+        add word [wfcnt],1
+        adc word [wfcnt+2],0
+        cmp word [wflog],WFMAX
+        jae .go
+        inc word [wflog]
+        call slot
+        mov word [si+2],0x4F05
+        mov [si+4],bx
+        mov [si+6],cx
+        mov [si+8],dx
+        push bp
+        mov bp,sp                       ; [bp+10] the caller's IP, [bp+12] its CS
+        mov ax,[bp+12]
+        mov [si+10],ax
+        mov ax,[bp+10]
+        mov [si+12],ax
+        pop bp
+        xor ax,ax
+        mov [si+14],ax
+        mov [si+16],ax
+        mov [si+18],ax
+        mov [si+20],ax
+        mov [si+26],ax
+        mov [si+28],ax
+        mov [si+30],ax
+        mov al,[depth]
+        or al,0x80
+        mov [si+22],ah
+        mov [si+23],al
+        call tick
+.go:    pop ax
+        pop si
+        pop ds
+        popf
+        jmp far [cs:wfold]
 
 ; SR10, SR11, CR58, CR59, CR5A, CR6D into [SI+26..31] (DS = CS). Unlocks the S3 registers and puts
 ; SR08, CR38, CR39 and the 3C4h/3D4h indexes back. Keeps all registers.
@@ -700,6 +823,8 @@ init:   mov si,0x81
         je minst
         cmp ah,'t'
         je tinst
+        cmp ah,'w'
+        je winst
         cmp ah,'d'
         je dump
         cmp ah,'h'
@@ -835,6 +960,10 @@ install:
         mov ax,0x4C01
         int 0x21
 
+; ---------------- install in memory mode with the window function hook ----------------
+winst:  mov byte [wflag],1
+        jmp minst
+
 ; ---------------- install in memory mode with the port trace ----------------
 tinst:  mov ax,[2]                      ; the end of our memory block (PSP+2)
         mov bx,cs
@@ -874,8 +1003,11 @@ minst:  call findmem
         mov word [0x2C],0
         mov dx,msgm
         cmp byte [tflag],0
-        je .m
+        je .w
         mov dx,msgt
+.w:     cmp byte [wflag],0
+        je .m
+        mov dx,msgw
 .m:     mov ah,9
         int 0x21
         mov dx,ring+RBN*32+15           ; PSP + handler + ring buffer, in paragraphs
@@ -907,8 +1039,14 @@ dump:   call findmem
         jz .none
         mov [dhdr+12],cx
         mov [dcnt],cx
-        mov al,[es:tflag]               ; flags: bit 0 = the trace part follows
+        mov al,[es:wflag]               ; flags: bit 0 = the trace part follows, bit 1 = /W
+        shl al,1
+        or al,[es:tflag]
         mov [dhdr+14],al
+        mov eax,[es:wfcnt]              ; /W: the far calls and the hooked routine into the block
+        mov [es:info+24],eax
+        mov eax,[es:wfold]
+        mov [es:info+28],eax
         mov ax,[es:rnext]               ; oldest slot = rnext - count
         sub ax,cx
         and ax,RBN-1
@@ -1181,6 +1319,7 @@ msg     db 'VGALOG ',VERSION,' installed, logging INT 10h AH=00 and 4F01/4F02/4F
 msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
 msgm    db 'VGALOG ',VERSION,' installed in memory mode: the last 1024 INT 10h calls (no text/pixel output), VGALOG /D writes them',13,10,'$'
 msgt    db 'VGALOG ',VERSION,' installed in memory mode with the port trace of the mode sets (AH=00h, 4F02h), VGALOG /D writes them',13,10,'$'
+msgw    db 'VGALOG ',VERSION,' installed in memory mode with the window function hook (4F01h WinFuncPtr), VGALOG /D writes them',13,10,'$'
 s_tmem  db 'VGALOG ',VERSION,': not enough memory for /T (about 100 KB)',13,10,'$'
 thdr    db 'VGALOGT1',0,0,0,0,0,0,0,0
 s_dump  db 'VGALOG ',VERSION,': ring buffer written to VGALOG.BIN',13,10,'$'
@@ -1194,6 +1333,7 @@ s_use   db 'VGALOG ',VERSION,' - logs INT 10h AH=00 and VBE 4F01/4F02/4F06 calls
         db '  VGALOG              install (VGALOG.BIN is created new in the current directory)',13,10
         db '  VGALOG /M           install in memory mode: last 1024 INT 10h calls in RAM (for Windows 9x)',13,10
         db '  VGALOG /T           as /M, and every VGA/S3 port access of the mode sets (AH=00h, 4F02h)',13,10
+        db '  VGALOG /W           as /M, and the far calls through the window function (4F01h WinFuncPtr)',13,10
         db '  VGALOG /D           memory mode: write the calls (and the trace) to VGALOG.BIN',13,10
         db '  VGALOG /U           unload (INT 10h restored, VGALOG.BIN closed)',13,10
         db '  VGALOG /H, /?, /HELP  this help',13,10,'$'

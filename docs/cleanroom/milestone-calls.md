@@ -61,7 +61,9 @@ What follows for the clean ROM:
   far window function whose address 4F01h returns (WinFuncPtr, VBE 1.2) or by writing the chip's bank
   register itself. Either way the window function and the window fields of 4F01h (WinAAttributes,
   WinGranularity, WinSize, WinASegment, WinFuncPtr) must be right. Which of the two it uses is not
-  known yet: a port trace of the drawing (not only of the mode set) would tell.
+  known yet. `VGALOG /W` tells: it hooks the WinFuncPtr of 4F01h and logs the far calls through it
+  (and counts them in the chip and ROM block, +24). Far calls logged: the window function; none and no
+  4F05h: the program writes the bank registers itself.
 - **AH=0Fh in a VESA mode:** no standard defines what AL holds after 4F02h; the program reads it only
   before it returns to text.
 - No AX=1012h or other palette call: the program loads the DAC through the ports itself.

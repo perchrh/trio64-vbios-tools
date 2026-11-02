@@ -82,6 +82,9 @@ Tests
   vgalog_trace     VGALOG /T: every OUT the BIOS makes in the mode sets AX=0003h and 4F02h 101h is in the
                    trace in order with its value, behind the marker of its call; other calls not traced,
                    INT 1 put back after each mode set, the trap flag clear on return
+  vgalog_win       VGALOG /W: 4F01h's WinFuncPtr points to VGALOG, far calls through it set the bank the
+                   BIOS's routine sets and return to the caller, the first 64 are records, all counted
+                   with the BIOS's routine in the chip and ROM block; /U gives the BIOS's address back
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
   s3regs           S3REGS.COM and S3REGS32.EXE (the Win32 one on a 32-bit CPU with the same register
                    model, vgaemu.run_pe32) write the same snapshot, keep indexes and locks, and
@@ -1244,17 +1247,17 @@ def t_s3compat_full(c):
     return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
 
 
-def vgalog_info(c, m, blk, what):
+def vgalog_info(c, m, blk, what, tail=bytes(8)):
     """The chip and ROM block VGALOG writes (32 bytes): CR2D-CR30 and CR36 as the model's chip reports
     them, the ROM size byte, SR10/SR11 as the POST left them, and the word after "Vers" in the ROM's
-    first 256 bytes."""
+    first 256 bytes; +24 the /W window function count and routine (tail), 0 without /W."""
     ids = CHIPS[Machine.chip]['ids'][:4]
     cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
     if Machine.chip in ('trio64', 'trio32'):
         cr36 |= 0x0C if Machine.vram == 4 else 0x08
     v = re.search(rb'Vers\S*\s+([^\s(]{1,15})', c.rom[:0x100])
     want = bytes(ids) + bytes([cr36, c.rom[2], m.r['seq'].get(0x10, 0), m.r['seq'].get(0x11, 0)]) + \
-        (v.group(1) if v else b'').ljust(16, b'\0') + bytes(8)
+        (v.group(1) if v else b'').ljust(16, b'\0') + tail
     check(blk == want, '%s: chip and ROM block %s, expected %s' % (what, blk.hex(' '), want.hex(' ')))
     return (v.group(1) if v else b'').decode()
 
@@ -1590,6 +1593,69 @@ def t_vgalog_trace(c):
     c.save('VGALOGT', rd)
     return '%d events: %d OUTs in 0003h, %d in 4F02h 101h, %d reads, %d repeats merged' % (
         tn, len(seen.get(0x0003, [])), len(seen.get(0x4F02, [])), reads, reps)
+
+
+def t_vgalog_win(c):
+    """VGALOG /W hooks the window function: the WinFuncPtr a 4F01h returns points to VGALOG, a far call
+    through it reaches the BIOS's routine (the bank 4F05h BH=1 then reads back is the one set) and
+    returns to the caller with the stack as it was; the first 64 far calls are records (AX=4F05h, BX,
+    DX, the return address, depth byte 80h), all are counted in the chip and ROM block with the BIOS's
+    routine; the INT 10h calls before them stay in the ring, and after /U 4F01h returns the BIOS's own
+    address again."""
+    com = c.tool('VGALOG.COM')
+    m = c.machine()
+    rom = m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
+    rof, rsg = struct.unpack('<HH', m.mem(0x3000C, 4))
+    if rom['ax'] != 0x004F or not (rof or rsg):
+        raise Skip('4F01h 101h gives no window function on this BIOS')
+    r = m.run_com(com, '/W', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /W did not stay resident: %s' % (r.exit,))
+    check(b'window function hook' in bytes(r.stdout), '/W install message: %r' % bytes(r.stdout)[-120:])
+    m.int10(0x4F02, bx=0x0101)
+    m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
+    off, seg = struct.unpack('<HH', m.mem(0x3000C, 4))
+    check(seg == 0x2000 and (off, seg) != (rof, rsg), 'WinFuncPtr after 4F01h %04X:%04X, expected VGALOG '
+          '(2000:xxxx; the BIOS gives %04X:%04X)' % (seg, off, rsg, rof))
+    m.int10(0x4F01, cx=0x0101, es=0x3000, di=0x100)     # a second 4F01h: the same BIOS routine, hooked too
+    check(m.mem(0x3010C, 4) == m.mem(0x3000C, 4), 'second 4F01h: WinFuncPtr %s, expected %s'
+          % (m.mem(0x3010C, 4).hex(), m.mem(0x3000C, 4).hex()))
+    m.mu.mem_write(0x7D10, b'\x9A' + struct.pack('<HH', off, seg) + b'\xF4')
+    n = 70
+    for i in range(n):
+        bank = (i % 4) + 1
+        m.mu.reg_write(UC_X86_REG_BX, 0)
+        m.mu.reg_write(UC_X86_REG_DX, bank)
+        m.mu.reg_write(UC_X86_REG_CS, 0)
+        m.mu.reg_write(UC_X86_REG_SS, 0)
+        m.mu.reg_write(UC_X86_REG_SP, 0x7000)
+        m.mu.emu_start(0x7D10, 0x7D15, count=100000)
+        ip, sp = m.mu.reg_read(UC_X86_REG_IP), m.mu.reg_read(UC_X86_REG_SP)
+        check(ip == 0x7D15 and sp == 0x7000, 'far call %d did not return to the caller: IP %04X SP %04X' % (i, ip, sp))
+        got = m.int10(0x4F05, bx=0x0100, dx=0xFFFF)
+        check(got['ax'] == 0x004F and got['dx'] == bank, 'far call %d BX=0 DX=%d: 4F05h get AX=%04X DX=%04X'
+              % (i, bank, got['ax'], got['dx']))
+    rd = m.run_com(com, '/D', seg=0x4000)
+    check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
+    b = rd.files.get('VGALOG.BIN')
+    check(b is not None and b[:8] == b'VGALOGM2', 'VGALOG.BIN has no memory-mode header')
+    total, nrec, flags = struct.unpack_from('<IHH', b, 8)
+    check(flags == 2, 'header flags %04X with /W, expected 0002' % flags)
+    vgalog_info(c, m, bytes(b[16:48]), '/W', struct.pack('<IHH', n, rof, rsg))
+    recs = [b[48 + 32 * i:80 + 32 * i] for i in range(nrec)]
+    far = [x for x in recs if x[23] & 0x80]
+    check(len(far) == 64, '%d far call records, expected the first 64 of %d' % (len(far), n))
+    for i, x in enumerate(far):
+        ax, bx, cx, dx, cs, ip = struct.unpack_from('<6H', x, 2)
+        check((ax, bx, dx, cs, ip, x[23]) == (0x4F05, 0, (i % 4) + 1, 0, 0x7D15, 0x80) and not any(x[14:23])
+              and not any(x[26:32]), 'far call record %d: %s' % (i, x.hex(' ')))
+    top = [struct.unpack_from('<H', x, 2)[0] for x in recs if x[23] == 0]
+    check(top[:3] == [0x4F02, 0x4F01, 0x4F01], 'INT 10h calls before the far calls: %s' % ['%04X' % a for a in top[:3]])
+    ru = m.run_com(com, '/U', seg=0x4000)
+    check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
+    m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
+    check(struct.unpack('<HH', m.mem(0x3000C, 4)) == (rof, rsg), 'after /U 4F01h WinFuncPtr is not the BIOS\'s')
+    c.save('VGALOGW', rd)
+    return '%d far calls through %04X:%04X, %d records' % (n, rsg, rof, len(far))
 
 
 def t_s3regs(c):
@@ -2350,7 +2416,7 @@ def t_stores(c):
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
-         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('s3alias', t_s3alias),
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
@@ -2368,7 +2434,7 @@ TAGS = {
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
+    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
