@@ -86,9 +86,9 @@ AH=0Bh's border colour, and the prompt AH=01h's cursor shape (with cursor emulat
   - SR10/SR11 = 41h/28h;
   - the ROM version is our 1.03-08N-p5.
 
-  The calls a program makes do not depend on the chip, as long as the BIOS answers the same. The VBE
-  mode list and mode information of the clean ROM will differ from 1.03-08N's, so this record must be
-  repeated with the clean ROM on the DSP-3364P.
+  The calls a program makes do not depend on the chip, as long as the BIOS answers the same. The two
+  benchmarks make the same calls on the Trio64 and the Trio64V+, so this record is not repeated on the
+  DSP-3364P (the owner's decision, 2 November 2026).
 - **The files:** `M3.BIN` (39 calls) and `M4.BIN` (89 calls), both `VGALOGM2`. M4 was dumped without
   unloading VGALOG, so its first 39 calls are those of M3. A third file, `S3REGS.TXT`, holds the
   snapshots before and after each benchmark. Their TICK values (17FB8Ch, 17FDAEh, 47h, 4FEh) match the
