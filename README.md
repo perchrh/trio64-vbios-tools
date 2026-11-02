@@ -429,7 +429,9 @@ its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that ca
 timing bytes. The emulator test `764_patches` checks the ROM's changes, `stores` its 32-bit stores, and
 S3TEST runs its Trio64 set. On the ExpertColor DSP-3364P (31 October 2026): S3TEST 26 PASS, 0 FAIL,
 banked writes at 81.7 MB/s with the booster; S3COMPAT's 49 FAILs there were test bugs, fixed in the
-tools ([#72](https://github.com/perchrh/trio64-vbios-tools/issues/72), [#73](https://github.com/perchrh/trio64-vbios-tools/issues/73); docs/764-rom.md, "On the card").
+tools ([#72](https://github.com/perchrh/trio64-vbios-tools/issues/72), [#73](https://github.com/perchrh/trio64-vbios-tools/issues/73); docs/764-rom.md, "On the card"). 1.5-07-p5 on the same card (2 November 2026): S3TEST
+26 PASS, 0 FAIL; S3COMPAT 135 PASS, 0 FAIL, 1 WARN (AH=12h BL=20h); Windows, video playback and
+the fonts look right ([docs/764-rom.md](docs/764-rom.md), "On the card: 1.5-07-p5").
 
 ## MCLK build option
 
