@@ -760,13 +760,13 @@ Documents the project does not have; what depends on them is marked where it is 
 
 The VESA documents our ROMs implement or the tools check against. Only VBE 2.0 may be posted online
 (unmodified): it is in the repository, `standards/vesa/vbe20.pdf`. The others are the owner's copies,
-outside the repository (file names in brackets, as of 2 November 2026); the links are the public ones.
+outside the repository (file names in brackets, as of 2 November 2026); the links are public copies.
 
-- [VBE Core Functions 2.0](https://web.archive.org/web/20081211174813/http://docs.ruudkoot.nl/vbe20.txt),
-  Rev. 1.1 (November 1994; `vbe20.pdf`): 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE
+- [VESA BIOS Extension (VBE) Core Functions Standard 2.0](https://www.phatcode.net/res/221/files/vbe20.pdf),
+  Rev. 1.1 (November 1994; `vbe20.pdf`; [text version](https://web.archive.org/web/20081211174813/http://docs.ruudkoot.nl/vbe20.txt)): 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE
   2.0, and S3TEST and S3COMPAT check against it.
-- [VBE 1.2](https://web.archive.org/web/20090114055246/http://docs.ruudkoot.nl/vesasp12.txt) (Super
-  VGA BIOS Extension, VS911022, 22 October 1991; `vbe12.txt`), the text retyped by "Patch" (VESASP12.ZIP): the
+- [VESA Super VGA BIOS Extension (VBE) 1.2](https://discmaster.textfiles.com/view/10567/HPAVC%20CD-ROM.iso/pc/PCGPEV10.ZIP/VESASP12.TXT)
+  (VS911022, 22 October 1991; `vbe12.txt`; [another copy](https://web.archive.org/web/20090114055246/http://docs.ruudkoot.nl/vesasp12.txt)), the text retyped by "Patch" (VESASP12.ZIP): the
   version the Trio64V+ and Trio64 ROMs report. What a 1.2 BIOS must do beyond 1.0: every
   ModeInfoBlock field valid (the direct colour fields in memory models 6 and 7), ModeAttributes bit
   D1 always 1, unused fields zero and exactly 256 bytes returned (from 1.1), the direct colour memory
@@ -776,9 +776,14 @@ outside the repository (file names in brackets, as of 2 November 2026); the link
 - [VBE 1.0](https://web.archive.org/web/20131211151957/http://www.gemixtes.de/super-vga-bios-extension-standard-vs891001/)
   (Super VGA BIOS Extension, VS891001, 1 October 1989), as transcribed on the Gemixtes blog: 4F00-4F05,
   the 15-bit mode numbers from 100h, mode 6Ah as 102h, window granularity; the base of VBE 1.2.
-- DMT 1.0, Rev. 0.7 (December 1996; `VESA-DMT-1.0.pdf`) and Rev. 13 (`VESA-DMT-1.13.pdf`), and GTF 1.1
-  (`VESA-GTF-1.1.pdf`): the timing references of the tools and the refresh tables.
-- E-DDC 1.2 (Enhanced Display Data Channel, 26 December 2007; `VESA-EDDC-1.2.pdf`): DDC2B over the I2C bus,
+- VESA and Industry Standards and Guidelines for Computer Display Monitor Timing (DMT) 1.0: Rev. 0.7
+  (December 1996; `VESA-DMT-1.0.pdf`, no public copy known),
+  [Rev. 10](https://glenwing.github.io/docs/VESA-DMT-1.10.pdf) (2004) and
+  [Rev. 13](https://glenwing.github.io/docs/VESA-DMT-1.13.pdf) (2013; `VESA-DMT-1.13.pdf`); and the
+  [VESA Generalized Timing Formula (GTF) Standard 1.1](https://glenwing.github.io/docs/VESA-GTF-1.1.pdf)
+  (2002; `VESA-GTF-1.1.pdf`): the timing references of the tools and the refresh tables.
+- [VESA Enhanced Display Data Channel (E-DDC) Standard 1.2](https://glenwing.github.io/docs/VESA-EDDC-1.2.pdf)
+  (26 December 2007; `VESA-EDDC-1.2.pdf`): DDC2B over the I2C bus,
   EDID at A0h/A1h, for the DDC2 work on the Trio64. It drops the DDC1 mode ("No support for the DDC1
   mode of operation"), which our ROMs still offer in 4F15.
 - DPM Standard Release A (3 March 2003; owner's copy of VESA's page
@@ -787,20 +792,25 @@ outside the repository (file names in brackets, as of 2 November 2026); the link
   Off modes, signalled through the syncs. The Standby and Suspend states that 4F10h also sets come from
   DPMS 1.0, for which the X Window System's DPMS extension stands in.
 - DDC on the VGA connector: [hardwarebook.info, "VGA (VESA DDC)"](https://www.hardwarebook.info/VGA_(VESA_DDC)),
-  the pins (12 SDA, 15 SCL, 9 +5 V) for the DDC2 work on the Trio64 board; and Joe Miseli, "Display
-  Technology, VESA and EDID" (Xorg Developer's Conference, 8 February 2007; `Xorg_2007-EDID-JMiseli.pdf`), the history
-  of EDID, E-EDID, DDC and E-DDC.
+  the pins (12 SDA, 15 SCL, 9 +5 V) for the DDC2 work on the Trio64 board; and Joe Miseli (Sun
+  Microsystems), [EDID, Display Technology and VESA](https://www.x.org/wiki/Events/XDC2007/Notes/Xorg_2007-EDID-JMiseli.pdf)
+  (Xorg Developer's Conference, 8 February 2007; `Xorg_2007-EDID-JMiseli.pdf`), the history of EDID,
+  E-EDID, DDC and E-DDC.
 
 Owner's copies of standards our ROMs do not implement, so neither the ROMs nor the clean room depend
 on them:
-[VBE 3.0](http://www.petesqbsite.com/sections/tutorials/tuts/vbe3.pdf) (September 1998; `vbe3.pdf`; refresh
+[VESA BIOS Extension (VBE) Core Functions Standard 3.0](https://pdos.csail.mit.edu/6.828/2018/readings/hardware/vbe3.pdf)
+(September 1998; `vbe3.pdf`; refresh
 control through 4F02 with a CRTCInfoBlock and 4F0B, for a later level; its 4F15 description is used
 above),
-[VBE/SCI 1.0](https://web.archive.org/web/20051221092948/http://www.vesa.org/Public/VBE/vbesci10-2w.pdf)
+[VESA BIOS Extension Serial Control Interface (VBE/SCI) Standard 1.0](https://web.archive.org/web/20051221092948/http://www.vesa.org/Public/VBE/vbesci10-2w.pdf)
 (July 1997; `vbesci10-2w.pdf`; 4F15 BL=10h-16h, raw access to the DDC lines, which would let a tool
-probe the Trio64 board's DDC wiring), E-EDID Release A1 (February 2000; `VESA-EEDID-A1-DDC3.pdf`;
-EDID 1.3, the data 4F15 carries) and A2 (`VESA-EEDID-A2.pdf`; EDID 1.4), and
-[VBE/AF 1.0](https://web.archive.org/web/20081209121702/http://www.vesa.org/public/VBE/VBE-AF07.pdf)
+probe the Trio64 board's DDC wiring), the
+[VESA Enhanced Extended Display Identification Data Standard, Release A, Revision 1](https://glenwing.github.io/docs/VESA-EEDID-A1.pdf)
+(February 2000; `VESA-EEDID-A1-DDC3.pdf`; EDID 1.3, the data 4F15 carries) and
+[Release A, Revision 2](https://glenwing.github.io/docs/VESA-EEDID-A2.pdf) (2006; `VESA-EEDID-A2.pdf`;
+EDID 1.4), and
+[VESA BIOS Extension/Accelerator Functions (VBE/AF) 1.0, Revision 0.7](https://web.archive.org/web/2005/http://www.vesa.org/public/VBE/VBE-AF07.pdf)
 (August 1996; `VBE-AF07.pdf`; a loadable accelerator driver, not a ROM function).
 
 ### Other references
