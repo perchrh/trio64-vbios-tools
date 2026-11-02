@@ -31,7 +31,10 @@
 ;                    untraced, except the BIOS part of INT 10h; VGALOG lets them return through its own
 ;                    stub, which sets the trap flag again, so the trace goes on whether the handler
 ;                    returns with IRET or RETF 2. INT 20h, INT 27h and INT 21h AH=00h, 31h and 4Ch end
-;                    the trace (the program ends). A program that hooks INT 1 itself ends it too.
+;                    the trace (the program ends). A program that hooks INT 1 itself ends it too. A
+;                    protected mode program (DPMI, for example DJGPP under CWSDPMI) is traced only to
+;                    its switch back to protected mode after the 4F02h: its own port accesses run there,
+;                    where VGALOG does not see them.
 ;   VGALOG /W        memory mode with the window function hook: as /M, and the WinFuncPtr that a 4F01h
 ;                    call returns (mode information +0Ch) is replaced in the caller's buffer by the
 ;                    address of a VGALOG routine, which logs the program's far calls through it and then

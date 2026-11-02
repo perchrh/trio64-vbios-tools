@@ -6,8 +6,7 @@ in memory mode. The first part, "The contract", lists the calls as the programs 
 what the standards say they must return. It crosses to the clean side after the leak review. The second part,
 "The run", holds the provenance and what our ROM answered. It stays on the dirty side.
 
-Milestone 2 (MS-DOS 6.22 and EDIT) is not recorded yet; only the DOS calls around the benchmarks are seen
-here.
+Milestone 2 is recorded for MS-DOS EDIT (below); the DOS calls around the programs are listed apart.
 
 ## The contract (crosses after the leak review)
 
@@ -15,6 +14,25 @@ The calls each program made through INT 10h, in order. VGALOG's memory mode does
 08h, 09h, 0Ah, 0Ch, 0Dh, 0Eh and 13h, so the programs may also use those (text output, cursor, pixels).
 It does not see anything a program writes to the ports itself (the DAC, the CRTC, the bank
 registers); far calls to the VBE window function it sees with `/W`.
+
+### Milestone 2: MS-DOS 6.22 EDIT
+
+EDIT started, used and left (VGALOG /P, 2 November 2026; no mode set, so nothing was traced). The text
+itself goes to video memory at B800h or through the calls VGALOG does not log (above).
+
+| Call | Input | Count | What the program needs |
+| --- | --- | --- | --- |
+| AX=1A00h | | 1 | the display combination code: AL = 1Ah back, BL = 08h |
+| AH=0Fh | | 1 | the current mode (03h, 80 columns) |
+| AX=1130h | BH = 00h | 1 | the font information: CX = 16 (bytes per character), DL = 24 (rows - 1); ES:BP the INT 1Fh pointer |
+| AX=1003h | BL = 00h | 1 | blink off: attribute bit 7 selects the bright background |
+| AH=01h | AL = 03h, CX = 2000h | 9 | cursor off (CH bit 5) |
+| AH=01h | AL = 03h, CX = 0607h | 6 | cursor shape lines 6-7 (with cursor emulation on, B01-4) |
+| AX=1003h | BL = 01h | 1 | blink on again, at the exit |
+| AH=01h | AL = 00h, CX = 0D0Eh | 1 | cursor shape lines 13-14, at the exit |
+
+AH=01h is called with AL = the current mode (03h): some BIOSes need it, the standard does not; the
+clean ROM ignores AL in AH=01h.
 
 ### Milestone 3: Superscape 3D Bench 1.0c
 
@@ -59,11 +77,21 @@ What follows for the clean ROM:
 - **No bank change through the BIOS:** no INT 10h 4F05h and no far call through the window function
   (WinFuncPtr of 4F01h, VBE 1.2) between the mode set and the return to text, in about 21 s of drawing
   in mode 101h (`VGALOG /W`, below). The program draws 640x480 x 1 byte = 300 KB through a 64 KB window,
-  so it changes the bank by writing the chip's bank registers itself. Which registers, and how it finds
-  out that the chip is an S3, is not known: VGALOG traces ports only inside mode sets. The clean ROM must
-  still report the window fields of 4F01h correctly (WinAAttributes, WinGranularity, WinSize,
-  WinASegment, WinFuncPtr), and it must leave the chip's bank registers working as the data book
-  describes them after 4F02h 101h.
+  64 KB at a time, and changes the bank itself, from protected mode, with its S3 driver (the program,
+  below). For each bank it writes, through 3D4h/3D5h:
+  - CR38 = 48h (unlock);
+  - CR31 = CR31 OR 09h (bit 0, CPU base address on; bit 3, enhanced 256-colour mapping);
+  - CR35 = the bank number (64 KB units, bits 3-0; CR35 bits 7-4 overwritten with 0);
+  - CR38 = 00h (lock again).
+
+  It finds the S3 by the lock: CR35 bits 3-0 must not change while CR38 = 00h, and must change while
+  CR38 = 48h.
+
+  So the clean ROM must, after 4F02h 101h, leave CR6A = 00h (a non-zero CR6A makes the chip ignore
+  CR35 bits 3-0, spec C VBE-53), CR51 bits 3-2 = 0, and a mapping in which CR31 bits 0 and 3 select
+  64 KB pages of the 640x480 frame (spec C VBE-44). It must still report the window fields of 4F01h
+  correctly (WinAAttributes, WinGranularity, WinSize, WinASegment, WinFuncPtr): the program reads 100h
+  and 101h.
 - **AH=0Fh in a VESA mode:** no standard defines what AL holds after 4F02h; the program reads it only
   before it returns to text.
 - No AX=1012h or other palette call: the program loads the DAC through the ports itself.
@@ -113,6 +141,20 @@ AH=0Bh's border colour, and the prompt AH=01h's cursor shape (with cursor emulat
 - **The ES the logged 4F00h/4F01h calls carry is 0000h** (ES:DI = 0000:D670h), and the calls returned
   004Fh. In the `/W` run below it was 2000:7F40h, so the buffer moves between runs. The clean ROM writes
   where ES:DI points, as VBE says, whatever the segment.
+- **The program:** `SVGABNCH.EXE` is a DJGPP program (protected mode under CWSDPMI) with Allegro's
+  graphics drivers; its symbol table names them. It tries them in this order: VGA, VESA 2.0 linear,
+  VESA 2.0 banked, Cirrus 54xx, S3, ET4000, VESA 1.x. The two VBE 2.0 drivers fail on a VBE 1.2 BIOS
+  after 4F00h and the 4F01h search; the S3 driver finds the chip by the CR35 lock test, sets mode 101h
+  through VBE (4F00h, 4F01h 100h and 101h, 4F02h: the third round of calls in the log) and then
+  switches banks with the routine `__s3_bank` (the four writes above, from protected mode). Its VESA
+  1.x driver would switch banks through DPMI 0300h (a simulated INT 10h 4F05h), which VGALOG would log;
+  the log has none, which agrees. Read from the disassembly of the program (objdump), not from any
+  BIOS.
+- **The port trace run (`VGALOG /P`, DSP-3364P, 1.5-07-p5, 2 November 2026):** 2926 events, the 4F02h
+  101h of the BIOS among them, but none of the program: the trace ends where CWSDPMI switches back to
+  protected mode after the 4F02h, as VGALOG /P is built to do, and the program's own port writes run
+  in protected mode, where VGALOG does not see them. The bank routine above comes from the program's
+  code instead.
 - **The window function run (`VGALOG /W`, DSP-3364P, 2 November 2026):** the chip block reads
   CR2D-CR30 = 88h 11h 20h E1h (Trio64), CR36 = 8Eh, SR10/SR11 = 41h/2Ch, the ROM version 1.5-07-p5.
   The header flags are 0002h (/W). VGALOG hooked the window function at C000:4CC5h (block +28), and the
