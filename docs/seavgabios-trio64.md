@@ -4,6 +4,17 @@ How the slimmed SeaVGABIOS (branch `claude/slim-vgabios` of perchrh/seabios_fork
 VBE) becomes a video BIOS for the ExpertColor DSP-3364P (S3 86C764X Trio64, 2 MB fast page memory) under
 the clean-room rules of [`docs/clean-room.md`](clean-room.md). Written 1 November 2026; nothing here is started yet.
 
+## Status, 2 November 2026
+
+This plan is not the implementation plan of the clean ROM any more. The owner's public domain wish
+([`docs/clean-room.md`](clean-room.md)) rules out SeaVGABIOS's LGPLv3 code in the ROM, so the clean ROM is to be written in
+full, with SeaVGABIOS kept as a comparison implementation and a source of facts. That is the outside
+review's finding F4 ([`docs/cleanroom/review-2026-11-02.md`](cleanroom/review-2026-11-02.md)); the owner confirms the base in #145.
+- **Size:** the size budget below (26,320 bytes plus an S3 module) does not estimate a whole BIOS. The review's figure for an original ROM is 32 KB less about 9.7 KB of fonts, about 23 KB for code and tables, not yet measured.
+- **Fitting VBE:** the slim build shows that SeaVGABIOS with VBE fits 32 KB; earlier statements that it cannot are superseded.
+
+The rest of this file is kept as the record of the experiment.
+
 ## Changes of 1 November 2026
 
 - **Base under review.** The owner wants the ROM in the public domain ([`docs/clean-room.md`](clean-room.md) "Scope,

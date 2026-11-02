@@ -5,6 +5,18 @@ What the clean side gets for writing the S3 Trio64 module of SeaVGABIOS (the pla
 and its reasons are in [`docs/clean-room.md`](../clean-room.md). Prepared 1 November 2026. The first leak review (1 November) removed the references to dirty-side
 documents from [`spec-a-post.md`](spec-a-post.md); what remains for a second reader is listed under "Leak review".
 
+**Status, 2 November 2026.** An outside review ([`review-2026-11-02.md`](review-2026-11-02.md)) found the package not yet ready
+to implement from:
+- MODE-130's refresh count and POST-23's example are corrected since.
+- Open, for the owner and #145:
+  - the base;
+  - a frozen mode list per milestone;
+  - release terms and the export of a reviewed allowlist;
+  - the second-reader leak review, whose handover is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md).
+- Open in the test harness (#143).
+
+**On the base:** the owner's public domain wish ([`docs/clean-room.md`](../clean-room.md)) rules out SeaVGABIOS's code in the ROM. The specifications still say "built on SeaVGABIOS" in their introductions; their rules describe behaviour and hold for an original ROM as well.
+
 ## Files here
 
 | File | Side | What it is |
@@ -16,6 +28,7 @@ documents from [`spec-a-post.md`](spec-a-post.md); what remains for a second rea
 | [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
 | [`freedos-1.4.md`](freedos-1.4.md) | goes across | what FreeDOS 1.4 asks of the video BIOS (milestone 2), from its sources |
 | [`freedos-reports.md`](freedos-reports.md) | goes across | drafts of the MORE and MODE defect reports to FreeDOS |
+| [`review-2026-11-02.md`](review-2026-11-02.md) | dirty only | the outside feasibility review of 2 November 2026: its findings, our checks and where each went |
 | [`oracle-a-post.md`](oracle-a-post.md), [`oracle-b-modeset.md`](oracle-b-modeset.md), [`oracle-c-vbe.md`](oracle-c-vbe.md) | dirty only | what the reference ROMs do in the emulator and on the card, compared with the specification; the expected values for checking the clean ROM, never handed over |
 
 ## What goes to the clean side
@@ -42,8 +55,10 @@ notes), and anything from another vendor's BIOS source.
 ## Checking the clean ROM (on the dirty side)
 
 1. **Emulator**: `make emu-test ROM=CLEAN.BIN CHIP=764` with 2, 4 and 1 MB. The tests tagged `patch`
-   are skipped for a ROM that is not ours; S3TEST runs its set for other BIOSes on a Trio64 (chip,
-   MCLK, memory, VGA and VESA mode lines, clears, scrolls, timings), S3COMPAT and VSHOW run in full.
+   are skipped for a ROM that is not ours, and S3TEST is one of them: there is no clean-ROM profile
+   yet (corrected 2 November 2026; this said S3TEST ran its set for other BIOSes, which the runner
+   does not do, and S3TEST on a Trio64 expects our ROM's signature; #143). S3COMPAT and VSHOW run in
+   full. Also, `t_post` does not yet notice a POST that never returns (#143).
 2. **The oracle**: the register state after POST and after each mode set compared with
    [`oracle-a-post.md`](oracle-a-post.md) and [`oracle-b-modeset.md`](oracle-b-modeset.md), the 4F00/4F01 blocks with [`oracle-c-vbe.md`](oracle-c-vbe.md). Where the
    oracle notes a reference value that the specification deliberately does not follow (non-DMT
@@ -61,7 +76,7 @@ notes), and anything from another vendor's BIOS source.
 
 ## Leak review
 
-The procedure is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md); the results are recorded here. Done once on 1 November 2026 by the dirty side (a search of the three specification files for
+The procedure is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md), with the handover for the second reader (2 November 2026); the results are recorded here. Done once on 1 November 2026 by the dirty side (a search of the three specification files for
 Phoenix, the reference ROMs, [`rompatch/`](../../rompatch/), [`docs/764-rom.md`](../764-rom.md) and riplin, then a reading of the
 hits). Left for a second reader to judge:
 
@@ -78,7 +93,8 @@ hits). Left for a second reader to judge:
 ## Font origin (to settle before distribution)
 
 The similarity check shows SeaVGABIOS's 8x8, 8x14 and 8x16 fonts byte for byte equal to S3's and
-Phoenix's fonts over runs of up to 3.6 KB: all of them carry the IBM VGA font. SeaVGABIOS calls its
-fonts public domain (from Joseph Gil's FNTCOL16 collection, [`docs/clean-room.md`](../clean-room.md)). Whether the IBM glyphs
-are free to distribute is a question for the lawyer of [`docs/clean-room.md`](../clean-room.md); the FreeDOS cpidos fonts
-(GPL 2 or later) are the alternative that the plan already names.
+Phoenix's fonts over runs of up to 3.6 KB: all of them carry the IBM VGA font.
+
+Since 2 November 2026 (#141) our patched ROMs build all five font tables from Joseph Gil's FNTCOL16 files in [`rompatch/fonts/`](../../rompatch/fonts/). That folder holds the unmodified files and Gil's notice: the individual fonts public domain, and the US Copyright Office position that bitmap fonts are not registrable (57 FR 6201). The tables include the 9-dot alternates, taken from PP_ROMAN.F16 and STANDARD.F14.
+
+Those files are the clean side's candidate font source. They equal IBM's glyphs byte for byte, though, so whether they are free to distribute everywhere (not only in the US) is still a question for the lawyer of [`docs/clean-room.md`](../clean-room.md); the FreeDOS cpidos fonts (GPL 2 or later) remain the named alternative. The similarity check excludes font ranges given with `--fonts`, but that says nothing about their provenance.
