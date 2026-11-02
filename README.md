@@ -782,7 +782,8 @@ outside the repository (file names in brackets, as of 2 November 2026); the link
   [Rev. 10](https://glenwing.github.io/docs/VESA-DMT-1.10.pdf) (29 October 2004; `VESA-DMT-1.0.pdf`) and
   [Rev. 13](https://glenwing.github.io/docs/VESA-DMT-1.13.pdf) (2013; `VESA-DMT-1.13.pdf`); and the
   [VESA Generalized Timing Formula (GTF) Standard 1.1](https://glenwing.github.io/docs/VESA-GTF-1.1.pdf)
-  (2002; `VESA-GTF-1.1.pdf`): the timing references of the tools and the refresh tables.
+  (2 September 1999; `VESA-GTF-1.1.pdf`; 1.1 adds only the "Secondary GTF" curve to 1.0 of 8 December
+  1996, the default curve is unchanged): the timing references of the tools and the refresh tables.
 - [VESA Enhanced Display Data Channel (E-DDC) Standard 1.2](https://glenwing.github.io/docs/VESA-EDDC-1.2.pdf)
   (26 December 2007; `VESA-EDDC-1.2.pdf`): DDC2B over the I2C bus,
   EDID at A0h/A1h, for the DDC2 work on the Trio64. It drops the DDC1 mode ("No support for the DDC1
