@@ -16,7 +16,7 @@ Tests
                  modes are gone from the mode table, the VESA lists and the mode map, every kept entry is
                  byte for byte the one of 1.5-07 (only bit 7 of a new first entry set), and no list
                  reaches into the code placed after the lists
-  fonts          all five font tables are those of 1.03-08 (--ref765) byte for byte, end to end from 5720h
+  fonts          all five font tables are those of rompatch/fonts byte for byte, end to end from 5720h
                  to 7F90h, and the eight references to the moved 8x16 font and 9x16 table point at their
                  new places; --fonts-only changes only the fonts, those references and the checksum byte
   ddc            the 4F15 sites carry their new bytes and the VDIF code (DDC_FREED) is gone, tfifo.asm in
@@ -144,30 +144,27 @@ def main():
     result('tables', not errs, '; '.join(errs[:4]) or '%d interlaced entries and %d modes gone, kept entries unchanged'
            % (len(s3tpatch.ILACE), len(s3tpatch.REMOVE)))
     errs = []
-    if os.path.exists(a.ref765):
-        v = open(a.ref765, 'rb').read()
-        where = {}
-        for name, so, ln, _, at in s3tpatch.S3FONTS:
-            where[name] = at
-            if img[at:at + ln] != v[so:so + ln]:
-                errs.append('%s font at %04X is not S3\'s' % (name, at))
-        for a_, old in s3tpatch.FONT_REFS.items():
-            want = where['8x16'] if old == 0x6E30 else where['9x16 alternate']
-            if struct.unpack_from('<H', img, a_)[0] != want:
-                errs.append('font reference %04X not %04X' % (a_, want))
-        rc, fref, err = run(tmp, ref, ['--fonts-only'])
-        if rc or not fref:
-            errs.append('--fonts-only: ' + err)
-        else:
-            fonts = set(range(*s3tpatch.FONTS))
-            for a_ in s3tpatch.FONT_REFS:
-                fonts |= {a_, a_ + 1}
-            if any(fref[i] != ref[i] for i in range(0x7FFF) if i not in fonts) or \
-                    any(fref[i] != img[i] for i in fonts) or sum(fref) & 0xFF:
-                errs.append('--fonts-only changes other bytes or not the same fonts')
+    where = {}
+    for name, tab, at in s3tpatch.FONT_TABLES:
+        where[name] = at
+        t = getattr(s3tpatch.fonts, tab)
+        if img[at:at + len(t)] != t:
+            errs.append('%s font at %04X is not the table of rompatch/fonts' % (name, at))
+    for a_, old in s3tpatch.FONT_REFS.items():
+        want = where['8x16'] if old == 0x6E30 else where['9x16 alternate']
+        if struct.unpack_from('<H', img, a_)[0] != want:
+            errs.append('font reference %04X not %04X' % (a_, want))
+    rc, fref, err = run(tmp, ref, ['--fonts-only'])
+    if rc or not fref:
+        errs.append('--fonts-only: ' + err)
     else:
-        errs.append('no %s' % a.ref765)
-    result('fonts', not errs, '; '.join(errs) or 'the five tables of 1.03-08, %d references moved; --fonts-only the same'
+        fonts = set(range(*s3tpatch.FONTS))
+        for a_ in s3tpatch.FONT_REFS:
+            fonts |= {a_, a_ + 1}
+        if any(fref[i] != ref[i] for i in range(0x7FFF) if i not in fonts) or \
+                any(fref[i] != img[i] for i in fonts) or sum(fref) & 0xFF:
+            errs.append('--fonts-only changes other bytes or not the same fonts')
+    result('fonts', not errs, '; '.join(errs) or 'the five tables of rompatch/fonts, %d references moved; --fonts-only the same'
            % len(s3tpatch.FONT_REFS))
     errs = []
     for a_, _, new in s3tpatch.DDC_SITES:

@@ -66,7 +66,7 @@ from s3patch import PatchError, sig_match, call_target, jmp, call, speed_sites, 
 VERSION = '1.03-08N'
 LEVEL = s3patch.rom_level('VER765', VERSION)   # the sign-on level: common/version.inc VER765
 REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   # 32 KB 1.03-08N image
-RESULT_SHA = '8e0df50123813c81cd3c01d7c11e8e420fd039c50cdf3ea1f01e49cbc6a8fc09'  # 1.03-08N-p4 (NASM 3.02), emulator tests passed
+RESULT_SHA = 'cde0867365326366f257ac188dfa838c6c425fae31c796a1f2d61474ef08dcec'  # 1.03-08N-p5 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -77,6 +77,10 @@ BLOCK_SHA = {
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
     'vfix.asm': 'a2fe5962c89579d5',
 }
+# Font tables, from rompatch/fonts (p5, #141): (name, table of fonts.py, address). The 9x14 table's
+# closing 00h is the first byte of the 8x16 font (glyph 00h, row 0), as in 1.03-08N.
+FONT_TABLES = [('8x8', 'F8', 0x526C), ('8x14', 'F14', 0x5A6C), ('9x14 alternate', 'ALT14', 0x686C),
+               ('8x16', 'F16', 0x6998), ('9x16 alternate', 'ALT16', 0x7998)]
 FREE_START, FREE_END = 0x7AE0, 0x7FF0   # free in 1.03-08 from 7AD9h (zeros); 7FF0h-7FF6h: 'Cardex1'
 
 # Patch sites in 1.03-08. The shared ones (clr ... ah09b) have the 2.04.07 signatures of s3patch.SIG,
@@ -268,6 +272,8 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
                  known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first
+
+    s3patch.put_fonts_in_place(d, FONT_TABLES, log)
 
     # 3. sign-on and checksum
     s = m.start(1)

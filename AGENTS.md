@@ -7,7 +7,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 - Hardware: Gainward S3 Trio64V2/DX (86C775), 2 MB EDO 40 ns, board ICUVGA-GW503A, PCI 5333:8901.
 - The ROM is a 64 KB image. The lower 32 KB is the S3 reference BIOS 2.04.07 with our patches
-  (currently -p23); the upper 32 KB is a copy of it (#78; p15 to p21 were built with zeros there, up to
+  (currently -p24); the upper 32 KB is a copy of it (#78; p15 to p21 were built with zeros there, up to
   p14 it was the card's Trio64V+ BIOS 1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
 - The patched ROM images are kept outside this repository. `rompatch/` holds the ROM code (nasm) and
   `s3patch.py`, which builds the current level from the S3 reference 2.04.07 alone
@@ -55,6 +55,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   (hang), see docs/775-rom.md "Omitted".
 - Fixes that change what a standard function returns, or need more ROM space than is free, stay as
   TSRs (S3ALIAS).
+- The fonts of all three ROMs come from rompatch/fonts (Joseph Gil's public domain collection, files kept
+  unmodified with his notice; #141), never from a BIOS image or another project's code.
 - The 8x14 font is missing in the BIOS and that is accepted for now. The Trio64 ROM keeps its 8x14
   font and 9x14 alternate table (S3's since 30 October 2026), to preserve the style of the era: do not
   delete them for space. It also keeps DDC1 in VBE 4F15 (only VDIF was deleted).
@@ -172,7 +174,8 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   unpatched reference BIOS 2.04.07: same registers back, BIOS data, video memory, DAC and standard VGA
   registers after every call (`make 775-ref-compare REF775=... ROM=...`, emu/refcompare.py). Our
   changes there are speed only (32-bit stores) or VGA/S3 extended registers; a change that makes a
-  difference in those modes needs a reason in README.md. The Trio64 ROM carries S3's fonts instead of
+  difference in those modes needs a reason in README.md. The Trio64 ROM carries the fonts of
+  rompatch/fonts (S3's tables, built from Gil's public domain collection, #141) instead of
   Phoenix's (README "Trio64 ROM"): `make 764-ref-compare` compares it with 1.5-07 with those fonts only
   (`s3tpatch.py --fonts-only`), so every other difference still shows.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and

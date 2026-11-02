@@ -143,6 +143,8 @@ from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, U
                                UC_X86_INS_IN, UC_X86_INS_OUT)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'rompatch', 'fonts'))
+import fonts  # noqa: E402  (rompatch/fonts: the font tables of our ROMs, built from Gil's public domain fonts)
 SRC = os.path.dirname(HERE)
 
 
@@ -375,6 +377,7 @@ def t_rom_patches(c):
         if not cond:
             fails.append(what)
 
+    font_tables(m, chk, has14=False)    # p24 (#141): the fonts of rompatch/fonts, in place; no 8x14 in 2.04.07
     rom = c.rom
     chk(romver().encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
@@ -521,6 +524,7 @@ def t_vplus_patches(c):
         if not cond:
             fails.append(what)
 
+    font_tables(m, chk)                 # p5 (#141): the fonts of rompatch/fonts, in place
     rom = c.rom
     chk(('Version ' + latest('vplus/s3vpatch.py')).encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes'
         % latest('vplus/s3vpatch.py'))
@@ -740,25 +744,19 @@ def t_t64_patches(c):
             cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x52, 0x6A, 0x38, 0x39))
     chk(base[0] and not base[1] and cr.get(0x52, 0) == 0x80, 'POST: CR59/5A %02X%02X, CR52 %02X (expected 80h)'
         % (base[0], base[1], cr.get(0x52, 0)))
-    # S3's fonts (1.03-08, the same as 2.04.07), all five tables whole: AX=1130h finds each, the moved 8x16
-    # font and 9x16 table too
-    vref = os.path.join(os.path.dirname(HERE), 'reference', '64vplus', '1_03_08n.bin')
-    if os.path.exists(vref):
-        v = open(vref, 'rb').read()
-        for bh, so, ln in ((3, 0x526C, 0x400), (4, 0x566C, 0x400), (2, 0x5A6C, 0xE00), (6, 0x6998, 0x1000),
-                           (5, 0x686C, 301), (7, 0x7998, 324)):
-            r = m.int10(0x1130, bx=bh << 8)
-            chk(m.mem(r['es'] * 16 + r['bp'], ln) == v[so:so + ln], 'AX=1130h BH=%d: not S3\'s font' % bh)
-        # the mode set and AX=1114h load them into plane 2 through the moved addresses: S3's 8x16 glyphs,
-        # and in the 9-dot modes 03h and 07h all 19 of S3's 9x16 alternate glyphs on top
-        alt = {v[0x7998 + i * 17]: v[0x7998 + i * 17 + 1:0x7998 + i * 17 + 17] for i in range(19)}
-        for ax, nalt in ((0x0003, 19), (0x0007, 19), (0x1114, 0)):
-            m.int10(ax)
-            g = [bytes(m.planes[2][c * 32:c * 32 + 16]) for c in range(256)]
-            plain = [c for c in range(256) if c not in alt and g[c] != v[0x6998 + c * 16:0x6998 + c * 16 + 16]]
-            got = sum(g[c] == alt[c] for c in alt)
-            chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not S3\'s 8x16, %d of 19 alternate glyphs '
-                '(expected %d)' % (ax, len(plain), got, nalt))
+    # the fonts of rompatch/fonts (#141; before p5 S3's from 1.03-08, the same bytes), all five tables
+    # whole: AX=1130h finds each, the moved 8x16 font and 9x16 table too
+    font_tables(m, chk)
+    # the mode set and AX=1114h load them into plane 2 through the moved addresses: the 8x16 glyphs (8-dot
+    # shapes), and in the 9-dot modes 03h and 07h all 19 9x16 alternate glyphs (9-dot shapes) on top
+    alt = {fonts.ALT16[i * 17]: fonts.ALT16[i * 17 + 1:i * 17 + 17] for i in range(19)}
+    for ax, nalt in ((0x0003, 19), (0x0007, 19), (0x1114, 0)):
+        m.int10(ax)
+        g = [bytes(m.planes[2][c * 32:c * 32 + 16]) for c in range(256)]
+        plain = [c for c in range(256) if c not in alt and g[c] != fonts.F16[c * 16:c * 16 + 16]]
+        got = sum(g[c] == alt[c] for c in alt)
+        chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not the 8x16 of rompatch/fonts, %d of 19 '
+            'alternate glyphs (expected %d)' % (ax, len(plain), got, nalt))
     # VBE 4F15 without VDIF (the model has no monitor on the DDC lines): BL=00h answers 004Fh with BX = 0000h
     # and BL=01h fails, as on 1.5-07, after its 50-frame watch for a DDC1 monitor (DDC1 kept); BL=02h, read
     # VDIF, fails at once (1.5-07 also watched 50 frames first)
@@ -1558,6 +1556,17 @@ def vesa_supported(m):
         if r['ax'] == 0x004F and m.mem(0x30400, 1)[0] & 1:
             out.append(v)
     return out
+
+
+def font_tables(m, chk, has14=True):
+    """Our ROMs' fonts are the tables of rompatch/fonts (#141): AX=1130h BH=2-7 point at them, whole.
+    2.04.07 has no 8x14 font (BH=2 gives the 8x16) and one alternate table, the 9x16 one (has14=False)."""
+    want = {3: fonts.F8[:0x400], 4: fonts.F8[0x400:], 2: fonts.F14 if has14 else fonts.F16, 6: fonts.F16,
+            5: fonts.ALT14 if has14 else fonts.ALT16, 7: fonts.ALT16}
+    for bh, t in sorted(want.items()):
+        r = m.int10(0x1130, bx=bh << 8)
+        chk(m.mem(r['es'] * 16 + r['bp'], len(t)) == t, 'AX=1130h BH=%d at %04X:%04X: not the %d-byte table of '
+            'rompatch/fonts' % (bh, r['es'], r['bp'], len(t)))
 
 
 def vesa_fit(m, mode):

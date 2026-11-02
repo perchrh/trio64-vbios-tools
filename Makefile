@@ -183,7 +183,7 @@ REF764 ?= reference/trio64/1_5_07.bin
 
 764-ref-compare: | build
 	@test -n "$(ROM)" || { echo "764-ref-compare: set ROM (our Trio64 ROM; REF764 defaults to reference/trio64/1_5_07.bin)"; exit 2; }
-	python3 rompatch/trio64/s3tpatch.py --fonts-only --fonts "$(REF765)" "$(REF764)" -o build/T64FONTS.BIN
+	python3 rompatch/trio64/s3tpatch.py --fonts-only "$(REF764)" -o build/T64FONTS.BIN
 	$(PYTHON) emu/refcompare.py --chip 764 --ref build/T64FONTS.BIN --rom "$(ROM)"
 
 # All four chips' ROMs, each at its memory clocks, into build/roms/<chip>-<level>/ (level from
