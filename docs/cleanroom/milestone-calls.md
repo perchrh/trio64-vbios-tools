@@ -13,8 +13,8 @@ here.
 
 The calls each program made through INT 10h, in order. VGALOG's memory mode does not log AH=02h, 03h,
 08h, 09h, 0Ah, 0Ch, 0Dh, 0Eh and 13h, so the programs may also use those (text output, cursor, pixels).
-It does not see a far call to the VBE window function either, nor anything a program writes to the
-ports itself (the DAC, the CRTC, the bank registers).
+It does not see anything a program writes to the ports itself (the DAC, the CRTC, the bank
+registers); far calls to the VBE window function it sees with `/W`.
 
 ### Milestone 3: Superscape 3D Bench 1.0c
 
@@ -56,14 +56,14 @@ What follows for the clean ROM:
 - **The VESA mode is 101h**, 640x480 in 256 colours (VBE 1.2), banked. Mode 100h must at least be
   reported correctly by 4F01h, because the program asks for it. Whether it is used when offered is not
   known.
-- **No INT 10h call to 4F05h** was logged between the mode set and the return to text. The program
-  draws 640x480 x 1 byte = 300 KB through a 64 KB window, so it changes the bank either through the
-  far window function whose address 4F01h returns (WinFuncPtr, VBE 1.2) or by writing the chip's bank
-  register itself. Either way the window function and the window fields of 4F01h (WinAAttributes,
-  WinGranularity, WinSize, WinASegment, WinFuncPtr) must be right. Which of the two it uses is not
-  known yet. `VGALOG /W` tells: it hooks the WinFuncPtr of 4F01h and logs the far calls through it
-  (and counts them in the chip and ROM block, +24). Far calls logged: the window function; none and no
-  4F05h: the program writes the bank registers itself.
+- **No bank change through the BIOS:** no INT 10h 4F05h and no far call through the window function
+  (WinFuncPtr of 4F01h, VBE 1.2) between the mode set and the return to text, in about 21 s of drawing
+  in mode 101h (`VGALOG /W`, below). The program draws 640x480 x 1 byte = 300 KB through a 64 KB window,
+  so it changes the bank by writing the chip's bank registers itself. Which registers, and how it finds
+  out that the chip is an S3, is not known: VGALOG traces ports only inside mode sets. The clean ROM must
+  still report the window fields of 4F01h correctly (WinAAttributes, WinGranularity, WinSize,
+  WinASegment, WinFuncPtr), and it must leave the chip's bank registers working as the data book
+  describes them after 4F02h 101h.
 - **AH=0Fh in a VESA mode:** no standard defines what AL holds after 4F02h; the program reads it only
   before it returns to text.
 - No AX=1012h or other palette call: the program loads the DAC through the ports itself.
@@ -111,8 +111,14 @@ AH=0Bh's border colour, and the prompt AH=01h's cursor shape (with cursor emulat
 
   None of this is a requirement for the clean ROM.
 - **The ES the logged 4F00h/4F01h calls carry is 0000h** (ES:DI = 0000:D670h), and the calls returned
-  004Fh. The program presumably runs under a DOS extender that passes the real-mode registers through
-  a simulated interrupt. The clean ROM writes where ES:DI points, as VBE says, whatever the segment.
+  004Fh. In the `/W` run below it was 2000:7F40h, so the buffer moves between runs. The clean ROM writes
+  where ES:DI points, as VBE says, whatever the segment.
+- **The window function run (`VGALOG /W`, DSP-3364P, 2 November 2026):** the chip block reads
+  CR2D-CR30 = 88h 11h 20h E1h (Trio64), CR36 = 8Eh, SR10/SR11 = 41h/2Ch, the ROM version 1.5-07-p5.
+  The header flags are 0002h (/W). VGALOG hooked the window function at C000:4CC5h (block +28), and the
+  count of far calls through it (block +24) is 0. The calls of the 640x480 run are those of the table
+  above (4F00h three times, 4F01h 100h and 101h twice each, 4F02h 101h, ticks 824Fh-83C8h, about 21 s),
+  with no 4F05h.
 - **S3REGS before and after:**
   - After both benchmarks, CR0E/CR0F (the cursor location) differ, as expected after CLS.
   - After Chris's benchmark, CR3B (the data transfer position) is 59h instead of 00h, left from mode
