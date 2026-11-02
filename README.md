@@ -813,7 +813,13 @@ probe the Trio64 board's DDC wiring), the
 [Release A, Revision 2](https://glenwing.github.io/docs/VESA-EEDID-A2.pdf) (2006; `VESA-EEDID-A2.pdf`;
 EDID 1.4), and
 [VESA BIOS Extension/Accelerator Functions (VBE/AF) 1.0, Revision 0.7](https://web.archive.org/web/2005/http://www.vesa.org/public/VBE/VBE-AF07.pdf)
-(August 1996; `VBE-AF07.pdf`; a loadable accelerator driver, not a ROM function).
+(August 1996; `VBE-AF07.pdf`; a loadable accelerator driver, not a ROM function), and the
+[VESA Coordinated Video Timings (CVT) Standard 1.2](https://glenwing.github.io/docs/VESA-CVT-1.2.pdf)
+(8 February 2013; the owner's copy; CVT dates from 2003). CVT generates new timings and does not change
+the DMT and IBM entries our ROMs use. Two of its points bear on them: a border (CVT's margin) counts as
+active and blanking lies outside it, as in DMT (spec-b MQ-16); and a display reads the sync polarities
+with the vertical sync width, where a sync of 3 lines or less marks a non-CVT (DMT, GTF) timing, so the
+IBM 400- and 350-line timings (2-line syncs, mixed polarities) are not taken for CVT ones.
 
 ### Other references
 
@@ -873,7 +879,7 @@ this for our ROMs).
 - S3 Trio64V+ (86C765) datasheet, from the S3VBEFIX repository: PLL formula and VCO range, CR67 colour
   modes, SR15/SR18 clock doubling, CR31/CR58/CR59-5A linear addressing, CR50, CR51, CR43, CR5D/CR5E.
 - [S3VBEFIX](https://github.com/wbcbz7/S3VBEFIX) source and README, plus SVGATRIX.TXT and vbe20.txt.
-- VESA BIOS Extension (VBE) 2.0 specification; VESA DMT; VESA CVT 1.1; the other VESA standards in
+- VESA BIOS Extension (VBE) 2.0 specification; VESA DMT; VESA CVT 1.2; the other VESA standards in
   "VESA standards" above.
 - VGATEST by Kent Quirk and Ed McNierney, PC Tech Journal, November 1988 (IBM reference tables).
 - VBETest/Lite (SciTech) and X-VESA 1.0.3: test ideas for S3COMPAT and VSHOW.
