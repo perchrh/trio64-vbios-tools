@@ -124,7 +124,9 @@ jobs:
 
       - name: ${{ matrix.chip }} ROM patcher tests
         if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
-        run: make ${{ matrix.code }}-rom-test NASM=$HOME/nasm/nasm
+        run: |
+          make ${{ matrix.code }}-rom-test NASM=$HOME/nasm/nasm
+          python3 emu/similarity.py --self-test
 
       - name: ${{ matrix.chip }} emulator tests, ${{ matrix.part }}
         if: ${{ !cancelled() && steps.rom.outcome == 'success' }}

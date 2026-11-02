@@ -1338,7 +1338,7 @@ def t_vgalog_mem(c):
           and b'No events registered, not writing output file' in r0.stdout,
           '/D with no calls: exit %s, files %s, output %r' % (r0.exit, sorted(r0.files), r0.stdout[-80:]))
     calls = [(0x0003, {}), (0x0E41, dict(bx=7)), (0x4F02, dict(bx=0x0101)), (0x4F05, dict(bx=0, dx=2)),
-             (0x1130, dict(bx=0x0200)), (0x0003, {})]
+             (0x1130, dict(bx=0x0200)), (0x0007, {}), (0x0003, {})]
     ret = {}
     for ax, kw in calls:
         res = m.int10(ax, **kw)
@@ -1347,6 +1347,9 @@ def t_vgalog_mem(c):
         if ax == 0x4F02:                # what the record of this call must hold: the registers after it
             sr, cr = m.r['seq'], m.r['crtc']
             after = bytes([sr.get(0x10, 0), sr.get(0x11, 0), cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0)])
+        if ax == 0x0007:                # mono: the CRTC is at 3B4h now, VGALOG must follow MISC bit 0 (#144)
+            sr, cr = m.r['seq'], m.r['crtc']
+            after7 = bytes([sr.get(0x10, 0), sr.get(0x11, 0), cr.get(0x58, 0), cr.get(0x59, 0), cr.get(0x5A, 0)])
     check(ret[0x1130]['es'] == 0xC000 and ret[0x1130]['cx'] == 16, 'AX=1130h result changed by VGALOG: %s' % ret[0x1130])
     rd = m.run_com(com, '/D', seg=0x4000)
     check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
@@ -1358,7 +1361,7 @@ def t_vgalog_mem(c):
     recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
     check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
     top = [struct.unpack_from('<H', x, 2)[0] for x in recs if x[23] == 0]
-    check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
+    check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0007, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
           % ['%04X' % a for a in top])
     nested = [x for x in recs if x[23] > 0]
     # the 2.04.07 BIOS calls AX=1130h itself in the mode set; another BIOS need not nest a call at all
@@ -1367,6 +1370,9 @@ def t_vgalog_mem(c):
     r101 = [x for x in recs if struct.unpack_from('<HH', x, 2) == (0x4F02, 0x0101)][0]
     check(struct.unpack_from('<H', r101, 14)[0] == 0x004F and r101[26:31] == after,
           '4F02 101h record: AX out, SR10/11 or CR58/59/5A wrong: %s (registers %s)' % (r101.hex(), after.hex()))
+    r07 = [x for x in recs if x[23] == 0 and struct.unpack_from('<H', x, 2)[0] == 0x0007][0]
+    check(r07[26:31] == after7, 'mode 07h record: SR10/11 or CR58/59/5A wrong (CRTC read at the colour '
+          'address?): %s (registers %s)' % (r07[26:31].hex(), after7.hex()))
     check(m.r['crtc'].get(0x38) != 0x48 or m.r['seq'].get(8) != 0x06, 'S3 registers left unlocked')
     # Another program hooks INT 10h after VGALOG, as Windows 9x does in a DOS box: /D and the install
     # check find the resident copy through the MCB chain, /U (only as the last hook) refuses
