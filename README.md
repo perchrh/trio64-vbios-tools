@@ -759,7 +759,8 @@ Documents the project does not have; what depends on them is marked where it is 
 ### VESA standards
 
 The VESA documents our ROMs implement or the tools check against. Only VBE 2.0 may be posted online
-(unmodified), so the copies are kept outside the repository; the links are the public ones.
+(unmodified): it is in the repository, `standards/vesa/vbe20.pdf`. The others are the owner's copies,
+outside the repository; the links are the public ones.
 
 - [VBE Core Functions 2.0](https://web.archive.org/web/20081211174813/http://docs.ruudkoot.nl/vbe20.txt),
   Rev. 1.1 (November 1994): 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE
@@ -800,12 +801,14 @@ board's DDC wiring), E-EDID Release A (February 2000; EDID 1.3, the data 4F15 ca
 [VBE/AF 1.0](https://web.archive.org/web/20081209121702/http://www.vesa.org/public/VBE/VBE-AF07.pdf)
 (August 1996; a loadable accelerator driver, not a ROM function).
 
-Other references at hand (owner's copies, outside the repository): IBM's "Personal System/2 and
+### Other references
+
+Owner's copies, outside the repository: IBM's "Personal System/2 and
 Personal Computer BIOS Interface Technical Reference" (April 1987), Ralf Brown's Interrupt List, Richard
 Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards" (3rd edition, 1994), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3
 (`docs/clean-room.md`, "Public documents for the clean side").
 
-Secondary references:
+### Secondary references
 
 - VGADOC 4b by Finn Thoegersen (1991-95), freeware: nine of its files are in `standards/thoegersen/`
   with its licence (`standards/README.md`). VGABIOS.TXT is a reference for the standard INT 10h
@@ -840,6 +843,8 @@ Secondary references:
 Looked at and not used: the list of chipsets with VBE 2.0/3.0 (xerxys.info), and vbespy and vbetool,
 Linux tools that run a card's video BIOS to log or replay its mode sets (the emulator in `emu/` does
 this for our ROMs).
+
+### Rules, data books and BIOS images the work rests on
 
 - `docs/chip-rules.md`: every chip rule the tools check, with its ID and datasheet source.
 - `docs/bios-rules.md`: 323 behaviour rules for the standard video BIOS (INT 10h AH=00h-1Ch, the BIOS
