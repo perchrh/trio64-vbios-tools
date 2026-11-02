@@ -19,6 +19,16 @@
 ;                    events), in program order: the port, the value and whether it was read or written.
 ;                    Needs about 100 KB of conventional memory. A mode set runs slower while traced (a
 ;                    trap per instruction: about half a second for a 256 KB clear on a 386).
+;   VGALOG /P        as /T, and after every AX=4F02h a program makes, the program itself is traced
+;                    too (its port accesses with those of the BIOS calls it makes), until TPMAX (12288)
+;                    new events are in the trace, the program's next mode set (traced as with /T, and
+;                    after a 4F02h the program is traced again), or an instruction that would switch to
+;                    protected mode (MOV CR0, LMSW and the rest of 0F 01h, 0F 22h), whichever comes first.
+;                    Shows how a program changes the bank or programs the DAC and CRTC through the ports.
+;                    The program runs much slower while traced; the trace ends by itself, then it runs at
+;                    full speed. The instruction right after the INT 10h 4F02h runs before the first trap
+;                    and is not traced. INT 21h and the other interrupts the program calls run untraced
+;                    (the CPU clears the trap flag in them); a program that hooks INT 1 itself ends it.
 ;   VGALOG /W        memory mode with the window function hook: as /M, and the WinFuncPtr that a 4F01h
 ;                    call returns (mode information +0Ch) is replaced in the caller's buffer by the
 ;                    address of a VGALOG routine, which logs the program's far calls through it and then
@@ -65,7 +75,8 @@
 ;
 ; Memory mode (/M, dumped with /D): a 48-byte file header, then 32 bytes per call, oldest first
 ;   header  'VGALOGM2', dd calls logged in total, dw records in the file, dw flags (bit 0 = the trace
-;           part follows, bit 1 = /W: window function calls are logged), then the chip and ROM block (32 bytes); the calls start at file offset 48.
+;           part follows, bit 1 = /W: window function calls are logged, bit 2 = /P: the program
+;           was traced after 4F02h too), then the chip and ROM block (32 bytes); the calls start at file offset 48.
 ;           ('VGALOGM1', before 1 November 2026: no flags, no block, the calls at offset 16.)
 ;   +0  dw call number (low 16 bits of the total)
 ;   +2  AX, +4 BX, +6 CX, +8 DX, +10 ES, +12 DI as the caller gave them
@@ -138,6 +149,11 @@ tnext   dw 0                    ; byte offset of the next event in tseg
 tlast   dw 0                    ; byte offset of the last event
 ttotal  dd 0                    ; events in total
 oldi1   dd 0                    ; INT 1 vector while a mode set is traced
+tpflag  db 0                    ; 1 = trace the program after its 4F02h too (/P)
+tpost   db 0                    ; 1 while the program is traced after a 4F02h
+tpleft  dw 0                    ; new events left in that trace
+tclr    db 0                    ; 1 = the trace ended inside an INT 10h call: no trap flag back
+TPMAX   equ 12288
 wflag   db 0                    ; 1 = window function hook (/W)
 wfold   dd 0                    ; the BIOS's window function (offset, segment) once hooked
 wfcnt   dd 0                    ; far calls through the hook in total
@@ -294,7 +310,18 @@ misr:   cmp ah,0x02
         or ax,bx
         pop bx
         mov [bp+14],ax
-        pop ax
+        cmp byte [tclr],0               ; /P: the trace ended during this call: the caller goes on
+        je .tp                          ; untraced
+        and byte [bp+15],0xFE
+        cmp byte [depth],0
+        jne .tp
+        mov byte [tclr],0
+.tp:    cmp byte [tpost],0              ; /P: the program is traced after its 4F02h
+        je .tq
+        cmp byte [depth],0
+        jne .tq
+        or byte [bp+15],1
+.tq:    pop ax
         pop si
         pop ds
         pop bp                          ; BP as the BIOS returned it (AX=1130h returns ES:BP)
@@ -497,8 +524,18 @@ s3regs: push ax
 tstart: cmp byte [tflag],0
         je .r
         cmp byte [tron],0
-        jne .mark                       ; a call from inside the traced one
+        je .new
+        cmp byte [tpost],0              ; /P: the program is traced; its next mode set is traced as one
+        je .mark                        ; (a call from inside the traced one)
         cmp byte [depth],0
+        jne .mark
+        test ah,ah
+        jz .ps
+        cmp ax,0x4F02
+        jne .mark
+.ps:    mov byte [tpost],0
+        jmp .mark
+.new:   cmp byte [depth],0
         jne .r
         test ah,ah
         jz .on
@@ -531,27 +568,45 @@ tstart: cmp byte [tflag],0
         pop ax
 .r:     ret
 
-; /T, after the BIOS call (DS = CS): at depth 1 (the traced mode set itself) INT 1 is put back and
-; tron cleared. Keeps all registers.
+; /T, after the BIOS call (DS = CS, SI = its slot): at depth 1 (the traced mode set itself) INT 1 is
+; put back and tron cleared. With /P, after a 4F02h (or while the program is traced) the trace goes on
+; into the program instead: tpost = 1 with TPMAX events to go (misr sets the caller's trap flag).
+; Keeps all registers.
 tstop:  cmp byte [tron],0
         je .r
         cmp byte [depth],1
         jne .r
-        push es
+        cmp byte [tpost],0
+        jne .r                          ; the program is traced: it goes on
+        cmp byte [tpflag],0
+        je tpoff
+        cmp word [si+2],0x4F02
+        je .on
+        mov byte [tclr],1               ; /P: a mode set ends the program's trace: no trap flag back
+        jmp tpoff
+.on:    mov byte [tpost],1
+        mov word [tpleft],TPMAX
+.r:     ret
+
+; The trace ends: INT 1 put back, tron, tpost and tpend cleared. Any DS. Keeps all registers and the
+; interrupt flag.
+tpoff:  push es
         push ax
         xor ax,ax
         mov es,ax
+        pushf                           ; the interrupt flag as found (off in the trap handler)
         cli
-        mov ax,[oldi1]
+        mov ax,[cs:oldi1]
         mov [es:4],ax
-        mov ax,[oldi1+2]
+        mov ax,[cs:oldi1+2]
         mov [es:6],ax
-        sti
+        popf
         pop ax
         pop es
-        mov byte [tron],0
-        mov byte [tpend],0
-.r:     ret
+        mov byte [cs:tron],0
+        mov byte [cs:tpost],0
+        mov byte [cs:tpend],0
+        ret
 
 ; INT 1 (single step) while a mode set is traced: the trap comes before each instruction of the BIOS.
 ; Logs the port access of the instruction about to run (OUT, OUTS: port and value are known now) or of
@@ -600,6 +655,8 @@ i1:     push bp
         je .pseg
         cmp al,0x65
         je .pseg
+        cmp al,0x0F
+        je .of
         cmp al,0xE4
         jb .str
         cmp al,0xEF
@@ -630,6 +687,14 @@ i1:     push bp
         and al,1
         inc ax
         mov [cs:tpend],al               ; 1 = byte, 2 = word
+        jmp .x
+.of:    mov al,[si]                     ; 0F 01h (LMSW, LGDT, ...) and 0F 22h (MOV CRn): /P ends the
+        cmp al,0x01                     ; program's trace before it, a trap in protected mode would
+        je .pm                          ; not reach VGALOG
+        cmp al,0x22
+        jne .x
+.pm:    cmp byte [cs:tpost],0
+        jne .stop
         jmp .x
 .p66:   or bh,1
         jmp .pf
@@ -674,7 +739,14 @@ i1:     push bp
         mov al,[si+1]
         mov ah,2
         call tev
-.x:     pop bx
+.x:     cmp byte [cs:tpost],0           ; /P: the program's trace has its TPMAX events
+        je .xx
+        cmp word [cs:tpleft],0
+        jne .xx
+.stop:  call tpoff                      ; INT 1 back, no trap flag on return; an INT 10h call it ran in
+        mov byte [cs:tclr],1            ; clears the caller's trap flag too
+        and byte [bp+7],0xFE
+.xx:    pop bx
         pop ax
         pop si
         pop ds
@@ -722,7 +794,12 @@ tev:    cmp bx,0x3B0
 .new:   pop di
         pop es
 ; A new event: BX = port (or call number), AL = value, AH = kind. Keeps all registers.
-tput:   push es
+tput:   cmp byte [cs:tpost],0           ; /P: count the program trace's events
+        je .nb
+        cmp word [cs:tpleft],0
+        je .nb
+        dec word [cs:tpleft]
+.nb:    push es
         push di
         mov es,[cs:tseg]
         mov di,[cs:tnext]
@@ -825,6 +902,8 @@ init:   mov si,0x81
         je tinst
         cmp ah,'w'
         je winst
+        cmp ah,'p'
+        je pinst
         cmp ah,'d'
         je dump
         cmp ah,'h'
@@ -964,6 +1043,8 @@ install:
 winst:  mov byte [wflag],1
         jmp minst
 
+; ---------------- install with the port trace of the program after 4F02h ----------------
+pinst:  mov byte [tpflag],1
 ; ---------------- install in memory mode with the port trace ----------------
 tinst:  mov ax,[2]                      ; the end of our memory block (PSP+2)
         mov bx,cs
@@ -1005,6 +1086,9 @@ minst:  call findmem
         cmp byte [tflag],0
         je .w
         mov dx,msgt
+        cmp byte [tpflag],0
+        je .w
+        mov dx,msgp
 .w:     cmp byte [wflag],0
         je .m
         mov dx,msgw
@@ -1039,7 +1123,9 @@ dump:   call findmem
         jz .none
         mov [dhdr+12],cx
         mov [dcnt],cx
-        mov al,[es:wflag]               ; flags: bit 0 = the trace part follows, bit 1 = /W
+        mov al,[es:tpflag]              ; flags: bit 0 = the trace part follows, bit 1 = /W, bit 2 = /P
+        shl al,1
+        or al,[es:wflag]
         shl al,1
         or al,[es:tflag]
         mov [dhdr+14],al
@@ -1320,6 +1406,7 @@ msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
 msgm    db 'VGALOG ',VERSION,' installed in memory mode: the last 1024 INT 10h calls (no text/pixel output), VGALOG /D writes them',13,10,'$'
 msgt    db 'VGALOG ',VERSION,' installed in memory mode with the port trace of the mode sets (AH=00h, 4F02h), VGALOG /D writes them',13,10,'$'
 msgw    db 'VGALOG ',VERSION,' installed in memory mode with the window function hook (4F01h WinFuncPtr), VGALOG /D writes them',13,10,'$'
+msgp    db 'VGALOG ',VERSION,' installed in memory mode with the port trace of the mode sets and of the program after 4F02h, VGALOG /D writes them',13,10,'$'
 s_tmem  db 'VGALOG ',VERSION,': not enough memory for /T (about 100 KB)',13,10,'$'
 thdr    db 'VGALOGT1',0,0,0,0,0,0,0,0
 s_dump  db 'VGALOG ',VERSION,': ring buffer written to VGALOG.BIN',13,10,'$'
@@ -1333,6 +1420,7 @@ s_use   db 'VGALOG ',VERSION,' - logs INT 10h AH=00 and VBE 4F01/4F02/4F06 calls
         db '  VGALOG              install (VGALOG.BIN is created new in the current directory)',13,10
         db '  VGALOG /M           install in memory mode: last 1024 INT 10h calls in RAM (for Windows 9x)',13,10
         db '  VGALOG /T           as /M, and every VGA/S3 port access of the mode sets (AH=00h, 4F02h)',13,10
+        db '  VGALOG /P           as /T, and the program itself for a while after its 4F02h',13,10
         db '  VGALOG /W           as /M, and the far calls through the window function (4F01h WinFuncPtr)',13,10
         db '  VGALOG /D           memory mode: write the calls (and the trace) to VGALOG.BIN',13,10
         db '  VGALOG /U           unload (INT 10h restored, VGALOG.BIN closed)',13,10

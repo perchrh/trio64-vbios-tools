@@ -85,6 +85,9 @@ Tests
   vgalog_win       VGALOG /W: 4F01h's WinFuncPtr points to VGALOG, far calls through it set the bank the
                    BIOS's routine sets and return to the caller, the first 64 are records, all counted
                    with the BIOS's routine in the chip and ROM block; /U gives the BIOS's address back
+  vgalog_post      VGALOG /P: after a program's 4F02h its own OUTs are traced in order (also after an
+                   INT 21h), its mode 03h ends the trace, INT 1 put back; the trace stops by itself
+                   after 12288 events and before 0F 01h (a protected mode switch)
   s3alias          S3ALIAS install, mapping 49h->59h and 4Bh->5Ah, refused second install, /H, /U
   s3regs           S3REGS.COM and S3REGS32.EXE (the Win32 one on a 32-bit CPU with the same register
                    model, vgaemu.run_pe32) write the same snapshot, keep indexes and locks, and
@@ -1595,6 +1598,69 @@ def t_vgalog_trace(c):
         tn, len(seen.get(0x0003, [])), len(seen.get(0x4F02, [])), reads, reps)
 
 
+def vgalog_trace_part(b):
+    """The records and the trace events of a VGALOG.BIN with a trace part: (records, [(port, value,
+    kind byte)])."""
+    n = struct.unpack_from('<H', b, 12)[0]
+    recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
+    t = 48 + 32 * n
+    check(b[t:t + 8] == b'VGALOGT1', 'no trace part after the %d calls' % n)
+    tn = struct.unpack_from('<I', b, t + 12)[0]
+    return recs, [struct.unpack_from('<HBB', b, t + 16 + 4 * i) for i in range(tn)]
+
+
+def t_vgalog_post(c):
+    """VGALOG /P traces the program after its 4F02h: the program's own OUTs (CR6A through 3D4h/3D5h, the
+    DAC index 3C8h) follow the 4F02h's events in the trace, also after an INT 21h; its next mode set ends
+    it (OUTs after mode 03h are not traced), INT 1 is put back and the trap flag clear when the program
+    ends; the trace stops by itself after 12288 new events and before an instruction that would switch
+    to protected mode (0F 01h)."""
+    com = c.tool('VGALOG.COM')
+    m = c.machine()
+    i1 = m.mem(4, 4)
+    r = m.run_com(com, '/P', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /P did not stay resident: %s' % (r.exit,))
+    check(b'of the program after 4F02h' in bytes(r.stdout), '/P install message: %r' % bytes(r.stdout)[-140:])
+    head = bytes.fromhex('b8024fbb0101cd10 90')            # AX=4F02h BX=0101h, INT 10h; NOP (runs untrapped)
+    tail = bytes.fromhex('b80300cd10')                     # AX=0003h, INT 10h
+    p1 = head + bytes.fromhex('bad403b86a01ef b86a02ef bac803b005ee b430cd21 bad403b86a03ef') + tail + \
+        bytes.fromhex('bad403b86a04ef cd20')
+    p2 = head + bytes.fromhex('b9c832bac803 88c8ee e2fb') + tail + bytes.fromhex('cd20')  # 13000 OUTs to 3C8h
+    p3 = head + bytes.fromhex('bac803b007ee 0f01e0 b008ee') + tail + bytes.fromhex('cd20')  # SMSW AX between
+    limit = 2_000_000_000
+    res = []
+    for name, prog in (('P1.COM', p1), ('P2.COM', p2), ('P3.COM', p3)):
+        rp = m.run_com(prog, seg=0x5000, name=name, max_insn=limit)
+        check(rp.exit == ('exit', 0), '%s ended with %s' % (name, rp.exit))
+        check(m.mem(4, 4) == i1, '%s: INT 1 not put back after the program' % name)
+        rd = m.run_com(com, '/D', seg=0x4000)
+        check(rd.exit == ('exit', 0), '/D after %s ended with %s' % (name, rd.exit))
+        b = rd.files.get('VGALOG.BIN')
+        flags = struct.unpack_from('<H', b, 14)[0]
+        check(flags == 5, 'header flags %04X with /P, expected 0005' % flags)
+        recs, evs = vgalog_trace_part(b)
+        num = {struct.unpack_from('<H', x, 2)[0]: struct.unpack_from('<H', x, 0)[0] for x in recs if x[23] == 0}
+        # the events from the program's last 4F02h marker to the marker of its mode 03h
+        start = max(i for i, e in enumerate(evs) if e[2] & 3 == 3 and e[0] == num[0x4F02])
+        end = max(i for i, e in enumerate(evs) if e[2] & 3 == 3 and e[0] == num[0x0003])
+        outs = [(p, v, k & 3) for p, v, k in evs[start + 1:end] if k & 3 in (0, 2) for _ in range(1 + (k >> 2))]
+        after = [(p, v, k & 3) for p, v, k in evs[end + 1:] if k & 3 in (0, 2)]
+        res.append((name, outs, after, evs, start))
+    _, o1, a1, _, _ = res[0]
+    want = [(0x3D4, 0x6A, 0), (0x3D5, 1, 2), (0x3D4, 0x6A, 0), (0x3D5, 2, 2), (0x3C8, 5, 0), (0x3D4, 0x6A, 0), (0x3D5, 3, 2)]
+    check(o1[-len(want):] == want, 'P1: the program\'s OUTs after 4F02h not traced in order: %s' % o1[-10:])
+    check(a1[-2:] != [(0x3D4, 0x6A, 0), (0x3D5, 4, 2)], 'P1: the OUT after mode 03h was traced')
+    _, o2, _, _, _ = res[1]
+    dac = [x for x in o2 if x[0] == 0x3C8]
+    check(len(dac) > 1000 and len(dac) < 13000, 'P2: %d OUTs to 3C8h traced of 13000, expected the trace to stop '
+          'after 12288 events' % len(dac))
+    _, o3, _, _, _ = res[2]
+    check((0x3C8, 7, 0) in o3 and (0x3C8, 8, 0) not in o3, 'P3: the trace did not stop before 0F 01h: %s' % o3[-4:])
+    ru = m.run_com(com, '/U', seg=0x4000)
+    check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
+    return 'P1 %d OUTs, P2 %d of 13000 DAC OUTs before the stop, P3 stopped at 0F 01h' % (len(o1), len(dac))
+
+
 def t_vgalog_win(c):
     """VGALOG /W hooks the window function: the WinFuncPtr a 4F01h returns points to VGALOG, a far call
     through it reaches the BIOS's routine (the bank 4F05h BH=1 then reads back is the one set) and
@@ -2416,7 +2482,7 @@ def t_stores(c):
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
-         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('s3alias', t_s3alias),
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
@@ -2434,7 +2500,7 @@ TAGS = {
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
+    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
