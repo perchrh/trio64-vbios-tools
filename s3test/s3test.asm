@@ -29,6 +29,9 @@
 ;   S3TEST [/V] > S3TEST.LOG
 ;   S3TEST /H (or /?) prints the parameters and the monitor note below.
 ;   /S  silent: no monitor warning on stderr, no key press (for batch runs).
+;   /C  any ROM: the test set of a chip without a ROM of ours (the version found is INFO, then only the
+;       tests that need none), on every chip. For a stock BIOS or a clean ROM on a Trio64V2, Trio64V+
+;       or Trio64, whose signature and patches are not ours (#143).
 ;   /V  debug log in S3TEST.DBG (common/vdebug.inc): every INT 10h call (except during the throughput
 ;       benchmark), the result line, a register dump after every test and the raw retrace counts.
 ;       The normal output is the same with or without /V.
@@ -143,8 +146,14 @@ start:  cld
         mov byte [silent],1
         jmp .op
 .o1:    cmp al,'V'
-        jne .op
+        jne .o2
         mov byte [vwant],1
+        jmp .op
+.o2:    cmp al,'C'                      ; /C: any ROM, only the tests that need no ROM of ours (#143)
+        jne .op
+        mov byte [cwant],1
+        mov word [rnone],r_cany
+        mov word [sigo],s_sigc
         jmp .op
 .hlp:   mov dx,s_help                   ; /H, /?: the parameters and the monitor note
         mov ah,9
@@ -194,7 +203,10 @@ start:  cld
 .k2:    cmp byte [chip],CHIP_T64
         jne .k
         mov byte [rkind],RK_T64
-.k:     call t_rom
+.k:     cmp byte [cwant],1              ; /C: the set of a chip without a ROM of ours, whatever the chip
+        jne .k3
+        mov byte [rkind],RK_OTHER
+.k3:    call t_rom
         call t_chip
         call t_post
         mov si,modelist
@@ -207,7 +219,7 @@ start:  cld
 .mk:    cmp byte [rkind],RK_OTHER
         jne .mk2
         mov dx,s_mlist                  ; no ROM of ours: its mode list is not run
-        mov si,r_none
+        mov si,[rnone]
         call skip
         jmp .mld
 .mk2:   cmp byte [rkind],RK_V2
@@ -250,7 +262,7 @@ start:  cld
         jmp .ml
 .mld:   cmp byte [rkind],RK_OTHER       ; our ROM's VBE behaviour, flip-flop reset and 4F05 path
         jne .fn
-        mov si,r_none
+        mov si,[rnone]
         mov dx,s_f03
         call skip
         mov dx,s_f05
@@ -273,7 +285,7 @@ start:  cld
         cmp byte [rkind],RK_OTHER
         jne .bk
         mov dx,s_bank
-        mov si,r_none
+        mov si,[rnone]
         call skip
         jmp .nbk
 .bk:    call t_bank
@@ -334,7 +346,7 @@ t_rom:  mov dx,s_sig
         mov cx,TROMVLEN
 .t3:    cmp byte [rkind],RK_OTHER
         jne .t2
-        mov dx,s_sigo
+        mov dx,[sigo]
 .t2:    mov [sigp],di
         mov [sigl],cx
         call puts
@@ -1637,7 +1649,7 @@ t_plscr:
         cmp byte [rkind],RK_OTHER       ; S3 mode 6Ah: the mode number of the S3 BIOSes of our ROMs
         jne .s6
         mov dx,s_pl6a
-        mov si,r_none
+        mov si,[rnone]
         jmp skip
 .s6:    VS 'D:TEST planar scroll 6Ah'
         call vnl
@@ -2699,6 +2711,7 @@ s_sig   db 'ROM  ROM signature ',VER775,' ............ $'
 s_sigv  db 'ROM  ROM signature ',VER765,' ............. $'
 s_sigt  db 'ROM  ROM signature ',VER764,' .............. $'
 s_sigo  db 'ROM  ROM version (no ROM of ours for the chip) $'
+s_sigc  db 'ROM  ROM version (/C: any ROM) ................ $'
 s_nover db '(no version string)$'
 s_cks   db 'ROM  ROM checksum (C000:0000-7FFF) = $'
 s_chip  db 'S3   Chip ID CR2D 2E 2F 30, PCI rev ...... $'
@@ -2767,13 +2780,18 @@ s_mon   db 'S3TEST ',VERSION,13,10
 s_mon_len equ $-s_mon
 silent  db 0                            ; /S given
 vwant   db 0                            ; /V given
+cwant   db 0                            ; /C given
+rnone   dw r_none                       ; the SKIP reason of a test that needs our ROM (r_cany with /C)
+sigo    dw s_sigo                       ; the signature line without a ROM of ours (s_sigc with /C)
 s_cf    db '  FAIL $'
 s_ci    db '  INFO $'
 s_help  db 'S3TEST ',VERSION,' - regression test for our VBIOSes: Trio64V2 ',VER775,', Trio64V+ ',VER765,13,10
         db '  and Trio64 ',VER764,13,10
-        db '  S3TEST [/V] [/S] > S3TEST.LOG',13,10
+        db '  S3TEST [/V] [/S] [/C] > S3TEST.LOG',13,10
         db 'The test set follows the chip; on other Trio64-family chips only the tests that',13,10
         db 'need no ROM of ours run.',13,10
+        db '  /C                  any ROM (stock, or a clean ROM): only the tests that need',13,10
+        db '                      no ROM of ours, on every chip; the version found is INFO',13,10
         db '  /V                  debug log in S3TEST.DBG (BIOS calls, registers, timing)',13,10
         db '  /S                  silent: no monitor warning, no key press',13,10
         db '  /H, /?              this help',13,10
@@ -2791,6 +2809,7 @@ s_mskip2 db ' (over 1 MB) ............... $'
 s_f06s  db 'VBE  4F06 BL=3 max line 101h ............. $'
 s_bchk  db 'VBE  4F05 line: 0040:04FE, linear 4101h .. $'
 r_none  db 'no ROM of ours for this chip$'
+r_cany  db '/C: a test of our ROM only$'
 r_v2    db 'a choice of our Trio64V2 ROM$'
 r_vbe2  db 'VBE 2.0 (our Trio64V2 ROM); this ROM is VBE 1.2$'
 r_1mb   db 'needs more than 1 MB, the card has 1 MB$'

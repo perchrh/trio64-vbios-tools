@@ -49,6 +49,9 @@ Tests
   s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
                    (banked memory, throughput); with /V the output is the same (except the Time spent
                    line) and S3TEST.DBG is well formed
+  s3test_any       S3TEST /C (any ROM: a stock BIOS, a clean ROM) on every ROM and chip: the version is
+                   INFO, our ROM's tests SKIP with the /C reason, every other check passes but the two
+                   the model cannot judge (#143)
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
                    monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT, shown once
                    before the VSHOW /I list, and S3TEST, S3COMPAT and VSHOW (a mode, /A) print it on
@@ -1015,6 +1018,30 @@ def t_s3test(c):
     check(b'75 kHz' in bytes(r1.stderr or b'') and b'Press any key' in bytes(r1.stderr or b''),
           'S3TEST: no monitor warning with a key prompt on stderr')
     return 'exit code %d' % r1.exit[1]
+
+
+def t_s3test_any(c):
+    """S3TEST /C, the set for a ROM that is not ours (a stock BIOS, a clean ROM, #143), runs on every ROM
+    and chip: the version found is INFO, the tests of our ROM are SKIP with the /C reason, and every
+    test that needs no ROM of ours passes except the two the model cannot judge."""
+    com = c.tool('S3TEST.COM')
+    r = c.machine().run_com(com, '/C /S')
+    c.save('S3TESTC', r)
+    check(r.exit and r.exit[0] == 'exit', 'S3TEST /C did not end: %s' % (r.exit,))
+    out = r.stdout.decode('latin1')
+    check('Passed:' in out, 'no summary line')
+    tl = tagged(out, 'S3TEST')
+    skips = skips_counted(out, 'S3TEST')
+    sig = [l for cat, l in tl if cat == 'ROM' and 'ROM version (/C: any ROM)' in l]
+    check(len(sig) == 1 and sig[0].rstrip().endswith('INFO'), 'S3TEST /C: no INFO version line: %s' % sig)
+    check(not any('ROM signature' in l for _, l in tl), 'S3TEST /C: the signature of our ROM was tested')
+    check(skips and all('no ROM of ours' not in l for l in skips) and any('/C: a test of our ROM only' in l
+          for l in skips), 'S3TEST /C: SKIP lines without the /C reason')
+    results = [l for cat, l in tl if l.endswith(('PASS', 'FAIL'))]
+    check(len(results) >= 8, 'only %d result lines' % len(results))   # the set without a ROM of ours
+    bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
+    check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    return '%d results, %d SKIP' % (len(results), len(skips))
 
 
 def t_vshow(c):
@@ -2304,7 +2331,7 @@ def t_stores(c):
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -2321,7 +2348,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
@@ -2332,7 +2359,7 @@ TAGS = {
 
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
-DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 'windows': 60,
+DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 's3test_any': 60, 'windows': 60,
             'stores': 55, 's3compat_vga': 45}
 
 
