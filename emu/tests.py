@@ -656,7 +656,7 @@ def t_vplus_patches(c):
         if v == 0xFFFF:
             break
         modes.append(v)
-    refused = 0
+    refused, why = 0, []
     for v in modes:
         m.int10(0x4F01, cx=v, es=0x3000, di=0x400)
         ok = m.mem(0x30400, 1)[0] & 1
@@ -664,11 +664,13 @@ def t_vplus_patches(c):
         mode0 = m.mem(0x449, 1)[0]
         r = m.int10(0x4F02, bx=v | 0x8000)
         if ok:
-            chk(r['ax'] == 0x004F, '4F02 %03X (4F01: supported) refused: AX=%04X' % (v, r['ax']))
+            chk(r['ax'] == 0x004F, refusal(m, v, r['ax']))
         else:
             refused += 1
+            why.append(vesa_fit(m, v))
             chk(r['ax'] == 0x014F and m.mem(0x449, 1)[0] == mode0,
-                '4F02 %03X (4F01: unsupported) not refused: AX=%04X, mode %02X' % (v, r['ax'], m.mem(0x449, 1)[0]))
+                '4F02 %03X (4F01: unsupported) not refused: AX=%04X, mode %02X; %s'
+                % (v, r['ax'], m.mem(0x449, 1)[0], vesa_fit(m, v)[2]))
     # p2: no interlaced timing. 118h, 119h, 11Ah, 120h (interlaced only on the Trio64V+) are not listed and
     # refused, their S3 numbers 78h-7Ch too (AH=00 changes nothing); 1024x768 and 1280x1024 run
     # non-interlaced at every CR41 refresh index, 0 included
@@ -701,7 +703,9 @@ def t_vplus_patches(c):
             % (v, vco, sq.get(1, 0), hz))
     m.int10(0x03)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return 'booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers, %d of %d modes refused by 4F02, no interlace, 10Dh-10Fh VCO in range' % (refused, len(modes))
+    return ('booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers, %d of %d modes refused by 4F02, '
+            'no interlace, 10Dh-10Fh VCO in range' % (refused, len(modes))
+            + ''.join('; refused: %s' % w[2] for w in why))
 
 
 def t_t64_patches(c):
@@ -1565,6 +1569,35 @@ def font_tables(m, chk, has14=True):
             'rompatch/fonts' % (bh, r['es'], r['bp'], len(t)))
 
 
+def vesa_fit(m, mode):
+    """Why a VESA mode does or does not fit: 'WxHxBPP needs N KB (bytes per line x lines[ x 4 planes]),
+    the BIOS reports M KB' from 4F01h and 4F00h's TotalMemory; uses 3000:0000-05FF. Also returns whether it
+    fits and 4F01h's attributes (None when 4F01h does not know the mode)."""
+    m.mu.mem_write(0x30000, b'VBE2' + bytes(508))
+    m.int10(0x4F00, es=0x3000, di=0)
+    mem = word(m, 0x30012) * 0x10000
+    r = m.int10(0x4F01, cx=mode, es=0x3000, di=0x400)
+    if r['ax'] != 0x004F:
+        return False, None, '4F01h does not know %03Xh (AX=%04Xh)' % (mode, r['ax'])
+    mi = m.mem(0x30400, 0x20)
+    planes = 4 if mi[0x1B] == 3 else 1
+    bpl, x, y, bpp = word(m, 0x30410), word(m, 0x30412), word(m, 0x30414), mi[0x19]
+    need = bpl * y * planes
+    return need <= mem, mi[0], '%03Xh, %dx%dx%d, needs %d KB (%d bytes x %d lines%s), the BIOS reports %d KB' % (
+        mode, x, y, bpp, -(-need // 1024), bpl, y, ' x 4 planes' if planes == 4 else '', mem // 1024)
+
+
+def refusal(m, mode, ax):
+    """One line saying why 4F02h refused a VESA mode, for the test output: the return code, then the
+    memory arithmetic (vesa_fit), then whether 4F01h marks the mode as not supported."""
+    fit, attr, why = vesa_fit(m, mode)
+    if attr is None:
+        return '4F02h refused %03Xh with AX=%04Xh: %s' % (mode, ax, why)
+    cause = 'too large for the memory' if not fit else 'not for lack of memory'
+    mark = '4F01h marks it not supported' if not attr & 1 else '4F01h marks it supported'
+    return '4F02h refused %s with AX=%04Xh: %s; %s (attributes %02Xh)' % (why, ax, cause, mark, attr)
+
+
 def vbe_version(m):
     """The VBE version 4F00h reports (0 when it fails); uses 3000:0000-01FF."""
     m.mu.mem_write(0x30000, b'VBE2' + bytes(508))
@@ -1783,13 +1816,13 @@ def t_errors(c):
             big.append(v)
         if mi[0] & 0x10 and word(m, 0x30410) * word(m, 0x30414) * (4 if mi[0x1B] == 3 else 1) > mem:
             toobig.append(v)
-    chk(set(big) >= set(toobig), '%d KB: modes too large for the memory not marked unsupported: %s'
-        % (mem // 1024, ' '.join('%03X' % v for v in toobig if v not in big)))
+    chk(set(big) >= set(toobig), 'modes too large for the memory not marked unsupported: %s'
+        % '; '.join(vesa_fit(m, v)[2] for v in toobig if v not in big))
     m.int10(0x4F02, bx=0x0101)
     s0 = vga_state(m)
     for bx in big + [0x01FF, 0x017F, 0x0200]:
         r = m.int10(0x4F02, bx=bx)
-        chk(r['ax'] != 0x004F, '4F02 BX=%04X accepted' % bx)
+        chk(r['ax'] != 0x004F, '4F02 BX=%04X accepted%s' % (bx, '; ' + vesa_fit(m, bx)[2] if bx in big else ''))
         chk(vga_state(m) == s0, '4F02 BX=%04X (refused) changed the video state' % bx)
     if vbe_version(m) >= 0x0200:                            # 4F09h is VBE 2.0
         m.mu.mem_write(0x30000, bytes([0x15, 0x2A, 0x3F, 0]))    # 4F09h at the last entry: blue, green, red
@@ -1953,8 +1986,10 @@ def t_windows(c):
     m2.mu.mem_write(0x7E00, bytes.fromhex('b004cf'))      # INT 2Fh AX=1600h: Windows 98 (enhanced mode)
     m2.mu.mem_write(0x2F * 4, struct.pack('<HH', 0, 0x07E0))
     base = (cr2.get(0x59, 0), cr2.get(0x5A, 0))
+    skipped = []
     for v, lines in ((0x101, 480), (0x103, 600), (0x111, 480), (0x114, 600), (0x105, 768), (0x112, 480)):
         if v not in fits:                               # 112h does not fit 1 MB; the BIOS refuses it, rightly
+            skipped.append('driver 4F02 %04Xh not tried: %s' % (0x8000 | v, vesa_fit(m2, v)[2]))
             continue
         o = int10w(m2, dict(eax=0x4F02, ebx=0x8000 | v, ecx=lines, edx=0x3D4))
         got = (cr2.get(0x59, 0), cr2.get(0x5A, 0))
@@ -1981,7 +2016,8 @@ def t_windows(c):
     m.int10(0x03)
     chk(m.mem(0xB8000, 4) == b'\x20\x07\x20\x07' and not m.mem(0x487, 1)[0] & 0x80, 'AH=00h AL=03h after 83h: no clear')
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return '%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(calls), len(modes))
+    return ('%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(calls), len(modes))
+            + ''.join('; ' + t for t in skipped))
 
 
 def t_display_switch(c):
@@ -2022,7 +2058,7 @@ def t_v2_writes(c):
         res = fn()
         log, m.wlog = m.wlog, None
         if name.endswith('h') and len(name) == 4 and res['ax'] != 0x004F:
-            skipped.append(name)                # 4F02h refused it: a mode the memory does not hold (112h, 1 MB)
+            skipped.append(refusal(m, int(name[:-1], 16), res['ax']))   # 112h with 1 MB: needs 1200 KB
             continue
         if not any(reg == 'CR' and i == 0x26 and v == 0 and cr39 == 0xA5
                    for reg, i, v, old, sr01, vr, cr39 in log):
@@ -2040,8 +2076,7 @@ def t_v2_writes(c):
                             % (name, i, old & 1, v & 1))
     m.int10(0x03)
     check(not errs, '%d: %s' % (len(errs), '; '.join(errs[:8])))
-    return '%d mode sets%s' % (len(sets) - len(skipped),
-                               ', %s refused by 4F02h (memory)' % ', '.join(skipped) if skipped else '')
+    return '%d mode sets%s' % (len(sets) - len(skipped), ''.join('; skipped: ' + t for t in skipped))
 
 
 def t_post_delay(c):
