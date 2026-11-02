@@ -20,7 +20,7 @@ of derived values can be recomputed from the rules.
   the data book's description (the display FIFO M); a card run is the final check. *note*: information.
 - **Sources.** T32/64 = S3 Trio32/Trio64 data book, March 1995 (section, table or register); rule IDs
   of [`docs/chip-rules.md`](../chip-rules.md) (PLL-1, CLK-1, T64-MEM-1, ...); DMT = VESA Display Monitor Timing standard
-  1.0 rev. 0.7 (the published timings below are industry figures); IBM = the IBM VGA register values as
+  1.0 rev. 10 (the published timings below are industry figures); IBM = the IBM VGA register values as
   [`docs/bios-rules.md`](../bios-rules.md) cites them (VGATEST); VGADOC = [`standards/thoegersen/`](../../standards/thoegersen/) (S3.TXT, VGAREGS.TXT);
   VBE 1.2 = the VESA BIOS Extension 1.2.
 - **Checked by.** S3COMPAT lines run in the emulator and on the card: 'VBE VESA nnnn' (one line per

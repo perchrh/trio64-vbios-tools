@@ -778,9 +778,8 @@ outside the repository (file names in brackets, as of 2 November 2026); the link
 - [VBE 1.0](https://web.archive.org/web/20131211151957/http://www.gemixtes.de/super-vga-bios-extension-standard-vs891001/)
   (Super VGA BIOS Extension, VS891001, 1 October 1989), as transcribed on the Gemixtes blog: 4F00-4F05,
   the 15-bit mode numbers from 100h, mode 6Ah as 102h, window granularity; the base of VBE 1.2.
-- VESA and Industry Standards and Guidelines for Computer Display Monitor Timing (DMT) 1.0: Rev. 0.7
-  (December 1996; `VESA-DMT-1.0.pdf`, no public copy known),
-  [Rev. 10](https://glenwing.github.io/docs/VESA-DMT-1.10.pdf) (2004) and
+- VESA and Industry Standards and Guidelines for Computer Display Monitor Timing (DMT) 1.0,
+  [Rev. 10](https://glenwing.github.io/docs/VESA-DMT-1.10.pdf) (29 October 2004; `VESA-DMT-1.0.pdf`) and
   [Rev. 13](https://glenwing.github.io/docs/VESA-DMT-1.13.pdf) (2013; `VESA-DMT-1.13.pdf`); and the
   [VESA Generalized Timing Formula (GTF) Standard 1.1](https://glenwing.github.io/docs/VESA-GTF-1.1.pdf)
   (2002; `VESA-GTF-1.1.pdf`): the timing references of the tools and the refresh tables.
