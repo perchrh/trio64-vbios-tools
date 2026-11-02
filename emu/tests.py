@@ -1997,7 +1997,8 @@ def t_v2_writes(c):
     driver may leave it set after vertical interpolation, section 3.2.2), so the BIOS has to clear it
     first (p19; the reference 2.04.07 writes CR26 only); V2-REG-6: CR40 bit 0 and CR66 bit 0 change only with the screen off (SR01 bit 5) or in
     vertical retrace (section 4.1). Checked for VGA modes 03h, 12h, 13h and the VESA modes 101h, 111h
-    and 112h. Only on the Trio64V2 model (--chip 775)."""
+    and 112h; a VESA mode 4F02h refuses (112h with 1 MB: it needs 1.2 MB) is skipped and named. Only on
+    the Trio64V2 model (--chip 775)."""
     if Machine.chip != 'v2':
         raise Skip('Trio64V2 rules (--chip 775)')
     m = c.machine()
@@ -2005,11 +2006,15 @@ def t_v2_writes(c):
     sets = [('03h', lambda: m.int10(0x03)), ('12h', lambda: m.int10(0x12)), ('13h', lambda: m.int10(0x13)),
             ('101h', lambda: m.int10(0x4F02, bx=0x101)), ('111h', lambda: m.int10(0x4F02, bx=0x111)),
             ('112h', lambda: m.int10(0x4F02, bx=0x112))]
+    skipped = []
     for name, fn in sets:
         m.r['crtc'][0x23] = 0x5A                # as a driver may leave it (vertical interpolation)
         m.wlog = []
-        fn()
+        res = fn()
         log, m.wlog = m.wlog, None
+        if name.endswith('h') and len(name) == 4 and res['ax'] != 0x004F:
+            skipped.append(name)                # 4F02h refused it: a mode the memory does not hold (112h, 1 MB)
+            continue
         if not any(reg == 'CR' and i == 0x26 and v == 0 and cr39 == 0xA5
                    for reg, i, v, old, sr01, vr, cr39 in log):
             errs.append('%s: no CR26 = 00h with CR39 = A5h (V2-REG-5)' % name)
@@ -2026,7 +2031,8 @@ def t_v2_writes(c):
                             % (name, i, old & 1, v & 1))
     m.int10(0x03)
     check(not errs, '%d: %s' % (len(errs), '; '.join(errs[:8])))
-    return '%d mode sets' % len(sets)
+    return '%d mode sets%s' % (len(sets) - len(skipped),
+                               ', %s refused by 4F02h (memory)' % ', '.join(skipped) if skipped else '')
 
 
 def t_post_delay(c):
@@ -2216,7 +2222,7 @@ TAGS = {
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
-    '775_writes': 's3 emu', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
+    '775_writes': 's3 emu vram', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
 }
 
 
