@@ -27,8 +27,11 @@
 ;                    Shows how a program changes the bank or programs the DAC and CRTC through the ports.
 ;                    The program runs much slower while traced; the trace ends by itself, then it runs at
 ;                    full speed. The instruction right after the INT 10h 4F02h runs before the first trap
-;                    and is not traced. INT 21h and the other interrupts the program calls run untraced
-;                    (the CPU clears the trap flag in them); a program that hooks INT 1 itself ends it.
+;                    and is not traced. The interrupts the program calls (INT 21h and the others) run
+;                    untraced, except the BIOS part of INT 10h; VGALOG lets them return through its own
+;                    stub, which sets the trap flag again, so the trace goes on whether the handler
+;                    returns with IRET or RETF 2. INT 20h, INT 27h and INT 21h AH=00h, 31h and 4Ch end
+;                    the trace (the program ends). A program that hooks INT 1 itself ends it too.
 ;   VGALOG /W        memory mode with the window function hook: as /M, and the WinFuncPtr that a 4F01h
 ;                    call returns (mode information +0Ch) is replaced in the caller's buffer by the
 ;                    address of a VGALOG routine, which logs the program's far calls through it and then
@@ -153,6 +156,11 @@ tpflag  db 0                    ; 1 = trace the program after its 4F02h too (/P)
 tpost   db 0                    ; 1 while the program is traced after a 4F02h
 tpleft  dw 0                    ; new events left in that trace
 tclr    db 0                    ; 1 = the trace ended inside an INT 10h call: no trap flag back
+tpnew   db 0                    ; 1 = this 4F02h starts the program's trace: trap flag back
+rip     dw 0                    ; /P: where the program's INT returns to (IP, CS), its flags without
+rcs     dw 0                    ; the trap flag, and the vector it calls
+rfl     dw 0
+rvec    dd 0
 TPMAX   equ 12288
 wflag   db 0                    ; 1 = window function hook (/W)
 wfold   dd 0                    ; the BIOS's window function (offset, segment) once hooked
@@ -316,10 +324,11 @@ misr:   cmp ah,0x02
         cmp byte [depth],0
         jne .tp
         mov byte [tclr],0
-.tp:    cmp byte [tpost],0              ; /P: the program is traced after its 4F02h
+.tp:    cmp byte [tpnew],0              ; /P: this 4F02h starts the program's trace
         je .tq
         cmp byte [depth],0
         jne .tq
+        mov byte [tpnew],0
         or byte [bp+15],1
 .tq:    pop ax
         pop si
@@ -585,6 +594,7 @@ tstop:  cmp byte [tron],0
         mov byte [tclr],1               ; /P: a mode set ends the program's trace: no trap flag back
         jmp tpoff
 .on:    mov byte [tpost],1
+        mov byte [tpnew],1
         mov word [tpleft],TPMAX
 .r:     ret
 
@@ -657,6 +667,8 @@ i1:     push bp
         je .pseg
         cmp al,0x0F
         je .of
+        cmp al,0xCD
+        je .int
         cmp al,0xE4
         jb .str
         cmp al,0xEF
@@ -695,6 +707,43 @@ i1:     push bp
         jne .x
 .pm:    cmp byte [cs:tpost],0
         jne .stop
+        jmp .x
+.int:   cmp byte [cs:tpost],0           ; /P: INT n of the program: the end of the program ends the
+        je .x                           ; trace; other interrupts return through rstub
+        mov al,[si]                     ; the vector
+        cmp al,0x20
+        je .stop
+        cmp al,0x27
+        je .stop
+        cmp al,0x21
+        jne .iv
+        mov ah,[bp-5]                   ; the program's AH
+        test ah,ah
+        jz .stop
+        cmp ah,0x31
+        je .stop
+        cmp ah,0x4C
+        je .stop
+.iv:    inc si                          ; the return address: after CD n
+        mov [cs:rip],si
+        mov si,[bp+4]
+        mov [cs:rcs],si
+        xor ah,ah
+        mov si,ax
+        shl si,2
+        xor ax,ax
+        mov ds,ax
+        mov ax,[si]
+        mov [cs:rvec],ax
+        mov ax,[si+2]
+        mov [cs:rvec+2],ax
+        mov ax,[bp+6]
+        and ax,0xFEFF                   ; the flags the handler returns to: no trap flag
+        mov [cs:rfl],ax
+        and ax,0xFCFF                   ; tramp runs as the INT would: TF and IF clear
+        mov [bp+6],ax
+        mov word [bp+2],tramp
+        mov [bp+4],cs
         jmp .x
 .p66:   or bh,1
         jmp .pf
@@ -752,6 +801,26 @@ i1:     push bp
         pop ds
         pop bp
         iret
+
+; /P: the program's INT n, as the CPU would run it (i1 enters here with TF and IF clear): the handler
+; gets the program's flags (without TF) and returns to rstub.
+tramp:  push word [cs:rfl]
+        push cs
+        push word rstub
+        jmp far [cs:rvec]
+
+; /P: the handler returned (IRET or RETF 2: the flags it left are the result). Back to the program,
+; with the trap flag set again while its trace goes on. Keeps all registers.
+rstub:  pushf
+        push word [cs:rcs]
+        push word [cs:rip]
+        cmp byte [cs:tpost],0
+        je .n
+        push bp
+        mov bp,sp
+        or byte [bp+7],1                ; [bp+6] the flags
+        pop bp
+.n:     iret
 
 ; A trace event: BX = port, AL = value, AH = kind (0 written, 1 read, 2 high byte of a word written).
 ; Only the VGA, PCI configuration and S3 engine ports; the same access as the last event adds a repeat.
