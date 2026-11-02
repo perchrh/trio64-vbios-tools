@@ -14,16 +14,19 @@ to implement from:
   - the size budget: the whole 32 KB, about 9.7 KB of fonts, about 23 KB for code and tables;
   - release terms: the MIT licence;
   - no patched ROM images uploaded by CI; the reference ROMs stay in the repository for now;
-  - the scope: two milestones on the DSP-3364P. (1) The card posts and shows a picture with readable
+  - the scope: four milestones on the DSP-3364P. (1) The card posts and shows a picture with readable
     text; glitches are allowed and nothing after POST is required. (2) MS-DOS 6.22 boots, and MS-DOS
-    EDIT loads, edits and saves a file without significant glitches. Parts B and C and
-    [`freedos-1.4.md`](freedos-1.4.md) are for later milestones.
+    EDIT loads, edits and saves a file without significant glitches. (3) Superscape 3D Bench 1.0c runs
+    under MS-DOS without significant glitches. (4) Chris's 3D Benchmark runs under MS-DOS in 320x200
+    and 640x480 VESA without significant glitches: the first milestone that needs parts B and C, for
+    its one VESA mode. The rest of parts B and C and [`freedos-1.4.md`](freedos-1.4.md) are for later milestones.
 - Added to part A since: PCI 2.3 section 6.3 as the source of the option ROM rules, and the DRAM
   power-up of the card (POST-41).
 - The test harness fixes (#143) are in place: `post` fails a POST that does not return, and
   `S3TEST /C` with the emulator test `s3test_any` runs the set that needs no ROM of ours.
 - Still open:
-  - the record of the INT 10h calls MS-DOS 6.22 and EDIT make on the card (the contract of milestone 2);
+  - the record of the INT 10h calls MS-DOS 6.22 and EDIT, 3D Bench 1.0c and Chris's 3D Benchmark make
+    on the card (the contracts of milestones 2-4);
   - the licence file and the asset manifest;
   - the export of a reviewed allowlist at a fixed commit to a separate repository;
   - the second-reader leak review, whose handover is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md).
