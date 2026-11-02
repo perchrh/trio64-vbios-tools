@@ -22,7 +22,9 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
   data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
          value 00h, CR41/CR52 60 Hz defaults for 1280x1024 and 1600x1200, 640x480 line total 800,
          320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384, 1600x1200 vertical display
-         end (1200 lines, the reference has 1201)
+         end (1200 lines, the reference has 1201), no monitor sense at POST (p23, #134: the call of the
+         sense in the routine at 195Bh becomes xor bx,bx, the colour result; the rest of the routine,
+         SR1A's blank pedestal among it, still runs)
   code   assembled with nasm from the .asm files next to this script, at the addresses in bios.inc:
          p12ext.asm (fast 4F05, 32-bit font load, 32-bit mode 13h scroll), crtc240.asm (320x240 CRTC
          tables), hooks.asm (mode set hook with LFB base restore, FIFO fix and ATC flip-flop reset;
@@ -82,7 +84,7 @@ def rom_level(name, version):
 VERSION = '2.04.07'
 LEVEL = rom_level('VER775', VERSION)            # the sign-on level: common/version.inc VER775
 REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    # 32 KB reference image
-RESULT_SHA = '5e53224067199327bc211cc269578c36399eafa746e15e64230ac192c6aaa041'  # 2.04.07-p22 (NASM 3.02), emulator tests passed;
+RESULT_SHA = '6d32c498cfe8f7760cbc98d4e58c8991de1566a19787dbfbadac54a54547ad3c'  # 2.04.07-p23 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
@@ -174,6 +176,8 @@ DATA = [
     (0x00D1, '02', '05', 'POST flags: blank pedestal off (bit 1), the card\'s board flags (bits 0 and 2)'),
     (0x00D3, '10', '00', 'CR80 POST value 00h, as on the card'),
     (0x00DE, '08 80', '88 81', 'CR41/CR52 refresh fields: 1280x1024 and 1600x1200 default 60 Hz'),
+    (0x1984, 'e8 f6 f8', '33 db 90', 'POST: no monitor sense (call 127Dh replaced by xor bx,bx: the colour '
+                                      'result; the SR1A pedestal write after it stays, #134)'),
     (0x04C1, '5e 4f 50 81', '5f 4f 50 82', '640x480x8/x32 @ 60 Hz: line total 800'),
     (0x089F, 'c1 03 82 48 33', '40 7e 82 3c 28', '320x240x8 refresh entry: CRTC table 7E40h, 60 Hz, 25.06 MHz'),
     (0x08AD, 'f5 0c 82 48 33', '60 7e 82 3c 28', '320x240x15/16 refresh entry: CRTC table 7E60h, 60 Hz'),

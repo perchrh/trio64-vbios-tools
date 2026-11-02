@@ -193,6 +193,7 @@ def main():
         allowed |= set(range(lo, hi))
     for a_ in s3tpatch.FONT_REFS:
         allowed |= {a_, a_ + 1}
+    allowed |= set(range(s3tpatch.SENSE[0], s3tpatch.SENSE[0] + 3))     # p4: the call of the monitor sense
     for lo, hi in s3tpatch.DROPPED + s3tpatch.UNUSED:
         allowed |= set(range(lo, hi))
     for name, org, room, _ in s3tpatch.BLOCKS:

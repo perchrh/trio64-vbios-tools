@@ -31,6 +31,7 @@ What is applied (docs/764-rom.md)
           rewritten, and the freed bytes hold the new code
   POST    CR52 = 80h instead of 00h: the 800x600 modes default to 60 Hz instead of 56 Hz (VESA DMT, as
           the Trio64V2 ROM)
+          no monitor sense (p4, #134): the call of the sense at 025Fh becomes xor bx,bx, the colour result
   code    assembled with nasm at the addresses in trio64/bios.inc: tbon.asm and tlock.asm (booster with
           the Windows check), thook.asm (mode set hook: Windows mark cleared, ATC flip-flop reset),
           tglue.asm and twset.asm (the entries from 4F02 and the window set), twin.asm (the window set
@@ -84,7 +85,7 @@ VERSION = '1.5-07'
 LEVEL = s3patch.rom_level('VER764', VERSION)   # the sign-on level: common/version.inc VER764
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = 'f6eb2bf00ea05abae16946c7f3493fdf747a5124bd1b80e3361876b68445904e'  # 1.5-07-p3 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = 'c6b3ed3d8d7c9fd4f6a5f197a8879175730e7d1f588a8aa7a37b1d1e9bbc066b'  # 1.5-07-p4 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
     'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',
@@ -174,6 +175,7 @@ DDC_SITES = [
 ]
 # VESADDCReadVDIF (52E1h-5341h), zeroed: riplin's disassembly shows no caller but the BL=02h branch
 DDC_FREED = [(0x52E1, 0x5342, '53 51 52 e8 5b 00')]
+SENSE = (0x025F, 0x0263, '33 c9 e8 61 00')     # the call of the monitor sense, the sense, its first bytes
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
 DATABOOK_MAX = 60.0                             # MEM-1: 16.67 ns on the Trio32/Trio64 (named in --help only)
 MCLK_MAX = 70.0                                 # --mclk without --overclock: the 86C764X's 70 MHz, our Trio64 limit
@@ -449,6 +451,15 @@ def patch(lo, nasm='nasm', mclk=None, fonts=None, overclock=False, model='764x')
         'mode set: CR67, then the display FIFO M (CR54) lowered to what the memory bandwidth allows')
     a = site['post52'] + 10
     put(a, 'b8 52 00', 'b8 52 80', 'POST: CR52 = 80h, 800x600 defaults to 60 Hz (VESA DMT) instead of 56 Hz')
+    # p4 (#134): no monitor sense at POST. The routine at 0231h (called from 1033h) sets mode 03h, then
+    # calls the sense at 0263h (black, blue 18h, green 18h, 3C2h bit 4 after each); its result can set
+    # grey-scale summing and makes POST beep. Only that call goes: xor bx,bx gives ZF = 1, the colour
+    # result, so POST skips the beep and 0489h is left alone. The vendor bit (0199h bit 1) would skip
+    # the whole of 1033h, its CR38/CR39 unlock and mode set too.
+    if bytes(d[SENSE[1]:SENSE[1] + 5]) != bytes.fromhex(SENSE[2]):
+        raise PatchError('%04X is not the monitor sense of 1.5-07' % SENSE[1])
+    put(SENSE[0], 'e8 01 00', '33 db 90', 'POST: no monitor sense (call %04Xh replaced by xor bx,bx: the '
+        'colour result)' % SENSE[1])
     if mclk is not None:
         fmin, fmax, name = MODELS[model]
         if mclk < fmin:
