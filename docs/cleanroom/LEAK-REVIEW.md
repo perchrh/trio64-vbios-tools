@@ -172,6 +172,8 @@ say so in the record, and the review is done again by another session.
 | The emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py) and [`emu/similarity.py`](../../emu/similarity.py) (step 6) to read and run; [`emu/tests.py`](../../emu/tests.py) to run, not to read | to run a reference ROM and observe it; the test file's comments describe our patches from the inside (see below) |
 | The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | which places changed after the outside review |
+| The repository-root [`README.md`](../../README.md), only the sections "Windows 9x driver test", "Missing documents" and "VESA standards", and the S3ALIAS row of the tool table | spec A and spec C cite them: the black-box record of S3's Windows 9x driver, the public standards and the missing documents. The Windows section also describes our own patches as observed on the card (the p15 booster, the mode set hook that restores CR59/CR5A from CR6D): behaviour of our ROM, not reference code. The other sections are not read: the ROM sections and "MCLK build option" describe our patches byte by byte ([`README.md`](README.md) of this folder, "What stays on the dirty side") |
+| [`AGENTS.md`](../../AGENTS.md), the whole file | the specifications cite its project rules ("Hard rules for the ROM", "Assembly conventions"); it holds no code, names riplin's disassembly only as a pointer, and its two reference ROM offsets (7F51h, 3CE9h) can be checked against the reference ROMs |
 
 **Must not read.**
 
@@ -182,6 +184,7 @@ say so in the record, and the review is done again by another session.
 | Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others) | the same; and a reviewer who has read it cannot tell what a file under review took from it |
 | Our patch code and patchers: [`rompatch/`](../../rompatch/) (its `bios.inc` files map routines of the reference ROMs), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour |
 | [`BRIEF.md`](BRIEF.md) | the clean implementer's brief, not dirty material, but the reviewer has no use for it and must not write to the clean side |
+| [`s3alias/`](../../s3alias/) (S3ALIAS's source, its header included) | our TSR's code; the owner does not allow it for the review. The README's tool table row is enough for the mode numbers (49h to 59h, 4Bh to 5Ah) |
 
 Step 6: `python3 emu/similarity.py FILE --min 16` compares with the three reference ROMs above by
 default. The text mode fonts are a known match: the tables our ROMs now build from Joseph Gil's public
@@ -193,6 +196,9 @@ that one file, not the rest of `rompatch/`.
 
 ### Open items
 
+- [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
+  and cites it as "README"; the quote is not in README.md, and the reviewer may not read [`s3alias/`](../../s3alias/). The
+  reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed.
 - [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
   BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4, so left for a later
   review.
