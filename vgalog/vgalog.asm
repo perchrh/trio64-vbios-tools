@@ -21,7 +21,10 @@
 ;                    trap per instruction: about half a second for a 256 KB clear on a 386).
 ;   VGALOG /D        memory mode: write the ring buffer to VGALOG.BIN (oldest call first); the buffer
 ;                    is kept, so /D can be repeated. With no call logged yet it writes no file and says
-;                    "No events registered, not writing output file" (exit code 0). Run in a DOS box
+;                    "No events registered, not writing output file" (exit code 0). The file is committed
+;                    and DOS's buffers flushed (AH=68h, AH=0Dh, which also empties a SMARTDRV
+;                    write-behind cache) before /D says it is written, so the machine may be reset
+;                    straight after it. Run in a DOS box
 ;                    while Windows runs, the calls logged during the write may be mixed into it
 ;   VGALOG /U        unload: puts INT 10h back, closes VGALOG.BIN and frees the memory
 ;   VGALOG /H, /?, /HELP  parameter list
@@ -966,9 +969,14 @@ dump:   call findmem
         je .cf
         call tdump
         jc .err
-.cf:    mov ah,0x3E
+.cf:    mov ah,0x68                     ; commit: data and directory entry to disk (DOS 3.3 and later;
+        int 0x21                        ; an older DOS sets CF, the close below writes them then)
+        mov ah,0x3E
         int 0x21
-        mov dx,s_dump
+        jc .err
+        mov ah,0x0D                     ; disk reset: DOS writes all its dirty buffers, and SMARTDRV
+        int 0x21                        ; its write-behind cache, so a reset right after /D keeps the
+        mov dx,s_dump                   ; file (it was lost before, #158)
         mov ah,9
         int 0x21
         mov ax,0x4C00

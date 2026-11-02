@@ -98,7 +98,7 @@ is for the Windows 9x desktop.
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
 | S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip: our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
-| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
+| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
 | S3REGS32.EXE | The same snapshot from the Windows 9x desktop (Win32 console program), and `/W n` logs every register change for n seconds | `S3REGS32 label`, `S3REGS32 /W 60 label` |
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions (also AH=13h, CGA scroll, graphics XOR, fonts, the video save pointer table), every VESA mode, the VBE functions (also 4F04 masks, 4F0A, 4F10, 4F14, 4F15), datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
@@ -410,8 +410,10 @@ In the emulator tests the ROM runs on the Trio64V+ model (`CHIP=765`): `765_patc
 patches, `stores` the 32-bit stores, and the tests for the 2.04.07 patches are skipped. On the STB
 Powergraph 64 and the Hercules Terminator 64 (1 November 2026, p1 at 50 MHz): S3TEST without a FAIL,
 S3COMPAT with the three FAILs 1.03-08 has, Windows 98 and video playback working (`docs/765-rom.md`, "On
-the cards"). p2 is checked in the emulator only; whether 10Dh-10Fh show a right picture with the halved
-dot clock is for the card to show.
+the cards"). 1.03-08N-p5 on the Hercules card (2 November 2026): S3TEST 26 PASS, 0 FAIL; S3COMPAT 138
+PASS, 0 FAIL, 2 WARN (AH=12h BL=20h, 106h at 108 MHz), 10Dh-10Fh at their rate with the halved dot clock
+of p2; Windows, video playback and the fonts look right ([docs/765-rom.md](docs/765-rom.md), "On the
+Hercules card: 1.03-08N-p5"). The picture of 10Dh-10Fh in VSHOW is still for a card to show.
 
 ## Trio64 ROM
 
@@ -440,7 +442,9 @@ its tables, so a card's own 1.5-07 dump can be patched as well; it keeps that ca
 timing bytes. The emulator test `764_patches` checks the ROM's changes, `stores` its 32-bit stores, and
 S3TEST runs its Trio64 set. On the ExpertColor DSP-3364P (31 October 2026): S3TEST 26 PASS, 0 FAIL,
 banked writes at 81.7 MB/s with the booster; S3COMPAT's 49 FAILs there were test bugs, fixed in the
-tools ([#72](https://github.com/perchrh/trio64-vbios-tools/issues/72), [#73](https://github.com/perchrh/trio64-vbios-tools/issues/73); docs/764-rom.md, "On the card").
+tools ([#72](https://github.com/perchrh/trio64-vbios-tools/issues/72), [#73](https://github.com/perchrh/trio64-vbios-tools/issues/73); docs/764-rom.md, "On the card"). 1.5-07-p5 on the same card (2 November 2026): S3TEST
+26 PASS, 0 FAIL; S3COMPAT 135 PASS, 0 FAIL, 1 WARN (AH=12h BL=20h); Windows, video playback and
+the fonts look right ([docs/764-rom.md](docs/764-rom.md), "On the card: 1.5-07-p5").
 
 ## MCLK build option
 

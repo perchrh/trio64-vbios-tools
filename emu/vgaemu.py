@@ -103,6 +103,10 @@ class ComResult:
         self.files = {}                # created files: name -> bytes written
         self.exit = None               # ('exit', code), ('tsr', code, paragraphs), ('error', text), ('budget', text)
         self.dos_calls = set()         # (AH) values seen
+        self.synced = set()            # files DOS was asked to put on disk after their last write: a
+                                       # commit of its handle (AH=68h) or a disk reset (AH=0Dh); a
+                                       # close alone may leave them in DOS's buffers or a write-behind
+                                       # cache, lost at a reset (#158)
 
 
 class Machine:
@@ -587,7 +591,9 @@ class Machine:
             data = bytes(uc.mem_read(ds * 16 + dx, cx))
             if bx == 1: c.stdout.extend(data)
             elif bx == 2: c.stderr.extend(data)
-            elif bx in self.handles: c.files[self.handles[bx]].extend(data)
+            elif bx in self.handles:
+                c.files[self.handles[bx]].extend(data)
+                c.synced.discard(self.handles[bx])
             uc.reg_write(UC_X86_REG_AX, cx)
         elif ah == 0x44:
             uc.reg_write(UC_X86_REG_DX, 0x0000 if self.stdout_is_file else 0x0080)
@@ -613,7 +619,12 @@ class Machine:
         elif ah == 0x49:                                # free: the block's MCB gets owner 0
             if es >= 1 and self.mem((es - 1) * 16, 1) in (b'M', b'Z'):
                 self.mu.mem_write((es - 1) * 16 + 1, b'\0\0')
-        elif ah in (0x68, 0x50):
+        elif ah == 0x68:
+            if self.handles.get(bx) in c.files:
+                c.synced.add(self.handles[bx])
+        elif ah == 0x0D:
+            c.synced.update(c.files)
+        elif ah == 0x50:
             pass
         elif ah in (0x51, 0x62):
             uc.reg_write(UC_X86_REG_BX, self.psp)
@@ -812,6 +823,7 @@ class Machine:
         base = seg * 16
         mu.mem_write(base + 0x100, com)
         mu.mem_write(base + 0xFFFE, b'\0\0')
+        mu.ctl_remove_cache(base, base + 0x10000)      # code translated for an earlier program here (#159)
         for reg in (UC_X86_REG_CS, UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_SS):
             mu.reg_write(reg, seg)
         mu.reg_write(UC_X86_REG_SP, 0xFFFE)
@@ -838,6 +850,7 @@ class Machine:
         if load + (size + 15) // 16 + minalloc > MEM_TOP:
             raise ValueError('program does not fit below %04X' % MEM_TOP)
         mu.mem_write(load * 16, bytes(img))
+        mu.ctl_remove_cache(seg * 16, load * 16 + len(img))   # code translated for an earlier program (#159)
         mu.reg_write(UC_X86_REG_DS, seg)
         mu.reg_write(UC_X86_REG_ES, seg)
         mu.reg_write(UC_X86_REG_SS, load + ss)
