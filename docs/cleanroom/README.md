@@ -28,8 +28,9 @@ to implement from:
 - The test harness fixes (#143) are in place: `post` fails a POST that does not return, and
   `S3TEST /C` with the emulator test `s3test_any` runs the set that needs no ROM of ours.
 - Still open:
-  - the record of the INT 10h calls MS-DOS 6.22 and EDIT, 3D Bench 1.0c and Chris's 3D Benchmark make
-    on the card (the contracts of milestones 2-4);
+  - the record of the INT 10h calls MS-DOS 6.22 and EDIT make on the card (the contract of milestone
+    2; milestones 3 and 4 are recorded in [`milestone-calls.md`](milestone-calls.md));
+  - how Chris's 3D Benchmark changes the bank in mode 101h (no INT 10h 4F05h call was logged);
   - the licence file and the asset manifest;
   - the export of a reviewed allowlist at a fixed commit to a separate repository;
   - the second-reader leak review, whose handover is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md).
@@ -45,6 +46,7 @@ to implement from:
 | [`spec-a-post.md`](spec-a-post.md) | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
 | [`spec-b-modeset.md`](spec-b-modeset.md) | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
 | [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
+| [`milestone-calls.md`](milestone-calls.md) | its contract part goes across after the leak review | the INT 10h calls of the programs of milestones 3 and 4, recorded on a card |
 | [`freedos-1.4.md`](freedos-1.4.md) | goes across with milestone 5 | what FreeDOS 1.4 asks of the video BIOS (milestone 5, tentative), from its sources |
 | [`freedos-reports.md`](freedos-reports.md) | goes across with milestone 5 | drafts of the MORE and MODE defect reports to FreeDOS |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | dirty only | the outside feasibility review of 2 November 2026: its findings, our checks and where each went |

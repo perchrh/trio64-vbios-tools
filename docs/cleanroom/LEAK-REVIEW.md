@@ -103,10 +103,12 @@ VESA. What crosses now is what the clean side needs for these:
 - part A in full (POST, the conventions, the option ROM);
 - [`docs/bios-rules.md`](../bios-rules.md) and the rules of [`docs/chip-rules.md`](../chip-rules.md) the parts cite;
 - of part B: the return to the VGA modes, the VGA clocks (with the 25.175 MHz PLL pair) and the rules
-  for the one VESA mode of milestone 4 (640x480, presumably 101h; the mode number is to be confirmed on
-  the card with VGALOG);
-- of part C: 4F00h, 4F01h and 4F02h for that mode, the window function 4F05h, and the general rules
-  (return codes, index registers).
+  for the one VESA mode of milestone 4, 101h (640x480 in 256 colours, recorded on a card,
+  [`milestone-calls.md`](milestone-calls.md));
+- of part C: 4F00h, 4F01h (for 100h and 101h, which the program asks for) and 4F02h for that mode, the
+  window function (4F05h and its far entry WinFuncPtr), and the general rules (return codes, index
+  registers);
+- the contract part of [`milestone-calls.md`](milestone-calls.md); its part "The run" stays on the dirty side.
 
 Rules outside this scope (the other modes, 4F03h-4F08h beyond 4F05h if milestone 4 does not need
 them, 4F14h and the S3 mode numbers, the S3 OEM functions) are not reviewed now and are cut from the
@@ -122,6 +124,7 @@ clean side's copy; the record names the rule IDs that crossed. [`freedos-1.4.md`
 | [`spec-c-vbe.md`](spec-c-vbe.md) | specification | first full review; 4F14h and the S3 mode numbers (step 5) |
 | [`docs/chip-rules.md`](../chip-rules.md) | the clean side's copy | the four `[Leak review: ...]` sentences (step 5); its section "S3 OEM functions (4F14h)" crosses only through part C |
 | [`docs/bios-rules.md`](../bios-rules.md) | public-source rules | its open-question lists, written while reading another vendor's BIOS source |
+| [`milestone-calls.md`](milestone-calls.md) | requirements | new; only its part "The contract" crosses; "The run" names our ROM and what it answered |
 | [`freedos-1.4.md`](freedos-1.4.md) | requirements | not in this review (milestone 5); not in the first review either. Its section "Our ROMs against these" measures our patched ROMs by level (1.5-07-p3, 1.03-08-p1, 2.04.07-p22): dirty-side material, to cut from the clean side's copy or keep with a reason (step 5) |
 | [`freedos-reports.md`](freedos-reports.md) | defect reports to FreeDOS | not in this review (milestone 5); not in the first review either. About FreeDOS's MORE and MODE; it names S3 BIOSes as a class (4F01h for mode 03h) |
 

@@ -167,18 +167,21 @@ where the two differ; that section is kept as the record of how the decision was
   5. **Milestone 5 (tentative): FreeDOS.** FreeDOS boots on the card
      ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
 
-  Milestone 4 is the first that needs VBE: the 640x480 VESA mode brings in part C (4F00, 4F01, 4F02,
-  the window function 4F05 at least) and part B's mode set for that one mode. Which VESA mode number
-  and colour depth the benchmark asks for (presumably 101h, 640x480 in 256 colours) is to be confirmed
-  on the card with VGALOG, which logs 4F01 and 4F02. Everything else stays outside the current scope:
-  the other S3 and VESA modes, 132 columns and 50 lines, other games and Windows; those documents are
-  kept for later milestones.
+  Milestone 3 needs only standard VGA: mode 13h and the DAC block load AX=1012h. Milestone 4 is the
+  first that needs VBE: VESA mode 101h (640x480 in 256 colours, banked; recorded on a card on
+  2 November 2026, [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)). It brings in part C (4F00h, 4F01h for 100h
+  and 101h, 4F02h, the window function, which the program reaches without an INT 10h call) and part
+  B's mode set for that one mode. Everything else stays outside the current scope: the other S3 and
+  VESA modes, 132 columns and 50 lines, other games and Windows; those documents are kept for later
+  milestones.
+- **The contract of each milestone** is recorded on the card before the clean side starts it: the
+  INT 10h calls of its programs, with `VGALOG /M` under a working ROM, then `VGALOG /D`. The text
+  output functions are not logged there, so a list of those comes from a trace or from the standard.
+  Milestones 3 and 4 are recorded ([`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)); milestone 2 (MS-DOS 6.22 and
+  EDIT) is not yet.
 - **Scope of the leak review:** a clean-room implementation of milestones 1-4. Only what the clean side
   needs for them crosses now and is reviewed; milestone 5 and later get their own review when they are
-  set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review"). The contract of each milestone is recorded on the card before the clean side starts it:
-  the INT 10h calls of MS-DOS 6.22 and EDIT (milestone 2), of 3D Bench (milestone 3) and of Chris's 3D
-  Benchmark (milestone 4), with `VGALOG /M` under a working ROM, then `VGALOG /D`. The text output
-  functions are not logged there, so a list of those comes from a trace or from the standard.
+  set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review").
 
 ## Scope, base and licence (31 October 2026)
 
@@ -284,5 +287,7 @@ where the two differ; that section is kept as the record of how the decision was
   ones to the new repository.
 - The base (empty, our own code), the font source (Gil's FNTCOL16 files) and the four milestones are
   decided ("Decisions of 2 November 2026").
-- Record the INT 10h calls of MS-DOS 6.22 and EDIT, 3D Bench 1.0c and Chris's 3D Benchmark on the
-  card, as the contracts of milestones 2-4.
+- Record the INT 10h calls of MS-DOS 6.22 and EDIT on the card, as the contract of milestone 2
+  (milestones 3 and 4: [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
+- Find out how Chris's 3D Benchmark changes the bank in mode 101h (the far window function or the
+  chip's bank register): a port trace of its drawing.
