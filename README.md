@@ -765,9 +765,11 @@ outside the repository (file names in brackets, as of 2 November 2026); the link
 - [VESA BIOS Extension (VBE) Core Functions Standard 2.0](https://www.phatcode.net/res/221/files/vbe20.pdf),
   Rev. 1.1 (November 1994; `vbe20.pdf`; [text version](https://web.archive.org/web/20081211174813/http://docs.ruudkoot.nl/vbe20.txt)): 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE
   2.0, and S3TEST and S3COMPAT check against it.
-- [VESA Super VGA BIOS Extension (VBE) 1.2](https://discmaster.textfiles.com/view/10567/HPAVC%20CD-ROM.iso/pc/PCGPEV10.ZIP/VESASP12.TXT)
-  (VS911022, 22 October 1991; `vbe12.txt`; [another copy](https://web.archive.org/web/20090114055246/http://docs.ruudkoot.nl/vesasp12.txt)), the text retyped by "Patch" (VESASP12.ZIP): the
-  version the Trio64V+ and Trio64 ROMs report. What a 1.2 BIOS must do beyond 1.0: every
+- [Super VGA BIOS Extension Standard #VS911022](https://www.phatcode.net/res/221/files/vbe12.txt)
+  (VBE 1.2, 22 October 1991; `vbe12.txt`); the text retyped by "Patch" (VESASP12.ZIP) is also at
+  [discmaster](https://discmaster.textfiles.com/view/10567/HPAVC%20CD-ROM.iso/pc/PCGPEV10.ZIP/VESASP12.TXT)
+  and [archive.org](https://web.archive.org/web/20090114055246/http://docs.ruudkoot.nl/vesasp12.txt). It is
+  the version the Trio64V+ and Trio64 ROMs report. What a 1.2 BIOS must do beyond 1.0: every
   ModeInfoBlock field valid (the direct colour fields in memory models 6 and 7), ModeAttributes bit
   D1 always 1, unused fields zero and exactly 256 bytes returned (from 1.1), the direct colour memory
   model, 4F08 (DAC width, reset to 6 bits by a mode set), and the advice that INT 10h AH=0Fh return a
