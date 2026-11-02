@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """s3vpatch.py - build the Trio64V+ ROM (1.03-08N-pN, the level from common/version.inc VER765) from the S3 Trio64V+ BIOS 1.03-08N.
 
-    python3 rompatch/vplus/s3vpatch.py 1_03_08N.BIN -o S3VPP1.BIN [--size 32|64] [--mclk MHZ [--memtype edo1|fpm]]
+    python3 rompatch/vplus/s3vpatch.py 1_03_08N.BIN -o S3VPP1.BIN [--size 64|32] [--mclk MHZ [--memtype edo1|fpm]]
                                        [--nasm nasm] [-q]
     make 765-rom OUT=S3VPP1.BIN [MCLK=55 [MEMTYPE=edo1]]
 
@@ -16,8 +16,8 @@ Input
                configuration bytes differ (#129, docs/765-rom.md)
 
 Output
-  32 KB (--size 64: 64 KB, the 32 KB twice, for a 64 KB EEPROM whichever half the board maps; a board
-  that maps the upper half finds nothing in zeros, #78)
+  64 KB, the 32 KB twice, for a 64 KB EEPROM whichever half the board maps (a board that maps the upper
+  half finds nothing in zeros, #78); --size 32: the 32 KB alone, for a 32 KB EEPROM
 
 What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
   code   assembled with nasm at the addresses in vplus/bios.inc:
@@ -344,8 +344,9 @@ def diagnose(nasm, output, img):
 def main():
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 Trio64V+ BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the Trio64V+ BIOS 1.03-08N: 32 KB, or a 64 KB image with it in the lower half')
-    ap.add_argument('-o', '--output', required=True, help='the result (32 KB, or 64 KB with --size 64)')
-    ap.add_argument('--size', type=int, choices=(32, 64), default=32, help='output size in KB (64: the 32 KB twice)')
+    ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the 32 KB twice; 32 KB with --size 32)')
+    ap.add_argument('--size', type=int, choices=(32, 64), default=64,
+                    help='output size in KB (default 64: the 32 KB twice; 32 for a 32 KB EEPROM)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype, at most 60 '
                     '(default: as 1.03-08N, 50.11 for 1-cycle EDO, 59.96 for fast page/2-cycle EDO)')
     ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',

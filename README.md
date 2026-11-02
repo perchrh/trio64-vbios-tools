@@ -74,7 +74,7 @@ number; the documentation also uses the market names.
 | Code | Market name | S3 part | PCI ID | Make targets | `--chip`, `CHIP=` | Version, reference, size variables |
 | --- | --- | --- | --- | --- | --- | --- |
 | 785 | Trio64V2/GX | 86C785 | 5333:8901 | `775-rom` (the same ROM: S3's 2.04.07 is the "86C775/86C785 Video BIOS"; the clock option has an `sgram` entry for the GX) | `775` | as 775 |
-| 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775` |
+| 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775`, `SIZE775` |
 | 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
 | 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
 | 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
@@ -364,9 +364,10 @@ candidate (`docs/clean-room.md`).
 (level p24) to the S3 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin`, with byte assertions at
 every patch site, the SHA-256 of the input's code outside the OEM area (CODE_SHA, 0100h-7FFDh) and the
 SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
-patched 32 KB twice. It needs python3 (no packages) and NASM 3.02:
+patched 32 KB twice (`SIZE775=32`: the 32 KB alone, for a 32 KB EEPROM). All three ROM targets default
+to 64 KB. It needs python3 (no packages) and NASM 3.02:
 
-    make 775-rom OUT=S3V2P24.BIN
+    make 775-rom OUT=S3V2P24.BIN [SIZE775=32]
     make 775-rom-test [STOCK=STOCK.BIN] [ROM=S3V2P24.BIN]
     make emu-test ROM=S3V2P24.BIN
     make 775-ref-compare ROM=S3V2P24.BIN
@@ -382,12 +383,12 @@ the patcher tests in its section "The build".
 1.03-08's own faults, each with its issue in [docs/765-changes.md](docs/765-changes.md). The build, what
 does not apply to the Trio64V+ and the per-call costs: [docs/765-rom.md](docs/765-rom.md).
 
-    make 765-rom OUT=S3VPP5.BIN [SIZE765=64]       (32 KB; SIZE765=64: 64 KB with the 32 KB twice, for a 64 KB EEPROM)
+    make 765-rom OUT=S3VPP5.BIN [SIZE765=32]       (64 KB, the 32 KB twice; SIZE765=32: 32 KB, for a 32 KB EEPROM)
     make 765-rom-test [ROM=S3VPP5.BIN]
     make emu-test ROM=S3VPP5.BIN CHIP=765 [LOGS=emu/vlogs]
     make 765-ref-compare ROM=S3VPP5.BIN
 
-Square brackets in these lines mark options: type `SIZE765=64`, not `[SIZE765=64]`.
+Square brackets in these lines mark options: type `SIZE765=32`, not `[SIZE765=32]`.
 
 `s3vpatch.py` works as `s3patch.py`: byte assertions at every patch site (the shared speed patches use
 the same signatures and the same .asm files, assembled with the 1.03-08 addresses of
@@ -439,9 +440,9 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
-| 775 (Trio64V2/DX) | `775-P24/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p24, 64 KB, the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P5/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p5, 32 KB (`SIZE765=64` for 64 KB), the clock in the edo1 entry |
-| 764X (Trio64 PnP) | `764X-P5/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p5, 64 KB |
+| 775 (Trio64V2/DX) | `775-P24/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p24, 64 KB (`SIZE775=32` for 32 KB), the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P5/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p5, 64 KB (`SIZE765=32` for 32 KB), the clock in the edo1 entry |
+| 764X (Trio64 PnP) | `764X-P5/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p5, 64 KB (`SIZE764=32` for 32 KB) |
 | 764P (86C764-P) | `764P-P5/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p5, 64 KB |
 
 The two Trio64 models get the same ROM; `make 764x-rom` and `make 764p-rom` differ only in the MCLK range

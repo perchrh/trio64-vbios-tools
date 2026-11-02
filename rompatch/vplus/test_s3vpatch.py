@@ -19,7 +19,7 @@ Tests
                  values among them: no VCO fix on the Trio64V+)
   input_64k      a 64 KB image with 1.03-08 in the lower half gives the same result, whatever its upper
                  half holds
-  size64         --size 64 gives the same 32 KB twice (#78)
+  size64         the default output is the same 32 KB twice, 64 KB (#78); --size 32 the 32 KB alone
   mclk           --mclk 50, 55 and 60 (1-cycle EDO) and 60 (fast page) give a valid MCLK PLL pair within
                  0.5 MHz in that memory type's entry and change nothing else but the checksum; 61 MHz and
                  39 MHz are refused (MEM-1: 60 MHz on the Trio64V+)
@@ -110,7 +110,7 @@ def main():
     ref = open(a.ref, 'rb').read()[:0x8000]
     tmp = tempfile.mkdtemp(prefix='t_s3vpatch_')
 
-    rc, img, err = run(tmp, ref)
+    rc, img, err = run(tmp, ref, ['--size', '32'])
     sha = hashlib.sha256(img).hexdigest() if img else ''
     want = 'Version %s-%s\r\n' % (s3vpatch.VERSION, s3vpatch.LEVEL)
     ok = rc == 0 and len(img) == 0x8000 and sha == s3vpatch.RESULT_SHA and want.encode() in img[:0x100]
@@ -154,10 +154,10 @@ def main():
     result('unchanged', not diff, 'changed outside the patches: %s' % ', '.join('%04X' % i for i in diff[:8])
            if diff else '%d bytes differ, all at patch sites, code blocks, sign-on, checksum'
            % sum(1 for i in range(0x8000) if img[i] != ref[i]))
-    rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
+    rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000, ['--size', '32'])
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
-    rc, big, err = run(tmp, ref, ['--size', '64'])
-    result('size64', rc == 0 and big == img + img, err or '64 KB, the 32 KB twice')
+    rc, big, err = run(tmp, ref)
+    result('size64', rc == 0 and big == img + img, err or 'the default: 64 KB, the 32 KB twice')
 
     bad = mclk_cases(tmp, ref, img, s3vpatch.MCLK_ENTRY, run)
     result('mclk', not bad, '; '.join(bad) or '50, 55, 60 MHz edo1 and the fpm maximum valid, out-of-range values refused')

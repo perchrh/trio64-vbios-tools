@@ -147,11 +147,11 @@ clean:
 MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 
 # ROM patcher (python3 and nasm): the current level from the S3 reference BIOS 2.04.07
-#   make 775-rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [MCLK=55 [MEMTYPE=edo1]]     (64 KB, the 32 KB twice)
+#   make 775-rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [SIZE775=32] [MCLK=55 [MEMTYPE=edo1]]   (64 KB, the 32 KB twice; SIZE775=32: 32 KB)
 #   make 775-rom-test [REF775=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 775-rom:
 	@test -n "$(IN)" -a -n "$(OUT)" || { echo "775-rom: set OUT, e.g. make 775-rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
-	python3 rompatch/s3patch.py --nasm "$(NASMBIN)" "$(IN)" -o "$(OUT)" $(MCLKOPT)
+	python3 rompatch/s3patch.py --nasm "$(NASMBIN)" --size $(SIZE775) "$(IN)" -o "$(OUT)" $(MCLKOPT)
 
 775-rom-test:
 	@test -n "$(REF775)" || { echo "775-rom-test: set REF775 (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
@@ -159,12 +159,13 @@ MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 
 # The Trio64V+ ROM (rompatch/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
 # reference/64vplus/1_03_08n.bin (REF765), docs/765-rom.md
-#   make 765-rom OUT=S3VPP1.BIN [REF765=...] [SIZE765=64] [MCLK=55 [MEMTYPE=edo1]]   (32 KB; SIZE765=64: 64 KB, the 32 KB twice)
+#   make 765-rom OUT=S3VPP1.BIN [REF765=...] [SIZE765=32] [MCLK=55 [MEMTYPE=edo1]]   (64 KB, the 32 KB twice; SIZE765=32: 32 KB)
 #   make 765-rom-test [REF765=...] [ROM=S3VPP1.BIN]
 #   make 765-ref-compare ROM=S3VPP1.BIN [REF765=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=765 [LOGS=emu/vlogs]
 REF765 ?= reference/64vplus/1_03_08n.bin
-SIZE765 ?= 32
+SIZE775 ?= 64
+SIZE765 ?= 64
 SIZE764 ?= 64
 765-rom:
 	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (REF765 defaults to reference/64vplus/1_03_08n.bin)"; exit 2; }
@@ -204,7 +205,7 @@ REF764 ?= reference/trio64/1_5_07.bin
 # common/version.inc) with 8.3 names for a DOS disk: the chip code, M and the clock, for example
 # build/roms/775-P22/775M60.BIN, build/roms/764X-P3/764XM70.BIN. On the 775 and 765 the clock goes into the
 # edo1 entry (MEMTYPE; 1-cycle EDO), on the 764 models into their one entry. The images keep each target's
-# size (775 and 764 64 KB, 765 SIZE765).
+# size (SIZE775, SIZE765, SIZE764: 64 KB, the 32 KB twice, unless set to 32).
 #   make roms [CLOCKS_775="50 55 60"] [CLOCKS_765=...] [CLOCKS_764X="55 60 70"] [CLOCKS_764P="50 55 60"]
 CLOCKS_775 ?= 50 55 60
 CLOCKS_765 ?= 50 55 60
