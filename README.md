@@ -106,6 +106,9 @@ is for the Windows 9x desktop.
 Each source file starts with a header that says what is tested and which outcome is expected, and
 each test routine has a comment block with its fail and warn bits. S3TEST and S3COMPAT end their log
 with `Time spent: x.y s`, the run time measured with the BIOS tick.
+S3TEST's six `Time:` lines (INFO) give the shortest of 3 runs in ms, the 4F05 line in us per call,
+with three decimals: one PIT count is 0.838 us, and a text clear (0.0x ms) read as 0.0 with one
+decimal, which a speed score built on these lines cannot use.
 
 Monitor: VSHOW and S3TEST set modes up to a 75 kHz line frequency (1600x1200 at 60 Hz), S3COMPAT up
 to 91 kHz (1280x1024 at 85 Hz in its 4F14 refresh test). An LCD refuses a signal it cannot show (out

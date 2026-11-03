@@ -110,7 +110,8 @@
 ;   4F05 (p12 fast path): registers and the 3C4h index kept, CR6A set, planar 102h bank x 4 in CR6A and
 ;                    0040:00FE, refused in linear 4101h (fail bits 1, 2, 4, 8, 10h)
 ;   Timings, INFO lines not counted: mode set 03h, 4F02 101h with the clear, one 4F05, one mode 13h
-;                    scroll, a text clear and a mode 12h clear with AH=06h AL=0 (shortest of 3 runs)
+;                    scroll, a text clear and a mode 12h clear with AH=06h AL=0 (shortest of 3 runs),
+;                    in ms (4F05 in us per call) with three decimals
 ;
 bits 16
 org 0x100
@@ -2069,7 +2070,9 @@ t_time: VS 'D:TEST timings'
         popf
 .r:     ret
 
-; DX = line text, BX = routine to time. Prints "text <ms or us with one decimal>  INFO".
+; DX = line text, BX = routine to time. Prints "text <ms or us with three decimals>  INFO".
+; Three decimals because one PIT count is 0.838 us: a fast call (a text clear, 0.0x ms) read as 0.0
+; with one decimal, which a benchmark score built on these lines cannot use.
 time3:  push dx
         mov dword [tmin],0xFFFFFFFF
         mov cx,3
@@ -2088,12 +2091,12 @@ time3:  push dx
         loop .l
         pop dx
         call puts
-        mov eax,[tmin]                  ; tenths: counts * 10000 / 1193182
-        mov ecx,10000
+        mov eax,[tmin]                  ; thousandths: counts * 1000000 / 1193182 (< 2^32)
+        mov ecx,1000000
         mul ecx
         mov ecx,1193182
         div ecx
-        call pdec10
+        call pdec1k
         mov al,2
         call ccount
         mov dx,s_tinfo
@@ -2630,6 +2633,35 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
         pop ax
         add al,'0'
         call putc
+        pop ebx
+        pop edx
+        ret
+
+pdec1k: push edx                ; EAX = value*1000 -> "x.yyy"; EAX lost, EBX ECX EDX kept
+        push ebx
+        push ecx
+        xor edx,edx
+        mov ebx,1000
+        div ebx
+        push dx
+        call pdec
+        mov al,'.'
+        call putc
+        pop ax                          ; AX = 0-999: three digits, leading zeros kept
+        mov bl,100
+        div bl                          ; AL = hundreds, AH = rest (putc keeps AX)
+        add al,'0'
+        call putc
+        mov al,ah
+        xor ah,ah
+        mov bl,10
+        div bl                          ; AL = tens, AH = ones
+        add al,'0'
+        call putc
+        mov al,ah
+        add al,'0'
+        call putc
+        pop ecx
         pop ebx
         pop edx
         ret
