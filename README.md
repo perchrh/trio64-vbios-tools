@@ -5,6 +5,8 @@ Trio64V+ (86C765) and the Trio64V2/DX (86C775), all PCI 5333h. For each chip the
 patched video BIOS from a reference BIOS (fixes, speed, 60 Hz defaults, an MCLK build option), tests it
 in its own emulator and on real cards, and prepares a clean-room BIOS of its own (`docs/clean-room.md`).
 
+Preliminary benchmarks [show about 10% performance improvement](https://github.com/perchrh/trio64-vbios-tools/issues/109#issuecomment-6608972948) (benchmark_1 tag)
+
 | Chip | ROM | Reference BIOS | Test card(s) | Fixes and improvements | Description |
 | --- | --- | --- | --- | --- | --- |
 | Trio64 86C764X and 86C764-P | 1.5-07-pN (`make 764x-rom`, `make 764p-rom`) | Phoenix 1.5-07 | ExpertColor DSP-3364P, 2 MB fast page | [docs/764-changes.md](docs/764-changes.md) | [docs/764-rom.md](docs/764-rom.md) |
