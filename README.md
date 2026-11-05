@@ -5,7 +5,7 @@ Trio64V+ (86C765) and the Trio64V2/DX (86C775), all PCI 5333h. For each chip the
 patched video BIOS from a reference BIOS (fixes, speed, 60 Hz defaults, an MCLK build option), tests it
 in its own emulator and on real cards, and prepares a clean-room BIOS of its own (`docs/clean-room.md`).
 
-Preliminary benchmarks [show about 10% performance improvement](https://github.com/perchrh/trio64-vbios-tools/issues/109#issuecomment-6608972948) (benchmark_1 tag)
+Preliminary benchmarks [show about 10% performance improvement](https://github.com/perchrh/trio64-vbios-tools/issues/109#issuecomment-6608972948)
 
 | Chip | ROM | Reference BIOS | Test card(s) | Fixes and improvements | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -20,6 +20,8 @@ Other documents: [docs/chip-rules.md](docs/chip-rules.md) (the data book rules t
 [docs/bios-rules.md](docs/bios-rules.md) (the standard video BIOS behaviour), [docs/clean-room.md](docs/clean-room.md)
 and [docs/cleanroom/](docs/cleanroom/README.md) (the clean-room BIOS), and
 [docs/seavgabios-trio64.md](docs/seavgabios-trio64.md) (SeaVGABIOS for the Trio64, measured and set aside).
+
+A [collection of S3 Trio video bioses](https://archive.org/details/s3-trio-vbioses) is available from archive.org
 
 ## Speed
 
@@ -90,7 +92,7 @@ The three ROMs share the patcher library (`rompatch/s3patch.py`), the version fi
 (`common/version.inc`), the tools and the emulator.
 
 The patched ROM images are not in this repository: `rompatch/` holds the changes to the reference
-BIOSes and the patchers that build the images from them.
+BIOSes and the patchers that build the images from them. 
 
 All tools need a 386 or later and run in plain DOS (no EMM386 needed), except S3REGS32.EXE, which
 is for the Windows 9x desktop.
