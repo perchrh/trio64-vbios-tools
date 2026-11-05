@@ -20,5 +20,6 @@ Chris's 3D Benchmark with VESA **101h** only).
 | CONV-3/-12 | Cut from the milestone-1-4 clean copy (Windows driver acceptance is out of scope). | CONV-3, CONV-12 |
 | Index/lock | Keep CONV-8/-9 as **project-chosen** contracts (AGENTS), not data-book guarantees; attribute-controller behaviour stays with B00-9 / B10-4. | CONV-8, CONV-9 |
 | Fonts | **Closed.** Use Joseph Gil's FNTCOL16 individual fonts in [`rompatch/fonts/`](../../rompatch/fonts/) and generate the five ROM tables with [`fonts.py`](../../rompatch/fonts/fonts.py) (including the 9-dot alternates). Gil's notice (`COPYLEFT.TXT`) is the project licence basis; no BIOS- or other-project-sourced font bytes. FreeDOS cpidos is not the project alternative. Manifest: [`asset-manifest.md`](asset-manifest.md). Already implemented (#141). | clean-room fonts; allowlist export |
+| M2-BOOT | Milestone 2 acceptance boots MS-DOS 6.22 **without** `CONFIG.SYS` and **without** `AUTOEXEC.BAT`, and with an **empty PATH**. The contract is EDIT's recorded INT 10h calls only ([`milestone-calls.md`](milestone-calls.md)). Shell helpers (CLS, DOSKEY, and other AUTOEXEC/PATH programs) are out of scope: no ownership work and no surround call table in the clean contract. | milestone 2; milestone-calls |
 
 Primary pages for the next leak review: [`primary-extracts/`](primary-extracts/).

@@ -34,7 +34,7 @@ to implement from:
 - Applied 5 November 2026 toward the independent-review returns (still need a fresh leak review of
   the changed files before any allowlist export):
   - owner decisions in [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) (100h, AH=0Fh,
-    MCLK policy, FIFO, POST-41, ROM-8/9);
+    MCLK policy, FIFO, POST-41, ROM-8/9, fonts, M2-BOOT bare MS-DOS);
   - primary extracts and full documents in [`primary-extracts/`](primary-extracts/),
     [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf),
     [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf),
@@ -48,7 +48,6 @@ to implement from:
   - a second-reader re-review of the changed files (nothing is cleared until then);
   - remaining bios-rules returns (B09-11, unsupported-subfunction rows, B00-5, TAB-9, font/state Q17)
     and any A/B/C rows not yet rewritten;
-  - the surrounding MS-DOS boot / CLS session as a finished milestone-2 contract;
   - Trio64V2/DX **driver** `VGALOG` call logs (dirty side; later milestones);
   - the export of a reviewed allowlist at a fixed commit to a separate repository.
 

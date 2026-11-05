@@ -6,7 +6,9 @@ in memory mode. The first part, "The contract", lists the calls as the programs 
 what the standards say they must return. It crosses to the clean side after the leak review. The second part,
 "The run", holds the provenance and what our ROM answered. It stays on the dirty side.
 
-Milestone 2 is recorded for MS-DOS EDIT (below); the DOS calls around the programs are listed apart.
+Milestone 2 is recorded for MS-DOS EDIT (below). Owner policy M2-BOOT
+([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md)): acceptance boots without `CONFIG.SYS` /
+`AUTOEXEC.BAT` and with an empty PATH, so shell surround (CLS, DOSKEY, ...) is out of the contract.
 
 ## The contract (crosses after the leak review)
 
@@ -82,15 +84,12 @@ What follows for the clean ROM:
 - **AH=0Fh after 101h:** project restorable extended-mode number; not S3 `69h` (Q0F).
 - No BIOS palette call was logged; absence of a port trace does not prove direct DAC writes.
 
-### Surrounding shell observations (provisional milestone 2)
+### Milestone 2 boot policy (no shell surround)
 
-| Observed inputs | Public behavior | Source |
-| --- | --- | --- |
-| AH=0Fh; AH=0Bh BH=00h BL=00h; AH=06h AL=00h BH=07h CX=0000h DX=184Fh | mode query; border colour; clear 80x25 with attribute 07h | surrounding-shell observation; VGADOC/RBIL AH=0Fh/0Bh/06h |
-| AH=0Fh; AH=01h CX=0D0Eh | mode query; cursor shape | surrounding-shell observation; VGADOC/RBIL AH=0Fh/01h |
-
-Program ownership (CLS vs DOSKEY) was not established. Cut S3REGS AX=4F03h instrumentation from the
-clean contract. Remains under [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145).
+Acceptance for milestone 2 boots MS-DOS 6.22 with **no** `CONFIG.SYS`, **no** `AUTOEXEC.BAT`, and an
+**empty PATH** (M2-BOOT). The clean contract is the EDIT table above only. Observed CLS / DOSKEY-like
+calls from richer shells are dirty-side notes only and do not cross. Cut S3REGS AX=4F03h
+instrumentation from the clean contract.
 
 ## The run (dirty side only)
 
