@@ -8,9 +8,10 @@ The ROM image is not in the repository; pass the 64 KB image of the card. The to
 their output (NAME.LOG) and debug files (NAME.DBG, VGALOG.BIN) are kept in emu/logs (--logs).
 Run against the stock ROM, s3test (and the FIFO line of rom_patches) list everything the patches add. The tools are taken from
 --build (run make first). Each test prints PASS, FAIL (with the reason) or SKIP; the exit code is 1
-when a test failed. The emulator models the VGA/S3 registers, one 64 KB planar window and a virtual clock
-that drives the PIT, the BIOS tick and the retrace bit (see vgaemu.py). It has no banked or linear
-video memory and no real bus speed, so those results stay with the hardware runs.
+when a test failed. The emulator models the VGA/S3 registers, the card's video memory (1, 2 or 4 MB)
+behind the banked A0000 window, and a virtual clock that drives the PIT, the BIOS tick and the
+retrace bit (see vgaemu.py). It has no linear frame buffer (INT 15h AH=87h) and no real bus speed,
+so the LFB lines and the banked write throughput stay with the hardware runs.
 
 Tests
   version          the tests are for the newest ROM: the ROM under test carries the sign-on of its level in
@@ -46,12 +47,12 @@ Tests
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
                    EGA (all others)
-  s3test           S3TEST runs to the end; every check passes except the two the model cannot judge
-                   (banked memory, throughput); with /V the output is the same (except the Time spent
-                   line) and S3TEST.DBG is well formed
+  s3test           S3TEST runs to the end; every check passes except the banked write throughput (no
+                   real bus speed); with /V the output is the same (except the Time spent line) and
+                   S3TEST.DBG is well formed
   s3test_any       S3TEST /C (any ROM: a stock BIOS, a clean ROM) on every ROM and chip: the version is
-                   INFO, our ROM's tests SKIP with the /C reason, every other check passes but the two
-                   the model cannot judge (#143)
+                   INFO, our ROM's tests SKIP with the /C reason, every other check passes but the
+                   banked write throughput (#143)
   vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
                    monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT, shown once
                    before the VSHOW /I list, and S3TEST, S3COMPAT and VSHOW (a mode, /A) print it on
@@ -68,8 +69,8 @@ Tests
   s3compat_full    the whole S3COMPAT /Q (every VESA mode banked and linear, the S3 modes, the VESA
                    functions, pass 2): every line PASS except the known BIOS warnings (8x14 font, 106h
                    above the single-clock limit, the CR86 and CR90/CR91 rules in 012Eh, 010Fh, 0131h,
-                   0134h and 012Ah, which are clean on the card) and the lines that judge video memory through banks,
-                   the LFB or planar windows above 64 KB, which the model does not have
+                   0134h and 012Ah, which are clean on the card) and the lines that need the LFB
+                   (INT 15h AH=87h), which the model does not have
   vgalog           VGALOG installs, writes the file header with the chip and ROM block (CR2D-CR30, CR36,
                    ROM size, SR10/SR11, the ROM version) and logs 32 bytes per call, returns the BIOS
                    results with the caller's interrupt flag; second install refused, /H, /U closes the
@@ -130,9 +131,9 @@ Tests
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
   --chip 775|765|767|764|764x|764p|732   the chip of the model by its S3 part number (default 775, the card)
-  --vram 1|2|4     the video memory CR36 reports (2 MB, the card; 4 MB, the chip maximum; 1 MB, the smallest
-                   configuration of every chip). The BIOS finds the size at POST (it writes CR36 bits 7-5
-                   after testing the last 64 KB of 4 and 2 MB); the model answers with the size given here
+  --vram 1|2|4     the video memory size in MB (CR36 and Machine.vram: 2 the card, 4 the chip maximum,
+                   1 the smallest). The BIOS finds the size at POST; the model answers with the size given
+                   here and keeps that many megabytes behind the banked A0000 window (no LFB)
   -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
@@ -945,8 +946,8 @@ def t_t64_patches(c):
     return 'defaults, removed modes, booster, Windows check, lock, ATC flip-flop, 32-bit registers, FIFO M'
 
 
-# S3TEST lines that cannot pass in the emulator (no banked video memory, no real bus speed)
-S3TEST_MODEL_LIMITS = ('Banked data check', 'Banked write throughput')
+# S3TEST lines that cannot pass in the emulator (no real bus speed; banked video memory is modelled)
+S3TEST_MODEL_LIMITS = ('Banked write throughput',)
 RESULT_RE = r'  (PASS|FAIL [0-9A-F]+|FAIL|WARN [0-9A-F]+|INFO)$'
 CATS = ('ROM', 'MDA', 'CGA', 'EGA', 'VGA', 'VBE', 'S3')
 
@@ -1031,7 +1032,7 @@ def t_s3test(c):
 def t_s3test_any(c):
     """S3TEST /C, the set for a ROM that is not ours (a stock BIOS, a clean ROM, #143), runs on every ROM
     and chip: the version found is INFO, the tests of our ROM are SKIP with the /C reason, and every
-    test that needs no ROM of ours passes except the two the model cannot judge."""
+    test that needs no ROM of ours passes except the banked write throughput (no real bus speed)."""
     com = c.tool('S3TEST.COM')
     r = c.machine().run_com(com, '/C /S')
     c.save('S3TESTC', r)
@@ -1197,10 +1198,10 @@ def t_s3compat_vga(c):
     return '%d tests' % len(tests)
 
 
-# S3COMPAT lines that judge video memory through the 64 KB banks, the LFB (INT 15h AH=87h) or a planar
-# window above 64 KB, which the model does not have; and the known warnings of the BIOS itself
-S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$', r'VESA 010[46] .*FAIL 0020$',
-                         r'4F05 bank set/get \+ WinFuncPtr .*FAIL 0004$',
+# S3COMPAT lines that need the LFB (INT 15h AH=87h), which the model does not have; banked and planar
+# video memory through the A0000 window is modelled (see vgaemu.py). Known warnings of the BIOS itself
+# are in S3COMPAT_KNOWN.
+S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$',
                          r'Banked window and LFB same memory .*WARN 01$']
 S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
                   r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
@@ -2645,9 +2646,10 @@ def main():
                          'default), 765 = Trio64V+, 767 = Trio64UV+, 764 (764x, 764p) = Trio64, 732 = Trio32; ID registers, '
                          'PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
-                    help='video memory CR36 bits 7-5 report after POST: 2 MB (the card, default), 4 MB (the '
-                         'maximum of every Trio64-family chip but the Trio32) or 1 MB (the smallest configuration '
-                         'of every chip); the model still has one 64 KB window, no banked or linear memory')
+                    help='video memory size in MB (CR36 bits 7-5 after POST, and the size of Machine.vram): '
+                         '2 (the card, default), 4 (the maximum of every Trio64-family chip but the Trio32) '
+                         'or 1 (the smallest configuration of every chip); seen through the banked A0000 '
+                         'window (no LFB)')
     a = ap.parse_args()
     if CHIP_CODES[a.chip] == 'trio32' and a.vram == 4:
         ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')
