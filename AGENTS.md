@@ -180,10 +180,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   (`s3tpatch.py --fonts-only`), so every other difference still shows.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and
   the DOS tools on top of it, under Unicorn with a VGA register model (`make emu-test ROM=...`). It
-  models registers, a planar window and a virtual clock (refresh rates there follow the programmed
-  timing), but has no banked or linear video memory and no real bus speed, so keep those results
-  apart from real findings; the hardware logs decide. Add a test to
-  `emu/tests.py` for new behaviour the model can judge.
+  models registers, the card's video memory behind the banked A0000 window and a virtual clock
+  (refresh rates there follow the programmed timing), but has no linear frame buffer (INT 15h AH=87h)
+  and no real bus speed, so keep those results apart from real findings; the hardware logs decide.
+  Add a test to `emu/tests.py` for new behaviour the model can judge.
 - Deliver changes as a pull request against main.
 - A bug that has ever been on the main branch (in a ROM, a tool, the patchers or the tests) gets a
   GitHub issue before it is fixed, as issues #47-#69 do: what is wrong, the cause, the effect of the

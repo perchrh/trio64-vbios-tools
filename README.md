@@ -214,17 +214,19 @@ leaves it after a VESA mode (the model does not set it). The other tests check t
 default palettes of every VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of
 S3COMPAT run and give the same output with and without /V, the /V debug file format, and VGALOG and
 S3ALIAS install and unload. The tools run with /V; their output and debug files are kept in
-`emu/logs/` (S3TEST.LOG, S3TEST.DBG, ...). The emulator models the VGA and S3 registers, one 64 KB planar window
-and a virtual clock that drives the timer, the BIOS tick and the retrace bit from the programmed
-timing (see `emu/vgaemu.py`), so refresh rates and planar memory tests mean something there. It has
-no banked or linear video memory and no real bus speed: those results, and the monitor, stay with
-the hardware logs, which decide. `emu/cover.py` lists the ROM bytes that a broad INT 10h workload
-never touches.
+`emu/logs/` (S3TEST.LOG, S3TEST.DBG, ...). The emulator models the VGA and S3 registers, the card's
+1, 2 or 4 MB of video memory behind the banked A0000 window (CR6A, or CR35/CR51 with CR31 bit 0;
+packed bytes or the four interleaved planes), and a virtual clock that drives the timer, the BIOS
+tick and the retrace bit from the programmed timing (see `emu/vgaemu.py`), so refresh rates, banked
+and planar memory tests mean something there. It has no linear frame buffer at the CR59/CR5A base
+(INT 15h AH=87h reports "not supported") and no real bus speed: the LFB lines, the banked write
+throughput and the monitor stay with the hardware logs, which decide. `emu/cover.py` lists the ROM
+bytes that a broad INT 10h workload never touches.
 
-`s3compat_full` runs the whole S3COMPAT on the model; only the lines that judge video memory through
-the banks, the LFB or planar windows above 64 KB are left to the card. In the model, read mode 1
-(colour compare), the GR03 rotate and logic functions, the DAC state register and the PIC are
-modelled too, so the VGA BIOS function tests of S3COMPAT all run there.
+`s3compat_full` runs the whole S3COMPAT on the model; only the lines that need the LFB (INT 15h
+AH=87h) are left to the card. In the model, read mode 1 (colour compare), the GR03 rotate and logic
+functions, the DAC state register and the PIC are modelled too, so the VGA BIOS function tests of
+S3COMPAT all run there.
 
 ### Chip models and stock BIOSes
 
