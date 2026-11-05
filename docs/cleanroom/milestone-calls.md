@@ -10,105 +10,87 @@ Milestone 2 is recorded for MS-DOS EDIT (below); the DOS calls around the progra
 
 ## The contract (crosses after the leak review)
 
-The calls each program made through INT 10h, in order. VGALOG's memory mode does not log AH=02h, 03h,
-08h, 09h, 0Ah, 0Ch, 0Dh, 0Eh and 13h, so the programs may also use those (text output, cursor, pixels).
-It does not see anything a program writes to the ports itself (the DAC, the CRTC, the bank
-registers); far calls to the VBE window function it sees with `/W`.
+Partial black-box call observations for milestones 2-4, with required outputs from the cited public
+interfaces. Counts and caller ordering describe those observations; they do not prescribe the BIOS's
+internal implementation order. OBS-EDIT, OBS-M3, OBS-M4-320 and OBS-M4-640 mean the recorded card
+runs of 2 November 2026 (inputs and counts only). The logger omitted AH=02h, 03h, 08h, 09h, 0Ah,
+0Ch, 0Dh, 0Eh and 13h; it does not see direct port writes unless `/P` or `/W` is used as noted.
+
+Owner policy for 100h and AH=0Fh after 101h:
+[`decisions-milestones-1-4.md`](decisions-milestones-1-4.md).
 
 ### Milestone 2: MS-DOS 6.22 EDIT
 
-EDIT started, used and left (VGALOG /P, 2 November 2026; no mode set, so nothing was traced). The text
-itself goes to video memory at B800h or through the calls VGALOG does not log (above).
+EDIT started, used and left (no mode set). Text itself may go to B800h or through omitted text APIs.
 
-| Call | Input | Count | What the program needs |
-| --- | --- | --- | --- |
-| AX=1A00h | | 1 | the display combination code: AL = 1Ah back, BL = 08h |
-| AH=0Fh | | 1 | the current mode (03h, 80 columns) |
-| AX=1130h | BH = 00h | 1 | the font information: CX = 16 (bytes per character), DL = 24 (rows - 1); ES:BP the INT 1Fh pointer |
-| AX=1003h | BL = 00h | 1 | blink off: attribute bit 7 selects the bright background |
-| AH=01h | AL = 03h, CX = 2000h | 9 | cursor off (CH bit 5) |
-| AH=01h | AL = 03h, CX = 0607h | 6 | cursor shape lines 6-7 (with cursor emulation on, B01-4) |
-| AX=1003h | BL = 01h | 1 | blink on again, at the exit |
-| AH=01h | AL = 00h, CX = 0D0Eh | 1 | cursor shape lines 13-14, at the exit |
+| Call | Input | Count | What the program needs | Source |
+| --- | --- | --- | --- | --- |
+| AX=1A00h | | 1 | AL=1Ah when supported; BL=08h for analogue-colour VGA | OBS-EDIT; VGADOC/RBIL AX=1A00h |
+| AH=0Fh | | 1 | current mode (03h, 80 columns) | OBS-EDIT; VGADOC/RBIL AH=0Fh |
+| AX=1130h | BH=00h | 1 | font info: CX bytes/char, DL=rows-1; ES:BP INT 1Fh | OBS-EDIT; VGADOC/RBIL AX=1130h |
+| AX=1003h | BL=00h | 1 | blink off | OBS-EDIT; VGADOC/RBIL AX=1003h |
+| AH=01h | CX=2000h | 9 | cursor off (CH bit 5) | OBS-EDIT; VGADOC/RBIL AH=01h |
+| AH=01h | CX=0607h | 6 | cursor shape lines 6-7 (with cursor emulation, B01-4) | OBS-EDIT; B01-4 |
+| AX=1003h | BL=01h | 1 | blink on at exit | OBS-EDIT; VGADOC/RBIL AX=1003h |
+| AH=01h | CX=0D0Eh | 1 | cursor shape lines 13-14 at exit | OBS-EDIT; VGADOC/RBIL AH=01h |
 
-AH=01h is called with AL = the current mode (03h): some BIOSes need it, the standard does not; the
-clean ROM ignores AL in AH=01h.
+Some BIOSes are called with AL=current mode on AH=01h; the clean ROM ignores AL in AH=01h.
 
 ### Milestone 3: Superscape 3D Bench 1.0c
 
-| Call | Input | Count | What the program needs |
-| --- | --- | --- | --- |
-| AH=00h | AL = 13h | 1 | mode 13h, 320x200 in 256 colours, with the screen cleared |
-| AX=1012h | BX = 0000h, CX = 0100h (all 256 DAC entries), ES:DX = the table | 5 | the DAC block load (B1012 rules of [`docs/bios-rules.md`](../bios-rules.md)) |
-| AH=00h | AL = 03h | 1 | back to 80x25 text |
+| Call | Input | Count | What the program needs | Source |
+| --- | --- | --- | --- | --- |
+| AH=00h | AL=13h | 1 | mode 13h, 320x200x256, screen cleared | OBS-M3; VGADOC/RBIL AH=00h |
+| AX=1012h | BX=0, CX=0100h, ES:DX=table | 5 | DAC block load of 256 entries | OBS-M3; B1012 |
+| AH=00h | AL=03h | 1 | back to 80x25 text | OBS-M3; VGADOC/RBIL AH=00h |
 
-No VBE call and no S3 mode: milestone 3 needs only the standard VGA mode 13h and the DAC function.
+No VBE INT 10h call was recorded. Logger limits prevent treating this as exhaustive.
 
 ### Milestone 4: Chris's 3D Benchmark
 
-The 320x200 run:
+320x200 run:
 
-| Call | Input | Count | What the program needs |
-| --- | --- | --- | --- |
-| AX=1A00h | | 1 | the display combination code: AL = 1Ah back, BL = 08h (VGA with an analogue colour display) |
-| AH=00h | AL = 03h | 2 | 80x25 text |
-| AH=12h BL=34h | AL = 00h | 1 | cursor emulation on; AL = 12h back |
-| AH=00h | AL = 13h | 1 | mode 13h |
-| AH=00h | AL = 03h | 2 | back to text |
-| AH=12h BL=34h | AL = 00h | 1 | cursor emulation on |
+| Call | Input | Count | What the program needs | Source |
+| --- | --- | --- | --- | --- |
+| AX=1A00h | | 1 | display combination; BL=08h for analogue-colour VGA | OBS-M4-320; VGADOC/RBIL AX=1A00h |
+| AH=00h | AL=03h | 2 | 80x25 text | OBS-M4-320; VGADOC/RBIL AH=00h |
+| AH=12h BL=34h | AL=00h | 1 | cursor emulation on; AL=12h back | OBS-M4-320; VGADOC/RBIL AH=12h BL=34h |
+| AH=00h | AL=13h | 1 | mode 13h | OBS-M4-320; VGADOC/RBIL AH=00h |
+| AH=00h | AL=03h | 2 | back to text | OBS-M4-320 |
+| AH=12h BL=34h | AL=00h | 1 | cursor emulation on | OBS-M4-320 |
 
-The 640x480 VESA run:
+640x480 VESA run:
 
-| Call | Input | Count | What the program needs |
-| --- | --- | --- | --- |
-| AX=1A00h, AH=00h AL=03h, AH=12h BL=34h AL=00h | as above | 1 each | as above |
-| AH=0Fh | | 1 | the current mode (80x25 text, mode 03h) |
-| AX=4F00h | ES:DI = a 256-byte buffer | 3 | the VBE information block, AX = 004Fh |
-| AX=4F01h | CX = 0100h, then 0101h | 2 each | the mode information of 100h (640x400) and 101h (640x480), both in 256 colours; AX = 004Fh |
-| AX=4F02h | BX = 0101h | 1 | mode 101h, 640x480 in 256 colours, banked (bit 14 clear), cleared (bit 15 clear); AX = 004Fh |
-| AH=0Fh | | 1 | read once in mode 101h, at the end of the run |
-| AH=00h | AL = 03h | 2 | back to text |
-| AH=12h BL=34h | AL = 00h | 1 | cursor emulation on |
+| Call | Input | Count | What the program needs | Source |
+| --- | --- | --- | --- | --- |
+| AX=1A00h; AH=00h AL=03h; AH=12h BL=34h | as above | 1 each | as above | OBS-M4-640 |
+| AH=0Fh | | 1 | current text mode | OBS-M4-640; VGADOC/RBIL AH=0Fh |
+| AX=4F00h | ES:DI=256-byte buffer | 3 | VBE information block; AX=004Fh | OBS-M4-640; VBE 1.2 6.1/6.2 |
+| AX=4F01h | CX=0100h then 0101h | 2 each | mode info; AX=004Fh; see Q100 for 100h support bit | OBS-M4-640; VBE 1.2; decisions Q100 |
+| AX=4F02h | BX=0101h | 1 | set 101h banked, memory cleared (bit 15 clear); AX=004Fh | OBS-M4-640; VBE 1.2 |
+| AH=0Fh | | 1 | after 101h; AL policy is Q0F (no private 69h) | OBS-M4-640; decisions Q0F |
+| AH=00h | AL=03h | 2 | back to text | OBS-M4-640 |
+| AH=12h BL=34h | AL=00h | 1 | cursor emulation on | OBS-M4-640 |
 
 What follows for the clean ROM:
-- **The VESA mode is 101h**, 640x480 in 256 colours (VBE 1.2), banked. Mode 100h must at least be
-  reported correctly by 4F01h, because the program asks for it. Whether it is used when offered is not
-  known.
-- **No bank change through the BIOS:** no INT 10h 4F05h and no far call through the window function
-  (WinFuncPtr of 4F01h, VBE 1.2) between the mode set and the return to text, in about 21 s of drawing
-  in mode 101h (`VGALOG /W`, below). The program draws 640x480 x 1 byte = 300 KB through a 64 KB window,
-  64 KB at a time, and changes the bank itself, from protected mode, with its S3 driver (the program,
-  below). For each bank it writes, through 3D4h/3D5h:
-  - CR38 = 48h (unlock);
-  - CR31 = CR31 OR 09h (bit 0, CPU base address on; bit 3, enhanced 256-colour mapping);
-  - CR35 = the bank number (64 KB units, bits 3-0; CR35 bits 7-4 overwritten with 0);
-  - CR38 = 00h (lock again).
+- **VESA mode 101h** is settable. **100h** is queryable with truthful geometry; ModeAttributes D0
+  clear so it is not settable in milestones 1-4 ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md)).
+- **Banking:** no INT 10h 4F05h and no WinFuncPtr far call were observed during drawing (`VGALOG /W`).
+  The program banks through CR35 from protected mode (program observation; details in The run). After
+  4F02h 101h the clean ROM must leave CR6A=00h, CR51 bits 3-2=0, and a CR31 mapping where bits 0 and 3
+  select 64 KB pages (spec C). 4F01h window fields and WinFuncPtr must still be truthful.
+- **AH=0Fh after 101h:** project restorable extended-mode number; not S3 `69h` (Q0F).
+- No BIOS palette call was logged; absence of a port trace does not prove direct DAC writes.
 
-  It finds the S3 by the lock: CR35 bits 3-0 must not change while CR38 = 00h, and must change while
-  CR38 = 48h.
+### Surrounding shell observations (provisional milestone 2)
 
-  So the clean ROM must, after 4F02h 101h, leave CR6A = 00h (a non-zero CR6A makes the chip ignore
-  CR35 bits 3-0, spec C VBE-53), CR51 bits 3-2 = 0, and a mapping in which CR31 bits 0 and 3 select
-  64 KB pages of the 640x480 frame (spec C VBE-44). It must still report the window fields of 4F01h
-  correctly (WinAAttributes, WinGranularity, WinSize, WinASegment, WinFuncPtr): the program reads 100h
-  and 101h.
-- **AH=0Fh in a VESA mode:** no standard defines what AL holds after 4F02h; the program reads it only
-  before it returns to text.
-- No AX=1012h or other palette call: the program loads the DAC through the ports itself.
-
-### Calls of DOS seen around the runs (not milestone programs)
-
-| Call | Input | From |
+| Observed inputs | Public behavior | Source |
 | --- | --- | --- |
-| AH=0Fh, AH=0Bh BH=00h BL=00h, AH=06h AL=00h BH=07h CX=0000h DX=184Fh, AH=0Fh | | presumably `CLS` before and after each program (from the top of conventional memory, where COMMAND.COM's transient part lies) |
-| AH=0Fh, AH=01h CX=0D0Eh | | before each prompt, from a program loaded high (presumably DOSKEY) |
-| AX=4F03h, AH=0Fh | | S3REGS, the snapshots before and after each run |
+| AH=0Fh; AH=0Bh BH=00h BL=00h; AH=06h AL=00h BH=07h CX=0000h DX=184Fh | mode query; border colour; clear 80x25 with attribute 07h | surrounding-shell observation; VGADOC/RBIL AH=0Fh/0Bh/06h |
+| AH=0Fh; AH=01h CX=0D0Eh | mode query; cursor shape | surrounding-shell observation; VGADOC/RBIL AH=0Fh/01h |
 
-EDIT's own calls are recorded above. These surrounding calls are still provisional for milestone 2:
-CLS needs AH=06h's whole-screen clear and AH=0Bh's border colour, and the prompt AH=01h's cursor
-shape (with cursor emulation, B01-4). Ownership (CLS vs DOSKEY) was not established; record a real
-MS-DOS 6.22 boot-to-EDIT session before treating them as the finished contract. Remains under
-[#145](https://github.com/perchrh/trio64-vbios-tools/issues/145).
+Program ownership (CLS vs DOSKEY) was not established. Cut S3REGS AX=4F03h instrumentation from the
+clean contract. Remains under [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145).
 
 ## The run (dirty side only)
 

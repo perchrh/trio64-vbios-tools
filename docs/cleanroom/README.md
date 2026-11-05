@@ -31,14 +31,24 @@ to implement from:
   CR35 ([`milestone-calls.md`](milestone-calls.md), PR #165); the MIT licence file ([`LICENSE.md`](../../LICENSE.md));
   the V53C16256H data sheet in [`datasheets/`](../../datasheets/); the independent second-reader leak
   review of 2 November 2026 (below: every current target RETURNED, no rule ID cleared).
+- Applied 5 November 2026 toward the independent-review returns (still need a fresh leak review of
+  the changed files before any allowlist export):
+  - owner decisions in [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) (100h, AH=0Fh,
+    MCLK policy, FIFO, POST-41, ROM-8/9);
+  - primary extracts and DMT PDF in [`primary-extracts/`](primary-extracts/) and
+    [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf);
+  - LEAK-REVIEW "May read" extended for those extracts;
+  - high-impact rewrites in parts A/B/C, chip-rules, bios-rules B00-9/B00-22, and milestone-calls
+    Source columns (POST-41 corrected to **200 ms** from the V53C sheet).
 - Still open:
-  - the surrounding MS-DOS boot / CLS / prompt calls as a finished milestone-2 contract (EDIT itself
-    is recorded; logger-omitted text-output APIs still come from the standard);
+  - a second-reader re-review of the changed files (nothing is cleared until then);
+  - PCI 2.3 section 6.3 extract and VBE 1.2 retype under [`primary-extracts/`](primary-extracts/)
+    (owner-held; see that folder's README);
+  - remaining bios-rules returns (B09-11, unsupported-subfunction rows, B00-5, TAB-9, font/state Q17)
+    and any A/B/C rows not yet rewritten;
+  - the surrounding MS-DOS boot / CLS session as a finished milestone-2 contract;
   - the asset manifest of incorporated fonts;
-  - applying the independent review's cuts/rewrites and re-reviewing the changed files;
-  - the export of a reviewed allowlist at a fixed commit to a separate repository;
-  - owner decisions the review left open (100h advertise policy, AH=0Fh after 101h, MCLK as
-    project/board policy, FIFO constants, POST-41 RAS premise with the now-local DRAM sheet).
+  - the export of a reviewed allowlist at a fixed commit to a separate repository.
 
 **On the base:** the specifications describe behaviour; their rules hold for the ROM written from scratch. Their introductions say so, and where they mention SeaVGABIOS it is the comparison implementation.
 
