@@ -217,8 +217,9 @@ that one file, not the rest of `rompatch/`.
   reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed
   (deferred with S3M/OEM for milestones after 1-4).
 - [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
-  BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4, so left for a later
-  review.
+  BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4. Dirty-side next step
+  after milestone 1: Trio64V2/DX driver `VGALOG` call logs, then OEM / `AX=4F14h` **interface**
+  contracts (inputs, outputs, status only) for a later leak review before any crossing.
 - [`spec-b-modeset.md`](spec-b-modeset.md): the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3);
   kept for the in-scope case by the independent review.
 - [`docs/chip-rules.md`](../chip-rules.md): the four sentences marked `[Leak review: ...]` (step 5) are cut

@@ -49,8 +49,13 @@ to implement from:
   milestone rewrites were already in this branch. Nothing is cleared until a fresh second-reader pass.
 - Still open:
   - a second-reader re-review of the changed files (nothing is cleared until then);
-  - Trio64V2/DX **driver** `VGALOG` call logs (dirty side; later milestones);
-  - the export of a reviewed allowlist at a fixed commit to a separate repository.
+  - the export of a reviewed allowlist at a fixed commit to a separate repository;
+  - Trio64V2/DX **driver** `VGALOG` call logs (dirty side; later milestones; after milestone 1 is fine);
+  - after those logs: dirty-side **OEM / `AX=4F14h` interface contracts** (inputs, outputs, status
+    only; no implementation) for later-milestone driver compatibility, then a leak review before any
+    crossing;
+  - mode 03h cold-boot proof on the DSP-3364P (clean acceptance, after a cleared clean build exists);
+  - theretroweb reference-ROM fetch (dirty side; deferred; not a coding gate).
 
 **On the base:** the specifications describe behaviour; their rules hold for the ROM written from scratch. Their introductions say so, and where they mention SeaVGABIOS it is the comparison implementation.
 
