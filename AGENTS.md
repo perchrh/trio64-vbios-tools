@@ -147,6 +147,42 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   directory or source file in the repository (`[rompatch/trio64](rompatch/trio64/)`). Plain text is
   kept only in code blocks, headings and for reference ROM images.
 
+## Clean-room rules and parts A/B/C
+
+Process and wall: [`docs/clean-room.md`](docs/clean-room.md), [`docs/cleanroom/LEAK-REVIEW.md`](docs/cleanroom/LEAK-REVIEW.md).
+Owner decisions that close review returns:
+[`docs/cleanroom/decisions-milestones-1-4.md`](docs/cleanroom/decisions-milestones-1-4.md). When editing
+[`docs/bios-rules.md`](docs/bios-rules.md), [`docs/chip-rules.md`](docs/chip-rules.md), or
+[`docs/cleanroom/spec-a-post.md`](docs/cleanroom/spec-a-post.md) / [`spec-b-modeset.md`](docs/cleanroom/spec-b-modeset.md) /
+[`spec-c-vbe.md`](docs/cleanroom/spec-c-vbe.md) / the contract half of
+[`docs/cleanroom/milestone-calls.md`](docs/cleanroom/milestone-calls.md), write for a second-reader leak
+review and a clean implementer who must not see BIOS images or BIOS source.
+
+- **Behaviour only.** Inputs, outputs, flags, BDA, video memory, ports. No ROM offsets, routine names,
+  dispatchers, private buffer layouts, or "how our / S3 / Phoenix BIOS does it inside".
+- **Source column.** Every must/should row needs a primary public cite (data book, VBE, Ferraro, RBIL,
+  VGADOC, IBM VGATEST as a published reference, PCI/DMT extracts under `docs/cleanroom/primary-extracts/`).
+  Do not use "as S3TEST / S3COMPAT encodes them" as provenance; name the public publication, and keep
+  the tool only under Checked by.
+- **Project choices.** Index/lock restore, IF-clear returns, unsupported-subfunction no-ops, bare
+  MS-DOS milestone-2 boot, and similar AGENTS policies are fine when labelled **project design choice**
+  (or cited to AGENTS / decisions-milestones), not as data-book guarantees.
+- **Unsupported / failure.** A public "supported subfunction" list or success indicator (AL=12h, AL=1Ch,
+  AL=1Ah, AL=4Fh) is not by itself a full no-op + preserve-all-registers contract. Split the public
+  support/success rule from any project no-op choice. Do not equate "AL is not the success value" with
+  "AL returned as given" when the caller may already have passed that success value.
+- **Open questions.** Observable black-box questions only; they are not requirements. Prefaces must say
+  so. Strip internal packing / vector-swap / temporary-value guesses until a public source or a named
+  necessary observation supports them.
+- **Parts A/B/C scope.** Crossing text must match the current milestone allowlist (milestones 1-4 today:
+  POST/VGA, EDIT bare boot, Superscape, Chris's 101h). Cut or defer out-of-scope modes, 4F14h, S3 mode
+  numbers, and Windows acceptance unless a later milestone opens them. Prefer interface contracts
+  (inputs/outputs) over implementation recipes; put primary pages the reviewer may read in
+  `docs/cleanroom/primary-extracts/` and name them in LEAK-REVIEW "May read".
+- **Oracles stay dirty.** `oracle-*.md`, "The run" in milestone-calls, reference ROMs, `rompatch/`, and
+  riplin never cross. A rewrite after a RETURNED review is not clearance: only a fresh second-reader
+  pass on the changed files clears IDs for export.
+
 ## Verifying a change
 
 - Build with `make`. A comment-only or documentation change must leave every .COM file byte-identical:

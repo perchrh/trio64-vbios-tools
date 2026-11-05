@@ -61,18 +61,23 @@ of its specification. The timing values of the ROM can then come from DMT and GT
 Phoenix's tables. VESA allows only VBE 2.0 to be posted online, so the others go to the clean side as
 files of their own, not in a public repository.
 
-At hand on 1 November 2026 (uploaded by the owner, kept outside the repository unless their terms allow
-it): VBE 1.2 (VS911022, the text of 22 October 1991; its mode table restates 6Ah as 102h, which with
-VBE 2.0 covers the Mode 6Ah standard), VBE 3.0, Ralf Brown's Interrupt List, IBM's "Personal System/2
-and Personal Computer BIOS Interface Technical Reference" (April 1987: the INT 10h functions at first
-hand), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3 (the option ROM header,
-the start-up call and the VGA palette snoop), DMT, GTF 1.1 and Ferraro's "Programmer's Guide to the EGA,
-VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised in VBE 2.0
-and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are restated
-in VBE 1.2 and 2.0, so none of them is needed on its own. E-DDC 1.2 (2007) describes DDC2B; it drops
-DDC1, for which DDC 1.0 or 2.0 is still missing; hardwarebook.info's "VGA (VESA DDC)" page gives the
-connector pins, and Joe Miseli's Xorg talk of 2007 the history of EDID and DDC. VESA's DPM Standard
-Release A (2003, https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
+In the repository (5 November 2026): VBE 1.2 as [`standards/vesa/vbe12.txt`](../standards/vesa/vbe12.txt)
+(VS911022; its mode table restates 6Ah as 102h, which with VBE 2.0 covers the Mode 6Ah standard),
+PCI Local Bus Specification 2.3 as [`standards/pci/pci23.pdf`](../standards/pci/pci23.pdf) (the option
+ROM header, the start-up call and the VGA palette snoop), and DMT 1.0 Rev. 10 as
+[`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../standards/vesa/VESA-DMT-1.0-Rev10.pdf). Clean-room extracts of
+the pages the leak review needs are under
+[`docs/cleanroom/primary-extracts/`](cleanroom/primary-extracts/).
+
+Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, Ralf Brown's
+Interrupt List, IBM's "Personal System/2 and Personal Computer BIOS Interface Technical Reference"
+(April 1987: the INT 10h functions at first hand), the PCI BIOS Specification 2.1, GTF 1.1 and
+Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised
+in VBE 2.0 and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are
+restated in VBE 1.2 and 2.0, so none of them is needed on its own. E-DDC 1.2 (2007) describes DDC2B;
+it drops DDC1, for which DDC 1.0 or 2.0 is still missing; hardwarebook.info's "VGA (VESA DDC)" page
+gives the connector pins, and Joe Miseli's Xorg talk of 2007 the history of EDID and DDC. VESA's DPM
+Standard Release A (2003, https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
 replaces DPMS 1.0 and keeps only On and Off; for Standby and Suspend, which 4F10h sets, the X Window
 System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands in for DPMS 1.0.
 
@@ -114,11 +119,11 @@ System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands
    CR52 bits 7-4; which scratch bits are free for us; DDC through the General Output Port (CR5C) and
    the General Input Port (port 3C8h, CR55 bit 2). Whether a driver reads the refresh indexes needs
    finding out.
-6. **Fonts.** Phoenix's and S3's font bitmaps are not ours to give away. A licensed or newly drawn
-   8x8, 8x14 and 8x16 set (with the 9-dot alternates) in the style of the era is needed. Chosen on
-   2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)): the five Joseph Gil public domain files of his FNTCOL16 collection in
-   [`rompatch/fonts/`](../rompatch/fonts/) (#141), which give all five tables and which our patched ROMs use already. They equal IBM's glyphs, so their origin is still to settle ([`docs/cleanroom/README.md`](cleanroom/README.md)
-   "Font origin").
+6. **Fonts.** Phoenix's and S3's font bitmaps are not ours to give away. Chosen on
+   2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)): the five Joseph Gil FNTCOL16 files in
+   [`rompatch/fonts/`](../rompatch/fonts/) (#141), with ROM tables built by [`fonts.py`](../rompatch/fonts/fonts.py).
+   Owner decision of 5 November 2026: that source is **closed** for the project (Gil notice + generated
+   tables; see [`docs/cleanroom/asset-manifest.md`](cleanroom/asset-manifest.md)).
 7. **A card configuration table.** The values that differ from one card maker to the next (the
    MCLK, CR5C's General Output Port value, the timing bytes) as inputs of the build, like today's
    `MCLK=` option.
@@ -139,16 +144,17 @@ where the two differ; that section is kept as the record of how the decision was
 - **SeaVGABIOS** stays a comparison implementation: a source of facts and a ROM to test the
   specification and the tests against ([`docs/seavgabios-trio64.md`](seavgabios-trio64.md)), not a base.
 - **Fonts:** Joseph Gil's FNTCOL16 files in [`rompatch/fonts/`](../rompatch/fonts/), as our patched ROMs use them since
-  #141. Their origin question (the bytes equal IBM's VGA font) stays with the lawyer.
+  #141, with tables generated by [`fonts.py`](../rompatch/fonts/fonts.py). Closed for the project on
+  5 November 2026 ([`docs/cleanroom/asset-manifest.md`](cleanroom/asset-manifest.md)): Gil's notice is the
+  permissive basis; FreeDOS cpidos is not an alternative.
 - **Size budget:** the whole BIOS in 32 KB. The fonts take about 9.7 KB (8x8 2048, 8x14 3584 and 8x16
   4096 bytes, plus the 9-dot alternates), which leaves about 23 KB for code and tables. Not measured
   yet; a milestone that does not fit says so before the next one starts.
 - **Release terms: the MIT licence** for our original code, tests and specifications, and for the clean
-  ROM. This replaces the public domain wish of 1 November 2026 (below). An MIT ROM can carry the public
-  domain fonts; it cannot carry LGPL or GPL code, which stays a source of facts only, as before. A
-  manifest of incorporated assets (today: the fonts, with Gil's notice) goes with every release. The
-  MIT licence file is [`LICENSE.md`](../LICENSE.md); the asset manifest is still to be added. Settle
-  remaining wording with the lawyer before anything is distributed.
+  ROM. This replaces the public domain wish of 1 November 2026 (below). An MIT ROM can carry the Gil
+  fonts under that folder's notice; it cannot carry LGPL or GPL code, which stays a source of facts
+  only, as before. The MIT licence file is [`LICENSE.md`](../LICENSE.md); the asset manifest is
+  [`docs/cleanroom/asset-manifest.md`](cleanroom/asset-manifest.md).
 - **Distribution:** no workflow uploads a patched ROM image any more (README "Continuous
   integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
@@ -178,9 +184,10 @@ where the two differ; that section is kept as the record of how the decision was
   INT 10h calls of its programs, with `VGALOG /M` under a working ROM, then `VGALOG /D`. The text
   output functions are not logged there, so a list of those comes from a trace or from the standard.
   Milestones 2 (EDIT), 3 and 4 are recorded ([`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
-  Still open for milestone 2: the surrounding MS-DOS boot / CLS / prompt calls, and the text-output
-  functions VGALOG does not log (from the standard or a fuller trace). Tracked under
-  [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); no separate issue.
+  Milestone 2 acceptance boots without `CONFIG.SYS` / `AUTOEXEC.BAT` and with an empty PATH (M2-BOOT in
+  [`docs/cleanroom/decisions-milestones-1-4.md`](cleanroom/decisions-milestones-1-4.md)), so CLS / DOSKEY
+  surround is out of the contract. Text-output functions VGALOG omits still come from the standard or a
+  fuller trace where EDIT needs them.
 - **Scope of the leak review:** a clean-room implementation of milestones 1-4. Only what the clean side
   needs for them crosses now and is reviewed; milestone 5 and later get their own review when they are
   set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review").
@@ -236,7 +243,7 @@ where the two differ; that section is kept as the record of how the decision was
     while CGA, EGA and MDA may be slower (the comparison of the slim SeaVGABIOS with p3 decides how
     much the C code costs; [`docs/seavgabios-trio64.md`](seavgabios-trio64.md)).
   - Fonts: an 8x8, 8x14 and 8x16 set that is itself public domain, or drawn anew. SeaVGABIOS's fonts
-    are called public domain but equal IBM's ([`docs/cleanroom/README.md`](cleanroom/README.md) "Font origin").
+    are called public domain but equal IBM's ([`docs/cleanroom/README.md`](cleanroom/README.md) "Fonts").
   - The specification, the tests and the tools stay as they are; only what goes into the ROM image
     must be free of other people's licences.
   - Public domain is not recognised everywhere (in Norway the author's moral rights cannot be given
@@ -289,7 +296,5 @@ where the two differ; that section is kept as the record of how the decision was
   ones to the new repository.
 - The base (empty, our own code), the font source (Gil's FNTCOL16 files) and the four milestones are
   decided ("Decisions of 2 November 2026").
-- Finish the milestone-2 surround: MS-DOS boot / CLS / prompt calls on the card (EDIT and milestones
-  3-4, and the CR35 bank path, are in [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
 - Apply the independent leak-review returns recorded in [`docs/cleanroom/README.md`](cleanroom/README.md),
   then re-review the changed files before exporting the clean allowlist (#145).

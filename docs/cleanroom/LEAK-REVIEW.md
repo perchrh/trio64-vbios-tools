@@ -171,6 +171,12 @@ say so in the record, and the review is done again by another session.
 | [`docs/764-rom.md`](../764-rom.md), [`docs/765-rom.md`](../765-rom.md), [`docs/775-rom.md`](../775-rom.md), except the section "Cross-check with riplin's annotated disassembly" of [`docs/764-rom.md`](../764-rom.md) | measurements of the reference ROMs and the cards |
 | The emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py) and [`emu/similarity.py`](../../emu/similarity.py) (step 6) to read and run; [`emu/tests.py`](../../emu/tests.py) to run, not to read | to run a reference ROM and observe it; the test file's comments describe our patches from the inside (see below) |
 | The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
+| [`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF) and [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md) | POST-41 and MODE-130 DRAM premises (independent review A-3 / B-1) |
+| [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf) and [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md) | part B 101h timing and border (MQ-16) |
+| [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | part A ROM header / PCI data structure / INIT (ROM-1..6, POST-1) |
+| [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) and [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md) | part C status / failure, AH=0Fh reinit advice, ModeAttributes D0 |
+| [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) | owner decisions that close Q100, Q0F, MCLK, FIFO, POST-41, ROM-8/9 |
+| [`primary-extracts/README.md`](primary-extracts/README.md) | index of extracts |)
 | [`review-2026-11-02.md`](review-2026-11-02.md) | which places changed after the outside review |
 | The repository-root [`README.md`](../../README.md), only the sections "Windows 9x driver test", "Missing documents" and "VESA standards", and the S3ALIAS row of the tool table | spec A and spec C cite them: the black-box record of S3's Windows 9x driver, the public standards and the missing documents. The Windows section also describes our own patches as observed on the card (the p15 booster, the mode set hook that restores CR59/CR5A from CR6D): behaviour of our ROM, not reference code. The other sections are not read: the ROM sections and "MCLK build option" describe our patches byte by byte ([`README.md`](README.md) of this folder, "What stays on the dirty side") |
 | [`AGENTS.md`](../../AGENTS.md), the whole file | the specifications cite its project rules ("Hard rules for the ROM", "Assembly conventions"); it holds no code, names riplin's disassembly only as a pointer, and its two reference ROM offsets (7F51h, 3CE9h) can be checked against the reference ROMs |
@@ -199,15 +205,21 @@ that one file, not the rest of `rompatch/`.
 - The independent second-reader review of 2 November 2026 is done at commit
   `cbbc2ce629f22c5ffa9b4cfeb60200df8fc1396d`: every current crossing target was **RETURNED**, no rule
   ID cleared. The disposition table is in [`README.md`](README.md) "Authorized independent review -
-  2026-11-02". Next: apply its exact cuts/rewrites, settle the owner/source returns it names, then
-  re-review the changed files before any allowlist export.
+  2026-11-02". Dirty-side rewrites and owner decisions of 5 November 2026
+  ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md), [`primary-extracts/`](primary-extracts/))
+  address many returns; **nothing crosses until a fresh second-reader pass on the changed files**.
+  Dirty-side rewrites for the returned bios-rules rows and B-08 open questions are in
+  [`docs/bios-rules.md`](../bios-rules.md) (5 November 2026); primary extracts for PCI 2.3 section 6.3
+  and VBE 1.2 are in [`primary-extracts/`](primary-extracts/). A fresh second-reader pass on the
+  changed files is still required before any clearance.
 - [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
   and cites it as "README"; the quote is not in README.md, and the reviewer may not read [`s3alias/`](../../s3alias/). The
   reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed
   (deferred with S3M/OEM for milestones after 1-4).
 - [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
-  BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4, so left for a later
-  review.
+  BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4. Dirty-side next step
+  after milestone 1: Trio64V2/DX driver `VGALOG` call logs, then OEM / `AX=4F14h` **interface**
+  contracts (inputs, outputs, status only) for a later leak review before any crossing.
 - [`spec-b-modeset.md`](spec-b-modeset.md): the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3);
   kept for the in-scope case by the independent review.
 - [`docs/chip-rules.md`](../chip-rules.md): the four sentences marked `[Leak review: ...]` (step 5) are cut

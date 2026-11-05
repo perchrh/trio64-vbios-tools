@@ -31,14 +31,31 @@ to implement from:
   CR35 ([`milestone-calls.md`](milestone-calls.md), PR #165); the MIT licence file ([`LICENSE.md`](../../LICENSE.md));
   the V53C16256H data sheet in [`datasheets/`](../../datasheets/); the independent second-reader leak
   review of 2 November 2026 (below: every current target RETURNED, no rule ID cleared).
+- Applied 5 November 2026 toward the independent-review returns (still need a fresh leak review of
+  the changed files before any allowlist export):
+  - owner decisions in [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) (100h, AH=0Fh,
+    MCLK policy, FIFO, POST-41, ROM-8/9, fonts, M2-BOOT bare MS-DOS);
+  - primary extracts and full documents in [`primary-extracts/`](primary-extracts/),
+    [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf),
+    [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf),
+    [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt);
+  - LEAK-REVIEW "May read" extended for those extracts;
+  - high-impact rewrites in parts A/B/C, chip-rules, bios-rules B00-9/B00-22, and milestone-calls
+    Source columns (POST-41 corrected to **200 ms** from the V53C sheet).
+- Fonts closed 5 November 2026: Gil FNTCOL16 files plus build-time tables (`fonts.py`); see
+  [`asset-manifest.md`](asset-manifest.md) and [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md).
+- Bios-rules returns of 2 November 2026 applied 5 November 2026 (B00-5, B09-11, B10-1, B11-1, B12-1,
+  B1A-1, B1C-8, TAB-9, font/state Q17, and the B-08 open-question rewrites). High-impact A/B/C and
+  milestone rewrites were already in this branch. Nothing is cleared until a fresh second-reader pass.
 - Still open:
-  - the surrounding MS-DOS boot / CLS / prompt calls as a finished milestone-2 contract (EDIT itself
-    is recorded; logger-omitted text-output APIs still come from the standard);
-  - the asset manifest of incorporated fonts;
-  - applying the independent review's cuts/rewrites and re-reviewing the changed files;
+  - a second-reader re-review of the changed files (nothing is cleared until then);
   - the export of a reviewed allowlist at a fixed commit to a separate repository;
-  - owner decisions the review left open (100h advertise policy, AH=0Fh after 101h, MCLK as
-    project/board policy, FIFO constants, POST-41 RAS premise with the now-local DRAM sheet).
+  - Trio64V2/DX **driver** `VGALOG` call logs (dirty side; later milestones; after milestone 1 is fine);
+  - after those logs: dirty-side **OEM / `AX=4F14h` interface contracts** (inputs, outputs, status
+    only; no implementation) for later-milestone driver compatibility, then a leak review before any
+    crossing;
+  - mode 03h cold-boot proof on the DSP-3364P (clean acceptance, after a cleared clean build exists);
+  - theretroweb reference-ROM fetch (dirty side; deferred; not a coding gate).
 
 **On the base:** the specifications describe behaviour; their rules hold for the ROM written from scratch. Their introductions say so, and where they mention SeaVGABIOS it is the comparison implementation.
 
@@ -153,11 +170,20 @@ discharge source or necessity returns. Counsel retains process, font-origin and 
 Since the pin, EDIT's calls and the CR35 bank path were added to [`milestone-calls.md`](milestone-calls.md);
 those additions still need Source-column hygiene and a fresh review before crossing.
 
-## Font origin (to settle before distribution)
+## Fonts (closed 5 November 2026)
 
 The similarity check shows SeaVGABIOS's 8x8, 8x14 and 8x16 fonts byte for byte equal to S3's and
 Phoenix's fonts over runs of up to 3.6 KB: all of them carry the IBM VGA font.
 
-Since 2 November 2026 (#141) our patched ROMs build all five font tables from Joseph Gil's FNTCOL16 files in [`rompatch/fonts/`](../../rompatch/fonts/). That folder holds the unmodified files and Gil's notice: the individual fonts public domain, and the US Copyright Office position that bitmap fonts are not registrable (57 FR 6201). The tables include the 9-dot alternates, taken from PP_ROMAN.F16 and STANDARD.F14.
+Since 2 November 2026 (#141) our patched ROMs build all five font tables from Joseph Gil's FNTCOL16
+files in [`rompatch/fonts/`](../../rompatch/fonts/). That folder holds the unmodified files and Gil's
+notice: the individual fonts public domain, and the US Copyright Office position that bitmap fonts
+are not registrable (57 FR 6201). The tables include the 9-dot alternates, built by
+[`fonts.py`](../../rompatch/fonts/fonts.py) from PP_ROMAN.F16 and STANDARD.F14.
 
-Those files are the clean side's candidate font source. They equal IBM's glyphs byte for byte, though, so whether they are free to distribute everywhere (not only in the US) is still a question for the lawyer of [`docs/clean-room.md`](../clean-room.md); the FreeDOS cpidos fonts (GPL 2 or later) remain the named alternative. The similarity check excludes font ranges given with `--fonts`, but that says nothing about their provenance.
+Owner decision of 5 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)):
+that Gil source plus the generated tables is the **closed** font package for the clean ROM
+([`asset-manifest.md`](asset-manifest.md)). FreeDOS cpidos is not kept as an alternative. The glyphs
+still match IBM / historical S3 tables; the project relies on Gil's notice for a permissive release.
+The similarity check excludes font ranges given with `--fonts`, but that says nothing about their
+provenance.
