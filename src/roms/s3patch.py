@@ -27,7 +27,7 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
          SR1A's blank pedestal among it, still runs)
   code   assembled with nasm from the .asm files next to this script, at the addresses in bios.inc:
          p12ext.asm (fast 4F05, 32-bit font load, 32-bit mode 13h scroll), crtc240.asm (320x240 CRTC
-         tables), hooks.asm (mode set hook with LFB base restore, FIFO fix and ATC flip-flop reset;
+         tables), hooks.asm (mode set hook with LFB base restore, FIFO fix in mode 13h and ATC flip-flop reset;
          booster, on at the end of a banked 4F02 (p18) and at the first bank switch (p16); LFB base and linear test fixes), vbe4f06.asm (4F06 BL=3), clear32.asm (32-bit S3/VESA
          mode set clear), p13*.asm (32-bit text and planar scroll fills, text window moves, AH=09h);
          p14: the VGA mode set clear in place as a jump to wfill
@@ -92,7 +92,7 @@ REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    
 # check the patch sites only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = '64f716e96fb3e8dd0fbdcf5de41df732b95852d373b0ade541d522026a5442a2'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = '59a38032d933f7ef9fc790689793c988195e6278ad53923ab1e98354d9f26c2e'  # 2.04.07-p24 (NASM 3.02), emulator tests passed;
+RESULT_SHA = '544fa4b11bac043af876cf45fa4f10df2a9ea5cb0e3d04295958d57060fc31f7'  # 2.04.07-p25 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
@@ -100,8 +100,8 @@ RESULT_SHA = '59a38032d933f7ef9fc790689793c988195e6278ad53923ab1e98354d9f26c2e' 
 # the REP prefix before the operand-size prefix in REP MOVSD/STOSD, 3.02 after it)
 BLOCK_SHA = {
     'wincheck.asm': 'd885136ca6b113c3', 'p19.asm': 'b778a484de923cb0',
-    'ddcwait.asm': 'c8494a1b6d4144f2', 'hooks.asm': 'e33cecbd0d98ec75',
-    'p12ext.asm': 'b16a86f728fb3f8c', 'crtc240.asm': 'c82f2ec50dacb61d',
+    'ddcwait.asm': 'c8494a1b6d4144f2', 'hooks.asm': '6624d8c9856b8c48',
+    'p12ext.asm': '727b07f64377de59', 'crtc240.asm': 'c82f2ec50dacb61d',
     'vbe4f06.asm': 'bdd213f1622291bb', 'clear32.asm': '28a181904074b700',
     'p13df.asm': '7e785b4ba99b8749', 'p13fill.asm': 'a81b8264916f413c',
     'p13move.asm': 'a9696e8fdb426c67', 'p13bfill.asm': '973ba6c5bf3d0cff',

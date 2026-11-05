@@ -26,8 +26,9 @@ Tests
                    fast 4F05 path (result, CR6A, EBX/EDX kept, at most 10 port accesses once the
                    booster is on), the window function by far call, EAX/ECX kept across the 32-bit VGA
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
-                   the mode 13h scroll (p21), AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
-                   after a VESA mode; all failures listed. The other patches are S3TEST's checks
+                   the mode 13h scroll (p21), AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix
+                   (CR90 bit 7 cleared in mode 13h only, #166) with the bit set as the card leaves it after
+                   a VESA mode; all failures listed. The other patches are S3TEST's checks
   765_patches    (our Trio64V+ ROM 1.03-08N-pN, src/roms/vplus, with --chip 765) the ROM file (sign-on of
                    the level s3vpatch.py builds, checksum, 32 KB), the mode set clear (bank 0 zeroed, EAX
                    bits 31-16 kept), the booster (on after a banked 4F02 and the window function after AH=00
@@ -439,8 +440,9 @@ def latest(patcher='s3patch.py'):
 
 def t_rom_patches(c):
     """What S3TEST cannot check on the card or in the model: the ROM file itself and the FIFO fix with
-    CR90 bit 7 set the way the chip leaves it after a VESA mode (the model does not set it). Every other
-    patch is checked by S3TEST, which t_s3test runs here and which also runs on the hardware."""
+    CR90 bit 7 set the way the chip leaves it after a VESA mode (the model does not set it): mode 03h
+    must leave the bit set, mode 13h must clear it (#166). Every other patch is checked by S3TEST,
+    which t_s3test runs here and which also runs on the hardware."""
     m = c.machine()
     fails = []
 
@@ -572,9 +574,14 @@ def t_rom_patches(c):
             high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
             chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
                 % (mode, ax, ['%04X' % h for h in high]))
-    m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80        # as a VESA mode leaves it on the card
+    # #166: clear CR90 bit 7 only in mode 13h (Mode X / 360-wide entry). Other VGA modes keep leftover
+    # L1 after VESA/Windows as stock did. The model does not set the bit on a VESA mode set, so poke it.
+    m.r['crtc'][0x90] = cr.get(0x90, 0) | 0x80
     m.int10(0x0003)
-    chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 03 (CR90 = %02X)' % cr.get(0x90, 0))
+    chk(cr.get(0x90, 0) & 0x80 != 0, 'FIFO fix: CR90 bit 7 cleared after mode 03 (only mode 13h clears; CR90 = %02X)'
+        % cr.get(0x90, 0))
+    m.int10(0x0013)
+    chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 13 (CR90 = %02X)' % cr.get(0x90, 0))
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return 'ROM file and FIFO fix as expected'
 

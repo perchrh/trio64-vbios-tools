@@ -5,6 +5,9 @@
 ;   by 4F02, so a banked mode set leaves CR58-CR5A as the reference does (the S3 Windows 9x driver turns
 ;   its linear window on at CR59/CR5A after a banked 4F02, README "Windows 9x driver test")
 ; - LFB base read fix (the 4F05/4F03 linear-mode test fix is in wincheck.asm since p17)
+; - FIFO fix (p7, #53; selective in p25, #166): CR90 bit 7 cleared only in mode 13h. Mode X and
+;   360-wide modes are built on BIOS 13h; other VGA modes keep leftover L1 after VESA/Windows as stock
+;   did (text is fine; the extra CPU bandwidth of #166). Modes above 13h never cleared it.
 bits 16
 org 0x7E80
 %include "bios.inc"
@@ -27,7 +30,8 @@ hook:
         mov     ds, ax
         call    GETCRTC
         cmp     byte [0x449], 0x13
-        ja      .ff
+        ja      .ff                     ; VESA / extended: ATC only
+        jne     .ff                     ; other VGA: ATC only (#166)
         mov     al, 0x38
         call    RDREG
         push    ax
@@ -38,7 +42,7 @@ hook:
         out     dx, ax
         mov     ax, 0xA539
         out     dx, ax
-        mov     al, 0x90                ; FIFO fix: CR90 bit 7 off in VGA modes
+        mov     al, 0x90                ; FIFO fix: CR90 bit 7 off in mode 13h (#53, #166)
         call    RDREG
         and     ah, 0x7F
         out     dx, ax

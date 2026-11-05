@@ -217,7 +217,8 @@ and which also runs on the card: run against the stock image it fails 25 lines (
 pedestal, 60 Hz defaults, refresh and line length of the patched timings, booster and LFB base,
 4F01/4F03/4F06, CR50, flip-flop). `rom_patches` adds only what S3TEST cannot check: the sign-on and
 the checksums of both 32 KB halves in the file, and the FIFO fix with CR90 bit 7 set the way the card
-leaves it after a VESA mode (the model does not set it). The other tests check the BIOS registers, state blocks and
+leaves it after a VESA mode (the model does not set it; since p25 mode 03h must leave the bit, mode 13h
+must clear it, [#166](https://github.com/perchrh/trio64-vbios-tools/issues/166)). The other tests check the BIOS registers, state blocks and
 default palettes of every VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of
 S3COMPAT run and give the same output with and without /V, the /V debug file format, and VGALOG and
 S3ALIAS install and unload. The tools run with /V; their output and debug files are kept in
@@ -678,7 +679,9 @@ Findings (S3REGS.TXT and VGALOG.BIN from the card, Windows 98 SE, October 2026):
 - CR90/CR91 (L1) is set by the driver to (bytes per line / 8) - 1 in every mode (V2-REG-4); CR86 stays
   00h with an End Horizontal Blank above 1 (V2-REG-3).
 - The stock BIOS leaves CR90 = 81h, CR91 = 8Fh (the L1 of 800x600x32) in mode 03h after Windows and in
-  a full-screen DOS box; the FIFO fix of the ROM clears bit 7 there (CR90 01h).
+  a full-screen DOS box. Through p24 the ROM cleared bit 7 in every VGA mode; since p25 ([#166](https://github.com/perchrh/trio64-vbios-tools/issues/166))
+  it clears bit 7 only in mode 13h (Mode X / 360-wide entry), so mode 03h after Windows matches stock
+  again (CR90 81h) while Mode X and Quake 360 still get a clean 13h.
 - 1280x1024 and 1600x1200 give "out of range" on an LCD with the stock BIOS and no error in Windows:
   the driver chooses no refresh rate, and the stock defaults (CR41 = 08h, CR52 = 80h, as in the
   reference) are interlaced timings (107h about 87 Hz fields at 46.7 kHz, 120h about 98 Hz fields at
