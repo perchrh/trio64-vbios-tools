@@ -27,13 +27,18 @@ to implement from:
   power-up of the card (POST-41).
 - The test harness fixes (#143) are in place: `post` fails a POST that does not return, and
   `S3TEST /C` with the emulator test `s3test_any` runs the set that needs no ROM of ours.
+- Recorded since that status: MS-DOS EDIT's INT 10h calls and Chris's 3D Benchmark banking through
+  CR35 ([`milestone-calls.md`](milestone-calls.md), PR #165); the MIT licence file ([`LICENSE.md`](../../LICENSE.md));
+  the V53C16256H data sheet in [`datasheets/`](../../datasheets/); the independent second-reader leak
+  review of 2 November 2026 (below: every current target RETURNED, no rule ID cleared).
 - Still open:
-  - the record of the INT 10h calls MS-DOS 6.22 and EDIT make on the card (the contract of milestone
-    2; milestones 3 and 4 are recorded in [`milestone-calls.md`](milestone-calls.md));
-  - how Chris's 3D Benchmark changes the bank in mode 101h (no INT 10h 4F05h call was logged);
-  - the licence file and the asset manifest;
+  - the surrounding MS-DOS boot / CLS / prompt calls as a finished milestone-2 contract (EDIT itself
+    is recorded; logger-omitted text-output APIs still come from the standard);
+  - the asset manifest of incorporated fonts;
+  - applying the independent review's cuts/rewrites and re-reviewing the changed files;
   - the export of a reviewed allowlist at a fixed commit to a separate repository;
-  - the second-reader leak review, whose handover is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md).
+  - owner decisions the review left open (100h advertise policy, AH=0Fh after 101h, MCLK as
+    project/board policy, FIFO constants, POST-41 RAS premise with the now-local DRAM sheet).
 
 **On the base:** the specifications describe behaviour; their rules hold for the ROM written from scratch. Their introductions say so, and where they mention SeaVGABIOS it is the comparison implementation.
 
@@ -46,7 +51,7 @@ to implement from:
 | [`spec-a-post.md`](spec-a-post.md) | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
 | [`spec-b-modeset.md`](spec-b-modeset.md) | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
 | [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
-| [`milestone-calls.md`](milestone-calls.md) | its contract part goes across after the leak review | the INT 10h calls of the programs of milestones 3 and 4, recorded on a card |
+| [`milestone-calls.md`](milestone-calls.md) | its contract part goes across after the leak review | the INT 10h calls of milestones 2 (EDIT), 3 and 4, recorded on a card |
 | [`freedos-1.4.md`](freedos-1.4.md) | goes across with milestone 5 | what FreeDOS 1.4 asks of the video BIOS (milestone 5, tentative), from its sources |
 | [`freedos-reports.md`](freedos-reports.md) | goes across with milestone 5 | drafts of the MORE and MODE defect reports to FreeDOS |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | dirty only | the outside feasibility review of 2 November 2026: its findings, our checks and where each went |
@@ -101,19 +106,52 @@ notes), and anything from another vendor's BIOS source.
 
 ## Leak review
 
-The procedure is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md), with the handover for the second reader (2 November 2026); the results are recorded here. Done once on 1 November 2026 by the dirty side (a search of the three specification files for
+The procedure is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md). Done once on 1 November 2026 by the dirty side (a search of the three specification files for
 Phoenix, the reference ROMs, [`rompatch/`](../../rompatch/), [`docs/764-rom.md`](../764-rom.md) and riplin, then a reading of the
-hits). Left for a second reader to judge:
+hits). The independent second reader of 2 November 2026 supersedes that as the current milestone-1-4
+record (below). Historical notes from the first search that the second reader still treated:
 
-- [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the open questions on the S3 mode numbers rest on
-  the observed behaviour of S3's BIOSes, not on a public document; they cross as behaviour only.
+- [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbers: outside milestones 1-4,
+  deferred/cut with that scope, not cleared.
 - [`spec-b-modeset.md`](spec-b-modeset.md): the PLL values for 25.175 MHz (SR12 61h, SR13 28h) equal the reference ROM's,
-  because both follow the data book's procedure 9.1; the derivation is in the rule.
-- [`docs/chip-rules.md`](../chip-rules.md): four sentences on what Phoenix's BIOSes do (T64-MEM-9, and the CR61/CR62,
-  CR3B and fixed-M notes of "Related chip: the Vision864") carry a leak review note: observed BIOS
-  behaviour, to keep as behaviour or cut from the clean side's copy.
-- Part B and part C agree on the mode list: 102h and 104h are part C's (VBE-10), 4F01 reports 32 bits
-  per pixel for the 4-byte modes (MQ-9, MQ-15 of part B answered).
+  because both follow the data book's procedure 9.1; the independent review kept that derivation for
+  the in-scope case.
+- [`docs/chip-rules.md`](../chip-rules.md): the four `[Leak review: ...]` notes are cut with their
+  out-of-scope containing material; they are not approved by silence.
+- Part B and part C agree on the mode list for later milestones: 102h and 104h are part C's (VBE-10);
+  current crossing scope is VGA return plus 101h only.
+
+### Authorized independent review - 2026-11-02
+
+Date: 2026-11-02. Reviewed commit: `cbbc2ce629f22c5ffa9b4cfeb60200df8fc1396d` (descendant of the
+owner-required `28e7c00`). Reviewers: eligible non-author sessions for parts A/B/C, chip/bios rules,
+and the milestone contract. Root remains disqualified as a substantive reviewer.
+
+**No current file or rule ID is cleared to cross.** Keep/rewrite/cut decisions are not clearance while
+any return remains. FreeDOS files are deferred with milestone 5. Full per-file reports and inventories
+stay on the dirty side (issue [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145) attachments
+and the MediaFire evidence zip of 2 November 2026); this section is the protocol-required README record.
+
+| Date | File at the pinned commit | Reviewer | Decision |
+| --- | --- | --- | --- |
+| 2026-11-02 | [`spec-a-post.md`](spec-a-post.md) | independent_leak_review | RETURNED; full part A |
+| 2026-11-02 | [`spec-b-modeset.md`](spec-b-modeset.md) | independent_leak_review | RETURNED; VGA/101h subset only |
+| 2026-11-02 | [`spec-c-vbe.md`](spec-c-vbe.md) | independent_leak_review | RETURNED; 4F00, 4F01 100/101, 4F02 101, 4F05/far entry and general rules |
+| 2026-11-02 | [`../chip-rules.md`](../chip-rules.md) | rules_review | RETURNED; 24 included IDs, 44 cut; 23 eligible after edits, T64-MEM-7 returned |
+| 2026-11-02 | [`../bios-rules.md`](../bios-rules.md) | rules_review | RETURNED; eight rows and one question remain; B00-22 exact rewrite resolved |
+| 2026-11-02 | [`milestone-calls.md`](milestone-calls.md) | freedos_review | RETURNED; The contract only; The run cut |
+| 2026-11-02 | [`freedos-1.4.md`](freedos-1.4.md) | scope record only | DEFERRED to milestone 5; not passed |
+| 2026-11-02 | [`freedos-reports.md`](freedos-reports.md) | scope record only | DEFERRED to milestone 5; not passed |
+
+Main outstanding issues at that pin (still the working list until a re-review of changed files):
+rating/source gaps and POST-41 premise in A; FIFO and refresh premises in B; 100h capability policy and
+AH=0Fh after 101h in C; T64-MEM-7 as a public chip rating; bios-rules rows B00-5, B09-11, B10-1,
+B11-1, B12-1, B1A-1, B1C-8, TAB-9 and font/state question 17; milestone contract Source columns and
+honest 100h/AH=0Fh wording. Byte-run scans found no unexplained positive match; that does not
+discharge source or necessity returns. Counsel retains process, font-origin and release judgments.
+
+Since the pin, EDIT's calls and the CR35 bank path were added to [`milestone-calls.md`](milestone-calls.md);
+those additions still need Source-column hygiene and a fresh review before crossing.
 
 ## Font origin (to settle before distribution)
 

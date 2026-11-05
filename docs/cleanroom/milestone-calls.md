@@ -104,8 +104,11 @@ What follows for the clean ROM:
 | AH=0Fh, AH=01h CX=0D0Eh | | before each prompt, from a program loaded high (presumably DOSKEY) |
 | AX=4F03h, AH=0Fh | | S3REGS, the snapshots before and after each run |
 
-These belong to milestone 2's contract once it is recorded: CLS needs AH=06h's whole-screen clear and
-AH=0Bh's border colour, and the prompt AH=01h's cursor shape (with cursor emulation, B01-4).
+EDIT's own calls are recorded above. These surrounding calls are still provisional for milestone 2:
+CLS needs AH=06h's whole-screen clear and AH=0Bh's border colour, and the prompt AH=01h's cursor
+shape (with cursor emulation, B01-4). Ownership (CLS vs DOSKEY) was not established; record a real
+MS-DOS 6.22 boot-to-EDIT session before treating them as the finished contract. Remains under
+[#145](https://github.com/perchrh/trio64-vbios-tools/issues/145).
 
 ## The run (dirty side only)
 

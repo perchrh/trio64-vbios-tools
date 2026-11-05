@@ -196,17 +196,24 @@ that one file, not the rest of `rompatch/`.
 
 ### Open items
 
+- The independent second-reader review of 2 November 2026 is done at commit
+  `cbbc2ce629f22c5ffa9b4cfeb60200df8fc1396d`: every current crossing target was **RETURNED**, no rule
+  ID cleared. The disposition table is in [`README.md`](README.md) "Authorized independent review -
+  2026-11-02". Next: apply its exact cuts/rewrites, settle the owner/source returns it names, then
+  re-review the changed files before any allowlist export.
 - [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
   and cites it as "README"; the quote is not in README.md, and the reviewer may not read [`s3alias/`](../../s3alias/). The
-  reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed.
+  reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed
+  (deferred with S3M/OEM for milestones after 1-4).
 - [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
   BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4, so left for a later
   review.
-- [`spec-b-modeset.md`](spec-b-modeset.md): the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3).
-- [`docs/chip-rules.md`](../chip-rules.md): the four sentences marked `[Leak review: ...]` (step 5).
-- [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md): first review, with milestone 5.
-- The three specifications: the first review (1 November 2026) was the dirty side's own search; the
-  full review by a second reader, steps 1-6, is still to be done.
+- [`spec-b-modeset.md`](spec-b-modeset.md): the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3);
+  kept for the in-scope case by the independent review.
+- [`docs/chip-rules.md`](../chip-rules.md): the four sentences marked `[Leak review: ...]` (step 5) are cut
+  with their out-of-scope sections in the independent review's withheld candidate; original notes stay
+  for identification until the source file is edited.
+- [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md): deferred with milestone 5.
 - Not to review now: the monitor sense decision of our ROMs (#134, #139) and the font change (#141)
   touched no file that crosses; the specifications say nothing yet on the monitor sense at POST
   (an open point for part A, decided on the clean side from the IBM references, not from our ROMs).
