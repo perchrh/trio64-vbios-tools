@@ -786,15 +786,17 @@ Documents the project does not have; what depends on them is marked where it is 
 
 ### VESA standards
 
-The VESA documents our ROMs implement or the tools check against. Only VBE 2.0 may be posted online
-(unmodified): it is in the repository, `standards/vesa/vbe20.pdf`. The others are the owner's copies,
-outside the repository (file names in brackets, as of 2 November 2026); the links are public copies.
+The VESA documents our ROMs implement or the tools check against. In the repository under
+`standards/vesa/`: VBE 2.0 (`vbe20.pdf`), VBE 1.2 (`vbe12.txt`) and DMT 1.0 Rev. 10
+(`VESA-DMT-1.0-Rev10.pdf`). The others remain the owner's copies outside the repository (file
+names in brackets, as of 2 November 2026); the links are public copies.
 
 - [VESA BIOS Extension (VBE) Core Functions Standard 2.0](https://www.phatcode.net/res/221/files/vbe20.pdf),
-  Rev. 1.1 (November 1994; `vbe20.pdf`; [text version](https://web.archive.org/web/20081211174813/http://docs.ruudkoot.nl/vbe20.txt)): 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE
+  Rev. 1.1 (November 1994; `standards/vesa/vbe20.pdf`; [text version](https://web.archive.org/web/20081211174813/http://docs.ruudkoot.nl/vbe20.txt)): 4F00-4F0A, the info blocks, the mode numbers. The Trio64V2 ROM is VBE
   2.0, and S3TEST and S3COMPAT check against it.
 - [Super VGA BIOS Extension Standard #VS911022](https://www.phatcode.net/res/221/files/vbe12.txt)
-  (VBE 1.2, 22 October 1991; `vbe12.txt`); the text retyped by "Patch" (VESASP12.ZIP) is also at
+  (VBE 1.2, 22 October 1991; `standards/vesa/vbe12.txt`); the text retyped by "Patch" (VESASP12.ZIP)
+  is also at
   [discmaster](https://discmaster.textfiles.com/view/10567/HPAVC%20CD-ROM.iso/pc/PCGPEV10.ZIP/VESASP12.TXT)
   and [archive.org](https://web.archive.org/web/20090114055246/http://docs.ruudkoot.nl/vesasp12.txt). It is
   the version the Trio64V+ and Trio64 ROMs report. What a 1.2 BIOS must do beyond 1.0: every
@@ -802,16 +804,20 @@ outside the repository (file names in brackets, as of 2 November 2026); the link
   D1 always 1, unused fields zero and exactly 256 bytes returned (from 1.1), the direct colour memory
   model, 4F08 (DAC width, reset to 6 bits by a mode set), and the advice that INT 10h AH=0Fh return a
   number with which AH=00h sets the last Super VGA mode again. The retyped ModeInfoBlock listing
-  leaves out RsvdFieldPosition, which its text describes.
+  leaves out RsvdFieldPosition, which its text describes. Clean-room extract:
+  [`docs/cleanroom/primary-extracts/vbe-1.2-status-and-ah0f.md`](docs/cleanroom/primary-extracts/vbe-1.2-status-and-ah0f.md).
 - [VBE 1.0](https://web.archive.org/web/20131211151957/http://www.gemixtes.de/super-vga-bios-extension-standard-vs891001/)
   (Super VGA BIOS Extension, VS891001, 1 October 1989), as transcribed on the Gemixtes blog: 4F00-4F05,
   the 15-bit mode numbers from 100h, mode 6Ah as 102h, window granularity; the base of VBE 1.2.
 - VESA and Industry Standards and Guidelines for Computer Display Monitor Timing (DMT) 1.0,
-  [Rev. 10](https://glenwing.github.io/docs/VESA-DMT-1.10.pdf) (29 October 2004; `VESA-DMT-1.0.pdf`) and
+  [Rev. 10](https://glenwing.github.io/docs/VESA-DMT-1.10.pdf) (29 October 2004;
+  `standards/vesa/VESA-DMT-1.0-Rev10.pdf`) and
   [Rev. 13](https://glenwing.github.io/docs/VESA-DMT-1.13.pdf) (2013; `VESA-DMT-1.13.pdf`); and the
   [VESA Generalized Timing Formula (GTF) Standard 1.1](https://glenwing.github.io/docs/VESA-GTF-1.1.pdf)
   (2 September 1999; `VESA-GTF-1.1.pdf`; 1.1 adds only the "Secondary GTF" curve to 1.0 of 8 December
   1996, the default curve is unchanged): the timing references of the tools and the refresh tables.
+  Clean-room extract of 640x480 at 60 Hz:
+  [`docs/cleanroom/primary-extracts/dmt-640x480-60hz.md`](docs/cleanroom/primary-extracts/dmt-640x480-60hz.md).
 - [VESA Enhanced Display Data Channel (E-DDC) Standard 1.2](https://glenwing.github.io/docs/VESA-EDDC-1.2.pdf)
   (26 December 2007; `VESA-EDDC-1.2.pdf`): DDC2B over the I2C bus,
   EDID at A0h/A1h, for the DDC2 work on the Trio64. It drops the DDC1 mode ("No support for the DDC1
@@ -853,8 +859,11 @@ IBM 400- and 350-line timings (2-line syncs, mixed polarities) are not taken for
 
 Owner's copies, outside the repository: IBM's "Personal System/2 and
 Personal Computer BIOS Interface Technical Reference" (April 1987), Ralf Brown's Interrupt List, Richard
-Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards" (3rd edition, 1994), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3
-(`docs/clean-room.md`, "Public documents for the clean side").
+Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards" (3rd edition, 1994), and the PCI BIOS
+Specification 2.1 (`docs/clean-room.md`, "Public documents for the clean side"). The PCI Local Bus
+Specification 2.3 is in the repository as [`standards/pci/pci23.pdf`](standards/pci/pci23.pdf)
+(clean-room extract of section 6.3:
+[`docs/cleanroom/primary-extracts/pci-2.3-section-6.3.md`](docs/cleanroom/primary-extracts/pci-2.3-section-6.3.md)).
 
 ### Secondary references
 

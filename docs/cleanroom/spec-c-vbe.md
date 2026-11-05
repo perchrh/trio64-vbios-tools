@@ -23,7 +23,7 @@ values or formulas, error cases. The observed results of the reference ROM are k
 
   | Short name | Document |
   | --- | --- |
-  | VBE12 | VESA Super VGA BIOS Extension, Standard VS911022, 22 October 1991, VBE version 1.2 (the retyped text, README "VESA standards"); cited by its section numbers (4 mode numbers, 5 windows, 6.1 status, 6.2-6.10 functions 00h-08h) |
+  | VBE12 | VESA Super VGA BIOS Extension, Standard VS911022, 22 October 1991, VBE version 1.2 ([`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt); extract [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md)); cited by its section numbers (4 mode numbers, 5 windows, 6.1 status, 6.2-6.10 functions 00h-08h) |
   | VBE20 | VESA BIOS Extension Core Functions 2.0, Rev. 1.1 ([`standards/vesa/vbe20.pdf`](../../standards/vesa/vbe20.pdf)), for the shared definitions (4.1 status, 4.3 ModeInfoBlock, 4.7-4.11); never a source of a 2.0-only feature |
   | T32/64 | S3 Trio32/Trio64 data book, March 1995 ([`datasheets/`](../../datasheets/)), by section, table, figure or register |
   | chip-rules | [`docs/chip-rules.md`](../chip-rules.md), by rule ID (CLK-1, T64-MEM-6, ...) |

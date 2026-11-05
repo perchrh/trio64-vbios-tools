@@ -173,8 +173,10 @@ say so in the record, and the review is done again by another session.
 | The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
 | [`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF) and [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md) | POST-41 and MODE-130 DRAM premises (independent review A-3 / B-1) |
 | [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf) and [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md) | part B 101h timing and border (MQ-16) |
+| [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | part A ROM header / PCI data structure / INIT (ROM-1..6, POST-1) |
+| [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) and [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md) | part C status / failure, AH=0Fh reinit advice, ModeAttributes D0 |
 | [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) | owner decisions that close Q100, Q0F, MCLK, FIFO, POST-41, ROM-8/9 |
-| [`primary-extracts/README.md`](primary-extracts/README.md) | index of extracts; PCI 2.3 section 6.3 and VBE 1.2 retype still owner-held |
+| [`primary-extracts/README.md`](primary-extracts/README.md) | index of extracts |)
 | [`review-2026-11-02.md`](review-2026-11-02.md) | which places changed after the outside review |
 | The repository-root [`README.md`](../../README.md), only the sections "Windows 9x driver test", "Missing documents" and "VESA standards", and the S3ALIAS row of the tool table | spec A and spec C cite them: the black-box record of S3's Windows 9x driver, the public standards and the missing documents. The Windows section also describes our own patches as observed on the card (the p15 booster, the mode set hook that restores CR59/CR5A from CR6D): behaviour of our ROM, not reference code. The other sections are not read: the ROM sections and "MCLK build option" describe our patches byte by byte ([`README.md`](README.md) of this folder, "What stays on the dirty side") |
 | [`AGENTS.md`](../../AGENTS.md), the whole file | the specifications cite its project rules ("Hard rules for the ROM", "Assembly conventions"); it holds no code, names riplin's disassembly only as a pointer, and its two reference ROM offsets (7F51h, 3CE9h) can be checked against the reference ROMs |
@@ -206,8 +208,9 @@ that one file, not the rest of `rompatch/`.
   2026-11-02". Dirty-side rewrites and owner decisions of 5 November 2026
   ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md), [`primary-extracts/`](primary-extracts/))
   address many returns; **nothing crosses until a fresh second-reader pass on the changed files**.
-  Still outstanding for that pass: remaining bios-rules returns, PCI 2.3 section 6.3 extract (owner-held),
-  and any A/B/C rows not yet rewritten.
+  Still outstanding for that pass: remaining bios-rules returns, and any A/B/C rows not yet
+  rewritten. Primary extracts for PCI 2.3 section 6.3 and VBE 1.2 are now in
+  [`primary-extracts/`](primary-extracts/) (with the full files under [`standards/`](../../standards/)).
 - [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
   and cites it as "README"; the quote is not in README.md, and the reviewer may not read [`s3alias/`](../../s3alias/). The
   reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed

@@ -61,18 +61,23 @@ of its specification. The timing values of the ROM can then come from DMT and GT
 Phoenix's tables. VESA allows only VBE 2.0 to be posted online, so the others go to the clean side as
 files of their own, not in a public repository.
 
-At hand on 1 November 2026 (uploaded by the owner, kept outside the repository unless their terms allow
-it): VBE 1.2 (VS911022, the text of 22 October 1991; its mode table restates 6Ah as 102h, which with
-VBE 2.0 covers the Mode 6Ah standard), VBE 3.0, Ralf Brown's Interrupt List, IBM's "Personal System/2
-and Personal Computer BIOS Interface Technical Reference" (April 1987: the INT 10h functions at first
-hand), the PCI BIOS Specification 2.1 and the PCI Local Bus Specification 2.3 (the option ROM header,
-the start-up call and the VGA palette snoop), DMT, GTF 1.1 and Ferraro's "Programmer's Guide to the EGA,
-VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised in VBE 2.0
-and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are restated
-in VBE 1.2 and 2.0, so none of them is needed on its own. E-DDC 1.2 (2007) describes DDC2B; it drops
-DDC1, for which DDC 1.0 or 2.0 is still missing; hardwarebook.info's "VGA (VESA DDC)" page gives the
-connector pins, and Joe Miseli's Xorg talk of 2007 the history of EDID and DDC. VESA's DPM Standard
-Release A (2003, https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
+In the repository (5 November 2026): VBE 1.2 as [`standards/vesa/vbe12.txt`](../standards/vesa/vbe12.txt)
+(VS911022; its mode table restates 6Ah as 102h, which with VBE 2.0 covers the Mode 6Ah standard),
+PCI Local Bus Specification 2.3 as [`standards/pci/pci23.pdf`](../standards/pci/pci23.pdf) (the option
+ROM header, the start-up call and the VGA palette snoop), and DMT 1.0 Rev. 10 as
+[`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../standards/vesa/VESA-DMT-1.0-Rev10.pdf). Clean-room extracts of
+the pages the leak review needs are under
+[`docs/cleanroom/primary-extracts/`](cleanroom/primary-extracts/).
+
+Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, Ralf Brown's
+Interrupt List, IBM's "Personal System/2 and Personal Computer BIOS Interface Technical Reference"
+(April 1987: the INT 10h functions at first hand), the PCI BIOS Specification 2.1, GTF 1.1 and
+Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised
+in VBE 2.0 and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are
+restated in VBE 1.2 and 2.0, so none of them is needed on its own. E-DDC 1.2 (2007) describes DDC2B;
+it drops DDC1, for which DDC 1.0 or 2.0 is still missing; hardwarebook.info's "VGA (VESA DDC)" page
+gives the connector pins, and Joe Miseli's Xorg talk of 2007 the history of EDID and DDC. VESA's DPM
+Standard Release A (2003, https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
 replaces DPMS 1.0 and keeps only On and Off; for Standby and Suspend, which 4F10h sets, the X Window
 System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands in for DPMS 1.0.
 

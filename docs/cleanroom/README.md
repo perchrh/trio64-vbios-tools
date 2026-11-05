@@ -35,15 +35,15 @@ to implement from:
   the changed files before any allowlist export):
   - owner decisions in [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) (100h, AH=0Fh,
     MCLK policy, FIFO, POST-41, ROM-8/9);
-  - primary extracts and DMT PDF in [`primary-extracts/`](primary-extracts/) and
-    [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf);
+  - primary extracts and full documents in [`primary-extracts/`](primary-extracts/),
+    [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf),
+    [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf),
+    [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt);
   - LEAK-REVIEW "May read" extended for those extracts;
   - high-impact rewrites in parts A/B/C, chip-rules, bios-rules B00-9/B00-22, and milestone-calls
     Source columns (POST-41 corrected to **200 ms** from the V53C sheet).
 - Still open:
   - a second-reader re-review of the changed files (nothing is cleared until then);
-  - PCI 2.3 section 6.3 extract and VBE 1.2 retype under [`primary-extracts/`](primary-extracts/)
-    (owner-held; see that folder's README);
   - remaining bios-rules returns (B09-11, unsupported-subfunction rows, B00-5, TAB-9, font/state Q17)
     and any A/B/C rows not yet rewritten;
   - the surrounding MS-DOS boot / CLS session as a finished milestone-2 contract;

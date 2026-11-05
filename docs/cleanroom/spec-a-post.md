@@ -28,16 +28,22 @@ are separate parts of this specification; where a rule here depends on them it s
   (`PLL-1`, `T64-MEM-3`, ...) and [`docs/bios-rules.md`](../bios-rules.md) (`BDA-14`, `B00-9`, ...) stand for the source
   those files give. PCI 2.3: PCI Local Bus Specification revision 2.3, section 6.3 (expansion ROMs:
   the ROM header, the PCI data structure, the initialisation entry and the device address in AX,
-  shadowing); the owner's copy, outside the repository (README "Other references"; added as the
-  source on 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)). The subsection numbers cited (6.3.1.1, 6.3.1.2,
-  6.3.3.1) are the same in revision 2.1, which the rules first cited.   V53C16256H: Mosel Vitelic
-  V53C16256H data sheet, Rev. 2.3, June 1998, the DRAM of the card
+  shadowing); [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and extract
+  [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md)
+  (added as the source on 2 November 2026,
+  [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); the PDF landed in-tree
+  5 November 2026). The subsection numbers cited (6.3.1.1, 6.3.1.2, 6.3.3.1) are the same in
+  revision 2.1, which the rules first cited. V53C16256H: Mosel Vitelic V53C16256H data sheet,
+  Rev. 2.3, June 1998, the DRAM of the card
   ([`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF); extract
   [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md)).
   VGADOC: Finn Thoegersen's VGADOC 4b,
-  [`standards/thoegersen/`](../../standards/thoegersen/) (PCI.TXT, S3.TXT). VBE 1.2: the VESA BIOS Extension 1.2. "README Windows 9x":
-  the black-box record of S3's Windows 9x driver in [README.md](../../README.md), section "Windows 9x driver test".
-  "Project rule": a decision of this project recorded in [AGENTS.md](../../AGENTS.md) ("Hard rules for the ROM"); it is
+  [`standards/thoegersen/`](../../standards/thoegersen/) (PCI.TXT, S3.TXT). VBE 1.2: the VESA BIOS
+  Extension 1.2 ([`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt); extract
+  [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md)).
+  "README Windows 9x": the black-box record of S3's Windows 9x driver in
+  [README.md](../../README.md), section "Windows 9x driver test". "Project rule": a decision of
+  this project recorded in [AGENTS.md](../../AGENTS.md) ("Hard rules for the ROM"); it is
   binding for our ROMs but is not a data book requirement.
 - **Strength.** *must*: the data book says must, never or illegal, or a program or driver fails
   without it, or a project rule; a violation is a FAIL. *should*: documented good practice, or the
@@ -295,12 +301,11 @@ the engine can be checked there only as register writes, not as effects.
 
 ## Missing documents
 
-- PCI Local Bus Specification 2.3, section 6.3 (expansion ROM header, PCI data structure,
-  initialisation entry): the source of ROM-1, ROM-2, ROM-5, ROM-6 and POST-1. The owner has it, but it
-  is not in the repository (no free licence to copy it); VGADOC PCI.TXT covers the PCI BIOS calls and
-  the configuration header, not the ROM format.
 - The S3 Video BIOS and Utilities OEM Guide that T32/64 11.4 refers to (the coding of CR41/CR52 and
   the monitor information bits of CR37/CR68 in S3's BIOS).
-- The DRAM data sheet of the parts the card fits, Mosel Vitelic V53C16256H (Rev. 2.3, 1997): 512 refresh
-  cycles in 8 ms (open question 8, MODE-130 of part B) and the power-up sequence (POST-41). Cited from the
-  outside review of 2 November 2026; not yet in [`datasheets/`](../../datasheets/).
+
+PCI 2.3 section 6.3 (ROM-1, ROM-2, ROM-5, ROM-6, POST-1) is in
+[`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) with extract
+[`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md). The V53C16256H
+sheet (POST-41, MODE-130) is in [`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF).
+VGADOC PCI.TXT still covers the PCI BIOS calls and the configuration header, not the ROM format.
