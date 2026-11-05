@@ -147,8 +147,8 @@ where the two differ; that section is kept as the record of how the decision was
   ROM. This replaces the public domain wish of 1 November 2026 (below). An MIT ROM can carry the public
   domain fonts; it cannot carry LGPL or GPL code, which stays a source of facts only, as before. A
   manifest of incorporated assets (today: the fonts, with Gil's notice) goes with every release. The
-  licence file itself is still to be added; settle the wording with the lawyer before anything is
-  distributed.
+  MIT licence file is [`LICENSE.md`](../LICENSE.md); the asset manifest is still to be added. Settle
+  remaining wording with the lawyer before anything is distributed.
 - **Distribution:** no workflow uploads a patched ROM image any more (README "Continuous
   integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
@@ -177,8 +177,10 @@ where the two differ; that section is kept as the record of how the decision was
 - **The contract of each milestone** is recorded on the card before the clean side starts it: the
   INT 10h calls of its programs, with `VGALOG /M` under a working ROM, then `VGALOG /D`. The text
   output functions are not logged there, so a list of those comes from a trace or from the standard.
-  Milestones 3 and 4 are recorded ([`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)); milestone 2 (MS-DOS 6.22 and
-  EDIT) is not yet.
+  Milestones 2 (EDIT), 3 and 4 are recorded ([`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
+  Still open for milestone 2: the surrounding MS-DOS boot / CLS / prompt calls, and the text-output
+  functions VGALOG does not log (from the standard or a fuller trace). Tracked under
+  [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); no separate issue.
 - **Scope of the leak review:** a clean-room implementation of milestones 1-4. Only what the clean side
   needs for them crosses now and is reviewed; milestone 5 and later get their own review when they are
   set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review").
@@ -287,7 +289,7 @@ where the two differ; that section is kept as the record of how the decision was
   ones to the new repository.
 - The base (empty, our own code), the font source (Gil's FNTCOL16 files) and the four milestones are
   decided ("Decisions of 2 November 2026").
-- Record the INT 10h calls of MS-DOS 6.22 and EDIT on the card, as the contract of milestone 2
-  (milestones 3 and 4: [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
-- Find out how Chris's 3D Benchmark changes the bank in mode 101h (the far window function or the
-  chip's bank register): a port trace of its drawing.
+- Finish the milestone-2 surround: MS-DOS boot / CLS / prompt calls on the card (EDIT and milestones
+  3-4, and the CR35 bank path, are in [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
+- Apply the independent leak-review returns recorded in [`docs/cleanroom/README.md`](cleanroom/README.md),
+  then re-review the changed files before exporting the clean allowlist (#145).
