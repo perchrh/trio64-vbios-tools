@@ -44,10 +44,11 @@ to implement from:
     Source columns (POST-41 corrected to **200 ms** from the V53C sheet).
 - Fonts closed 5 November 2026: Gil FNTCOL16 files plus build-time tables (`fonts.py`); see
   [`asset-manifest.md`](asset-manifest.md) and [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md).
+- Bios-rules returns of 2 November 2026 applied 5 November 2026 (B00-5, B09-11, B10-1, B11-1, B12-1,
+  B1A-1, B1C-8, TAB-9, font/state Q17, and the B-08 open-question rewrites). High-impact A/B/C and
+  milestone rewrites were already in this branch. Nothing is cleared until a fresh second-reader pass.
 - Still open:
   - a second-reader re-review of the changed files (nothing is cleared until then);
-  - remaining bios-rules returns (B09-11, unsupported-subfunction rows, B00-5, TAB-9, font/state Q17)
-    and any A/B/C rows not yet rewritten;
   - Trio64V2/DX **driver** `VGALOG` call logs (dirty side; later milestones);
   - the export of a reviewed allowlist at a fixed commit to a separate repository.
 

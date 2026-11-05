@@ -32,7 +32,10 @@ write a compatible BIOS from it.
 - **Sources disagree** lists, per section, where Ferraro, RBIL and VGADOC differ and which the rule
   follows.
 
-Written 31 October 2026 from the sources above; the open questions are not yet settled.
+Written 31 October 2026 from the sources above. Open questions remain open until answered with a
+cited public source or a leak-reviewed observation; they are not requirements. Independent-review
+returns of 2 November 2026 for B00-5, B09-11, B10-1, B11-1, B12-1, B1A-1, B1C-8, TAB-9 and selected
+open questions were applied 5 November 2026.
 
 ## Mode set and the state it leaves (AH=00h, AH=0Fh, BIOS data area, published tables)
 
@@ -92,7 +95,7 @@ Programs the hardware for a mode and resets the BIOS state that belongs to it.
 | B00-2 | BX, CX, DX, SI, DI, BP, DS and ES come back as the caller gave them | Ferraro 11.2.1 (no output); RBIL INT 10/AH=00h | should | make 775-ref-compare (registers against the reference BIOS) |
 | B00-3 | AL on return differs between BIOSes: some return 30h (modes 00h-05h, 07h), 3Fh (06h) or 20h (above 07h), one returns the CRT mode byte, others AL unchanged. A program must not depend on AL | RBIL INT 10/AH=00h ("Return: AL = video mode flag (Phoenix, AMI BIOS)"); VGADOC VGABIOS.TXT | note | make 775-ref-compare (AL against the reference BIOS) |
 | B00-4 | AL bit 7 = 1: the mode is set as usual (registers, BIOS data, palette, font, cursor), but video memory is not erased. 0040:0049h receives the mode without bit 7, and 0040:0087h bit 7 is set; a mode set with AL bit 7 = 0 clears 0040:0087h bit 7 again | Ferraro 11.2.1 ("Erasure During Mode Change"); RBIL INT 10/AH=00h note ("IBM standard modes do not clear the screen if the high bit of AL is set"); RBIL MEM 0040:0087h bit 7 (#M0024); Ferraro Table 9.26 bit 7 | must | emu t_windows (AL=83h: text kept, 0049h = 03h, 0087h bit 7 set; then AL=03h clears and resets the bit); make 775-ref-compare (AL bit 7 in 00h-07h, 0Dh-10h) |
-| B00-5 | AL bit 7 = 0: video memory is erased. Text modes: the text buffer holds blanks (character 20h, attribute 07h) in every page (B800:0000h-7FFFh, B000:0000h-7FFFh in 07h); graphics modes: every pixel is 0 (B800:0000h-7FFFh in 04h-06h; all four planes of A000h in 0Dh-13h) | Ferraro 11.2.1 ("the display memory is erased"); fill values: IBM (as S3TEST encodes them) | must (erased), should (fill values) | S3TEST 'VGA mode set clear 13h 12h 03h' (fail 1 A000h 00h in 13h, 2 all planes 00h in 12h, 4 B800:0000h-7FFFh 0720h in 03h) |
+| B00-5 | AL bit 7 = 0: video memory is erased (Ferraro). Exact fill values and extents are the IBM VGA clear behaviour published in VGATEST (PC Tech Journal, November 1988): text modes hold blanks (character 20h, attribute 07h) through B800:0000h-7FFFh (B000:0000h-7FFFh in 07h); graphics modes hold pixel value 0 through B800:0000h-7FFFh in 04h-06h and all four planes of A000h in 0Dh-13h. The project's S3TEST lines check those published fills; they are not themselves the source | Ferraro 11.2.1 ("the display memory is erased"); IBM VGATEST (PC Tech Journal, November 1988) | must (erased), should (fill values and extents) | S3TEST 'VGA mode set clear 13h 12h 03h' (fail 1 A000h 00h in 13h, 2 all planes 00h in 12h, 4 B800:0000h-7FFFh 0720h in 03h) |
 | B00-6 | Text modes keep the font in plane 2 whatever bit 7 says: the clear writes planes 0 and 1 only (B00-14 loads the font). With bit 7 = 1 the character codes and attributes stay in planes 0 and 1, so a change from a text to a graphics mode without the clear shows them, and the font, as pixels | Ferraro 11.2.1 ("the character ASCII codes, attributes, and the current character fonts are loaded into the four planes") | should | S3TEST 'Font load 8x16 and 8x8 in plane 2' (after a mode set); make 775-ref-compare (the four planes) |
 | B00-7 | Registers: MISC, SR01-04, CRTC 00h-18h, AR00-13h and GR00-08h get the values of the mode's parameter table entry (TAB-13, TAB-15); for the standard modes these are IBM's values. AR14h (colour select) = 00h and the feature control register = 00h | RBIL MEM 0040:00A8h (#M0041, #M0042); Ferraro 9.2.2, Table 9.31; IBM (VGATEST register tables) | must | S3COMPAT 'Mode nnh' fail 1 (62 registers); emu t_vga_registers; make 775-ref-compare |
 | B00-8 | The registers are written with the screen blanked and the sequencer reset; when the call returns, the screen is on (SR01 bit 5 = 0), the sequencer runs (SR00 = 03h) and the attribute controller shows the palette (PAS = 1). The CRTC protect bit CR11 bit 7 is set as in IBM's tables, so a program clears it before it writes CR00-07 | IBM (VGATEST: SR00 = 03h, SR01 bit 5 = 0, CR11 bit 7 = 1); Ferraro 10.6.1 (PAS) | must | S3COMPAT 'Mode nnh' fail 1; S3TEST 'VGA ATC flip-flop reset by mode set' |
@@ -187,6 +190,9 @@ mode set, and a program alters them by copying them to RAM and changing the poin
 
 ### Open questions
 
+Open questions about externally observable behaviour. These are not requirements. Any answer proposed
+for the clean specification must state its source and pass leak review.
+
 1. AH=00h with an unsupported mode number (08h-0Ch, 14h-7Fh, and with AL bit 7 set, 88h-8Ch,
    94h-FFh): is it ignored with every register and the whole video state unchanged, or is it mapped to
    another mode? Does it set 0040:0087h bit 7 or 0040:0049h before it gives up?
@@ -203,9 +209,9 @@ mode set, and a program alters them by copying them to RAM and changing the poin
 6. Does the clear erase all of video memory (every plane of A000h-BFFFh, 256 KB) or only the mode's
    window? In 04h-06h, is B800:0000h-7FFFh written as 0000h, and does the clear of a text mode write
    0720h in every page of B800:0000h-7FFFh?
-7. 0040:0089h after a mode set: are bits 7 and 4 kept (the 200/350-line choice lasts until the next
-   AH=12h BL=30h) or is bit 7 reset and bit 4 set (BDA-17)? Is the low nibble of 0040:0088h 9h after a
-   colour mode, 8h after a 200-line colour text mode, and Bh after 07h/0Fh?
+7. Which documented scan-line selection bits and switch fields are retained or changed after a mode
+   set, and for how long does an AH=12h BL=30h choice persist? Identify differences by mode and by the
+   public sources BDA-15 through BDA-17.
 8. 0040:0087h after a mode set: are bits 3 (inactive), 2 (wait for display enable) and 1 (monochrome
    display) cleared or set according to the mode, or left as POST set them? Is 0040:0089h bit 2
    changed by the mode set of 07h or 0Fh?
@@ -230,11 +236,10 @@ mode set, and a program alters them by copying them to RAM and changing the poin
     (graphics modes)?
 17. Does the mode set keep AL bit 7 of 0040:0087h when it is called through AH=11h (the font functions
     that "cause a mode set")? 
-18. Do all 29 entries of our ROM's parameter table follow the order and layout of TAB-14 and TAB-15
-    (entries 08h-0Ch and 0Fh-10h included), so that a program that reads an entry through
-    0040:00A8h finds the registers the mode set programs?
-19. What does the ROM's save pointer table hold at POST: a dynamic save area pointer of 0, override
-    pointers of 0, and a secondary table of length 1Ah?
+18. Does the published video parameter table follow the public entry order and field layout in
+    TAB-13 through TAB-15, including unused entries?
+19. Which public save-pointer and secondary-table fields are valid after POST, and which optional
+    interfaces are absent?
 20. Does a mode set with interrupts disabled by the caller leave IF as found? Does it enable interrupts
     during the clear?
 21. AH=0Fh: is BL returned unchanged, and is AH the low byte of 0040:004Ah even when the word is above
@@ -382,16 +387,16 @@ AH=06h scrolls up, AH=07h down, on the active page; AL=0 clears the window.
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
 | B09-1 | Input AL = character, BL = attribute (text) or colour (graphics), BH = page, CX = count. The character is written CX times from the cursor of page BH; the cursor does not move. Nothing is returned | Ferraro 11.7.2; RBIL INT 10/AH=09h; VGADOC VGABIOS.TXT | must | S3COMPAT 'AH=08/09/0A/0E text I/O mode 01/03' fail 1; S3TEST 'AH=09h text char/attribute count'; emu t_mono |
-| B09-2 | Text modes: CX consecutive cells get character AL and attribute BL; a count that runs past the end of the row continues at the start of the next row (the cells follow each other in memory). Every other cell keeps its value | IBM (VGATEST, as S3TEST encodes it); Ferraro 11.7.2 | must | S3TEST 'AH=09h text char/attribute count' (CX = 1, 2, 3, 5, 80, every cell); S3COMPAT 'AH=08/09/0A/0E text I/O mode 01/03' |
+| B09-2 | Text modes: CX consecutive cells get character AL and attribute BL; a count that runs past the end of the row continues at the start of the next row (the cells follow each other in memory). Every other cell keeps its value | IBM VGATEST (PC Tech Journal, November 1988); Ferraro 11.7.2 | must | S3TEST 'AH=09h text char/attribute count' (CX = 1, 2, 3, 5, 80, every cell); S3COMPAT 'AH=08/09/0A/0E text I/O mode 01/03' |
 | B09-3 | Control codes are not interpreted: 07h, 08h, 0Ah and 0Dh are written as characters, and the cursor does not move | RBIL INT 10/AH=09h note | must | 775-ref-compare (random AL) |
 | B09-4 | The page need not be the active one: the cells are on page BH (B800h + BH * 0040:004Ch in text modes) | Ferraro 11.7.2; RBIL INT 10/AH=09h | must | S3TEST 'AH=09h text char/attribute count' fail 20h (page 1) |
 | B09-5 | Graphics modes: the pattern of AL comes from the graphics font (terms above) and fills the cell at the cursor, one font byte per scan line | Ferraro 7.1.5, 7.1.6, 11.7.2 | must | S3COMPAT 'AH=09/0A graphics glyph and XOR' (the glyph of AX=1130h), 'Video save pointer table 0040:00A8' (graphics font override) |
-| B09-6 | Graphics modes, BL bit 7 = 0: the whole cell is replaced. Pixels whose font bit is 1 get the colour (BL bits 1-0 in 04h/05h, bit 0 in 06h, bits 3-0 in the planar modes), pixels whose font bit is 0 get colour 0 | IBM (VGATEST, as S3COMPAT encodes it); Ferraro 11.7.2 differs (see "Sources disagree") | should | S3COMPAT 'AH=09/0A graphics glyph and XOR' fail 1, 2, 4, 8 (modes 04h, 06h, 0Dh, 12h); 775-ref-compare |
+| B09-6 | Graphics modes, BL bit 7 = 0: the whole cell is replaced. Pixels whose font bit is 1 get the colour (BL bits 1-0 in 04h/05h, bit 0 in 06h, bits 3-0 in the planar modes), pixels whose font bit is 0 get colour 0 | IBM VGATEST (PC Tech Journal, November 1988); Ferraro 11.7.2 differs (see "Sources disagree") | should | S3COMPAT 'AH=09/0A graphics glyph and XOR' fail 1, 2, 4, 8 (modes 04h, 06h, 0Dh, 12h); 775-ref-compare |
 | B09-7 | Graphics modes other than 13h, BL bit 7 = 1: the colour is XORed into the pixels whose font bit is 1; the other pixels keep their value. Writing the same character twice so restores the cell | Ferraro 11.7.2, 7.1.7; RBIL INT 10/AH=09h | must | S3COMPAT 'AH=09/0A graphics glyph and XOR' |
 | B09-8 | Mode 13h: BL is the 8-bit colour of the character pixels; bit 7 is part of the colour, not an XOR flag | RBIL INT 10/AH=09h ("in <256-color graphics mode") | should | not checked |
 | B09-9 | Graphics modes: the CX cells follow each other to the right along the row; a count larger than the cells left in the row gives an undefined picture | Ferraro 11.7.2; RBIL INT 10/AH=09h note; VGADOC VGABIOS.TXT | note | not checked |
 | B09-10 | Graphics modes with more than one page (0Dh, 0Eh, 0Fh, 10h): the cell is on page BH (A000h + BH * 0040:004Ch); in modes with one page BH selects nothing | Ferraro 11.7.2 | should | not checked |
-| B09-11 | BX, CX, DX, SI, DI, BP, DS and ES come back as given | RBIL INT 10/AH=08h notes (the same dispatcher) | should | 775-ref-compare; emu t_rom_patches (bits 31-16) |
+| B09-11 | BX, CX, DX, SI, DI, BP, DS and ES come back as given. Ferraro and RBIL document no outputs in those registers for AH=09h; full preservation is a project design choice (this file's general rule), not a claim about another BIOS's dispatcher | Ferraro 11.7.2 (outputs named for AH=09h); RBIL INT 10/AH=09h; project design choice | should | 775-ref-compare; emu t_rom_patches (bits 31-16) |
 
 ### AH=0Ah: write character only at the cursor
 
@@ -431,7 +436,7 @@ Writes one character at the cursor and moves the cursor on, as a terminal does.
 | B0E-3 | Text modes: only the character byte is written; the attribute of the cell keeps its value | Ferraro 11.9.3 | must | emu t_mono (5A70h after AH=09h left attribute 70h); 775-ref-compare |
 | B0E-4 | Graphics modes: the character is drawn in colour BL as AH=09h with CX = 1 draws it | Ferraro 11.9.3; RBIL INT 10/AH=0Eh | must | 775-ref-compare (modes 04h-06h, 0Dh-10h) |
 | B0E-5 | After a printable character in the last column (0040:004Ah - 1) the cursor goes to column 0 of the next row | Ferraro 11.9.3 | must | S3COMPAT 'AH=13h write string' fail 10h (the same handling) |
-| B0E-6 | CR (0Dh): the cursor goes to column 0 of the same row; nothing is written | RBIL INT 10/AH=0Eh ("do the expected things"); IBM (VGATEST, as S3COMPAT encodes it); Ferraro table 11.4 differs (see "Sources disagree") | must | S3COMPAT 'AH=13h write string' fail 1 |
+| B0E-6 | CR (0Dh): the cursor goes to column 0 of the same row; nothing is written | RBIL INT 10/AH=0Eh ("do the expected things"); IBM VGATEST (PC Tech Journal, November 1988); Ferraro table 11.4 differs (see "Sources disagree") | must | S3COMPAT 'AH=13h write string' fail 1 |
 | B0E-7 | LF (0Ah): the cursor goes one row down in the same column; nothing is written | Ferraro 11.9.3 table 11.4 | must | S3COMPAT 'AH=13h write string' fail 1 |
 | B0E-8 | BS (08h): the cursor goes one column left, not past column 0; nothing is written or erased | Ferraro 11.9.3 table 11.4 | must | S3COMPAT 'AH=13h write string' fail 1 |
 | B0E-9 | BEL (07h): the speaker sounds; nothing is written and the cursor stays | Ferraro 11.9.3 table 11.4; RBIL INT 10/AH=0Eh | must | S3COMPAT 'AH=13h write string' fail 1 (BEL not written) |
@@ -457,15 +462,15 @@ Writes one character at the cursor and moves the cursor on, as a terminal does.
 
 ### Open questions
 
-Behaviour to confirm in the emulator (our ROMs against the reference BIOSes):
+Open questions about externally observable behaviour. These are not requirements. Any answer proposed
+for the clean specification must state its source and pass leak review.
 
 1. AH=01h with emulation on: what goes to CR0Ah/CR0Bh for a start line above the end line, for CL = 0,
    for CH or CL of 20h or more, for the 8-line fonts of the 200-line modes and for the 14-line fonts?
 2. AH=01h: does CH with bits 6-5 = 10b or 11b (40h-7Fh) hide the cursor (RBIL #00013) or show it at CH
    bits 4-0? Are CR0Bh bits 6-5 (cursor skew) written as 0?
 3. AH=01h in a graphics mode: is the value scaled, and are CR0Ah/CR0Bh written at all?
-4. Which functions of this group return AX as given? (Some BIOSes return values in AX after AH=01h,
-   02h, 05h, 06h, 07h, 09h, 0Ah or 13h, for example the attribute or a CRTC index.)
+4. Which registers not documented as outputs remain unchanged after each function in this group?
 5. AH=02h and AH=03h in modes 04h-06h with BH not 0: which page's position is stored and returned?
 6. AH=02h: are a row past 0040:0084h or a column past 0040:004Ah - 1 stored unchanged, and what goes to
    CR0Eh/CR0Fh? In graphics modes, are CR0Eh/CR0Fh written?
@@ -478,8 +483,8 @@ Behaviour to confirm in the emulator (our ROMs against the reference BIOSes):
     the lower-right one: is the window clipped, ignored, or written past the screen?
 12. AH=06h/07h in mode 13h: is the cell height 8 whatever 0040:0085h holds? In the planar modes, are BH
     bits 7-4 ignored, and which values do SR02h and GR00h-GR08h hold afterwards?
-13. AH=06h/07h and AH=13h: is the result the same when the caller's direction flag is set? (emu
-    t_errors requires it of our ROMs.)
+13. Are the externally visible results of AH=06h, AH=07h and AH=13h independent of the caller's
+    direction flag, and what flag state is returned?
 14. AH=08h in modes 04h-06h while the INT 1Fh vector is 0000:0000h: are codes 80h-FFh compared at all?
 15. AH=08h in graphics modes: is AH returned as 00h? Are GR05h and GR07h (read mode, colour don't care)
     back at their mode-set values afterwards?
@@ -503,15 +508,15 @@ Behaviour to confirm in the emulator (our ROMs against the reference BIOSes):
     of the bottom line (Ferraro), or that of the cell at the cursor after the line feed? In graphics
     modes, is the new line filled with colour 0?
 27. AH=0Eh in graphics modes: does BL bit 7 XOR the character as in AH=09h?
-28. AH=0Eh BEL: what frequency and duration, and are the PIT channel 2 and port 61h left as found?
+28. What public compatibility requirement, if any, constrains the BEL sound and preservation of the
+    caller's speaker/timer state?
 29. AH=0Eh with the cursor below the last row (row above 0040:0084h): does the screen scroll, and where
     does the cursor end?
 30. AH=13h with CX = 0, or with AL bits 7-2 not 0: is nothing done, the cursor unchanged?
 31. AH=13h to a page that is not displayed: when the string scrolls, from which page does the fill
     attribute come, and where does that page's cursor end?
 32. AH=13h: do ES and BP come back as given?
-33. Do all functions of this group keep bits 31-16 of the 32-bit registers? (775-ref-compare, S3TEST and
-    emu t_rom_patches check some of them.)
+33. Do these functions preserve the upper halves of 32-bit registers that are not documented outputs?
 
 ### Sources disagree
 
@@ -591,7 +596,7 @@ controller state they leave, the dynamic save area, and how grey summing and def
 
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
-| B10-1 | Subfunctions in AL: 00h-03h, 07h-09h, 10h, 12h, 13h, 15h, 17h-1Bh. Any other AL (04h-06h, 0Ah-0Fh, 11h, 14h, 16h, 1Ch-FFh) changes nothing and returns AX and every other register unchanged | RBIL INT 10/AX=1000h-101Bh (the VGA subfunctions it lists; other AL values are vendor functions) | should | emu t_errors (AL=04h-06h, 0Bh-0Fh, 11h, 14h, 16h, 1Ch, 1Dh, 1Fh) |
+| B10-1 | Public supported AL values: 00h-03h, 07h-09h, 10h, 12h, 13h, 15h, 17h-1Bh (RBIL). Other AL values are outside that list; RBIL does not define a failure-state contract for them. Project choice for unsupported AL (04h-06h, 0Ah-0Fh, 11h, 14h, 16h, 1Ch-FFh): change nothing (registers, BIOS data, video memory, video registers); AX and every other register returned as given | RBIL INT 10/AX=1000h-101Bh (supported list); project design choice (unsupported no-op) | should | emu t_errors (AL=04h-06h, 0Bh-0Fh, 11h, 14h, 16h, 1Ch, 1Dh, 1Fh) |
 | B10-2 | Only the registers named as outputs change: BH for 07h and 08h, DH/CH/CL for 15h, BL for 19h, BX for 1Ah. All others, AX included, come back as given | RBIL INT 10/AX=1000h-101Bh (returns); RBIL AX=1015h ("AX destroyed by some BIOSes") shows that BIOSes differ | should | make 775-ref-compare (AX=1000h, 1001h, 1003h, 1007h, 1010h, 1013h against the reference BIOS) |
 | B10-3 | The calls that write the palette registers (AL=00h, 02h, and AH=0Bh) do it with PAS = 0, and every subfunction that selects an attribute register leaves PAS = 1 before it returns, so that the display uses the palette again (with PAS = 0 the screen shows no picture) | Ferraro 10.6.1 (PAS: 0 host access, 1 display access); VGADOC VGAREGS.TXT (3C0h bit 5) | must | not checked |
 | B10-4 | A subfunction works whatever state the caller left the attribute flip-flop in: the BIOS resets it by reading Input Status 1 (3BAh/3DAh) before its first access to 3C0h. The state it leaves is not defined by any public source: a program reads 3BAh/3DAh before its own next use of 3C0h | Ferraro 10.6.1 and chapter 10 introduction (the flip-flop "cannot be interrogated or saved"); VGADOC VGAREGS.TXT (3C0h) | should (reset before use), note (state left) | not checked (S3TEST 'VGA ATC flip-flop reset by mode set' covers the mode set only) |
@@ -717,7 +722,8 @@ Undocumented in IBM's references, but in RBIL and VGADOC and used by programs.
 
 ### Open questions
 
-To settle by running the ROMs in the emulator.
+Open questions about externally observable behaviour. These are not requirements. Any answer proposed
+for the clean specification must state its source and pass leak review.
 
 AH=0Bh:
 
@@ -740,8 +746,8 @@ AH=0Bh:
 
 AH=10h:
 
-10. In which state is the attribute flip-flop left after each subfunction (index or data state), and
-    what does the attribute address register hold (for example 20h: index 0 with PAS = 1)?
+10. What externally observable attribute-controller index, palette-address-source and flip-flop state
+    does each subfunction leave, and does software rely on any of it?
 11. Do AH=0Bh and AX=1000h-1003h wait for the vertical retrace before writing (up to one frame per
     call)?
 12. Do AX=1012h, 1017h and 101Bh blank the screen while they run, and if so, do they leave SR01 bit 5
@@ -761,8 +767,8 @@ AH=10h:
 20. AX=1019h: is BH returned as given, or as 00h?
 21. AX=1013h with BL other than 00h/01h; with BL=00h and BH above 01h (only bit 0 used?); with BL=01h
     and a page above 3 in four-page mode (masked to 2 bits?); and in mode 13h: what happens?
-22. AX=101Bh rounding: is G = (30 R + 59 G + 11 B + 50) / 100, or does the BIOS round halves down
-    (+49)? Both stay within the tolerance of B101B-2.
+22. Does the result remain within the publicly stated tolerance of B101B-2 for every input colour, and
+    is any stricter rounding requirement established by a public source or compatibility need?
 23. A mode set with default palette loading disabled (AH=12h BL=31h AL=01h): is the dynamic save area
     still filled, and is the PEL mask still set to FFh?
 24. AH=10h with 0040:0087h bit 3 set (video system inactive): does any subfunction act?
@@ -878,7 +884,7 @@ Return a font pointer and the current text geometry.
 
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
-| B11-1 | Only AL = 00h-04h, 10h-12h, 14h, 20h-24h and 30h are defined; for any other AL the BIOS changes nothing (registers, BIOS data, video memory, video registers) | RBIL INT 10/AH=11h entries (the list of subfunctions); Ferraro 11.12 | should | emu t_errors (AL = 05h, 06h, 0Fh, 13h, 15h, 1Fh, 25h, 2Fh, 31h, 40h) |
+| B11-1 | Public supported AL values: 00h-04h, 10h-12h, 14h, 20h-24h and 30h (RBIL, Ferraro). Other AL values have no public failure-state contract. Project choice for unsupported AL: change nothing (registers, BIOS data, video memory, video registers) | RBIL INT 10/AH=11h entries (supported list); Ferraro 11.12; project design choice (unsupported no-op) | should | emu t_errors (AL = 05h, 06h, 0Fh, 13h, 15h, 1Fh, 25h, 2Fh, 31h, 40h) |
 
 ### AH=12h BL=10h: get EGA information
 
@@ -952,7 +958,7 @@ Return a font pointer and the current text geometry.
 
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
-| B12-1 | For a BL the BIOS does not support, AL is not 12h (AL is returned as given) and nothing changes; "AL = 12h" is how a caller tells a supported subfunction | Ferraro 11.13.3-11.13.9 ("any other value: call was invalid"); RBIL AH=12h ("AL = 12h if function supported") | should | emu t_errors (BL = 00h, 0Fh, 11h, 1Fh, 21h, 2Fh, 37h, 3Fh, 40h, FFh) |
+| B12-1 | Supported BL values set AL = 12h as the public success indicator (Ferraro, RBIL). For an unsupported BL: do not set AL = 12h; leave AL as given (a caller that already passed AL = 12h cannot use AL alone as proof of success). Project choice: unsupported BL also changes nothing else (registers, BIOS data, video memory, video registers) | Ferraro 11.13.3-11.13.9 ("AL = 12h" if valid); RBIL AH=12h ("AL = 12h if function supported"); project design choice (unsupported no-op) | should | emu t_errors (BL = 00h, 0Fh, 11h, 1Fh, 21h, 2Fh, 37h, 3Fh, 40h, FFh) |
 
 ### AX=1A00h, 1A01h: display combination code
 
@@ -962,7 +968,7 @@ Return a font pointer and the current text geometry.
 | B1A00-2 | Codes: 00h no display, 01h MDA with mono display, 02h CGA with colour display, 04h EGA colour, 05h EGA mono, 06h PGA, 07h VGA with analog mono display, 08h VGA with analog colour display, 0Ah-0Ch MCGA, FFh unknown; 03h and 09h reserved | RBIL #00039, #M0040; VGADOC VGABIOS.TXT | must | S3COMPAT 'AH=1A display combination code' |
 | B1A00-3 | The pair comes from the display combination code table (save pointer table 0040:00A8h -> secondary save pointer table, offset 02h -> DCC table: byte 00h number of entries, 04h onward one byte pair per entry), entry number 0040:008Ah | RBIL MEM 0040:008Ah, MEM 0040:00A8h (#M0037, #M0038, #M0039) | should | emu t_mono (every pair of the table) |
 | B1A01-1 | AX=1A01h: BL = active, BH = alternate display code; returns AL = 1Ah. The BIOS records the combination: 0040:008Ah = the number of the table entry that holds the pair, so that AX=1A00h returns it | RBIL AX=1A01h, MEM 0040:008Ah; VGADOC VGABIOS.TXT; Ferraro 11.15.1 | must | S3COMPAT 'AH=1A display combination code' (AL = 1Ah); emu t_mono (read back, 0040:008Ah) |
-| B1A-1 | AL = 02h-FFh: not supported, AL returned as given, nothing changes | RBIL AX=1A00h ("AL = 1Ah if function was supported") | should | emu t_errors (AX=1A02h, 1AFFh) |
+| B1A-1 | Supported subfunctions are AL = 00h (query) and AL = 01h (set); success returns AL = 1Ah (RBIL). AL = 02h-FFh are unsupported inputs (AL = 1Ah is the success return of AL = 00h/01h, not an unsupported-input case). Project choice for unsupported AL: leave AL as given and change nothing else | RBIL AX=1A00h ("AL = 1Ah if function was supported"); project design choice (unsupported no-op) | should | emu t_errors (AX=1A02h, 1AFFh) |
 | B1A-2 | AX=1A00h is the usual VGA presence test; a VGA BIOS supports it | RBIL AX=1A00h | must | S3COMPAT 'AH=1A display combination code' |
 
 ### AH=1Bh: functionality/state information
@@ -1003,7 +1009,7 @@ Save the video hardware, BIOS data and DAC into a caller's buffer and restore th
 | B1C-5 | DAC class layout: 00h DAC read/write mode, 01h pixel address, 02h pixel mask, 03h-302h 256 colour triples, 303h colour select (AR14); the restore loads all 256 entries and these registers | RBIL #00050; VGADOC VGABIOS.TXT | must | S3COMPAT 'AH=1C save/restore video state' (fail 8: DAC entry 1) |
 | B1C-6 | Where the classes lie in the buffer, and anything else in it, is the BIOS's own: a caller keeps the buffer as an opaque block and restores with the CX it saved with | RBIL AH=1Ch (only the class formats are given) | should | not checked |
 | B1C-7 | Saving may disturb the video registers; a program should restore right after saving (the saved data are correct) | RBIL AH=1Ch note ("many BIOSes corrupt the video registers when saving the state") | note | S3COMPAT restores after the mode set; not checked separately |
-| B1C-8 | AL = 03h-FFh is not supported and must not change the video state; AL other than 1Ch tells the caller it failed | Ferraro 11.15.3 ("1C hex: call was valid; any other value: invalid"); RBIL AH=1Ch | should | emu t_errors (AX=1C03h: no state change; AL = 1Ch is accepted there as known behaviour of our base) |
+| B1C-8 | Supported AL values are 00h-02h; success returns AL = 1Ch (Ferraro, RBIL). AL = 03h-FFh are unsupported inputs. Project choice for unsupported AL: do not set AL = 1Ch; leave AL as given and change no video state | Ferraro 11.15.3 ("1C hex: call was valid; any other value: invalid"); RBIL AH=1Ch; project design choice (unsupported no-op) | should | emu t_errors (AX=1C03h: no state change) |
 | B1C-9 | AX=1C00h with CX nonzero is a better VGA presence test than AX=1A00h (some EGA cards answer 1A00h) | RBIL AH=1Ch, AX=1A00h | note | not checked |
 
 ### Static functionality table (the table AH=1Bh points to)
@@ -1023,14 +1029,15 @@ Save the video hardware, BIOS data and DAC into a caller's buffer and restore th
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
 | TAB-8 | ROM fonts 8x8 (BH=03h), 8x14 (02h) and 8x16 (06h): one glyph of N bytes (8, 14, 16) per character, top scan line first, character c at offset c x N, bit 7 the leftmost pixel, 1 = foreground; 256 characters (the 8x8 font in two halves of 128, B1130-1) | Ferraro 11.12.1, 11.12.15; RBIL AX=1130h | must | S3COMPAT 'AX=1130 BH=3 8x8 font', 'AX=1130 BH=6 8x16 font' (glyph 01h), 'AX=1130 BH=4 8x8 upper half' (glyph 80h) |
-| TAB-9 | The glyphs are the IBM PC character set (code page 437) | IBM (glyph 01h and 80h as S3COMPAT encodes them) | should | S3COMPAT 'AX=1130 BH=3/6' (fail 2: glyph 01h), 'AX=1130 BH=4 8x8 upper half' (WARN 02 for another design, FAIL when blank) |
+| TAB-9 | Character codes map to IBM code page 437 (CP437): code c selects glyph slot c. This rule is the code mapping only; it does not prescribe glyph bitmap designs or permit copying reference-BIOS glyph bytes. Concrete bitmaps for a clean ROM come from the project's Gil FNTCOL16 sources ([`rompatch/fonts/`](../rompatch/fonts/), [`docs/cleanroom/asset-manifest.md`](cleanroom/asset-manifest.md)) | IBM code page 437 (PC character set); Ferraro 11.12.1 (code-indexed glyph slots) | should | S3COMPAT 'AX=1130 BH=3/6' (fail 2: sample CP437 slot checks), 'AX=1130 BH=4 8x8 upper half' (WARN 02 for another design, FAIL when blank) |
 | TAB-10 | Alternate tables (BH=05h 9x14, 07h 9x16): entries of one byte character code followed by N glyph bytes (14 or 16); a code byte 00h ends the table. They replace the 8-dot glyphs of characters that need the ninth column in 9-dot text modes | RBIL AX=1130h (#00021); Ferraro 11.12.1 | must | not checked |
 | TAB-11 | INT 1Fh (0000:007Ch) points to 128 8x8 glyphs for codes 80h-FFh, used in the CGA graphics modes 04h-06h; INT 43h (0000:010Ch) to the graphics-mode font (the 8x8 lower half or a 256-character font of 0040:0085h bytes) | Ferraro 11.12.10, 11.12.15, Table 9.7 | must | S3COMPAT 'AX=1120-1124 graphics fonts', 'AX=1130 BH=1 INT43 in mode 13' |
 | TAB-12 | After a mode set of 13h the INT 43h vector points to the ROM 8x8 font (the BH=03h table) | Ferraro 11.12.15; IBM (VGATEST: 0040:0085h = 8 in mode 13h) | must | S3COMPAT 'AX=1130 BH=1 INT43 in mode 13' (fail 1) |
 
 ### Open questions
 
-Behaviour the public sources leave open, to be settled by running our ROMs in the emulator.
+Open questions about externally observable behaviour. These are not requirements. Any answer proposed
+for the clean specification must state its source and pass leak review.
 
 1. Does AX=1100h-1104h (and 1110h-1114h before their recalculation) reprogram the whole mode (CRTC,
    attribute registers, DAC, cursor, BIOS data) as a mode set would, or only put back the sequencer
@@ -1044,9 +1051,9 @@ Behaviour the public sources leave open, to be settled by running our ROMs in th
 5. AX=1101h-1104h and 1111h-1114h in a graphics mode: do they load plane 2 anyway, change nothing, or
    change the BIOS data?
 6. Does AX=1101h/1111h apply the 9x14 alternates in a 9-dot mode, or load the plain 8x14 font only?
-7. AX=1110h-1114h: is 0040:004Ch exactly rows x columns x 2, or rounded (for example + 256), and is
-   it written only when it grows? Are 0040:0062h (active page), 0040:004Eh (page start) and
-   CR0C/CR0D set to 0, and is the cursor shape in 0040:0060h updated with CR0A/CR0B?
+7. After a recalculating font load, what public requirement determines page length, active page, page
+   start and cursor state? Compare observable results with the geometry formulas in B1110-3 through
+   B1110-8.
 8. AX=1110h-1114h: is CR14 (underline location) changed, and to H - 1 or H? Are CR09 bits 7-5 kept?
    Are 0040:0084h, 0040:0085h and CR09 recalculated in mode 07h the same way as in mode 03h?
 9. Do the undefined AL values of AH=11h (05h-0Fh, 13h, 15h-1Fh, 25h-2Fh, 31h-FFh) change nothing
@@ -1055,8 +1062,9 @@ Behaviour the public sources leave open, to be settled by running our ROMs in th
     AX=1121h write only the low byte of 0040:0085h (CL) or the whole word (CX)?
 11. AX=1130h with BH = 08h-FFh: what comes back in ES:BP, and do CX and DL change? Are AX, BX and DH
     kept on every BH?
-12. Is the AX=1130h BH=04h pointer always the BH=03h pointer + 400h (one contiguous 256-character
-    8x8 table), so that programs that index the BH=03h table with codes 80h-FFh work?
+12. Is there a public guarantee or demonstrated software compatibility need for the two 8x8 font
+    pointers to identify adjacent halves of one table? Otherwise callers must use each published
+    pointer for its documented half.
 13. AH=12h BL=10h and BL=20h: is AL changed (to 12h or anything else), and are all registers other
     than BX and CX kept by BL=10h?
 14. AH=12h BL=30h with AL = 03h-FFh: refused (AL not 12h), or taken as one of 200/350/400? With a
@@ -1064,39 +1072,38 @@ Behaviour the public sources leave open, to be settled by running our ROMs in th
 15. AH=12h BL=31h, 33h, 34h, 36h with AL = 02h-FFh: refused, or treated as 01h (any nonzero AL)?
 16. AH=12h BL=32h: which register does the BIOS write (3C3h bit 0 or 46E8h bit 3), and on a card that
     cannot disable itself, does the call still return AL = 12h?
-17. AH=12h BL=35h: which AL values write the 128-byte buffer and which read it; what does it hold
-    (the equipment bits of 0040:0010h, 0040:0049h-0066h, 0040:0084h-008Ah, 0040:00A8h, the INT 05h,
-    1Dh, 1Fh and 43h vectors?); with AL other than 00h-03h, what is AL on return? Does AL=00h call
-    the system BIOS (INT 42h) or swap the INT 42h and INT 6Dh vectors?
+17. AH=12h BL=35h: which documented buffer extent and public AL operations are defined, and what
+    externally observable changes (registers, BDA, vectors) does each supported AL produce? Until a
+    public layout or necessary outside observation is cited, do not assume private buffer fields or
+    internal vector-swapping/calling behaviour.
 18. AH=12h BL=20h: the alternate print-screen routine prints rows 0 to 0040:0084h of the active page
     with 0040:004Ah columns; does it replace codes 00h, 0Ah-0Dh by spaces, put the cursor back, and
     ignore an INT 05h while 0050:0000h = 01h?
-19. AX=1A00h: when the current mode uses the mono CRTC (3B4h) and the stored pair has a mono and a
-    colour display, is the mono display returned as the active one (BL and BH swapped against the
-    table entry)? When 0040:008Ah is beyond the table, is BX = FFFFh?
-20. AX=1A01h with a pair that is in no table entry: is 0040:008Ah set to FFh, left unchanged, and is
-    AL = 1Ah returned anyway?
+19. How are active and alternate display codes reported for documented monochrome and colour
+    configurations? What public failure contract, if any, applies when the stored table index is out
+    of range?
+20. What externally visible result is defined when AX=1A01h receives a display combination absent from
+    the public table?
 21. AH=1Bh with BX not 0000h: is the buffer written, and what is AL? What is AH on return (unchanged,
     or another value)? Does the call leave the attribute controller index (and its palette address
     source bit) and the other index registers as it found them?
-22. AH=1Bh offset 2Dh bit 4 on our ROMs: set or clear with cursor emulation enabled? Bits 7-6: always
-    0?
-23. Static functionality table bytes 08h, 09h, 0Ah, 0Bh and 0Eh of our ROMs: which values, and do
-    they match the functions the ROM supports (TAB-4 to TAB-6)?
-24. AX=1C00h: which BX for CX = 1 to 7? (From the public class formats alone: hardware 70 bytes,
-    BIOS data 96 bytes, DAC 772 bytes.) Is there a header in the buffer (offsets of the classes),
-    and where do the classes start?
+22. Which public interpretation of AH=1Bh offset 2Dh bit 4 applies, given the documented disagreement
+    in B1B-12, and are reserved bits zero?
+23. Do the public static functionality fields accurately report the implementation's supported
+    functions (TAB-4 through TAB-6)?
+24. For each supported state-class combination, does AX=1C00h report enough storage for a successful
+    save and restore? Treat inter-class placement and any private header as opaque unless a public
+    standard or demonstrated compatibility need requires them.
 25. AH=1Ch with CX = 0, or with reserved CX bits 3-15 set: is AL = 1Ch returned, and is anything
     saved, restored or written? What is AL for AX=1C03h-1CFFh?
 26. AH=1Ch hardware class offset 09h: SR00 (as RBIL and VGADOC name it) or the miscellaneous output
     register (as offset 09h of a parameter table entry is)? Are the attribute index and the palette
     address source bit restored?
-27. Does saving the hardware class change video memory (to read the latches, for example at offset
-    FFFFh of the A000h window), or leave the screen turned on (palette address source set) when it
-    was off?
-28. AH=1Ch BIOS data class: exactly which bytes (0040:0010h equipment bits, 0040:0049h-0066h,
-    0040:0084h-008Ah, 0040:00A8h-00ABh?) and which interrupt vectors (05h, 1Dh, 1Fh, 43h?) does it
-    save and restore?
+27. Does saving the hardware state change caller-visible video memory or display-enable state, and is
+    such a side effect required or warned about by a public source?
+28. Which documented video BDA fields and video interrupt vectors must a BIOS-data save/restore
+    preserve? Distinguish the public preservation contract from the private representation in its
+    buffer.
 29. AH=1Ch restore of the DAC class: is the DAC left in the saved read or write mode with the saved
     pixel address (adjusted for the auto-increment in read mode)?
 30. Are BX, CX and DX kept by AX=1C01h and 1C02h, and BX by AH=12h BL=30h-36h?

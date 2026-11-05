@@ -208,9 +208,10 @@ that one file, not the rest of `rompatch/`.
   2026-11-02". Dirty-side rewrites and owner decisions of 5 November 2026
   ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md), [`primary-extracts/`](primary-extracts/))
   address many returns; **nothing crosses until a fresh second-reader pass on the changed files**.
-  Still outstanding for that pass: remaining bios-rules returns, and any A/B/C rows not yet
-  rewritten. Primary extracts for PCI 2.3 section 6.3 and VBE 1.2 are now in
-  [`primary-extracts/`](primary-extracts/) (with the full files under [`standards/`](../../standards/)).
+  Dirty-side rewrites for the returned bios-rules rows and B-08 open questions are in
+  [`docs/bios-rules.md`](../bios-rules.md) (5 November 2026); primary extracts for PCI 2.3 section 6.3
+  and VBE 1.2 are in [`primary-extracts/`](primary-extracts/). A fresh second-reader pass on the
+  changed files is still required before any clearance.
 - [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
   and cites it as "README"; the quote is not in README.md, and the reviewer may not read [`s3alias/`](../../s3alias/). The
   reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed
