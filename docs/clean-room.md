@@ -184,9 +184,10 @@ where the two differ; that section is kept as the record of how the decision was
   INT 10h calls of its programs, with `VGALOG /M` under a working ROM, then `VGALOG /D`. The text
   output functions are not logged there, so a list of those comes from a trace or from the standard.
   Milestones 2 (EDIT), 3 and 4 are recorded ([`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
-  Still open for milestone 2: the surrounding MS-DOS boot / CLS / prompt calls, and the text-output
-  functions VGALOG does not log (from the standard or a fuller trace). Tracked under
-  [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); no separate issue.
+  Milestone 2 acceptance boots without `CONFIG.SYS` / `AUTOEXEC.BAT` and with an empty PATH (M2-BOOT in
+  [`docs/cleanroom/decisions-milestones-1-4.md`](cleanroom/decisions-milestones-1-4.md)), so CLS / DOSKEY
+  surround is out of the contract. Text-output functions VGALOG omits still come from the standard or a
+  fuller trace where EDIT needs them.
 - **Scope of the leak review:** a clean-room implementation of milestones 1-4. Only what the clean side
   needs for them crosses now and is reviewed; milestone 5 and later get their own review when they are
   set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review").
@@ -295,7 +296,5 @@ where the two differ; that section is kept as the record of how the decision was
   ones to the new repository.
 - The base (empty, our own code), the font source (Gil's FNTCOL16 files) and the four milestones are
   decided ("Decisions of 2 November 2026").
-- Finish the milestone-2 surround: MS-DOS boot / CLS / prompt calls on the card (EDIT and milestones
-  3-4, and the CR35 bank path, are in [`docs/cleanroom/milestone-calls.md`](cleanroom/milestone-calls.md)).
 - Apply the independent leak-review returns recorded in [`docs/cleanroom/README.md`](cleanroom/README.md),
   then re-review the changed files before exporting the clean allowlist (#145).
