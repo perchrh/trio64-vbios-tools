@@ -18,7 +18,7 @@ internal implementation order. OBS-EDIT, OBS-M3, OBS-M4-320 and OBS-M4-640 mean 
 runs of 2 November 2026 (inputs and counts only). The logger omitted AH=02h, 03h, 08h, 09h, 0Ah,
 0Ch, 0Dh, 0Eh and 13h; it does not see direct port writes unless `/P` or `/W` is used as noted.
 
-Owner policy for 100h and AH=0Fh after 101h:
+Owner policy for 100h, and for AH=0Fh after 101h (AL = 40h):
 [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md).
 
 ### Milestone 2: MS-DOS 6.22 EDIT
@@ -70,7 +70,7 @@ No VBE INT 10h call was recorded. Logger limits prevent treating this as exhaust
 | AX=4F00h | ES:DI=256-byte buffer | 3 | VBE information block; AX=004Fh | OBS-M4-640; VBE 1.2 6.1/6.2 |
 | AX=4F01h | CX=0100h then 0101h | 2 each | mode info; AX=004Fh; see Q100 for 100h support bit | OBS-M4-640; VBE 1.2; decisions Q100 |
 | AX=4F02h | BX=0101h | 1 | set 101h banked, memory cleared (bit 15 clear); AX=004Fh | OBS-M4-640; VBE 1.2 |
-| AH=0Fh | | 1 | after 101h; AL policy is Q0F (no private 69h) | OBS-M4-640; decisions Q0F |
+| AH=0Fh | | 1 | after 101h; AL = 40h (this ROM's number for banked 101h) | OBS-M4-640; VBE 1.2 3; decisions Q0F |
 | AH=00h | AL=03h | 2 | back to text | OBS-M4-640 |
 | AH=12h BL=34h | AL=00h | 1 | cursor emulation on | OBS-M4-640 |
 
@@ -81,7 +81,7 @@ What follows for the clean ROM:
   The program banks through CR35 from protected mode (program observation; details in The run). After
   4F02h 101h the clean ROM must leave CR6A=00h, CR51 bits 3-2=0, and a CR31 mapping where bits 0 and 3
   select 64 KB pages (spec C). 4F01h window fields and WinFuncPtr must still be truthful.
-- **AH=0Fh after 101h:** project restorable extended-mode number; not S3 `69h` (Q0F).
+- **AH=0Fh after 101h:** AL = 40h. AH=00h with AL = 40h sets banked 101h again (Q0F).
 - No BIOS palette call was logged; absence of a port trace does not prove direct DAC writes.
 
 ### Milestone 2 boot policy (no shell surround)
