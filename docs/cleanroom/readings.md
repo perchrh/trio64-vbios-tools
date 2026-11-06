@@ -1,49 +1,64 @@
-# Recommended readings for the clean room
+# Ranked information sources for the clean room
 
-What the clean side reads, in order of authority. A source counts only for its own subject.
-A later guide does not add a requirement the standard does not have. Recorded 6 November 2026.
-The process is in [`docs/clean-room.md`](../clean-room.md). The files kept in this repository
-are catalogued in [`standards/README.md`](../../standards/README.md) and
-[`datasheets/`](../../datasheets/).
+What the clean side may rely on, in order of authority, for a Trio64 ROM and milestones 1-4
+on the DSP-3364P. Recorded 6 November 2026. The process is in
+[`docs/clean-room.md`](../clean-room.md). Copies kept in this repository are catalogued in
+[`standards/README.md`](../../standards/README.md) and [`datasheets/`](../../datasheets/).
+
+A source counts only for its own subject. When two sources disagree, the one that owns the
+subject wins. A guide does not add a requirement the standard does not have.
 
 Among the VGA behaviour guides, Ralf Brown's Interrupt List outranks Ferraro's book (owner,
 6 November 2026). Both outrank VGADOC. None of those three outranks the S3 data book, the PCI
 specification, a VESA standard, the card's DRAM data sheet, or the IBM BIOS technical reference.
 
-## Standards and data books
+## 1. Standards and data books
 
-| Order | Read | For |
+Cite these first.
+
+| Order | Source | Authority for |
 | --- | --- | --- |
 | 1 | S3 Trio32/Trio64 data book, March 1995, in [`datasheets/`](../../datasheets/) | The chip: wake-up, unlock, PCI configuration, memory, clocks, registers |
-| 2 | PCI Local Bus Specification 2.3, section 6.3, [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) | The option ROM image. Extract: [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) |
+| 2 | PCI Local Bus Specification 2.3, section 6.3, [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf). Extract: [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | The option ROM image: header, PCIR, initialisation entry, AX = bus/device/function, checksum |
 | 3 | The DRAM data sheet of the parts on the card. V53C16256H for the DSP-3364P is in [`datasheets/`](../../datasheets/) | Power-up and refresh, and how high the memory clock may go on that card. The chip book still sets the chip's own maximum |
-| 4 | VBE 1.2, VS911022, [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) | The VBE calls this ROM reports. Milestone 4. A later VBE does not add requirements |
+| 4 | VBE 1.2, VS911022, [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) | The VBE calls this ROM reports. Milestone 4 (4F00h, 4F01h, 4F02h, the window). A later VBE does not add requirements |
 | 5 | VESA DMT 1.0 Rev. 10, [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf). DMT 1.13 is a check only | 640x480 at 60 Hz, and later DMT modes |
 | 6 | IBM "Personal System/2 and Personal Computer BIOS Interface Technical Reference", April 1987 | INT 10h and the BIOS data area, where that book states them |
 
-VESA DPMS 1.0 (August 1993) is not in hand. It would sit here for the sync states of 4F10h. Until then, the lower DPMS notes below are only a stand-in.
+VESA DPMS 1.0 (August 1993) is not in hand. When it is, it sits in this group for the sync states of 4F10h. Until then the DPMS notes in section 3 are only a stand-in.
 
-## Guides
+## 2. Guides to those standards
 
-| Order | Read | Sits under |
+Use these when the standard is silent or hard to apply.
+
+| Order | Source | Sits under |
 | --- | --- | --- |
-| 7 | Ralf Brown's Interrupt List | INT 10h and the BIOS data area. The first guide to consult |
+| 7 | Ralf Brown's Interrupt List | The first guide for INT 10h and the BIOS data area |
 | 8 | Ferraro, "Programmer's Guide to the EGA, VGA, and Super VGA Cards", 3rd edition | The same VGA behaviour, where the Interrupt List is silent. Table 9.23 documents the bytes `IBM` at `C000:001E` |
 | 9 | VGADOC 4b, the nine files in [`standards/thoegersen/`](../../standards/thoegersen/) | VBE, the VGA registers, and the S3 book. It has errors; the standard wins. `VESA.TXT` records 4F10h as 00h On, 01h Standby, 02h Suspend, 04h Off |
 | 10 | VBE 1.0 (VS891001) and Brad Haakenson, "Examining the VESA VBE 2.0 Specification" (July 1995) | How VBE 1.2 and 2.0 relate. They do not make this ROM a VBE 2.0 BIOS |
 
-## Secondary notes
+## 3. Secondary explanations
 
-| Order | Read | Good for |
+Useful, and not a specification.
+
+| Order | Source | What it is good for |
 | --- | --- | --- |
-| 11 | X11 DPMS client, 1996 (`dpms.h`, `dpmsconst.h`, `dpmsproto.h`, `DPMS.c`). What it states: [`docs/clean-room.md`](../clean-room.md) "The X11 project" | Level names: On 0, Standby 1, Suspend 2, Off 3. Off is 04h in 4F10h. No sync-line behaviour |
-| 12 | DPMS explanations, not the 1993 standard. The charter.net page, and the link collection at [VESA Display Power Management Signaling](https://grokipedia.com/page/VESA_Display_Power_Management_Signaling) | Both restate the same sync map: On both active, Standby horizontal inactive and vertical pulsed, Suspend horizontal pulsed and vertical inactive, Off both inactive. The collection cites the X.Org DPMS extension for that table. It is a finding aid (X.Org extension, VBE 2.0, VBE/PM, DPM, Energy Star), not a specification to implement from |
-| 13 | Toby Opferman, "How To Use Super VGA (VESA 1.x Non-Linear)" | How a program calls 4F02h and 4F05h |
+| 11 | X11 DPMS client, 1996 (`dpms.h`, `dpmsconst.h`, `dpmsproto.h`, `DPMS.c`). What it states: [`docs/clean-room.md`](../clean-room.md) "The X11 project" | Level names only: version 1.2, On 0, Standby 1, Suspend 2, Off 3, and the timeout order. Off is 04h in 4F10h. No sync-line behaviour |
+| 12 | DPMS explanations, not the 1993 standard. The charter.net page, and the link collection at [VESA Display Power Management Signaling](https://grokipedia.com/page/VESA_Display_Power_Management_Signaling) | The sync map: On both active, Standby horizontal inactive and vertical pulsed, Suspend horizontal pulsed and vertical inactive, Off both inactive. The collection cites the X.Org DPMS extension for that table. It is a finding aid, not a text to implement from |
+| 13 | Toby Opferman, "How To Use Super VGA (VESA 1.x Non-Linear)" | How a program calls 4F02h and 4F05h. An application note, below VBE 1.2 |
 
-## Not an input to milestones 1-4
+## 4. Authoritative in their own subject, not for milestones 1-4
 
-GTF 1.1, E-DDC 1.2, E-EDID Release A Revision 2, CVT 1.2, Joe Miseli's 2007 Xorg EDID talk, VBE/SCI 1.0, and VBE/AF 0.7. They stay for later timings, DDC, or EDID. VBE/SCI and VBE/AF are not video BIOS functions of this ROM.
+GTF 1.1, E-DDC 1.2, E-EDID Release A Revision 2, CVT 1.2, Joe Miseli's 2007 Xorg EDID talk, VBE/SCI 1.0, and VBE/AF 0.7. Keep them for later timings, DDC, or EDID. VBE/SCI and VBE/AF are not functions of this ROM. CVT is not a timing this ROM uses.
 
-Gil's FNTCOL16 files ([`rompatch/fonts/`](../../rompatch/fonts/)) are the glyph bits, with his notice. They do not say how a mode set loads a font.
+## 5. Not a behaviour source
 
-For milestone 1, read rows 1, 2, 3, 6, then 7 and 8. VBE and DMT join at milestone 4.
+- Gil's FNTCOL16 files ([`rompatch/fonts/`](../../rompatch/fonts/)) are the glyph bits, with his notice. They do not say how a mode set loads a font.
+- A reference BIOS image, an oracle, or a Phoenix observation checks a result. It is not a source to cite.
+
+## How to use the order
+
+Milestone 1 reads rows 1, 2, 3 and 6, then 7 and 8. VBE and DMT are not required for POST text.
+
+Milestone 4 inserts rows 4 and 5 ahead of the guides, for the VBE calls and for 640x480 at 60 Hz only.
