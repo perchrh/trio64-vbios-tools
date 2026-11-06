@@ -84,6 +84,11 @@ gives the connector pins, and Joe Miseli's Xorg talk of 2007 the history of EDID
 Standard Release A (2003, https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
 replaces DPMS 1.0 and keeps only On and Off; for Standby and Suspend, which 4F10h sets, the X Window
 System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands in for DPMS 1.0.
+A link collection for that subject, not itself a standard, is
+https://grokipedia.com/page/VESA_Display_Power_Management_Signaling . Its sync table cites the
+X.Org extension: On both active, Standby horizontal inactive and vertical pulsed, Suspend horizontal
+pulsed and vertical inactive, Off both inactive. The reading order is
+[`docs/cleanroom/readings.md`](cleanroom/readings.md).
 
 ### The X11 project
 

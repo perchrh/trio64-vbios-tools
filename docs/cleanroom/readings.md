@@ -37,7 +37,7 @@ VESA DPMS 1.0 (August 1993) is not in hand. It would sit here for the sync state
 | Order | Read | Good for |
 | --- | --- | --- |
 | 11 | X11 DPMS client, 1996 (`dpms.h`, `dpmsconst.h`, `dpmsproto.h`, `DPMS.c`). What it states: [`docs/clean-room.md`](../clean-room.md) "The X11 project" | Level names: On 0, Standby 1, Suspend 2, Off 3. Off is 04h in 4F10h. No sync-line behaviour |
-| 12 | The charter.net DPMS explanation | Sync map only, and it is not DPMS 1.0: Normal both on, Standby horizontal off and vertical on, Suspend horizontal on and vertical off, Off both off |
+| 12 | DPMS explanations, not the 1993 standard. The charter.net page, and the link collection at [VESA Display Power Management Signaling](https://grokipedia.com/page/VESA_Display_Power_Management_Signaling) | Both restate the same sync map: On both active, Standby horizontal inactive and vertical pulsed, Suspend horizontal pulsed and vertical inactive, Off both inactive. The collection cites the X.Org DPMS extension for that table. It is a finding aid (X.Org extension, VBE 2.0, VBE/PM, DPM, Energy Star), not a specification to implement from |
 | 13 | Toby Opferman, "How To Use Super VGA (VESA 1.x Non-Linear)" | How a program calls 4F02h and 4F05h |
 
 ## Not an input to milestones 1-4
