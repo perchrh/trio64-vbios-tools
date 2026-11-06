@@ -48,6 +48,10 @@ separate session and the similarity check reduce that risk; they do not remove i
 
 ## Public documents for the clean side
 
+The reading order, and which guide outranks which, is
+[`docs/cleanroom/readings.md`](cleanroom/readings.md). Ralf Brown's Interrupt List outranks
+Ferraro's book; both outrank VGADOC (6 November 2026).
+
 The clean side may read the IBM VGA references, the Trio64 data book, and the parts of the VESA
 standards that one of our BIOSes implements (README "VESA standards"): VBE 2.0 and VBE 1.2, VBE/DDC
 1.0 (4F15) with the DDC1 and DDC2B signalling of DDC 1.0 to 3, VBE/PM 1.0 (4F10) with DPMS 1.0, DMT

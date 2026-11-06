@@ -1,5 +1,9 @@
 # Third-party reference texts
 
+The order in which the clean room reads these, and the books that are not stored here, is
+[`docs/cleanroom/readings.md`](../docs/cleanroom/readings.md). This folder is the catalogue of
+the copies. VGADOC sits under the VESA standards and under Ralf Brown's Interrupt List.
+
 ## thoegersen/
 
 Nine files from VGADOC 4b by Finn Thoegersen (1991-95), copied unmodified (CRLF line endings, kept
