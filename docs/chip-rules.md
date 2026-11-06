@@ -173,8 +173,8 @@ datasheet at hand for them, README "Missing documents").
 
 | Chip | BIOSes examined | 4F14h |
 | --- | --- | --- |
-| T64 | Phoenix 1.4-04 and 1.5-07, Number Nine 2.03.10, Diamond Stealth 64 DRAM 2.09, Hercules Graphite Terminator D2g, ELSA Winner 1000 Trio 1.02.00 | none: BL=00h returns AX = 4F00h (not supported) |
-| V+ | S3 1.03-08, Phoenix 1.02-02, Octek Mirage 64 (Phoenix 1.01-05), Diamond Stealth64 Video 1.03 | none |
+| T64 | Phoenix 1.4-04 and 1.5-07, Number Nine 2.03.10, Diamond Stealth 64 DRAM 2.09, ELSA Winner 1000 Trio 1.02.00 | none: BL=00h returns AX = 4F00h (not supported) |
+| V+ | S3 1.03-08, Phoenix 1.02-02, Octek Mirage 64 (Phoenix 1.01-05), Diamond Stealth64 Video 1.03, Hercules Graphite Terminator D2g (S3 1.03-08 code, OEM string "S3 Incorporated. Trio64V+") | none |
 | UV+ | S3 1.00-06 | none |
 | V2 | S3 1.01.04 (VBE 1.2), ELSA Winner 1000/T2D 6.01.00 | none |
 | V2 | S3 2.04.07 (the base of this ROM) and 2.04.11 (the card's stock BIOS) | BL=00h, 01h, 02h as below, the same results in both |

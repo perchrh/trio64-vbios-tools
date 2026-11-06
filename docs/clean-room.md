@@ -113,7 +113,7 @@ What those files state:
 - [`docs/bios-rules.md`](bios-rules.md): 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
   area, the published tables) from public sources, with the open questions still to settle in the
   emulator: the start of item 1 below.
-- [`docs/chip-rules.md`](chip-rules.md): 92 rules from the data books (clock limits, memory timing, register
+- [`docs/chip-rules.md`](chip-rules.md): 70 rules from the data books (clock limits, memory timing, register
   meanings), each with its source.
 - S3TEST and S3COMPAT: checks against the IBM VGA tables, the VBE 2.0 specification, VESA DMT and
   the data book, written to the [AGENTS.md](../AGENTS.md) rule that expected values come from independent sources.
