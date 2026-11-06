@@ -52,7 +52,11 @@ Useful, and not a specification.
 
 ## 4. Authoritative in their own subject, not for milestones 1-4
 
-GTF 1.1, E-DDC 1.2, E-EDID Release A Revision 2, CVT 1.2, Joe Miseli's 2007 Xorg EDID talk, VBE/SCI 1.0, and VBE/AF 0.7. Keep them for later timings, DDC, or EDID. VBE/SCI and VBE/AF are not functions of this ROM. CVT is not a timing this ROM uses.
+GTF 1.1, E-DDC 1.2, E-EDID Release A Revision 2, Joe Miseli's 2007 Xorg EDID talk, VBE/SCI 1.0, and VBE/AF 0.7. Keep them for later timings, DDC, or EDID. VBE/SCI and VBE/AF are not functions of this ROM.
+
+CVT 1.2 (copyright 2003-2013; the file checked 6 November 2026) is not a source for a 1995-1999 VGA BIOS. It defines timings from 2003 onward. It does not contain the IBM VGA timings or a video BIOS. The one occurrence of "VGA" in it is the name "quarter-VGA" for 320x240. A second copy of the same PDF adds nothing.
+
+MCCS 2.2a (VESA Monitor Control Command Set, 13 January 2011, copyright 2006-2011) is not a source for that BIOS either. It is VCP codes a monitor accepts over DDC/CI. It has no VGA mode set and no option ROM.
 
 ## 5. Not a behaviour source
 
