@@ -58,6 +58,8 @@ CVT 1.2 (copyright 2003-2013; the file checked 6 November 2026) is not a source 
 
 MCCS 2.2a (VESA Monitor Control Command Set, 13 January 2011, copyright 2006-2011) is not a source for that BIOS either. It is VCP codes a monitor accepts over DDC/CI. It has no VGA mode set and no option ROM.
 
+A monitor made after 2003, including one from 2013, does not change this when it is plugged into the VGA connector. It locks to the timings the card already sends (IBM and DMT). It does not ask the BIOS to compute CVT timings. MCCS is only for optional controls such as brightness, and the picture does not depend on it.
+
 ## 5. Not a behaviour source
 
 - Gil's FNTCOL16 files ([`rompatch/fonts/`](../../rompatch/fonts/)) are the glyph bits, with his notice. They do not say how a mode set loads a font.
