@@ -63,7 +63,7 @@ Written 1 November 2026.
 | CR58 | bit 4 = 0 (banked), size bits as POST | 03h (4 MB window size with 2 MB, bit 4 = 0) | 10h (the booster: linear addressing on with a 64 KB window at A0000h) | the booster is optional later ([`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)); Phoenix's size 11b exceeds 2 MB (VGADOC: must not) |
 | SR15 after POST | bit 0 = 0 (MODE-121) | 03h: bit 0 (MCLK load) left 1 after POST, 02h after a VESA mode set | the same | T64-PLL-1 says bit 0 must be cleared after loading |
 | DCLK load path | immediate (SR15 bit 5 1 then 0) | delayed: SR15 written 00h then 02h (bit 1) after SR12/SR13 | the same | both allowed (T32/64 9.2); the spec prefers the immediate one |
-| FIFO M | MODE-136 | Phoenix's table (31 in most 8 bpp modes, 19 in 113h/114h, 26 in 107h, ...) | MODE-136 at 2 and 4 MB; at 1 MB Phoenix's 1 MB table lowered by the 112-byte formula | p3 does not know the 32-bit bus; Phoenix has a separate 1 MB table |
+| FIFO M | 101h: M = 31 (MODE-136). Other modes are not given an M by that row | Phoenix's table (31 in most 8 bpp modes, 19 in 113h/114h, 26 in 107h, ...) | old formula at 2 and 4 MB; at 1 MB Phoenix's 1 MB table lowered by the 112-byte formula | 101h's M = 31 matches Phoenix's usual 8 bpp value on 2 MB. The old formula is not the clean rule |
 
 ## Write order observed (both ROMs, every packed mode)
 
@@ -77,9 +77,10 @@ SR12, SR13 and SR15 write happens with SR01 bit 5 = 1, as MODE-138 and MODE-140 
 - **1 MB, both ROMs:** 4F01 gives ModeAttributes 001Ah (bit 0 = 0, not supported) for 107h, 112h, 115h,
   116h and 117h, but 4F02 still sets them (AX = 004Fh). MODE-101 refuses them (014Fh). p3 additionally
   refuses 106h (removed) at every size.
-- **1 MB FIFO M (CR54 bits 7-3), derived (D = 56) against p3:** 100h 16 / 31, 101h 16 / 21, 103h 8 / 14,
+- **1 MB FIFO M (CR54 bits 7-3), old formula (D = 56) against p3:** 100h 16 / 31, 101h 16 / 21, 103h 8 / 14,
   105h 4 / 6, 110h-111h 6 / 6, 113h-114h 2 / 3 (at 54.9 MHz). p3 is above the derived value in 100h,
-  101h, 103h, 105h and 113h/114h; no 1 MB card has been run (MQ-11).
+  101h, 103h, 105h and 113h/114h. Those derived numbers are not MODE-136. For 101h, MODE-136 sets M = 31
+  at 59.96 MHz on 1 MB too, because the 30-byte drain fits the 64-byte FIFO. No 1 MB card has been run.
 - **4 MB:** p3 gives the same registers as with 2 MB (only the 4F01 page counts differ). The 1.5-07 run
   at 4 MB covered 100h-10Eh and agreed with its 2 MB values there.
 
@@ -101,7 +102,7 @@ and 112h, in both ROMs:
 
 ## Per mode: derived values against the two ROMs (2 MB, MCLK 54.89 MHz)
 
-"Derived" = the formulas of [`spec-b-modeset.md`](spec-b-modeset.md) (DMT or IBM timing, data book PLL procedure, MODE-136 M).
+"Derived" = the formulas of [`spec-b-modeset.md`](spec-b-modeset.md) (DMT or IBM timing, data book PLL procedure). CR54 in these tables is the old FIFO formula, kept as a comparison. MODE-136 fixes only mode 101h, at M = 31 (CR54 F8), which the 101h lines below already show.
 SR18 and CR58 show only the bit the spec fixes (bit 7, bit 4); the other bits are POST's. Rates are
 the emulator's (`Machine.frame()`); an interlaced mode shows its field rate.
 

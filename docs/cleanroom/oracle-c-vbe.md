@@ -88,13 +88,13 @@ Against the specification:
 | 4F03h in 03h, 12h, 13h | 004Fh, BX = 0003h, 0012h, 0013h | VBE-48 | yes |
 | 4F02h 0003h, 0013h | 004Fh, 0049h = 03h/13h | VBE-42 | yes |
 | 4F02h 0083h, 8003h, 8013h | 004Fh, mode set, text kept, 0087h bit 7 set | VBE-42 (8003h yes), open question 5 (0083h) | 8003h yes; 0083h: the reference applies AL bit 7 |
-| 4F02h 0101h | 004Fh, 0049h = 69h, 0087h = 60h, AH=0Fh 5069h, 4F03h 0101h | VBE-45, VBE-48, S3M-1 | yes (the 7-bit number is the reference's) |
-| 4F02h 8101h | 004Fh, 0087h = E0h, AH=0Fh 50E9h, 4F03h 0101h (no bit 15) | VBE-43, VBE-48 | yes |
+| 4F02h 0101h | 004Fh, 0049h = 69h, 0087h = 60h, AH=0Fh 5069h, 4F03h 0101h | VBE-45, VBE-48 | differs on the mode number: the reference returns 69h; VBE-45 requires 40h. 4F03h 0101h agrees |
+| 4F02h 8101h | 004Fh, 0087h = E0h, AH=0Fh 50E9h, 4F03h 0101h (no bit 15) | VBE-43, VBE-45, VBE-48 | memory and 4F03h agree. AH=0Fh is 50E9h in the reference (69h with bit 7) and 50C0h in the spec (40h with bit 7) |
 | 4F02h 017Fh, 4101h, 0181h | 014Fh, 4F03h unchanged | VBE-41 | yes |
 | 4F02h 006Ah | 004Fh, 4F03h 0102h | VBE-42, S3M-4 | yes |
 | 4F02h 0106h | 004Fh (interlaced in 1.5-07) | not listed: 014Fh | differs (list) |
 | 4F02h 0107h, 0112h, 0115h, 0116h, 0118h, 0119h with 1 MB | 004Fh: the reference sets them although 4F01h marks them unsupported | VBE-12: 014Fh, no change | DIFFERS: the reference does not check the memory in 4F02h (emu t_errors would flag it) |
-| BIOS data after 4F02h 101h | 0049h 69h, 004Ah 0050h, 004Ch 1000h, 004Eh 0000h, 0062h 00h, 0084h 1Dh, 0085h 0010h, 0087h 60h | VBE-45 | yes (004Ch is not specified) |
+| BIOS data after 4F02h 101h | 0049h 69h, 004Ah 0050h, 004Ch 1000h, 004Eh 0000h, 0062h 00h, 0084h 1Dh, 0085h 0010h, 0087h 60h | VBE-45 | differs: 0049h is 69h in the reference and 40h in VBE-45. The other fields agree (004Ch is not specified) |
 | INT 43h after 101h | C000:6E30h (8x16 font) | VBE-45 | yes |
 | DAC after 101h, 111h | the mode 13h default (entry 1 = 00 00 2A, 16 = 0, 255 = 0) | VBE-44 | yes |
 | DAC after 102h | the EGA palette (entry 7 = 2A 2A 2A, 20 = 2A 15 00) | VBE-44 | yes |

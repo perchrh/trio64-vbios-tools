@@ -116,7 +116,7 @@ by the data book procedure and the rates it gives.
 | --- | --- | --- | --- | --- |
 | MODE-101 | The packed modes offered are 100h, 101h, 103h, 105h, 107h and 110h-117h, each with the resolution, colours and memory layout of the mode table. A mode is offered only when its memory need (pitch x YRes, the "Memory" column) fits the video memory found at POST (CR36 bits 7-5: 1, 2 or 4 MB, T64-MEM-5): with 1 MB, 107h, 112h, 115h, 116h and 117h are not offered. A mode not offered gets AX = 014Fh from 4F02 (nothing is changed) and mode attribute bit 0 = 0 from 4F01 | VBE 1.2 (4F01 ModeAttributes bit 0 "mode supported in hardware", 4F02 status 014Fh); T64-MEM-5 | must | emu t_errors (1 MB: 4F02 of 107h, 112h, 115h-117h); S3COMPAT 'VBE VESA nnnn' INFO for unsupported modes; S3TEST 'VBE Mode 0107 (over 1 MB) SKIP' |
 | MODE-102 | Not offered: 106h (1280x1024 in 16 planar colours needs 108 MHz in a 4-bit VGA-style mode, which has no clock doubling; colour mode 0 allows 80 MHz, CLK-1) and 10Dh-10Fh (320x200 at 70 Hz needs a 12.59 MHz pixel clock, below the lowest PLL output, 135 MHz / 8 = 16.9 MHz, PLL-1 with R at most 3; whether SR01 bit 3 can halve the dot clock in an enhanced mode is MQ-9). No mode is offered interlaced, and no mode whose timing exceeds the colour mode's clock limit (MODE-120): 1024x768 in 16M colours (65 MHz > 50 MHz in mode 13) and 1280x1024 in 32K/64K colours (108 MHz > 80 MHz in modes 9/10) do not exist on the Trio64 at 60 Hz | T32/64 table 8-1 (CLK-1), 9.1 (PLL-1); [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) scope (60 Hz or more, never interlaced) | must | emu t_errors; S3COMPAT 'VBE VESA nnnn' (WARN 10 interlace, WARN 02 DCLK above the maximum) |
-| MODE-103 | The installed memory decides; the board's memory type (fast page or EDO, CR36 bits 3-2) changes no value of this part except through the MCLK in the FIFO formula (MODE-136) | T64-MEM-3, T64-MEM-5 | note | not checked |
+| MODE-103 | The installed memory decides; the board's memory type (fast page or EDO, CR36 bits 3-2) changes no value of this part except through the MCLK, which lowers M in MODE-136 when the FIFO wait no longer fits | T64-MEM-3, T64-MEM-5 | note | not checked |
 
 ## Timing
 
@@ -267,10 +267,12 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
    DCLK in an enhanced mode?
 10. **MQ-10** Display start units for 4F07 (VBE part): does CR0C/CR0D/CR69 count 4-byte or 8-byte units in
     the enhanced modes with 2 MB (64-bit bus) and with 1 MB?
-11. **MQ-11** The 1 MB FIFO (MODE-136): is the cost per access the same 6 MCLKs with the 32-bit bus? No
-    1 MB card has been run.
-12. **MQ-12** At 60 MHz the DSP-3364P showed white dots in windowed video with the 5-MCLK model (#82);
-    the 6-MCLK model of MODE-136 is not yet confirmed at 60 MHz.
+11. **MQ-11** Answered for mode 101h by MODE-136. The 1 MB FIFO is 64 bytes, and M = 31 drains about
+    30 bytes at 59.96 MHz, which fits. No 1 MB card has been run, so that fit is the data book's
+    arithmetic only.
+12. **MQ-12** The 5-MCLK and 6-MCLK models are not the rule for 101h. At 60 MHz the DSP-3364P showed
+    white dots in windowed video with the 5-MCLK model (#82). MODE-136 uses M = 31 instead. Whether
+    101h streaks at that M on the card is still the acceptance check.
 13. **MQ-13** CR67 bit 0 (VCLK phase) in clock-doubled mode 8: the data book's example (CR67 = 00h) is a
     mode 0 setting; is bit 0 = 0 right for mode 8 too?
 14. **MQ-14** SR01 bit 5: on the Trio64V2 the screen off takes effect up to 3 HSYNCs later (V2-REG-6);
