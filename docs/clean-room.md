@@ -81,6 +81,24 @@ Standard Release A (2003, https://web.archive.org/web/20100628042359/http://www.
 replaces DPMS 1.0 and keeps only On and Off; for Standby and Suspend, which 4F10h sets, the X Window
 System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands in for DPMS 1.0.
 
+### The X11 project
+
+The X.Org X11 project is a source of information about DPMS and about the other display material it
+publishes (the DPMS extension document above, and the EDID and DDC notes already cited from the 2007
+Xorg conference). Its DPMS client, read 6 November 2026, is Digital Equipment Corporation, 1996, under
+the notice in those files: `dpms.h`, `dpmsconst.h`, `dpmsproto.h` and `DPMS.c`. The facts are used;
+the code is not copied into a ROM.
+
+What those files state:
+
+- The extension name is "DPMS" and the version is 1.2.
+- The levels are On 0, Standby 1, Suspend 2 and Off 3 (`dpmsconst.h`). `DPMS.c` rejects any other level.
+- Timeouts are ordered: if off is not 0 it is at least suspend, and if suspend is not 0 it is at least
+  standby. Zero means that timeout is unused.
+- They do not say which sync signals Standby, Suspend or Off turn off. VBE 4F10h, as VGADOC
+  [`standards/thoegersen/VESA.TXT`](../standards/thoegersen/VESA.TXT) records it, uses 00h On, 01h
+  Standby, 02h Suspend and 04h Off, so Off is not the same number as in the X11 client.
+
 ## What we have
 
 - [`docs/bios-rules.md`](bios-rules.md): 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
