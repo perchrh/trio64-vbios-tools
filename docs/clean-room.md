@@ -48,6 +48,10 @@ separate session and the similarity check reduce that risk; they do not remove i
 
 ## Public documents for the clean side
 
+The reading order, and which guide outranks which, is
+[`docs/cleanroom/readings.md`](cleanroom/readings.md). Ralf Brown's Interrupt List outranks
+Ferraro's book; both outrank VGADOC (6 November 2026).
+
 The clean side may read the IBM VGA references, the Trio64 data book, and the parts of the VESA
 standards that one of our BIOSes implements (README "VESA standards"): VBE 2.0 and VBE 1.2, VBE/DDC
 1.0 (4F15) with the DDC1 and DDC2B signalling of DDC 1.0 to 3, VBE/PM 1.0 (4F10) with DPMS 1.0, DMT
@@ -80,6 +84,29 @@ gives the connector pins, and Joe Miseli's Xorg talk of 2007 the history of EDID
 Standard Release A (2003, https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht)
 replaces DPMS 1.0 and keeps only On and Off; for Standby and Suspend, which 4F10h sets, the X Window
 System's DPMS extension (https://xorg.freedesktop.org/docs/Xext/DPMS.pdf) stands in for DPMS 1.0.
+A link collection for that subject, not itself a standard, is
+https://grokipedia.com/page/VESA_Display_Power_Management_Signaling . Its sync table cites the
+X.Org extension: On both active, Standby horizontal inactive and vertical pulsed, Suspend horizontal
+pulsed and vertical inactive, Off both inactive. The reading order is
+[`docs/cleanroom/readings.md`](cleanroom/readings.md).
+
+### The X11 project
+
+The X.Org X11 project is a source of information about DPMS and about the other display material it
+publishes (the DPMS extension document above, and the EDID and DDC notes already cited from the 2007
+Xorg conference). Its DPMS client, read 6 November 2026, is Digital Equipment Corporation, 1996, under
+the notice in those files: `dpms.h`, `dpmsconst.h`, `dpmsproto.h` and `DPMS.c`. The facts are used;
+the code is not copied into a ROM.
+
+What those files state:
+
+- The extension name is "DPMS" and the version is 1.2.
+- The levels are On 0, Standby 1, Suspend 2 and Off 3 (`dpmsconst.h`). `DPMS.c` rejects any other level.
+- Timeouts are ordered: if off is not 0 it is at least suspend, and if suspend is not 0 it is at least
+  standby. Zero means that timeout is unused.
+- They do not say which sync signals Standby, Suspend or Off turn off. VBE 4F10h, as VGADOC
+  [`standards/thoegersen/VESA.TXT`](../standards/thoegersen/VESA.TXT) records it, uses 00h On, 01h
+  Standby, 02h Suspend and 04h Off, so Off is not the same number as in the X11 client.
 
 ## What we have
 

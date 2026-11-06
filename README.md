@@ -826,7 +826,9 @@ names in brackets, as of 2 November 2026); the links are public copies.
   [sumdpm.mht](https://web.archive.org/web/20100628042359/http://www.vesa.org/summary/sumdpm.mht),
   its front matter and contents): it replaces DPMS 1.0 of 20 August 1993 and defines only the On and
   Off modes, signalled through the syncs. The Standby and Suspend states that 4F10h also sets come from
-  DPMS 1.0, for which the X Window System's DPMS extension stands in.
+  DPMS 1.0, for which the X Window System's DPMS extension stands in. The X11 project is a source for
+  that extension and for the other display material it publishes; what its 1996 DPMS client states is
+  in [docs/clean-room.md](docs/clean-room.md) ("The X11 project").
 - DDC on the VGA connector: [hardwarebook.info, "VGA (VESA DDC)"](https://www.hardwarebook.info/VGA_(VESA_DDC)),
   the pins (12 SDA, 15 SCL, 9 +5 V) for the DDC2 work on the Trio64 board; and Joe Miseli (Sun
   Microsystems), [EDID, Display Technology and VESA](https://www.x.org/wiki/Events/XDC2007/Notes/Xorg_2007-EDID-JMiseli.pdf)

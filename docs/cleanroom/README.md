@@ -63,6 +63,7 @@ to implement from:
 
 | File | Side | What it is |
 | --- | --- | --- |
+| [`readings.md`](readings.md) | goes across with the specifications | the order of authority for what the clean side reads |
 | [`BRIEF.md`](BRIEF.md) | dirty | the rules the specification was written under |
 | [`LEAK-REVIEW.md`](LEAK-REVIEW.md) | dirty | how a file is reviewed before it crosses, and how the result is recorded |
 | [`spec-a-post.md`](spec-a-post.md) | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
