@@ -32,9 +32,16 @@ included, and needs no IRQ, I/O or memory resource of its own.
 
 ```
 make poc-rom                      -> build/roms/poc/HELLO64K.ROM (64 KB)
-make poc-rom OUT=HELLO.ROM VENDOR=0x8086 DEVICE=0x1229
-make poc-rom OUT=HELLO.ROM REPEATS=4 VENDOR=0x10EC DEVICE=0x8139   (128 KB)
+make poc-rom VENDOR=0x10B7 DEVICE=0x9055                  (3C905B-TX, 64 KB)
+make poc-rom OUT=HELLO.ROM POC_REPEATS=4 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
 ```
+
+The 3C905B-TX line above is the verified example: the card reports vendor
+10B7h, device 9055h (subsystem 9055h:10B7h, revision 24h, none of which the
+image uses), its 32-pin DIP socket decodes up to 128 KB, and the build writes
+the 32 KB image twice into the 64 KB part. The subsystem ID and the chip
+revision do not go into the image: a PCI 2.1 POST matches only the
+vendor/device IDs.
 
 NASM 3.02 assembles [hello.asm](../src/roms/poc/hello.asm) and
 [build.py](../src/roms/poc/build.py) pads the code with 00h to a 32 KB
@@ -49,7 +56,9 @@ usual 32-pin DIP sockets on network cards (3C905B, RTL8139D) decode up to
 **Build with the card's IDs.** A PCI 2.1 POST skips an image whose vendor
 and device IDs do not match the card's configuration space (section 6.3.2),
 so pass the card's real IDs with `VENDOR` and `DEVICE` (hex); build.py warns
-when they stay 0000h.
+when they stay 0000h. The IDs come from the card itself: `lspci -nn` on
+Linux, the Device Manager's hardware IDs on Windows, a PCI list utility in
+DOS, or the BIOS' own PCI device listing at POST.
 
 ## The image
 
