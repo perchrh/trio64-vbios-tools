@@ -101,7 +101,8 @@ build/S3REGS32.EXE: $(TOOLS_SRC)/s3regs/s3regs32.asm $(COMMON)/version.inc | bui
 #   make emu-test ROM=S3VPP1.BIN CHIP=765        our Trio64V+ ROM on the Trio64V+ model (CHIP: the chip of
 #                                                  the model, v2 by default; tests.py --chip); on the
 #                                                  Trio64V+, Trio64 and Trio32 the vram tests run with
-#                                                  1 MB too (cards sold with 1 MB, upgradable to 2 MB)
+#                                                  1 MB too (cards sold with 1 MB, upgradable to 2 MB);
+#                                                  the Trio64 and Trio32 never with 4 MB (no such card)
 # Uses the virtual environment .venv when there is one, otherwise python3 (override with PYTHON=...).
 PYTHON ?= $(if $(wildcard .venv/bin/python3),.venv/bin/python3,python3)
 # emu-test runs this many tests at a time (default: every CPU; JOBS=1 for one after the other)
@@ -120,7 +121,7 @@ ifdef VRAM
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM) $(EMUARGS)
 else
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) $(EMUARGS)
-ifneq ($(CHIP),732)
+ifeq ($(filter 732 764 764x 764p,$(CHIP)),)
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram $(EMUARGS)
 endif
 ifneq ($(filter 775 765 764 764x 764p 732,$(CHIP)),)

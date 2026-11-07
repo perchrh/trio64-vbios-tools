@@ -115,7 +115,7 @@ is for the Windows 9x desktop.
 | S3TEST.COM | Regression test for the ROM patches (signature, chip and its CR2F variant, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X or 86C764-P by CR2F, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) renames `runall.zip` to `runall-<part>.zip` from `chipid.out` when the DOS can rename to a long name. Windows 98 DOS can create a long name and cannot rename an existing file to one, so `/Z` changes nothing there; RUNALL uses REPORT | `CHIPID`, `CHIPID /Q` |
 | ROMVER.COM | Prints the video ROM version S3TEST's signature line reads, using the same scan (`src/tools/common/romver.inc`): "Version " in C000:0000-00FF, then at most 12 characters. `/Q` (`-q`) prints only that version | `ROMVER`, `ROMVER /Q` |
-| MCLK.COM | Finds a stable memory clock on the card. Prints the chip, the ROM version, the CR36 memory type and size, then each clock as it is tested. Steps of 0.5 MHz from the floor pair SR10=41h SR11=28h (50.114 MHz), or `/P` for finer steps (the next PLL pair at least 0.1 MHz higher), or `/I 52.5` to start higher. The cap is the datasheet MCLK maximum plus 25 percent. Before the first clock change it warns once (on stderr, with the range it will program) and continues only when Y is pressed; any other key ends the run without touching the PLL (exit 1). The "Recommended max" line names a clock the run tested and passed, at least 1 percent below the highest that passed (the highest such step), or "none" when no tested step is that low (run again with a lower `/I`). The POST clock is restored. Not part of RUNALL | `MCLK`, `MCLK /P`, `MCLK /I 52.5` |
+| MCLK.COM | Shows, sets or tests the memory clock. Without a switch it only reports, and changes nothing: the chip, the amount and type of video memory, the memory clock the BIOS programmed, and the range the datasheet gives for the chip, from the lowest PLL pair at or above 50 MHz (SR10=41h SR11=28h, 50.114 MHz; 50 MHz is the EDO clock of the Trio64V+ feature list, the data books give no minimum) to the datasheet maximum (MEM-1, V2-MEM-1; 60 MHz for the Trio64, not the 70 MHz board policy). `/S 57.5` sets the PLL pair at or below the request and leaves it, without a memory test, until the BIOS sets its own clock at the next boot; it refuses a request below the lowest pair or above the cap (the datasheet maximum plus 25 percent), and above the datasheet maximum it asks for Y first. `/T` tests steps of 0.5 MHz from the lowest pair up to the cap, `/T /P` finer steps (the next PLL pair at least 0.1 MHz higher), `/T /I 52.5` starts higher; it always asks for Y once before the first clock change (on stderr, with the range it will program), and any other key ends the run without touching the PLL (exit 1). The "Recommended max" line names a clock the run tested and passed, at least 1 percent below the highest that passed (the highest such step), followed by the `/S` command that sets it, or "none" when no tested step is that low (run again with a lower `/I`). After `/T` the clock found at the start is restored. Not part of RUNALL | `MCLK`, `MCLK /S 57.5`, `MCLK /T`, `MCLK /T /P`, `MCLK /T /I 52.5` |
 | REPORT.COM | Packs the RUNALL logs into one stored ZIP (method 0, no compression) and creates it as `runall-<part>.zip` (a slash in the part becomes a hyphen). If that create is refused, the name is `<part>.ZIP` (86C775.ZIP; 86C764-P gives 86C764.ZIP). No part: `RUNALL.ZIP` | `REPORT` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. `/P` is `/T` that also traces the program itself after each of its 4F02h calls (its port accesses, with those of the BIOS calls it makes), until 12288 new events, its next mode set or an instruction that would switch to protected mode; it shows how a program changes the bank or programs the DAC and CRTC through the ports, and the program runs much slower until the trace ends by itself. `/W` is `/M` with a window function hook: the WinFuncPtr a 4F01h call returns points to VGALOG, which logs the program's far calls through it (the first 64 as records, all counted) and jumps on to the BIOS's routine, so a log shows whether a program changes the bank with the window function, with INT 10h 4F05h or with its own port writes. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`, `VGALOG /P`, `VGALOG /W`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `src/tools/vgalog/vgalog.asm` |
@@ -257,7 +257,8 @@ S3COMPAT all run there.
 `--chip` (`775`, `765`, `767`, `764`, `764x`, `764p`, `732`; "Chip codes") makes the model that chip: its PCI device ID and
 revision, CR2D-CR2F (on the Trio64 CR2F 20h for `764x` and `764`, 00h for `764p`, T64-ID-2), the PCI subsystem ID (Trio64V2 only) and the width of the PLL post divider R (3
 bits on the Trio64V2 only) and the memory type strapped in CR36 bits 3-2 (EDO, 10b, on the Trio64
-and Trio32, fast page on the Trio64 with 4 MB; `--vram 4` is refused for the Trio32). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
+and Trio32; `--vram 4` is refused for the Trio32, whose maximum is 2 MB, and for the Trio64, of which no
+4 MB card was built). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
 system memory (UMA), which neither the tools nor the model know about, so only its register rules are
 judged. The tools find the chip themselves (`src/tools/common/chip.inc`) and judge the clocks by that chip's datasheet limits.
 With a ROM that is not our patched BIOS (no `2.04.07-pN` sign-on) the tests tagged `patch` (version,
@@ -578,9 +579,9 @@ upgraded from 1 to 2 MB, or from 2 to 4 MB where the board has the sockets, work
 Phoenix 1.5-07, the Trio64 ROM's base, does the same, but tries 4 MB only on a Trio64 strapped for fast
 page memory (CR36 bit 2), as the data book allows (docs/764-rom.md, "Memory"). The emulator
 answers with a fixed size (`--vram`): `make emu-test` runs the tests whose result depends on the size with
-2 and 4 MB (the Trio32 only with 2 MB, its maximum), and on every chip also with 1 MB, the smallest
-configuration. The Trio64 and Trio32 models are strapped EDO (CR36 bits 3-2 = 10b), the Trio64 with 4 MB fast
-page (11b).
+2 and 4 MB (the Trio32 only with 2 MB, its maximum; the Trio64 only with 2 MB too, because no Trio64 card
+was built with 4 MB, decided 7 November 2026), and on every chip also with 1 MB, the smallest
+configuration. The Trio64 and Trio32 models are strapped EDO (CR36 bits 3-2 = 10b).
 
 ## Continuous integration
 
@@ -600,7 +601,7 @@ that they all build, and the release zip (`make dist`). When `src/roms/**` chang
 as parallel jobs on the slowest and the fastest memory clock of each chip; each job builds the one image it
 tests (`make 775-rom MCLK=50` and so on). Each job tests its image with 2 MB of
 video memory, then runs the tests tagged `vram` (the ones whose result depends on the memory size) with
-4 MB and with 1 MB; the other tests do not run again at the other sizes:
+4 MB and with 1 MB (the Trio64 jobs with 1 MB only); the other tests do not run again at the other sizes:
 
 | Job | What it runs |
 | --- | --- |
@@ -611,9 +612,9 @@ video memory, then runs the tests tagged `vram` (the ones whose result depends o
 | Trio64V2 60 MHz: s3compat_full 4 MB | `775M60.BIN`: the longest test alone |
 | Trio64V+ 50 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `765M50.BIN`; `make 765-rom-test`, `make 765-ref-compare` |
 | Trio64V+ 60 MHz: 2, 4 and 1 MB | `765M60.BIN` |
-| Trio64 764X 55 MHz: 2, 4 and 1 MB, patcher, EGA/CGA | `764XM55.BIN`; `make 764-rom-test`, `make 764-ref-compare` |
-| Trio64 764X 70 MHz: 2, 4 and 1 MB | `764XM70.BIN` |
-| Trio64 764P 50 MHz and 60 MHz: 2, 4 and 1 MB | `764PM50.BIN`, `764PM60.BIN` (one job each) |
+| Trio64 764X 55 MHz: 2 and 1 MB, patcher, EGA/CGA | `764XM55.BIN`; `make 764-rom-test`, `make 764-ref-compare` |
+| Trio64 764X 70 MHz: 2 and 1 MB | `764XM70.BIN` |
+| Trio64 764P 50 MHz and 60 MHz: 2 and 1 MB | `764PM50.BIN`, `764PM60.BIN` (one job each) |
 | Stock ROM 775, 765, 764x (informational) | `make stock-test`: every tool and emulator test, the ones tagged `patch` too (tests.py `--stock`), on the stock reference ROM; failures are expected and do not fail the run; the logs are the artifact `stock-logs-<chip>` (14 days) |
 | build-and-test | passes when every row passed and every ROM built (the check name branch rules can require); the stock jobs are not part of it |
 

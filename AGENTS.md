@@ -208,8 +208,9 @@ review and a clean implementer who must not see BIOS images or BIOS source.
   fast page memory only and EDO stops at 2 MB (T64-MEM-3); the Trio32 takes at most 2 MB (T64-MEM-5). The BIOS sizes the memory at every
   POST, so there is no build option for it. `make emu-test ROM=...` runs every test with 2 MB and the
   ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=765`,
-  `CHIP=764` or `CHIP=732` also with 1 MB (the Trio32 never with 4 MB, its maximum is 2 MB; a 4 MB
-  Trio64 is fast page memory by its data book, and the model straps it so); a new test that reads the memory size or the VESA mode list gets the tag. Expected
+  `CHIP=764` or `CHIP=732` also with 1 MB (the Trio32 never with 4 MB, its maximum is 2 MB; the Trio64
+  never with 4 MB either: no Trio64 card was built with more than 2 MB, owner's decision 7 November
+  2026, so tests.py refuses `--vram 4` for both); a new test that reads the memory size or the VESA mode list gets the tag. Expected
   values follow the memory size, never a fixed 2 MB.
 - Test coverage goal: at least 80 % of the ROM's code is executed by the tests (`make coverage ROM=...`:
   every emulator test with coverage recording, then `emu/codemap.py`, which finds the code by recursive

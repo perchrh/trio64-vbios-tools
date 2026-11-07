@@ -17,7 +17,8 @@
 # trio64-tools-<VERSION>.zip with trio64/tools/ in it, no ROM). The tests run as parallel jobs, one
 # matrix row per chip and memory clock: the slowest and the fastest clock of each chip.
 # Each row tests its image with 2 MB, then runs the tests tagged `vram` (the ones whose result depends on
-# the memory size) with 4 MB and with 1 MB. On the Trio64V2 the longest
+# the memory size) with 4 MB and with 1 MB (the Trio64 rows with 1 MB only: no Trio64 card was built with
+# 4 MB). On the Trio64V2 the longest
 # test, s3compat_full, has rows of its own: 2 MB on the 50 MHz image, 4 MB on the 60 MHz one. Every job
 # builds NASM 3.02 from its release source (cached) and the tools with `make tools`. The first row of each
 # chip also runs the patcher tests, which build the default ROM (without MCLK) and check it against the
@@ -85,14 +86,14 @@ jobs:
              code: '765', first: true, runs: '2|;4|-t vram;1|-t vram'}
           - {chip: Trio64V+, part: '60 MHz: 2, 4 and 1 MB', model: '765', target: '765-rom', mclk: '60', code: '765',
              runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764X, part: '55 MHz: 2, 4 and 1 MB, patcher, EGA/CGA', model: '764x', target: '764x-rom', mclk: '55',
-             code: '764', first: true, runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764X, part: '70 MHz: 2, 4 and 1 MB', model: '764x', target: '764x-rom', mclk: '70', code: '764',
-             runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764P, part: '50 MHz: 2, 4 and 1 MB', model: '764p', target: '764p-rom', mclk: '50', code: '764',
-             runs: '2|;4|-t vram;1|-t vram'}
-          - {chip: Trio64 764P, part: '60 MHz: 2, 4 and 1 MB', model: '764p', target: '764p-rom', mclk: '60', code: '764',
-             runs: '2|;4|-t vram;1|-t vram'}
+          - {chip: Trio64 764X, part: '55 MHz: 2 and 1 MB, patcher, EGA/CGA', model: '764x', target: '764x-rom', mclk: '55',
+             code: '764', first: true, runs: '2|;1|-t vram'}
+          - {chip: Trio64 764X, part: '70 MHz: 2 and 1 MB', model: '764x', target: '764x-rom', mclk: '70', code: '764',
+             runs: '2|;1|-t vram'}
+          - {chip: Trio64 764P, part: '50 MHz: 2 and 1 MB', model: '764p', target: '764p-rom', mclk: '50', code: '764',
+             runs: '2|;1|-t vram'}
+          - {chip: Trio64 764P, part: '60 MHz: 2 and 1 MB', model: '764p', target: '764p-rom', mclk: '60', code: '764',
+             runs: '2|;1|-t vram'}
     steps:
       - uses: actions/checkout@v5
 
