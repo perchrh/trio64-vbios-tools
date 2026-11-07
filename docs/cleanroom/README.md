@@ -9,7 +9,7 @@ documents from [`spec-a-post.md`](spec-a-post.md); what remains for a second rea
 to implement from:
 - MODE-130's refresh count and POST-23's example are corrected since.
 - Decided by the owner on 2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), [`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"):
-  - the base: empty, a full new BIOS written from scratch, with the fonts of [`rompatch/fonts/`](../../rompatch/fonts/);
+  - the base: empty, a full new BIOS written from scratch, with the fonts of [`src/roms/fonts/`](../../src/roms/fonts/);
   - SeaVGABIOS kept as a comparison implementation;
   - the size budget: the whole 32 KB, about 9.7 KB of fonts, about 23 KB for code and tables;
   - release terms: the MIT licence;
@@ -92,7 +92,7 @@ to implement from:
 
 ## What stays on the dirty side
 
-The reference ROMs ([`reference/`](../../reference/)), the patched ROMs and their code ([`rompatch/`](../../rompatch/)), the oracle files,
+The reference ROMs ([`reference/`](../../reference/)), the patched ROMs and their code ([`src/roms/`](../../src/roms/)), the oracle files,
 riplin's disassembly, [`docs/764-rom.md`](../764-rom.md), the README sections on byte-level changes, the
 emulator tests that compare with a reference ROM (`make 775-ref-compare`, `764-ref-compare`, the `T64_BASE`
 notes), and anything from another vendor's BIOS source.
@@ -125,7 +125,7 @@ notes), and anything from another vendor's BIOS source.
 ## Leak review
 
 The procedure is in [`LEAK-REVIEW.md`](LEAK-REVIEW.md). Done once on 1 November 2026 by the dirty side (a search of the three specification files for
-Phoenix, the reference ROMs, [`rompatch/`](../../rompatch/), [`docs/764-rom.md`](../764-rom.md) and riplin, then a reading of the
+Phoenix, the reference ROMs, [`src/roms/`](../../src/roms/), [`docs/764-rom.md`](../764-rom.md) and riplin, then a reading of the
 hits). The independent second reader of 2 November 2026 supersedes that as the current milestone-1-4
 record (below). Historical notes from the first search that the second reader still treated:
 
@@ -177,10 +177,10 @@ The similarity check shows SeaVGABIOS's 8x8, 8x14 and 8x16 fonts byte for byte e
 Phoenix's fonts over runs of up to 3.6 KB: all of them carry the IBM VGA font.
 
 Since 2 November 2026 (#141) our patched ROMs build all five font tables from Joseph Gil's FNTCOL16
-files in [`rompatch/fonts/`](../../rompatch/fonts/). That folder holds the unmodified files and Gil's
+files in [`src/roms/fonts/`](../../src/roms/fonts/). That folder holds the unmodified files and Gil's
 notice: the individual fonts public domain, and the US Copyright Office position that bitmap fonts
 are not registrable (57 FR 6201). The tables include the 9-dot alternates, built by
-[`fonts.py`](../../rompatch/fonts/fonts.py) from PP_ROMAN.F16 and STANDARD.F14.
+[`fonts.py`](../../src/roms/fonts/fonts.py) from PP_ROMAN.F16 and STANDARD.F14.
 
 Owner decision of 5 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145)):
 that Gil source plus the generated tables is the **closed** font package for the clean ROM

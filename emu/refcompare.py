@@ -12,7 +12,7 @@ the clear, AH=06h/07h scrolls with random windows and fills, AH=08h/09h/0Ah/0Eh 
 pixels, palettes (AH=0Bh, AX=10xxh), pages, cursor, fonts, AH=12h, AH=1Ah, AH=1Ch. After each call
 the registers a program gets back (with bits 31-16), the BIOS data area, video memory (A000-BFFF and the
 four planes), the DAC and the standard VGA registers (MISC, SR00-04, CR00-18, GR00-08, AR00-14) must
-be the same. The Trio64V+ ROM (rompatch/vplus) has the same goal against its base 1.03-08: --chip 765
+be the same. The Trio64V+ ROM (src/roms/vplus) has the same goal against its base 1.03-08: --chip 765
 runs both on the Trio64V+ model. The S3 extended registers are not compared: the ROM sets the memory clock, the pedestal
 and the FIFO bit on purpose. Exit code 1 when any call differs; the differences are listed.
 """

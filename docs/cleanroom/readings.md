@@ -62,7 +62,7 @@ A monitor made after 2003, including one from 2013, does not change this when it
 
 ## 5. Not a behaviour source
 
-- Gil's FNTCOL16 files ([`rompatch/fonts/`](../../rompatch/fonts/)) are the glyph bits, with his notice. They do not say how a mode set loads a font.
+- Gil's FNTCOL16 files ([`src/roms/fonts/`](../../src/roms/fonts/)) are the glyph bits, with his notice. They do not say how a mode set loads a font.
 - A reference BIOS image, an oracle, or a Phoenix observation checks a result. It is not a source to cite.
 
 ## How to use the order

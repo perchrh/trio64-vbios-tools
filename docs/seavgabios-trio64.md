@@ -10,7 +10,7 @@ This plan is not the implementation plan of the clean ROM any more. The outside 
 ([`docs/cleanroom/review-2026-11-02.md`](cleanroom/review-2026-11-02.md)) found it still budgeting SeaVGABIOS as the base. The owner
 decided on 2 November 2026 ([#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), [`docs/clean-room.md`](clean-room.md) "Decisions of 2 November 2026"):
 - **Base:** empty. The clean ROM is a full new video BIOS written from scratch, under the MIT licence,
-  with the fonts of [`rompatch/fonts/`](../rompatch/fonts/) (Joseph Gil's FNTCOL16 files).
+  with the fonts of [`src/roms/fonts/`](../src/roms/fonts/) (Joseph Gil's FNTCOL16 files).
 - **SeaVGABIOS** is kept as a comparison implementation and a source of facts; none of its LGPLv3
   code goes into the ROM.
 - **Size:** the size budget below (26,320 bytes plus an S3 module) does not estimate a whole BIOS. The

@@ -1,10 +1,10 @@
 # Test coverage of the ROM code on GitHub Actions (README "Continuous integration").
 #
-# Runs on pushes to main and by hand, never for pull requests: it runs every emulator test once more
-# with coverage recording, which takes long. Changes that touch documentation alone do not start it,
-# and a newer commit on main cancels the running one.
+# Runs on pushes to main that touch src/roms/** (and by hand), never for pull requests: it runs every
+# emulator test once more with coverage recording, which takes long. A newer commit on main cancels
+# the running one.
 #
-# NASM 3.02 is built from its release source (cached), `make` builds every tool, the ROM is built from
+# NASM 3.02 is built from its release source (cached), `make tools` builds every tool, the ROM is built from
 # the S3 reference BIOS 2.04.07 in reference/v2/2_04_07.bin (the Makefile default of IN), then
 # `make coverage` runs the emulator tests with coverage recording and emu/codemap.py, which fails under
 # 80 % (AGENTS.md goal) and lists the code no test reaches. The patched ROM image is not kept.
@@ -13,7 +13,9 @@ name: Coverage
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', '**.pdf', 'docs/**', 'datasheets/**', 'standards/**', 'infozip/**']
+    paths:
+      - 'src/roms/**'
+      - '.github/workflows/coverage.yml'
   workflow_dispatch:
 
 permissions:
@@ -61,7 +63,7 @@ jobs:
           ~/nasm/nasm -v | grep -q "version $NASM_VERSION"
 
       - name: Build the tools
-        run: make NASM=$HOME/nasm/nasm
+        run: make tools NASM=$HOME/nasm/nasm
 
       - uses: actions/setup-python@v6
         with:

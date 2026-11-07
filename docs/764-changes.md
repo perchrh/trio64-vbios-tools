@@ -1,6 +1,6 @@
 # Trio64 ROM (764): fixes and improvements
 
-What 1.5-07-pN (the level in [`common/version.inc`](../common/version.inc), now p5) changes against the Phoenix S3 Trio64 BIOS
+What 1.5-07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p5) changes against the Phoenix S3 Trio64 BIOS
 1.5-07, each with the issue that has the details. The speed patches, the booster and the flip-flop reset
 are backports from the Trio64V2 ROM ([`docs/775-changes.md`](775-changes.md)); their issues are the Trio64V2 ones, which
 carry the label 764. The build, the space map, the base candidates, the MCLK survey and the
@@ -22,7 +22,7 @@ card runs are in [`docs/764-rom.md`](764-rom.md).
 | The 32 KB twice in the 64 KB image (the DSP-3364P maps the upper half) | p1 | [#78](https://github.com/perchrh/trio64-vbios-tools/issues/78) | `SIZE764=32` for a 32 KB EEPROM. |
 | Two Trio64 models: `make 764x-rom` (86C764X, MCLK 55-70 MHz) and `make 764p-rom` (86C764-P, 50-60 MHz) | p3 | [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112) | The same ROM; the models differ in the clock range the build option accepts (T64-MEM-7). |
 | No monitor sense at POST | p4 | [#134](https://github.com/perchrh/trio64-vbios-tools/issues/134) | As in S3's Trio64V+ BIOS 1.03-08N. Only the call of the sense (025Fh, call 0263h) becomes `xor bx,bx`, the colour result: POST no longer turns on grey-scale summing for a display that reads as monochrome, and no longer beeps when none is found. The configuration bit (0199h bit 1) is not used, because it skips the whole routine at 1033h, its CR38/CR39 unlock and mode set 03h too. |
-| Fonts from public domain sources instead of S3's BIOS file | p5 | [#141](https://github.com/perchrh/trio64-vbios-tools/issues/141) | The five tables that replaced Phoenix's fonts in p1 (#69) now come from [`rompatch/fonts`](../rompatch/fonts/) (Joseph Gil's public domain collection) instead of S3's Trio64V+ BIOS 1.03-08N: the same bytes, so the build no longer reads the Trio64V+ reference image and `--fonts` is gone. |
+| Fonts from public domain sources instead of S3's BIOS file | p5 | [#141](https://github.com/perchrh/trio64-vbios-tools/issues/141) | The five tables that replaced Phoenix's fonts in p1 (#69) now come from [`src/roms/fonts`](../src/roms/fonts/) (Joseph Gil's public domain collection) instead of S3's Trio64V+ BIOS 1.03-08N: the same bytes, so the build no longer reads the Trio64V+ reference image and `--fonts` is gone. |
 
 
 
