@@ -33,8 +33,8 @@
 ;       tests that need none), on every chip. For a stock BIOS or a clean ROM on a Trio64V2, Trio64V+
 ;       or Trio64, whose signature and patches are not ours (#143).
 ;   /V  debug log in S3TEST.DBG (src/tools/common/vdebug.inc): the NASM version that assembled
-;       this tool, every INT 10h call (except during the throughput benchmark), the result line,
-;       a register dump after every test and the raw retrace counts.
+;       this tool (D:ENV NASM=), the ROM version (D:ENV ROM=), every INT 10h call (except during the throughput
+;       benchmark), the result line, a register dump after every test and the raw retrace counts.
 ;       The normal output is the same with or without /V.
 ;   Output is buffered while the video modes switch and written to stdout at the end.
 ;   Exit code 0 = every test passed, 1 = at least one failed.
@@ -333,8 +333,9 @@ start:  cld
 ; ---------------- ROM identity ----------------
 ; Expect: 'Version ' and the version of our ROM for the chip within C000:0000-00FF (Trio64V2: VER775, now
 ; "2.04.07-p21"; Trio64V+: VER765, now "1.03-08N-p4"), and an 8-bit checksum of 00 over the lower 32 KB
-; (the half the VGA BIOS runs from). On another chip there is no ROM of ours: the version found is an
-; INFO line, not counted.
+; (the half the VGA BIOS runs from). The scan is romfind (src/tools/common/romver.inc): ROMVER prints
+; it, S3COMPAT's ROM line prints it, and /V records it as D:ENV ROM=. On another chip there is no ROM
+; of ours: the version found is an INFO line, not counted.
 t_rom:  mov dx,s_sig
         mov di,s_romver
         mov cx,ROMVLEN
@@ -354,49 +355,37 @@ t_rom:  mov dx,s_sig
 .t2:    mov [sigp],di
         mov [sigl],cx
         call puts
-        push ds
-        mov ax,0xC000
-        mov ds,ax
-        xor si,si
-        mov cx,0x100
-.f:     cmp dword [si],'Vers'
-        jne .fn
-        cmp dword [si+4],'ion '
-        je .fs
-.fn:    inc si
-        loop .f
-        pop ds
-        mov dx,s_nover
-        call puts
-        xor al,al
-        jmp .pr2
-.fs:    add si,8
-        mov bx,si                       ; print the version found, up to the line end
-        mov cx,12
-.pv:    mov al,[si]
-        cmp al,' '
-        jb .pe
-        push ds                         ; putc works on our segment
-        push cs
-        pop ds
+        call romfind                    ; "Version " in C000:0000-00FF, up to 12 characters
+        jc .miss
+        mov si,romvbuf
+        mov cx,[romvlen]
+        jcxz .cmp
+.pc:    lodsb
         call putc
-        pop ds
-        inc si
-        loop .pv
-.pe:    push es                         ; compare with VER775/VER765, which must end there
+        loop .pc
+.cmp:   push es                         ; compare with VER775/VER765/VER764, which must end there
         push cs
         pop es
-        mov si,bx
-        mov di,[cs:sigp]
-        mov cx,[cs:sigl]
+        mov si,romvbuf
+        mov di,[sigp]
+        mov cx,[sigl]
         repe cmpsb
         pop es
         mov al,0
-        jne .pr
-        cmp byte [si],'!'               ; next character: end of the version (space, CR, 0)
-        jae .pr
+        jne .pr2
+        mov bx,[sigl]
+        cmp bx,[romvlen]
+        jae .nx
+        mov al,[romvbuf+bx]             ; a longer string: the next character is still in the buffer
+        jmp .ec
+.nx:    mov al,[romvnext]               ; the byte that ended the run, or the one after 12 characters
+.ec:    cmp al,'!'                      ; end of the version (space, CR, 0)
+        jae .pr2
         mov al,1
-.pr:    pop ds
+        jmp .pr2
+.miss:  mov dx,s_nover
+        call puts
+        xor al,al
 .pr2:   cmp byte [rkind],RK_OTHER       ; no ROM of ours for this chip: INFO
         jne .pr3
         mov al,2
@@ -2802,7 +2791,7 @@ s_help  db 'S3TEST ',VERSION,' - regression test for our VBIOSes: Trio64V2 ',VER
         db 'need no ROM of ours run.',13,10
         db '  /C                  any ROM (stock, or a clean ROM): only the tests that need',13,10
         db '                      no ROM of ours, on every chip; the version found is INFO',13,10
-        db '  /V                  debug log in S3TEST.DBG (BIOS calls, registers, timing)',13,10
+        db '  /V                  debug log in S3TEST.DBG (ROM version, BIOS calls, registers, timing)',13,10
         db '  /S                  silent: no monitor warning, no key press',13,10
         db '  /H, /?              this help',13,10
         db 'Exit code 0 = every test passed, 1 = at least one failed.',13,10

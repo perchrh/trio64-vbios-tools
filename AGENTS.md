@@ -9,10 +9,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The ROM is a 64 KB image. The lower 32 KB is the S3 reference BIOS 2.04.07 with our patches
   (currently -p24); the upper 32 KB is a copy of it (#78; p15 to p21 were built with zeros there, up to
   p14 it was the card's Trio64V+ BIOS 1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
-- Layout: `src/tools/` holds the DOS tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, CHIPID, S3REGS32,
-  S3ALIAS) and shared includes (`src/tools/common/`); `src/roms/` holds the ROM patchers and assembly.
+- Layout: `src/tools/` holds the DOS tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, CHIPID, ROMVER,
+  S3REGS32, S3ALIAS) and shared includes (`src/tools/common/`); `src/roms/` holds the ROM patchers and assembly.
   `make` / `make all` builds tools and ROMs; `make tools` and `make roms` build one side; `make clean`
-  removes `build/` (both). CHIPID.COM is part of the tools artefacts and the release zip.
+  removes `build/` (both). CHIPID.COM and ROMVER.COM are part of the tools artefacts and the release zip.
 - The patched ROM images are kept outside this repository. `src/roms/` holds the ROM code (nasm) and
   `s3patch.py`, which builds the current level from the S3 reference 2.04.07 alone
   with byte assertions; only the latest level is built. A new level replaces the pinned SHA-256

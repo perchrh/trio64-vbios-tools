@@ -33,11 +33,11 @@ ifdef VER764
 DEFS += -DVER764="'$(VER764)'"
 endif
 
-# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM and the batch files into build/
+# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM and the batch files into build/
 # make all: tools and every chip's ROM at its memory clocks (make roms)
 # make clean: removes build/ (tools and ROM images)
 TOOLS = build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-        build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/RUNALL.BAT build/CLEAN.BAT \
+        build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/RUNALL.BAT build/CLEAN.BAT \
         build/ZIP.EXE
 all: tools roms
 tools: $(TOOLS)
@@ -59,12 +59,16 @@ build:
 	mkdir -p build
 
 # src/tools/common/ holds the /V debug log code shared by VSHOW, S3TEST and S3COMPAT
-VDEBUG = $(COMMON)/vdebug.inc $(COMMON)/vdebug.mac $(COMMON)/version.inc $(COMMON)/chip.inc
+VDEBUG = $(COMMON)/vdebug.inc $(COMMON)/vdebug.mac $(COMMON)/version.inc $(COMMON)/chip.inc \
+         $(COMMON)/romver.inc
 
 build/VSHOW.COM: $(TOOLS_SRC)/vshow/vshow.asm $(VDEBUG) | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
 
 build/S3TEST.COM: $(TOOLS_SRC)/s3test/s3test.asm $(VDEBUG) | build
+	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
+
+build/ROMVER.COM: $(TOOLS_SRC)/romver/romver.asm $(COMMON)/version.inc $(COMMON)/romver.inc | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
 
 # s3compat.asm includes vgaref.inc (reference tables) from its own folder
