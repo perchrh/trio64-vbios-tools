@@ -4,7 +4,8 @@
 ; chipfind   finds the card through the PCI BIOS (INT 1Ah AX=B102h, vendor 5333h):
 ;            8901h Trio64V2/DX/GX; 8A13h Trio3D/2X (S3 NT 5.30.05 INF DEV_8A13); 8904h Trio3D
 ;            (S3 Win9x 4.10.01.2204-2.61.06 INF DEV_8904 "S3 Inc. Trio3D"; 86C365); 8814h Trio64UV+;
-;            8811h Trio32/Trio64 (CR2E 10h/11h) or Trio64V+ when revision bit 6 is set (4xh).
+;            8811h Trio32/Trio64 (CR2E 10h/11h) or Trio64V+ when revision bit 6 is set
+;            (4xh in the data book; later steppings 5xh, also bit 6).
 ;            On a find it also runs chipidregs. docs/chip-rules.md T64-ID-1, VP-ID-1, UV-ID-1, V2-ID-1.
 ;            Out: CF=1 when none of them is found ([chip] = CHIP_NONE); else CF=0 and [chip] = CHIP_*,
 ;            [chipbx] = the PCI bus/device/function (BX of the PCI BIOS), [chipdev], [chiprev],
@@ -92,7 +93,7 @@ chipfind:
         mov al,CHIP_T64UVP
         cmp word [chipdev],0x8814
         je .set
-        mov al,CHIP_T64VP               ; 8811: revision 4xh is the Trio64V+
+        mov al,CHIP_T64VP               ; 8811: revision bit 6 (4xh, 5xh) is the Trio64V+
         test byte [chiprev],0x40
         jnz .set
         mov al,CHIP_T32                 ; else CR2E: 10h Trio32, 11h Trio64

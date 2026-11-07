@@ -76,7 +76,7 @@ PCI_CONFIG = {0x00: 0x89015333, 0x04: 0x02000003, 0x08: 0x03000006,
 # The chips of the Trio64 family the model can be: PCI device ID, the ID registers CR2D/CR2E/CR2F
 # (CR2F = PCI revision) and CR30, and the DCLK PLL post divider: 2 bits (SR12 bits 6-5) on the
 # Trio32/64/V+, 3 bits with SR12 bit 7 on the Trio64V2. Datasheets: device 8811 for the Trio32 and
-# Trio64 (CR2E 10h / 11h) and the Trio64V+ (CR2E 11h, CR2F 4xh); 8901 is the Trio64V2/DX/GX; 8814 the
+# Trio64 (CR2E 10h / 11h) and the Trio64V+ (CR2E 11h, CR2F 4xh, later steppings 5xh); 8901 is the Trio64V2/DX/GX; 8814 the
 # Trio64UV+ (CR2E 14h, revision "xxH": 00h here; CR30 unchanged from the Trio64V+, E1h).
 CHIPS = {
     'v2':     dict(name='Trio64V2/DX', dev=0x8901, ids=(0x89, 0x01, 0x06, 0xE1), r3=True),
