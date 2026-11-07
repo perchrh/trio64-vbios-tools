@@ -17,7 +17,9 @@
 ; chipname   DX -> the '$' string with the chip's market name ([chip]). On CHIP_T64V2, CR6F bit 0
 ;            selects Trio64V2/DX vs Trio64V2/GX.
 ; chippart   DX -> the '$' string with the S3 part number for [chip] (README "Chip codes"): 86C732,
-;            86C764X (PCI cannot tell the earlier 86C764-P; CR2F can, chipvar), 86C765, 86C775 or 86C785 (CR6F bit 0),
+;            86C764X or 86C764-P (the PCI revision is 00h on both: by CR2F as S3's Windows 95 driver
+;            2.41.07 does, 20h, 30h, 03h or 12h the 86C764X ("86C764..pnp"), any other value the
+;            86C764-P, T64-ID-2; chipvar names the maker), 86C765, 86C775 or 86C785 (CR6F bit 0),
 ;            86C767, 86C365 (Trio3D), 86C362/86C368 (Trio3D/2X). S3's Windows 95 Trio INF (w9524107)
 ;            lists one Have Disk row for PCI 8901 ("Trio64V2"); DX vs GX is not a PCI revision there.
 ;            S3 Win9x 2.61.06 (9x26106) INF: PCI 8904 = Trio3D; S3 NT 5.30.05 (53005) INF: PCI 8A13
@@ -208,7 +210,21 @@ chippart:
         jz .e
         mov dx,s_part785
         jmp .e
-.t:     movzx bx,byte [chip]
+.t:     cmp byte [chip],CHIP_T64        ; Trio64: the pnp codes in CR2F are the 86C764X (T64-ID-2)
+        jne .t2
+        mov dx,s_part764x
+        mov bl,[chipcr2f]
+        cmp bl,0x20
+        je .e
+        cmp bl,0x30
+        je .e
+        cmp bl,0x03
+        je .e
+        cmp bl,0x12
+        je .e
+        mov dx,s_part764p
+        jmp .e
+.t2:    movzx bx,byte [chip]
         shl bx,1
         mov dx,[chipparts+bx]
 .e:     pop bx
@@ -279,7 +295,8 @@ s_chipt3d   db 'Trio3D$'                  ; PCI 8904h
 s_chipt3d2x db 'Trio3D/2X$'               ; PCI 8A13h (53005 INF)
 s_partnone  db '$'
 s_part732   db '86C732$'
-s_part764x  db '86C764X$'                  ; PCI 8811 with rev bit 6 clear; 86C764-P is the same ID
+s_part764x  db '86C764X$'                  ; PCI 8811, rev bit 6 clear, CR2F 20h/30h/03h/12h (T64-ID-2)
+s_part764p  db '86C764-P$'                 ; PCI 8811, rev bit 6 clear, any other CR2F
 s_part765   db '86C765$'                  ; PCI 8811 with rev bit 6 set (VP-ID-1)
 s_part775   db '86C775$'                  ; PCI 8901, CR6F bit 0 clear
 s_part785   db '86C785$'                  ; PCI 8901, CR6F bit 0 set

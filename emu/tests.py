@@ -51,6 +51,11 @@ Tests
   romver           ROMVER.COM prints the version S3TEST reads ("Version " in C000:0000-00FF, at most
                    12 characters, stopping before a byte below 20h); /Q prints only that version.
                    S3COMPAT's ROM line and a /V log (D:ENV ROM=) use that same scan
+  mclk             MCLK.COM prints the chip, the ROM version and the CR36 memory type and size
+                   before it changes the clock. /H is the help. /I above the cap changes nothing.
+                   /I 74.9 on a 1-cycle EDO Trio64V2 (cap 75 MHz) runs one step, passes, publishes
+                   the step below it, and restores the POST SR10/SR11. The emulator's RAM does not
+                   go bad as the clock rises, so this does not measure a real maximum
   s3test           S3TEST runs to the end; every check passes except the banked write throughput (no
                    real bus speed); with /V the output is the same (except the Time spent line) and
                    S3TEST.DBG is well formed
@@ -154,7 +159,7 @@ Tests
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES, budget_msg  # noqa: E402
+from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES, CHIP_CR2F, chip_ids, budget_msg  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -1041,11 +1046,16 @@ def t_s3test(c):
     bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
     # the Chip variant line: CR2F and the name S3's Windows 95 driver gives it (common/chip.inc chipvar);
-    # the models report CR2F 00h on the Trio32/Trio64, so the plain 86C764 and 86C732
+    # the 764X model reports CR2F 20h (86C764GSpnp, the DSP-3364P), the 764P model 00h, the Trio32 00h
     var = [l for _, l in tl if l.startswith('Chip variant by CR2F')]
-    rev = CHIPS[Machine.chip]['ids'][2]
-    name = {'trio64': '86C764, no pnp code', 'trio32': '86C732, no pnp code'}.get(Machine.chip,
-                                                                                 'no variant codes for this chip')
+    rev = chip_ids()[2]
+    name = {('trio64', 0x20): '86C764GSpnp (764X)', ('trio64', 0x00): '86C764, no pnp code (764P',
+            ('trio32', 0x00): '86C732, no pnp code'}.get((Machine.chip, rev), 'no variant codes for this chip')
+    # and the part on the Chip ID line (chippart): 86C764X for a pnp code, 86C764-P for any other
+    part = {'trio64': '86C764X' if rev in (0x20, 0x30, 0x03, 0x12) else '86C764-P'}.get(Machine.chip)
+    cid = [l for _, l in tl if l.startswith('Chip ID')]
+    check(part is None or (len(cid) == 1 and cid[0].rstrip().endswith(part + '  INFO')),
+          'S3TEST Chip ID line: %s, expected the part %s' % (cid, part))
     check(len(var) == 1 and var[0].rstrip().endswith('INFO') and ('%02Xh %s' % (rev, name)) in var[0],
           'S3TEST Chip variant line: %s, expected %02Xh %s ... INFO' % (var, rev, name))
     if v:
@@ -1322,7 +1332,7 @@ def vgalog_info(c, m, blk, what, tail=bytes(8)):
     """The chip and ROM block VGALOG writes (32 bytes): CR2D-CR30 and CR36 as the model's chip reports
     them, the ROM size byte, SR10/SR11 as the POST left them, and the word after "Vers" in the ROM's
     first 256 bytes; +24 the /W window function count and routine (tail), 0 without /W."""
-    ids = CHIPS[Machine.chip]['ids'][:4]
+    ids = chip_ids()
     cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
     if Machine.chip in ('trio64', 'trio32'):
         cr36 |= 0x0C if Machine.vram == 4 else 0x08
@@ -1806,6 +1816,8 @@ def t_s3regs(c):
     r32 = m.run_pe32(exe, 'S3REGS32.EXE test label')
     check(r32.exit == ('exit', 0), 'S3REGS32 ended with %s' % (r32.exit,))
     win = r32.files['S3REGS.TXT'].decode('latin1').split('\r\n')
+    check('S3REGS.TXT' in r.synced and 'S3REGS.TXT' in r32.synced, 'S3REGS.TXT closed without a commit: '
+          'DOS (AH=68h or AH=0Dh) %s, Win32 (FlushFileBuffers) %s' % ('S3REGS.TXT' in r.synced, 'S3REGS.TXT' in r32.synced))
     after = (m.r['si'], m.r['gi'], m.r['ci'], m.r['crtc'].get(0x38), m.r['crtc'].get(0x39), m.r['seq'].get(8))
     check(before == after, 'indexes or locks changed: %s -> %s' % (before, after))
     check(dos[0].startswith('S3REGS ') and dos[0].endswith('[test label] DOS') and win[0].endswith('[test label] Win32'),
@@ -2591,9 +2603,83 @@ def t_romver(c):
     return want.decode('latin1')
 
 
+def t_mclk(c):
+    """MCLK prints the chip, ROM version and CR36 memory before any clock step, and puts the POST clock back."""
+    com = c.tool('MCLK.COM')
+    h = c.machine().run_com(com, '/H', name='MCLK.COM', max_insn=2_000_000)
+    check(h.exit == ('exit', 0), 'MCLK /H exit %s' % (h.exit,))
+    helptext = bytes(h.stdout)
+    check(b'/P' in helptext and b'/I' in helptext and b'CR36' in helptext, 'MCLK /H text %r' % helptext[:200])
+
+    bad = c.machine().run_com(com, '/I', name='MCLK.COM', max_insn=1_000_000)
+    check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
+          'bad /I %s %r' % (bad.exit, bytes(bad.stdout)[:200]))
+
+    m = c.machine()
+    before = (m.r['seq'].get(0x10), m.r['seq'].get(0x11))
+    over = m.run_com(com, '/I 90', name='MCLK.COM', max_insn=20_000_000)
+    check(over.exit == ('exit', 1), 'MCLK /I 90 exit %s stdout %r' % (over.exit, bytes(over.stdout)[:500]))
+    text = bytes(over.stdout).replace(b'\r\n', b'\n')
+    check(b'Chip ' in text and b'ROM ' in text, 'identity missing in %r' % text[:400])
+    check(b'Memory CR36=' in text and b'type ' in text and b'size ' in text, 'CR36 line missing in %r' % text[:600])
+    check(b'above the cap' in text, 'cap refusal missing in %r' % text[:800])
+    check(b'STEP ' not in text, 'a step ran above the cap: %r' % text[:800])
+    check((m.r['seq'].get(0x10), m.r['seq'].get(0x11)) == before,
+          'SR10/SR11 changed on refusal: %s was %s' % ((m.r['seq'].get(0x10), m.r['seq'].get(0x11)), before))
+
+    # One step, just under a 60 MHz datasheet cap of 75 MHz. The UV+ book is 66.67 MHz,
+    # so the same request keeps stepping and is not this test.
+    if Machine.chip == 'uvplus':
+        raise Skip('Trio64UV+ cap is 83.333 MHz; /I 74.9 is not a single step')
+    m2 = c.machine()
+    post = (m2.r['seq'].get(0x10), m2.r['seq'].get(0x11))
+    one = m2.run_com(com, '/I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
+    body = bytes(one.stdout).replace(b'\r\n', b'\n')
+    check(one.exit == ('exit', 0), 'MCLK /I 74.9 exit %s\n%s' % (one.exit, body.decode('latin1', 'replace')[:1500]))
+    lines = [ln for ln in body.split(b'\n') if ln]
+    mem = next((ln for ln in lines if ln.startswith(b'Memory CR36=')), b'')
+    check(b'size ' in mem and b'type ' in mem and b'test ' in mem and b'EDO' in mem, 'memory line %r' % mem)
+    steps = [ln for ln in lines if ln.startswith(b'STEP ')]
+    check(steps and steps[0].endswith(b'testing'), 'first step line %r' % steps[:2])
+    check(any(ln.endswith(b'PASS') for ln in steps), 'no PASS in %r' % steps)
+    check(sum(1 for ln in steps if ln.endswith(b'testing')) == 1, 'expected one step, got %r' % steps)
+    high = next((ln for ln in lines if ln.startswith(b'Highest ')), b'')
+    pub = next((ln for ln in lines if ln.startswith(b'Published ')), b'')
+
+    def mhz_of(line):
+        return float(line.split()[1])
+
+    gap = mhz_of(high) - mhz_of(pub)
+    check(high and pub and 0.5 <= gap < 1.2, 'published %r is not one 0.5 MHz step under %r' % (pub, high))
+    rest = next((ln for ln in lines if ln.startswith(b'Restored ')), b'')
+    check(('SR10=%02X' % post[0]).encode() in rest and ('SR11=%02X' % post[1]).encode() in rest,
+          'restored %r, POST SR10/SR11 %02X %02X' % (rest, post[0], post[1]))
+    check((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)) == post,
+          'clock left at %s, POST was %s' % ((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)), post))
+
+    # /P from the same request is also one step: the next legal pair is already over the cap.
+    # Publishing then takes the previous table entry, a small step, not 0.5 MHz down.
+    mp = c.machine()
+    postp = (mp.r['seq'].get(0x10), mp.r['seq'].get(0x11))
+    prec = mp.run_com(com, '/P /I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
+    pbody = bytes(prec.stdout).replace(b'\r\n', b'\n')
+    check(prec.exit == ('exit', 0), 'MCLK /P exit %s\n%s' % (prec.exit, pbody.decode('latin1', 'replace')[:800]))
+    plines = [ln for ln in pbody.split(b'\n') if ln]
+    psteps = [ln for ln in plines if ln.startswith(b'STEP ')]
+    check(sum(1 for ln in psteps if ln.endswith(b'testing')) == 1, 'precise steps %r' % psteps)
+    phigh = next(ln for ln in plines if ln.startswith(b'Highest '))
+    ppub = next(ln for ln in plines if ln.startswith(b'Published '))
+    gap = mhz_of(phigh) - mhz_of(ppub)
+    check(0 < gap < 0.25, 'precise published %r is not the previous pair under %r' % (ppub, phigh))
+    check((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)) == postp,
+          'precise left the clock at %s, POST was %s' % ((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)), postp))
+    c.save('MCLK', one)
+    return 'one step'
+
+
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -2610,7 +2696,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'mclk': 'tools s3 card', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_dac_retry': 'vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
@@ -2765,6 +2851,7 @@ def main():
         ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')
     Machine.vram = a.vram
     Machine.chip = CHIP_CODES[a.chip]
+    Machine.cr2f = CHIP_CR2F.get(a.chip)
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
     if a.list:
         for n, _ in TESTS:
