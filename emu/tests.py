@@ -57,9 +57,11 @@ Tests
                    clock and the datasheet range (50.113 MHz to the MEM-1/V2-MEM-1 maximum) and
                    changes nothing. /H is the help; /P or /I without /T, /S with /T, /S without a
                    value are bad arguments. /S 57.5 sets the pair at or below 57.5 MHz without a
-                   question; mode sets keep it on our 2.04.07 ROM and the next report shows it.
-                   /S 45 and /S 90 are refused without a write; /S 70 asks once: N writes nothing,
-                   Y sets it. /T /I 90 (above the cap) changes nothing and asks nothing. Before
+                   question and ends with "Memory clock set to <MHz> (requested 57.500 MHz, SR10=..
+                   SR11=.. read back): OK"; mode sets keep it on our 2.04.07 ROM and the next report
+                   shows it. /S 45 and /S 90 are refused without a write, with an "ERROR: ... the
+                   clock was not changed" line; /S 70 asks once: N writes nothing ("ERROR: Not
+                   confirmed"), Y sets it (the OK line). /T /I 90 (above the cap) changes nothing and asks nothing. Before
                    the first PLL write /T asks once on stderr: N leaves SR08/SR10/SR11/SR15 as they
                    were (exit 1). With Y, /T /I 74.9 (cap 75 MHz) runs one step and recommends none
                    (no tested pass 1 % below it); /T /I 73.9 runs three steps and recommends the
@@ -2682,8 +2684,9 @@ def t_mclk(c):
     check(s1.exit == ('exit', 0), 'MCLK /S 57.5 exit %s %r' % (s1.exit, sl))
     check(b'Press Y' not in bytes(s1.stderr), '/S 57.5 asked: %r' % bytes(s1.stderr)[:300])
     check(clk(ms) == pair[k], '/S 57.5 left SR10/SR11 %s, expected %s (%d kHz)' % (clk(ms), pair[k], k))
-    check(('Set: %d.%03d MHz SR10=%02X SR11=%02X' % (k // 1000, k % 1000, pair[k][0], pair[k][1])).encode() in sl,
-          '/S 57.5 lines %r' % sl)
+    okline = lambda kk, req: ('Memory clock set to %d.%03d MHz (requested %s MHz, SR10=%02X SR11=%02X read back): OK'
+                              % (kk // 1000, kk % 1000, req, pair[kk][0], pair[kk][1])).encode()
+    check(okline(k, '57.500') in sl and not any(ln.startswith(b'ERROR') for ln in sl), '/S 57.5 lines %r' % sl)
     check(ms.r['seq'].get(0x08) == beforei[0], '/S left SR08 %s, found %s' % (ms.r['seq'].get(0x08), beforei[0]))
     if c.ours:
         for mode in (0x0003, 0x0013):
@@ -2699,7 +2702,9 @@ def t_mclk(c):
         mo = c.machine()
         bo = pll(mo)
         ro = mo.run_com(com, tail, name='MCLK.COM', max_insn=20_000_000)
-        check(ro.exit == ('exit', 1) and any(word in ln for ln in lines_of(ro)), '%s %s %r' % (tail, ro.exit, lines_of(ro)))
+        check(ro.exit == ('exit', 1) and any(ln.startswith(b'ERROR: ') and word in ln and
+                                             ln.endswith(b'the clock was not changed') for ln in lines_of(ro)),
+              '%s %s %r' % (tail, ro.exit, lines_of(ro)))
         check(pll(mo) == bo and b'Press Y' not in bytes(ro.stderr), '%s wrote %s or asked' % (tail, pll(mo)))
 
     # /S above the datasheet maximum (below every cap): asks once; N writes nothing, Y sets it.
@@ -2707,13 +2712,14 @@ def t_mclk(c):
     mn = c.machine(keys=[0x316E])                       # 'n'
     bn = pll(mn)
     rn = mn.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
-    check(rn.exit == ('exit', 1) and b'Not confirmed' in bytes(rn.stdout) and bytes(rn.stderr).count(b'Press Y') == 1,
+    check(rn.exit == ('exit', 1) and b'ERROR: Not confirmed' in bytes(rn.stdout) and bytes(rn.stderr).count(b'Press Y') == 1,
           '/S 70 declined %s %r' % (rn.exit, lines_of(rn)))
     check(pll(mn) == bn, '/S 70 declined wrote %s, before %s' % (pll(mn), bn))
     my = c.machine(keys=[0x1579])                       # 'y'
     ry = my.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
     yl = lines_of(ry)
-    check(ry.exit == ('exit', 0) and b'Confirmed: Y pressed, the clock is set' in yl, '/S 70 %s %r' % (ry.exit, yl))
+    check(ry.exit == ('exit', 0) and b'Confirmed: Y pressed' in yl and okline(k70, '70.000') in yl,
+          '/S 70 %s %r' % (ry.exit, yl))
     check(clk(my) == pair[k70], '/S 70 left %s, expected %s' % (clk(my), pair[k70]))
 
     m = c.machine()
