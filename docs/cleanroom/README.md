@@ -1,7 +1,7 @@
 # The clean-room package
 
 What the clean side gets for writing a Trio64 video BIOS from scratch (decided 2 November 2026,
-[#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); the earlier plan built on SeaVGABIOS: [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)), what stays on the dirty side, and how the result is checked. The process
+[#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); the parts it consists of: [`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM"), what stays on the dirty side, and how the result is checked. The process
 and its reasons are in [`docs/clean-room.md`](../clean-room.md). Prepared 1 November 2026. The first leak review (1 November) removed the references to dirty-side
 documents from [`spec-a-post.md`](spec-a-post.md); what remains for a second reader is listed under "Leak review".
 
@@ -119,8 +119,10 @@ notes), and anything from another vendor's BIOS source.
 
        python3 emu/similarity.py slim.bin --fonts 409E-509D --fonts 509E-5E9D --fonts 5E9E-669D --tables 38B8-4053
 
-4. **On the card**: [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) "Clean-room steps", step 4 (written for the SeaVGABIOS
-   plan; the card steps hold for the ROM written from scratch).
+4. **On the card**, with a way back: keep the card's own ROM image and a second graphics card (or a
+   machine that can flash the card blind) at hand, as for every ROM so far. Flash the 64 KB image
+   (the 32 KB twice), cold boot, then RUNALL (S3TEST, S3COMPAT, VSHOW /R, VGALOG, S3REGS) and the
+   programs of the milestone.
 
 ## Leak review
 

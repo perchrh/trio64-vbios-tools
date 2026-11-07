@@ -17,9 +17,8 @@ Each fix and improvement is listed in the chip's changes document with the GitHu
 it: what was wrong or missing, the cause, the effect and how it is tested.
 
 Other documents: [docs/chip-rules.md](docs/chip-rules.md) (the data book rules the tools check),
-[docs/bios-rules.md](docs/bios-rules.md) (the standard video BIOS behaviour), [docs/clean-room.md](docs/clean-room.md)
-and [docs/cleanroom/](docs/cleanroom/README.md) (the clean-room BIOS), and
-[docs/seavgabios-trio64.md](docs/seavgabios-trio64.md) (SeaVGABIOS for the Trio64, measured and set aside).
+[docs/bios-rules.md](docs/bios-rules.md) (the standard video BIOS behaviour), and [docs/clean-room.md](docs/clean-room.md)
+and [docs/cleanroom/](docs/cleanroom/README.md) (the clean-room BIOS, written from scratch).
 
 A [collection of S3 Trio video bioses](https://archive.org/details/s3-trio-vbioses) is available from archive.org
 

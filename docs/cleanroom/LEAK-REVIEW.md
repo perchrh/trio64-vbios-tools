@@ -226,7 +226,7 @@ say so in the record, and the review is done again by another session.
 | --- | --- |
 | The Phoenix VGA BIOS source material (an `SRC/phx` folder or similar, wherever found) | a vendor's source: the review compares with the ROMs' observed bytes and behaviour, not with anyone's source |
 | riplin's annotated disassembly ([hag](https://github.com/riplin/hag) `research/s3/bios/86c764x.asm`), and the section of [`docs/764-rom.md`](../764-rom.md) that cites it | the same: an expression of the Phoenix code, with names for its routines |
-| Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others), and [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md), the plan for a SeaVGABIOS port, which parts A, B and C link to | the same; and a reviewer who has read it cannot tell what a file under review took from it |
+| Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others) | the same; and a reviewer who has read it cannot tell what a file under review took from it |
 | Our patch code and patchers: [`src/roms/`](../../src/roms/) (its `bios.inc` files map routines of the reference ROMs), except `src/roms/fonts/README.md` (step 6), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour. TAB-9 and the decision "Fonts" link to `src/roms/fonts/`: do not follow those links |
 | [`BRIEF.md`](BRIEF.md) | the clean implementer's brief, not dirty material, but the reviewer has no use for it and must not write to the clean side |
 | [`src/tools/s3alias/`](../../src/tools/s3alias/) (S3ALIAS's source, its header included) | our TSR's code; the owner does not allow it for the review. The README's tool table row is enough for the mode numbers (49h to 59h, 4Bh to 5Ah) |
@@ -253,9 +253,13 @@ that one file, not the rest of `src/roms/`.
   driver INF without a note. A driver's identification table is neither data book nor black-box
   observation of a BIOS: decide under steps 2 and 5 whether the clean side needs it (POST-6 says the ROM
   does not need to tell the two Trio64 parts apart).
-- Parts A, B and C link to [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) (spec C: "It covers
-  items 3 and 5 of ..."), which the reviewer may not read. Decide whether the link is cut from the clean
-  side's copy; the links were there at the first pass too.
+- Parts A, B and C linked to the SeaVGABIOS plan file, which the reviewer could not read. Since
+  7 November 2026 that file is removed and the links point to [`docs/clean-room.md`](../clean-room.md) "The parts of the
+  clean ROM" (items 1-6 and the scope of the first version, written as project design choices) instead.
+  The changed introductions and source cells of parts A, B and C, and that section, need the fresh
+  second-reader pass, as do the rows changed for the default MCLK of 50.11 MHz (owner's decision,
+  7 November 2026): POST-22, POST-23 and open question 4 of part A, MODE-136 and MQ-11 of part B, and
+  the MCLK and FIFO rows of [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md).
 - [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
   and cites it as "README"; the quote is not in README.md, and the reviewer may not read
   [`src/tools/s3alias/`](../../src/tools/s3alias/). Deferred with the S3 mode numbers (outside milestones
