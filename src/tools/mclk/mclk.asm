@@ -1,44 +1,74 @@
-; MCLK.COM - raise the memory clock from a floor and find the last stable step (DOS, 386+)
+; MCLK.COM - show, set or test the memory clock (DOS, 386+)
 ;
 ; Purpose
-;   Measures the card, not the BIOS. From plain DOS it programs the MCLK PLL (SR11, SR10, then
-;   SR15 bit 0 set and cleared) and checks video memory at each step. The screen is blanked for
-;   the run and mode 03h is restored at the end, with the POST clock put back.
+;   Measures the card, not the BIOS. Without a switch it only reports: the chip, the amount and
+;   type of video memory, the memory clock (MCLK) the BIOS programmed, and the MCLK range for this
+;   chip. It changes nothing then. /S sets the memory clock, /T searches for the highest clock at
+;   which the video memory still works.
 ;
-;   The floor is the pair SR10=41h SR11=28h (50.114 MHz at 14.31818 MHz; 50113 kHz by the same
-;   integer formula as S3COMPAT). The cap is the chip's datasheet MCLK maximum plus 25 percent
-;   (MEM-1, V2-MEM-1): 60 MHz gives 75 MHz, 66.67 MHz gives 83.333 MHz. On the Trio64 the
-;   datasheet maximum is 60 MHz; the 70 MHz board policy is not used here. A Trio64V2 cap follows
-;   the strapped memory type (60 MHz for 1-cycle EDO, 66.67 MHz otherwise).
+;   The clocks are pairs of the MCLK PLL (SR10, SR11) from pll.inc, in rising order. A clock is
+;   loaded by writing SR11, SR10, then setting and clearing SR15 bit 0. The lowest pair, and the
+;   low end of the range on the screen, is SR10=41h SR11=28h (50.114 MHz at 14.31818 MHz; 50113
+;   kHz by the same integer formula as S3COMPAT): the lowest pair at or above 50 MHz, the EDO
+;   clock in the Trio64V+ feature list (MEM-1). The data books give no minimum MCLK. The high end is
+;   the chip's datasheet MCLK maximum (MEM-1, V2-MEM-1): 60 MHz on the Trio32, Trio64 and Trio64V+,
+;   66.67 MHz on the Trio64UV+, on the Trio64V2 60 MHz for 1-cycle EDO and 66.67 MHz for the other
+;   strapped memory types (CR36 bits 3-2). On the Trio64 the 70 MHz board policy (T64-MEM-7) is
+;   not used here. The cap is that maximum plus 25 percent: 60 MHz gives 75 MHz, 66.67 MHz gives
+;   83.333 MHz. Trio3D and Trio3D/2X have no datasheet maximum in this tree: /S and /T refuse.
 ;
+; Output without a switch (also the start of /S and /T)
+;   MCLK 1.0.0
+;   Chip:         Trio64V2/DX 86C775          chipname, chippart (chip.inc)
+;   Memory:       2 MB 1-cycle EDO            VBE 4F00 total memory (CR36 bits 7-5 when 4F00
+;                                             fails), type from CR36 bits 3-2
+;   Memory clock: 59.956 MHz                  SR10/SR11 as found
+;   The datasheet supports 50.113 MHz to 60.000 MHz on this chip; the memory
+;   speed and the hardware determine what you can get.
+;
+; /S MHz: set the clock
+;   Programs the highest pair at or below the request and leaves it there; no memory test. The
+;   BIOS programs its own clock again at the next boot. A request below the lowest pair or above
+;   the cap is refused. A pair above the datasheet maximum is set only after the Y question
+;   (below). After the write SR10 and SR11 are read back; when they differ the clock found at the
+;   start is put back (exit 1). One result line: "Set: <MHz> SR10=.. SR11=..".
+;
+; /T: test steps
+;   0.5 MHz steps from the lowest pair up to the cap, or /P for finer steps, or /I to start
+;   higher. The screen is blanked for the run and mode 03h is restored at the end, with the clock
+;   found at the start put back.
 ;   The recommended maximum ("Recommended max" line) is always a clock this run tested and passed,
 ;   and at least 1 percent below the highest clock that passed: the highest passing step at or
 ;   below 99 percent of it (integer kHz, step x 100 <= highest x 99). When no passing step is that
 ;   low (one step passed, or the run started too close to the highest) the line says "none"
 ;   instead of naming an untested clock: run again with a lower /I. Reaching the cap with every
-;   step clean is handled the same way, from the last step under the cap.
+;   step clean is handled the same way, from the last step under the cap. A recommendation is
+;   followed by the /S command that sets it ("To use it: MCLK /S 73.737").
 ;
-;   Before the first PLL write MCLK asks once, on stderr: it names the clock range it is about to
-;   program and waits for a key from the BIOS keyboard (INT 16h, so a redirected stdin cannot answer
-;   it; keys typed before the prompt are dropped). Only Y or y starts the sweep; any other key ends
-;   the run with the PLL untouched, a "Not confirmed" line and exit 1. The answer goes into the log.
-;   /H, a bad argument, no chip, no datasheet maximum and a start above the cap end before the
-;   question, also without a PLL write.
+; The Y question
+;   /T always, and /S above the datasheet maximum, ask once on stderr before the first PLL write:
+;   it names the clock (/S) or the range (/T) and waits for a key from the BIOS keyboard (INT 16h,
+;   so a redirected stdin cannot answer it; keys typed before the prompt are dropped). Only Y or y
+;   goes on; any other key ends the run with the PLL untouched, a "Not confirmed" line and exit 1.
+;   The answer goes into the log. /H, a bad argument, no chip, no datasheet maximum and a request
+;   out of range end before the question, also without a PLL write.
 ;
 ; Usage
-;   MCLK                 0.5 MHz steps from the floor up to the cap
-;   MCLK /P              finer steps: the next PLL pair at least 0.1 MHz up, instead of 0.5 MHz
+;   MCLK                 report only, changes nothing
+;   MCLK /S 57.5         set the pair at or below 57.5 MHz
+;   MCLK /T              test 0.5 MHz steps from the lowest pair up to the cap
+;   MCLK /T /P           finer steps: the next PLL pair at least 0.1 MHz up, instead of 0.5 MHz
 ;                        (the table has pairs 46 kHz apart; finer than 0.1 MHz is not needed)
-;   MCLK /I 52.5         start at 52.5 MHz (a pair at or below the request, not below the floor)
-;   MCLK /H              this help
-;   Each run asks once for Y before the first clock change (above).
-;   Esc during a pass stops the sweep and restores the POST clock.
-;   Exit 0 when at least one step passed and the sweep was not stopped. Exit 1 otherwise
-;   (a later step that fails is the result, not a failed run; a key other than Y at the
-;   question is exit 1). Not part of RUNALL: it changes
-;   the memory clock and the memory test is slow on purpose.
+;   MCLK /T /I 52.5      start at 52.5 MHz (a pair at or below the request, not below the lowest)
+;   MCLK /H              the help
+;   /P and /I go only with /T, /S not with /T: otherwise "bad argument".
+;   Esc during a test pass stops the sweep and puts the clock found at the start back.
+;   Exit codes: report 0 (1 when no chip is found). /S 0 when the clock was set, 1 otherwise. /T 0
+;   when at least one step passed and the sweep was not stopped, 1 otherwise (a later step that
+;   fails is the result, not a failed run). A key other than Y at the question is exit 1.
+;   Not part of RUNALL: /S and /T change the memory clock and the memory test is slow on purpose.
 ;
-; Each step, before the test: a line ending in "testing", flushed, so a hang names that clock.
+; Each /T step, before the test: a line ending in "testing", flushed, so a hang names that clock.
 ; The memory test writes a pattern across the whole aperture and reads it back (address XOR
 ; 5AA5C33Ch, the inverted pattern, alternating 55555555h/AAAAAAAAh), twice, plus a row ping-pong
 ; at a 2048-byte stride. From the second step on, a full write at the candidate is read back at
@@ -76,7 +106,14 @@ start:  cld
         call vbe_size
         call choose_book
         call header
-        cmp byte [nobook],1
+        cmp byte [doset],1
+        je setclk
+        cmp byte [dotest],1
+        je .test
+        call relock                     ; report only: nothing was changed
+        mov ax,0x4C00
+        int 0x21
+.test:  cmp byte [nobook],1
         je nodata
         call choose_start
         jc toohigh
@@ -89,12 +126,13 @@ start:  cld
         jmp finish
 
 ; ---------------------------------------------------------------------------
-; argument tail
+; argument tail. Sets [dohelp], [badarg], [doset] with [sreq], [dotest], [precise], [havei] with
+; [ireq]. /P and /I without /T, or /S together with /T, are a bad argument.
 
 parse:  mov si,0x81
 .op:    lodsb
         cmp al,13
-        je .d
+        je .chk
         cmp al,' '
         je .op
         cmp al,9
@@ -114,15 +152,36 @@ parse:  mov si,0x81
         mov byte [precise],1
         jmp .op
 .ii:    cmp al,'i'
-        jne .bad
+        jne .ss
         call skipsp
         call parsemhz
         jc .bad
         mov [ireq],eax
         mov byte [havei],1
         jmp .op
+.ss:    cmp al,'s'
+        jne .tt
+        call skipsp
+        call parsemhz
+        jc .bad
+        mov [sreq],eax
+        mov byte [doset],1
+        jmp .op
+.tt:    cmp al,'t'
+        jne .bad
+        mov byte [dotest],1
+        jmp .op
+.chk:   cmp byte [dotest],1             ; the end of the tail: check the combination
+        je .t
+        mov al,[precise]
+        or al,[havei]
+        jnz .bad
+        ret
+.t:     cmp byte [doset],1
+        je .bad
+        ret
 .hlp:   mov byte [dohelp],1
-.d:     ret
+        ret
 .bad:   mov byte [badarg],1
         ret
 
@@ -318,25 +377,41 @@ choose_book:
         ret
 
 ; ---------------------------------------------------------------------------
-; header. Printed before any PLL write and before the mode set.
+; header: the report. Printed before any PLL write and before the mode set. Also sets [banks]
+; (test_kb) for the sweep.
 
 header: call lbegin
         mov si,s_title
         call lstr
         call lend
         call line_chip
-        call line_rom
         call line_mem
+        call line_clock
         cmp byte [nobook],1
         je .nb
-        call line_floor
         call line_book
-        call line_post
-.nb:    ret
+        ret
+.nb:    call lbegin
+        mov si,s_nodata
+        call lstr
+        call lend
+        ret
 
+; "Chip:         Trio64V2/DX 86C775". Without a chip: the ID registers, for the log.
 line_chip:
         call lbegin
         mov si,s_chip
+        call lstr
+        cmp byte [chip],CHIP_NONE
+        je .na
+        call chipname
+        call lstrd
+        mov al,' '
+        call lc
+        call chippart
+        call lstrd
+        jmp .e
+.na:    mov si,s_na
         call lstr
         mov al,[chipcr2d]
         call phex2
@@ -352,74 +427,87 @@ line_chip:
         call lc
         mov al,[chipcr30]
         call phex2
-        mov si,s_cr6f
-        call lstr
-        mov al,[chipcr6f]
-        call phex2
-        mov si,s_pci
-        call lstr
-        cmp byte [chip],CHIP_NONE
-        je .na
-        mov ax,[chipdev]
-        call phex4
-        mov si,s_rev
-        call lstr
-        mov al,[chiprev]
-        call phex2
-        mov al,' '
+        mov al,')'
         call lc
-        call chipname
-        call lstrd
-        mov al,' '
-        call lc
-        call chippart
-        call lstrd
-        jmp .e
-.na:    mov si,s_na
-        call lstr
 .e:     call lend
         ret
 
-line_rom:
-        call lbegin
-        mov si,s_rom
-        call lstr
-        call romfind
-        jc .no
-        mov si,romvbuf
-        mov cx,[romvlen]
-        jcxz .no
-        rep movsb
-        jmp .e
-.no:    mov si,s_nover
-        call lstr
-.e:     call lend
-        ret
-
-; CR36 type (the strap, bits 3-2) and size (bits 7-5, written by the BIOS at POST),
-; then the aperture the test will walk.
+; "Memory:       2 MB 1-cycle EDO": the amount the test walks (VBE 4F00, else the CR36 size,
+; bits 7-5, written by the BIOS at POST), then the CR36 type (the strap, bits 3-2).
 line_mem:
         call lbegin
         mov si,s_mem
         call lstr
-        mov al,[cr36]
-        call phex2
-        mov si,s_size
-        call lstr
-        call size_si
-        call lstr
-        mov si,s_type
-        call lstr
+        call size_si                    ; [szkb] for test_kb's fallback
+        call test_kb
+        call pmem
+        mov al,' '
+        call lc
         call type_si
         call lstr
-        mov si,s_test
+        call lend
+        ret
+
+; "Memory clock: 59.956 MHz", from SR10/SR11 as found.
+line_clock:
+        call lbegin
+        mov si,s_clock
         call lstr
-        call test_kb
+        mov bl,[post10]
+        mov bh,[post11]
+        call pll_khz
+        call pmhz
+        call lend
+        ret
+
+; The range: the lowest pair to the datasheet maximum, on two lines.
+line_book:
+        call lbegin
+        mov si,s_book1
+        call lstr
+        mov eax,FLOOR_KHZ
+        call pmhz
+        mov si,s_book2
+        call lstr
+        mov eax,[book]
+        call pmhz
+        mov si,s_book3
+        call lstr
+        call lend
+        call lbegin
+        mov si,s_book4
+        call lstr
+        call lend
+        ret
+
+; AX = KB -> "2 MB", "1.5 MB", "640 KB", or "unknown size" for 0. Keeps AX.
+pmem:   push ax
+        push dx
+        or ax,ax
+        jz .unk
+        test ax,0x01FF                  ; not a multiple of 512 KB: KB
+        jnz .kb
         movzx eax,ax
+        push eax
+        shr eax,10
+        call pdec
+        pop eax
+        test ax,0x0200
+        jz .mb
+        mov si,s_half
+        call lstr
+.mb:    mov si,s_mb
+        call lstr
+        jmp .r
+.kb:    movzx eax,ax
         call pdec
         mov si,s_kb
         call lstr
-        call lend
+        jmp .r
+.unk:   mov si,s_unk
+        call lstr
+.r:     pop dx
+        pop ax
         ret
 
 ; SI -> size name. Also [szkb] for the fallback aperture.
@@ -471,57 +559,8 @@ test_kb:
         mov [banks],bx
         ret
 
-line_floor:
-        call lbegin
-        mov si,s_floor
-        call lstr
-        mov eax,FLOOR_KHZ
-        call pmhz
-        mov si,s_sr
-        call lstr
-        mov al,0x41
-        call phex2
-        mov si,s_sr11
-        call lstr
-        mov al,0x28
-        call phex2
-        call lend
-        ret
-
-line_book:
-        call lbegin
-        mov si,s_book
-        call lstr
-        mov eax,[book]
-        call pmhz
-        mov si,s_cap
-        call lstr
-        mov eax,[capk]
-        call pmhz
-        mov si,s_plus
-        call lstr
-        call lend
-        ret
-
-line_post:
-        call lbegin
-        mov si,s_post
-        call lstr
-        mov bl,[post10]
-        mov bh,[post11]
-        call pll_khz
-        call pmhz
-        mov si,s_sr
-        call lstr
-        mov al,[post10]
-        call phex2
-        mov si,s_sr11
-        call lstr
-        mov al,[post11]
-        call phex2
-        call lend
-        ret
-
+; "Start 73.737 MHz, step 0.500 MHz, cap 75.000 MHz (datasheet maximum + 25%)", after a
+; "Requested ... is below" line when /I asked for less than the lowest pair.
 line_start:
         cmp byte [clamped],1
         jne .s
@@ -550,7 +589,13 @@ line_start:
         call pmhz
         mov si,s_prec
         call lstr
-.e:     call lend
+.e:     mov si,s_cap
+        call lstr
+        mov eax,[capk]
+        call pmhz
+        mov si,s_plus
+        call lstr
+        call lend
         ret
 
 ; ---------------------------------------------------------------------------
@@ -584,11 +629,8 @@ choose_start:
         stc
         ret
 
-; The one question of a run, before the first PLL write. The warning and the prompt go to stderr
-; only (meant for the person at the screen); the answer goes to the log as a line of its own.
-; Keys already in the BIOS keyboard buffer are dropped first, so only a key pressed after the
-; prompt counts. The key is read with INT 16h AH=00h, not from stdin.
-; Out: CF clear when Y or y was pressed, CF set for any other key. Clobbers AX, BX, CX, DX, SI, DI.
+; /T's question: the range it will program, then ask. Out: CF as ask. Clobbers AX, BX, CX, DX,
+; SI, DI.
 confirm:
         call lbegin
         mov si,s_warn1
@@ -602,7 +644,24 @@ confirm:
         call pmhz
         mov si,s_warn3
         call lstr
-        call lerr
+        mov si,s_risk
+        call lstr
+        call ask
+        jc .r
+        call lbegin
+        mov si,s_yes
+        call lstr
+        call lend
+        clc
+.r:     ret
+
+; The one question of a run, before the first PLL write. In: the warning and the prompt in the
+; line buffer up to DI (lbegin, lstr ...); they go to stderr only (meant for the person at the
+; screen). The answer goes to the log: a "Not confirmed" line here, the caller's line on Y.
+; Keys already in the BIOS keyboard buffer are dropped first, so only a key pressed after the
+; prompt counts. The key is read with INT 16h AH=00h, not from stdin.
+; Out: CF clear when Y or y was pressed, CF set for any other key. Clobbers AX, BX, CX, DX, SI, DI.
+ask:    call lerr
         push es
         mov ax,0x40
         mov es,ax
@@ -628,10 +687,6 @@ confirm:
         or al,0x20
         cmp al,'y'
         jne .no
-        call lbegin
-        mov si,s_yes
-        call lstr
-        call lend
         clc
         ret
 .no:    call lbegin
@@ -640,6 +695,123 @@ confirm:
         call lend
         stc
         ret
+
+; /S: program the highest pair at or below [sreq] and leave it; no memory test. Refuses a request
+; below the lowest pair or above the cap, asks above the datasheet maximum. Reads SR10/SR11 back
+; and puts the clock found at the start back when they differ. Ends the program: exit 0 when the
+; clock was set, 1 otherwise; SR08 and the sequencer index as found.
+setclk: cmp byte [nobook],1
+        je nodata
+        mov eax,[sreq]
+        cmp eax,FLOOR_KHZ
+        jb .low
+        cmp eax,[capk]
+        ja .high
+        call find_le
+        jc .low
+        mov [curi],bx
+        call entry
+        mov [curk],eax
+        mov [cur10],dl
+        mov [cur11],dh
+        cmp eax,[book]
+        jbe .go
+        call lbegin                     ; above the datasheet maximum: ask first
+        mov si,s_sw1
+        call lstr
+        mov eax,[curk]
+        call pmhz
+        mov si,s_sw2
+        call lstr
+        mov eax,[book]
+        call pmhz
+        mov si,s_sw3
+        call lstr
+        mov si,s_risk
+        call lstr
+        call ask
+        jc declined
+        call lbegin
+        mov si,s_yes2
+        call lstr
+        call lend
+.go:    mov bl,[cur10]
+        mov bh,[cur11]
+        call loadp
+        call settle
+        mov al,0x10
+        call rdsr
+        mov [prv10],al                  ; what the registers hold now
+        mov al,0x11
+        call rdsr
+        mov [prv11],al
+        cmp al,[cur11]
+        jne .bad
+        mov al,[prv10]
+        cmp al,[cur10]
+        jne .bad
+        call lbegin                     ; "Set: 57.272 MHz SR10=41 SR11=2E"
+        mov si,s_set
+        call lstr
+        mov eax,[curk]
+        call pmhz
+        mov si,s_sr
+        call lstr
+        mov al,[cur10]
+        call phex2
+        mov si,s_sr11
+        call lstr
+        mov al,[cur11]
+        call phex2
+        call lend
+        call lbegin
+        mov si,s_set2
+        call lstr
+        call lend
+        call relock
+        mov ax,0x4C00
+        int 0x21
+.bad:   mov bl,[post10]                 ; the pair did not take: back to the clock found
+        mov bh,[post11]
+        call loadp
+        call settle
+        call lbegin
+        mov si,s_setbad
+        call lstr
+        mov al,[prv10]
+        call phex2
+        mov si,s_sr11
+        call lstr
+        mov al,[prv11]
+        call phex2
+        mov si,s_setbd2
+        call lstr
+        call lend
+        jmp .x
+.low:   call lbegin
+        mov eax,[sreq]
+        call pmhz
+        mov si,s_low
+        call lstr
+        mov eax,FLOOR_KHZ
+        call pmhz
+        mov si,s_low2
+        call lstr
+        call lend
+        jmp .x
+.high:  call lbegin
+        mov eax,[sreq]
+        call pmhz
+        mov si,s_high2
+        call lstr
+        mov eax,[capk]
+        call pmhz
+        mov si,s_plus
+        call lstr
+        call lend
+.x:     call relock
+        mov ax,0x4C01
+        int 0x21
 
 video_on:
         mov ax,0x4F02
@@ -1280,7 +1452,15 @@ summary:
         cmp eax,[reclim]
         ja .cand
         mov si,s_pub                    ; a tested pass at least 1 percent below the highest
-        call show_pair
+        push bx
+        call show_pair                  ; lend clobbers BX
+        pop bx
+        call lbegin                     ; "To use it: MCLK /S 73.737"
+        mov si,s_use1
+        call lstr                       ; clobbers AL: the entry after it
+        call entry
+        call pkhz
+        call lend
         jmp .rest
 .nrec:  call lbegin                     ; no tested pass that low: no value
         mov si,s_pub
@@ -1311,7 +1491,7 @@ summary:
         call lend
         ret
 
-; SI = label, BX = table index. Prints the label, the frequency and SR10/SR11.
+; SI = label, BX = table index. Prints the label, the frequency and SR10/SR11. Clobbers BX.
 show_pair:
         push bx
         call lbegin
@@ -1381,17 +1561,17 @@ entry:  push bx
 ; ---------------------------------------------------------------------------
 ; early exits that have not changed the PLL
 
-nochip: call line_chip
-        call lbegin
-        mov si,s_nochip
+nochip: call lbegin
+        mov si,s_title
         call lstr
         call lend
+        call line_chip
         mov ax,0x4C01
         int 0x21
 
 nodata: call relock
         call lbegin
-        mov si,s_nodata
+        mov si,s_nodat2
         call lstr
         call lend
         mov ax,0x4C01
@@ -1537,8 +1717,16 @@ pdec:   push eax
         pop eax
         ret
 
-; EAX kHz -> "50.113"
-pmhz:   push eax
+; EAX kHz -> "50.113 MHz". Keeps every register (and DI moves on).
+pmhz:   call pkhz
+        push si
+        mov si,s_mhz
+        call lstr
+        pop si
+        ret
+
+; EAX kHz -> "50.113", the form /S and /I take. Keeps every register (and DI moves on).
+pkhz:   push eax
         push ebx
         push ecx
         push edx
@@ -1551,8 +1739,6 @@ pmhz:   push eax
         call lc
         pop ax
         call p3
-        mov si,s_mhz
-        call lstr
         pop edx
         pop ecx
         pop ebx
@@ -1583,6 +1769,8 @@ dohelp  db 0
 badarg  db 0
 precise db 0
 havei   db 0
+doset   db 0
+dotest  db 0
 clamped db 0
 nobook  db 0
 vid     db 0
@@ -1604,6 +1792,7 @@ cur11   db 0
 prv10   db 0
 prv11   db 0
 ireq    dd 0
+sreq    dd 0
 book    dd 0
 capk    dd 0
 curk    dd 0
@@ -1622,28 +1811,25 @@ llen    dw 0
 passi   times 256 dw 0
 
 s_title db 'MCLK ',VERSION,0
-s_chip  db 'Chip ',0
-s_cr6f  db ' CR6F ',0
-s_pci   db ' PCI ',0
-s_rev   db ' rev ',0
-s_na    db 'n/a',0
-s_rom   db 'ROM ',0
-s_nover db '(no version string)',0
-s_mem   db 'Memory CR36=',0
-s_size  db ' size ',0
-s_type  db ', type ',0
-s_test  db ', test ',0
+s_chip  db 'Chip:         ',0
+s_na    db 'not found (CR2D-CR30 ',0
+s_mem   db 'Memory:       ',0
+s_clock db 'Memory clock: ',0
+s_book1 db 'The datasheet supports ',0
+s_book2 db ' to ',0
+s_book3 db ' on this chip; the memory',0
+s_book4 db 'speed and the hardware determine what you can get.',0
+s_mb    db ' MB',0
+s_half  db '.5',0
 s_kb    db ' KB',0
-s_floor db 'Floor ',0
-s_book  db 'Datasheet ',0
-s_cap   db '  cap ',0
-s_plus  db ' (+25%)',0
-s_post  db 'POST ',0
+s_unk   db 'unknown size,',0
 s_start db 'Start ',0
-s_step  db '  step ',0
+s_step  db ', step ',0
 s_prec  db ' or more (/P)',0
+s_cap   db ', cap ',0
+s_plus  db ' (datasheet maximum + 25%)',0
 s_below db 'Requested ',0
-s_bel2  db ' is below the floor',0
+s_bel2  db ' is below the lowest clock; starting there',0
 s_over  db 'Start is above the cap: ',0
 s_mhz   db ' MHz',0
 s_sr    db ' SR10=',0
@@ -1668,19 +1854,32 @@ s_got   db ' got ',0
 s_high  db 'Highest ',0
 s_pub   db 'Recommended max ',0
 s_pub1  db 'none: no tested step 1% or more below the highest (run again with a lower /I)',0
+s_use1  db 'To use it: MCLK /S ',0
 s_none  db 'No step passed',0
 s_rest  db 'Restored ',0
+s_set   db 'Set: ',0
+s_set2  db 'The BIOS sets its own clock again at the next boot.',0
+s_setbad db 'Not set: SR10/SR11 read back as SR10=',0
+s_setbd2 db '; the clock found at the start was put back',0
+s_low   db ' is below ',0
+s_low2  db ', the lowest clock MCLK sets',0
+s_high2 db ' is above the cap: ',0
 s_nomode db 'Mode 101h was not set; the clock was not changed',0
 s_nomem db 'No video memory to test',0
-s_nochip db 'No Trio64-family chip found',0
-s_nodata db 'No datasheet MCLK maximum for this chip',0
-s_warn1 db 'MCLK changes the memory clock of this card. It programs the MCLK PLL from',13,10,0
+s_nodata db 'No datasheet MCLK maximum for this chip in MCLK',0
+s_nodat2 db '/S and /T need the datasheet maximum; the clock was not changed',0
+s_warn1 db 'MCLK /T changes the memory clock of this card. It programs the MCLK PLL from',13,10,0
 s_warn2 db ' up to ',0
-s_warn3 db ' (the datasheet maximum plus 25 percent). A clock',13,10
-        db 'above what the memory takes can corrupt video memory or hang the machine (then',13,10
-        db 'reset it). The POST clock is put back at the end.',13,10
-        db 'Press Y to continue, any other key to quit: ',0
+s_warn3 db ' (the datasheet maximum plus 25 percent).',13,10
+        db 'The clock found at the start is put back at the end.',13,10,0
+s_sw1   db 'MCLK /S sets the memory clock to ',0
+s_sw2   db ', above the datasheet maximum',13,10
+        db 'of ',0
+s_sw3   db '.',13,10,0
+s_risk  db 'A clock above what the memory takes can corrupt video memory or hang the',13,10
+        db 'machine (then reset it). Press Y to continue, any other key to quit: ',0
 s_yes   db 'Confirmed: Y pressed, the clock steps start',0
+s_yes2  db 'Confirmed: Y pressed, the clock is set',0
 s_no    db 'Not confirmed: the clock was not changed',0
 s_4     db '4 MB',0
 s_2     db '2 MB',0
@@ -1702,22 +1901,21 @@ typetab dw s_edo1, s_sgram, s_edo2, s_fpm
 type64  dw s_res, s_res, s_edo, s_fpm
 
 s_bad   db 'MCLK ',VERSION,': bad argument. MCLK /H for help.',13,10,'$'
-s_use   db 'MCLK ',VERSION,' - find a stable memory clock',13,10
-        db '  MCLK           0.5 MHz steps from the floor (SR10=41 SR11=28, 50.114 MHz)',13,10
-        db '  MCLK /P        steps of 0.1 MHz or more (the next PLL pair)',13,10
-        db '  MCLK /I 52.5   start at 52.5 MHz (not below the floor)',13,10
-        db '  MCLK /H        this help',13,10
-        db 'Prints the chip, the ROM version, CR36 memory type and size, then',13,10
-        db 'each clock as it is tested. Esc stops the run. The recommended max',13,10
-        db 'is the highest tested step that passed at least 1 percent below the',13,10
-        db 'highest that passed (none when no tested step is that low).',13,10
-        db 'The cap is the datasheet MCLK maximum plus 25 percent. The POST',13,10
-        db 'clock is restored. Exit 0 when a step passed and Esc was not used.',13,10
-        db 'Asks once for Y before the first clock change; any other key quits.',13,10,'$'
+s_use   db 'MCLK ',VERSION,' - show, set or test the memory clock (MCLK)',13,10
+        db 13,10
+        db '  MCLK            show the chip, the memory and the memory clock',13,10
+        db '  MCLK /S 57.5    set the memory clock to 57.5 MHz (or the step just below)',13,10
+        db '  MCLK /T         test the memory in 0.5 MHz steps from 50.113 MHz up to the',13,10
+        db '                  datasheet maximum + 25%, and recommend a clock',13,10
+        db '  MCLK /T /P      test in steps of 0.1 MHz or more',13,10
+        db '  MCLK /T /I 55   start the test at 55 MHz',13,10
+        db '  MCLK /H         this help',13,10
+        db 13,10
+        db '/S asks for Y above the datasheet maximum, /T always. The BIOS sets its own',13,10
+        db 'clock again at the next boot. Esc stops a test; the old clock is put back.',13,10,'$'
 
 %include "chip.inc"
-%include "romver.inc"
 %include "pll.inc"
 
 vbebuf  times 256 db 0
-line    times 180 db 0
+line    times 512 db 0

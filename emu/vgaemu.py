@@ -297,7 +297,8 @@ class Machine:
             # CR36 bits 7-5 = the memory size (110b 1 MB, 100b 2 MB, 000b 4 MB); bits 3-2 the memory type:
             # 1-cycle EDO (00b) on the Trio64V2/V+ models, EDO (10b) on the Trio32/Trio64, whose 00b is
             # reserved, and fast page (11b) on the Trio64 with 4 MB, which the data book requires for it
-            # (pin 50 as RAS1, T64-MEM-3)
+            # (pin 50 as RAS1, T64-MEM-3; tests.py --vram 4 by hand only, make emu-test and CI stop at
+            # 2 MB on the Trio64; the Trio32 takes at most 2 MB)
             c = chip_ids()
             cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
             if Machine.chip in ('trio64', 'trio32'):

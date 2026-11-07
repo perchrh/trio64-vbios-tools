@@ -209,7 +209,8 @@ review and a clean implementer who must not see BIOS images or BIOS source.
   POST, so there is no build option for it. `make emu-test ROM=...` runs every test with 2 MB and the
   ones tagged `vram` (their result depends on the memory size) again with 4 MB, and with `CHIP=765`,
   `CHIP=764` or `CHIP=732` also with 1 MB (the Trio32 never with 4 MB, its maximum is 2 MB; the Trio64
-  not with 4 MB in `make emu-test`, `make test-all` and CI, by the owner's choice: 2 and 1 MB there.
+  not with 4 MB in `make emu-test`, `make test-all` and CI either: no Trio64 card was built with more than
+  2 MB, owner's decision 7 November 2026, so 2 and 1 MB there.
   The model still takes `--vram 4` on the Trio64, a fast page board by its data book and strapped so,
   for a run by hand with `VRAM=4`); a new test that reads the memory size or the VESA mode list gets the tag. Expected
   values follow the memory size, never a fixed 2 MB.

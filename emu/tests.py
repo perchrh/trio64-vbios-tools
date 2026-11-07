@@ -53,13 +53,18 @@ Tests
   romver           ROMVER.COM prints the version S3TEST reads ("Version " in C000:0000-00FF, at most
                    12 characters, stopping before a byte below 20h); /Q prints only that version.
                    S3COMPAT's ROM line and a /V log (D:ENV ROM=) use that same scan
-  mclk             MCLK.COM prints the chip, the ROM version and the CR36 memory type and size
-                   before it changes the clock. /H is the help. /I above the cap changes nothing
-                   and asks nothing. Before the first PLL write it asks once on stderr: N leaves
-                   SR08/SR10/SR11/SR15 as they were (exit 1). With Y, /I 74.9 (cap 75 MHz) runs one
-                   step and recommends none (no tested pass 1 % below it); /I 73.9 runs three
-                   steps and recommends the highest tested pass at least 1 % below the highest;
-                   /P /I 74.5 takes the first PLL pair 0.1 MHz or more above each step. The POST
+  mclk             MCLK.COM without a switch prints the version, chip, memory amount and type, memory
+                   clock and the datasheet range (50.113 MHz to the MEM-1/V2-MEM-1 maximum) and
+                   changes nothing. /H is the help; /P or /I without /T, /S with /T, /S without a
+                   value are bad arguments. /S 57.5 sets the pair at or below 57.5 MHz without a
+                   question; mode sets keep it on our 2.04.07 ROM and the next report shows it.
+                   /S 45 and /S 90 are refused without a write; /S 70 asks once: N writes nothing,
+                   Y sets it. /T /I 90 (above the cap) changes nothing and asks nothing. Before
+                   the first PLL write /T asks once on stderr: N leaves SR08/SR10/SR11/SR15 as they
+                   were (exit 1). With Y, /T /I 74.9 (cap 75 MHz) runs one step and recommends none
+                   (no tested pass 1 % below it); /T /I 73.9 runs three steps and recommends the
+                   highest tested pass at least 1 % below the highest, with its /S command;
+                   /T /P /I 74.5 takes the first PLL pair 0.1 MHz or more above each step. The POST
                    SR10/SR11 come back. The emulator's RAM does not go bad as the clock rises, so
                    this does not measure a real maximum
   s3test           S3TEST runs to the end; every check passes except the banked write throughput (no
@@ -2621,25 +2626,102 @@ def t_romver(c):
 
 
 def t_mclk(c):
-    """MCLK prints the chip, ROM version and CR36 memory before any clock step, asks once for Y before the
-    first PLL write (any other key: no write, exit 1), and puts the POST clock back."""
+    """MCLK without a switch reports the chip, the memory, the memory clock and the datasheet range and
+    changes nothing; /S sets a clock (asking for Y above the datasheet maximum); /T asks once for Y
+    before the first PLL write (any other key: no write, exit 1), tests steps and puts the POST clock back."""
     com = c.tool('MCLK.COM')
     h = c.machine().run_com(com, '/H', name='MCLK.COM', max_insn=2_000_000)
     check(h.exit == ('exit', 0), 'MCLK /H exit %s' % (h.exit,))
     helptext = bytes(h.stdout)
-    check(b'/P' in helptext and b'/I' in helptext and b'CR36' in helptext, 'MCLK /H text %r' % helptext[:200])
+    check(all(sw in helptext for sw in (b'/S', b'/T', b'/P', b'/I')), 'MCLK /H text %r' % helptext[:300])
 
-    bad = c.machine().run_com(com, '/I', name='MCLK.COM', max_insn=1_000_000)
-    check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
-          'bad /I %s %r' % (bad.exit, bytes(bad.stdout)[:200]))
+    for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X'):
+        bad = c.machine().run_com(com, tail, name='MCLK.COM', max_insn=1_000_000)
+        check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
+              'bad %r %s %r' % (tail, bad.exit, bytes(bad.stdout)[:200]))
+
+    with open(os.path.join(HERE, '..', 'src', 'tools', 'mclk', 'pll.inc')) as f:
+        tab = re.findall(r'\bdd\s+(\d+)\s+db\s+0x([0-9A-F]{2}),\s*0x([0-9A-F]{2})', f.read())
+    table = [int(k) for k, _, _ in tab]
+    pair = {int(k): (int(a, 16), int(b, 16)) for k, a, b in tab}
+    pll = lambda mm: tuple(mm.r['seq'].get(i) for i in (0x08, 0x10, 0x11, 0x15))
+    clk = lambda mm: (mm.r['seq'].get(0x10), mm.r['seq'].get(0x11))
+    lines_of = lambda r: [ln for ln in bytes(r.stdout).replace(b'\r\n', b'\n').split(b'\n') if ln]
+
+    # The report: the version, four facts and the datasheet range (MEM-1, V2-MEM-1), nothing changed.
+    mi = c.machine()
+    beforei = pll(mi)
+    info = mi.run_com(com, '', name='MCLK.COM', max_insn=20_000_000)
+    il = lines_of(info)
+    check(info.exit == ('exit', 0), 'MCLK report exit %s %r' % (info.exit, il))
+    check(il[0].startswith(b'MCLK ') and il[1].startswith(b'Chip:') and il[2].startswith(b'Memory:') and
+          il[3].startswith(b'Memory clock:') and il[4].startswith(b'The datasheet supports ') and len(il) == 6,
+          'report lines %r' % il)
+    check(CHIPS[Machine.chip]['name'].encode() in il[1], 'chip line %r on the %s model' % (il[1], Machine.chip))
+    vram = Machine.vram
+    want_mem = ('%d MB' % vram).encode()
+    want_type = b'fast page' if Machine.chip == 'trio64' and vram == 4 else b'EDO'   # 4 MB Trio64: fast page
+    check(il[2].split(b':', 1)[1].strip().startswith(want_mem + b' ') and want_type in il[2],
+          'memory line %r, %d MB' % (il[2], vram))
+    post = clk(mi)
+    pk = 14318 * ((post[1] & 0x7F) + 2) // ((post[0] & 0x1F) + 2) >> ((post[0] >> 5) & 3)
+    check(('%d.%03d MHz' % (pk // 1000, pk % 1000)).encode() in il[3], 'clock line %r, SR10/SR11 %s' % (il[3], post))
+    cr36 = mi.r['crtc'].get(0x36)
+    book = 66667 if Machine.chip == 'uvplus' or (Machine.chip == 'v2' and cr36 & 0x0C) else 60000
+    check(('supports 50.113 MHz to %d.%03d MHz' % (book // 1000, book % 1000)).encode() in il[4],
+          'datasheet line %r, expected %d kHz' % (il[4], book))
+    check(not info.stderr or b'Press Y' not in bytes(info.stderr), 'the report asked %r' % bytes(info.stderr)[:300])
+    check(pll(mi) == beforei, 'report changed SR08/SR10/SR11/SR15 %s, before %s' % (pll(mi), beforei))
+
+    # /S below the datasheet maximum: no question, the pair at or below the request, kept by mode sets
+    # (our ROM programs the MCLK at POST only) and shown by the next report.
+    ms = c.machine()
+    s1 = ms.run_com(com, '/S 57.5', name='MCLK.COM', max_insn=20_000_000)
+    sl = lines_of(s1)
+    k = max(t for t in table if t <= 57500)
+    check(s1.exit == ('exit', 0), 'MCLK /S 57.5 exit %s %r' % (s1.exit, sl))
+    check(b'Press Y' not in bytes(s1.stderr), '/S 57.5 asked: %r' % bytes(s1.stderr)[:300])
+    check(clk(ms) == pair[k], '/S 57.5 left SR10/SR11 %s, expected %s (%d kHz)' % (clk(ms), pair[k], k))
+    check(('Set: %d.%03d MHz SR10=%02X SR11=%02X' % (k // 1000, k % 1000, pair[k][0], pair[k][1])).encode() in sl,
+          '/S 57.5 lines %r' % sl)
+    check(ms.r['seq'].get(0x08) == beforei[0], '/S left SR08 %s, found %s' % (ms.r['seq'].get(0x08), beforei[0]))
+    if c.ours:
+        for mode in (0x0003, 0x0013):
+            ms.int10(mode)
+        ms.int10(0x4F02, 0x0101)
+        ms.int10(0x0003)
+        check(clk(ms) == pair[k], 'a mode set changed the /S clock to %s' % (clk(ms),))
+    again = lines_of(ms.run_com(com, '', name='MCLK.COM', max_insn=20_000_000))
+    check(('Memory clock: %d.%03d MHz' % (k // 1000, k % 1000)).encode() in again, 'report after /S %r' % again)
+
+    # /S out of range: refused, nothing written, no question.
+    for tail, word in (('/S 45', b'is below'), ('/S 90', b'above the cap')):
+        mo = c.machine()
+        bo = pll(mo)
+        ro = mo.run_com(com, tail, name='MCLK.COM', max_insn=20_000_000)
+        check(ro.exit == ('exit', 1) and any(word in ln for ln in lines_of(ro)), '%s %s %r' % (tail, ro.exit, lines_of(ro)))
+        check(pll(mo) == bo and b'Press Y' not in bytes(ro.stderr), '%s wrote %s or asked' % (tail, pll(mo)))
+
+    # /S above the datasheet maximum (below every cap): asks once; N writes nothing, Y sets it.
+    k70 = max(t for t in table if t <= 70000)
+    mn = c.machine(keys=[0x316E])                       # 'n'
+    bn = pll(mn)
+    rn = mn.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
+    check(rn.exit == ('exit', 1) and b'Not confirmed' in bytes(rn.stdout) and bytes(rn.stderr).count(b'Press Y') == 1,
+          '/S 70 declined %s %r' % (rn.exit, lines_of(rn)))
+    check(pll(mn) == bn, '/S 70 declined wrote %s, before %s' % (pll(mn), bn))
+    my = c.machine(keys=[0x1579])                       # 'y'
+    ry = my.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
+    yl = lines_of(ry)
+    check(ry.exit == ('exit', 0) and b'Confirmed: Y pressed, the clock is set' in yl, '/S 70 %s %r' % (ry.exit, yl))
+    check(clk(my) == pair[k70], '/S 70 left %s, expected %s' % (clk(my), pair[k70]))
 
     m = c.machine()
     before = (m.r['seq'].get(0x10), m.r['seq'].get(0x11))
-    over = m.run_com(com, '/I 90', name='MCLK.COM', max_insn=20_000_000)
-    check(over.exit == ('exit', 1), 'MCLK /I 90 exit %s stdout %r' % (over.exit, bytes(over.stdout)[:500]))
+    over = m.run_com(com, '/T /I 90', name='MCLK.COM', max_insn=20_000_000)
+    check(over.exit == ('exit', 1), 'MCLK /T /I 90 exit %s stdout %r' % (over.exit, bytes(over.stdout)[:500]))
     text = bytes(over.stdout).replace(b'\r\n', b'\n')
-    check(b'Chip ' in text and b'ROM ' in text, 'identity missing in %r' % text[:400])
-    check(b'Memory CR36=' in text and b'type ' in text and b'size ' in text, 'CR36 line missing in %r' % text[:600])
+    check(b'Chip:' in text and b'Memory:' in text, 'report missing in %r' % text[:400])
     check(b'above the cap' in text, 'cap refusal missing in %r' % text[:800])
     check(b'STEP ' not in text, 'a step ran above the cap: %r' % text[:800])
     check((m.r['seq'].get(0x10), m.r['seq'].get(0x11)) == before,
@@ -2648,9 +2730,8 @@ def t_mclk(c):
 
     # Any key but Y: the question on stderr, a "Not confirmed" line, no step, no PLL or SR15 write.
     mn = c.machine(keys=[0x316E])                       # 'n'
-    pll = lambda mm: tuple(mm.r['seq'].get(i) for i in (0x08, 0x10, 0x11, 0x15))
     beforen = pll(mn)
-    no = mn.run_com(com, '/I 60', name='MCLK.COM', max_insn=20_000_000)
+    no = mn.run_com(com, '/T /I 60', name='MCLK.COM', max_insn=20_000_000)
     ntext = bytes(no.stdout).replace(b'\r\n', b'\n')
     check(no.exit == ('exit', 1), 'MCLK declined exit %s\n%s' % (no.exit, ntext.decode('latin1', 'replace')[:800]))
     check(bytes(no.stderr).count(b'Press Y') == 1, 'question on stderr %r' % bytes(no.stderr)[:600])
@@ -2662,18 +2743,18 @@ def t_mclk(c):
     # One step, just under a 60 MHz datasheet cap of 75 MHz. The UV+ book is 66.67 MHz,
     # so the same request keeps stepping and is not this test.
     if Machine.chip == 'uvplus':
-        raise Skip('Trio64UV+ cap is 83.333 MHz; /I 74.9 is not a single step')
+        raise Skip('Trio64UV+ cap is 83.333 MHz; /T /I 74.9 is not a single step')
     m2 = c.machine(keys=[0x1579])                       # 'y'
     post = (m2.r['seq'].get(0x10), m2.r['seq'].get(0x11))
-    one = m2.run_com(com, '/I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
+    one = m2.run_com(com, '/T /I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
     body = bytes(one.stdout).replace(b'\r\n', b'\n')
-    check(one.exit == ('exit', 0), 'MCLK /I 74.9 exit %s\n%s' % (one.exit, body.decode('latin1', 'replace')[:1500]))
+    check(one.exit == ('exit', 0), 'MCLK /T /I 74.9 exit %s\n%s' % (one.exit, body.decode('latin1', 'replace')[:1500]))
     check(bytes(one.stderr).count(b'Press Y') == 1, 'asked %d times' % bytes(one.stderr).count(b'Press Y'))
     check(body.find(b'Confirmed') >= 0 and body.find(b'Confirmed') < body.find(b'STEP '),
           'no "Confirmed" line before the first step in %r' % body[:800])
     lines = [ln for ln in body.split(b'\n') if ln]
-    mem = next((ln for ln in lines if ln.startswith(b'Memory CR36=')), b'')
-    check(b'size ' in mem and b'type ' in mem and b'test ' in mem and b'EDO' in mem, 'memory line %r' % mem)
+    mem = next((ln for ln in lines if ln.startswith(b'Memory:')), b'')
+    check(b' MB ' in mem and b'EDO' in mem, 'memory line %r' % mem)
     steps = [ln for ln in lines if ln.startswith(b'STEP ')]
     check(steps and steps[0].endswith(b'testing'), 'first step line %r' % steps[:2])
     check(any(ln.endswith(b'PASS') for ln in steps), 'no PASS in %r' % steps)
@@ -2686,6 +2767,7 @@ def t_mclk(c):
 
     # One pass has no tested step 1 % below it: no value rather than an untested clock.
     check(high and pub.startswith(b'Recommended max none'), 'one pass, recommended %r (highest %r)' % (pub, high))
+    check(not any(ln.startswith(b'To use it') for ln in lines), 'a /S hint without a recommendation: %r' % lines)
     rest = next((ln for ln in lines if ln.startswith(b'Restored ')), b'')
     check(('SR10=%02X' % post[0]).encode() in rest and ('SR11=%02X' % post[1]).encode() in rest,
           'restored %r, POST SR10/SR11 %02X %02X' % (rest, post[0], post[1]))
@@ -2697,17 +2779,14 @@ def t_mclk(c):
     # not 74.658). The highest of the three has no tested pass 1 % below it: "none".
     mp = c.machine(keys=[0x1579])
     postp = (mp.r['seq'].get(0x10), mp.r['seq'].get(0x11))
-    prec = mp.run_com(com, '/P /I 74.5', name='MCLK.COM', max_insn=6_000_000_000)
+    prec = mp.run_com(com, '/T /P /I 74.5', name='MCLK.COM', max_insn=6_000_000_000)
     pbody = bytes(prec.stdout).replace(b'\r\n', b'\n')
     check(prec.exit == ('exit', 0), 'MCLK /P exit %s\n%s' % (prec.exit, pbody.decode('latin1', 'replace')[:800]))
     plines = [ln for ln in pbody.split(b'\n') if ln]
     pstart = next((ln for ln in plines if ln.startswith(b'Start ')), b'')
-    check(pstart.endswith(b'step 0.100 MHz or more (/P)'), 'precise start line %r' % pstart)
+    check(b', step 0.100 MHz or more (/P), cap ' in pstart, 'precise start line %r' % pstart)
     ptested = [round(mhz_of(ln[len(b'STEP '):]) * 1000) for ln in plines if ln.startswith(b'STEP ') and ln.endswith(b'testing')]
-    with open(os.path.join(HERE, '..', 'src', 'tools', 'mclk', 'pll.inc')) as f:
-        table = [int(x) for x in re.findall(r'\bdd\s+(\d+)', f.read())]
-    capl = next((ln for ln in plines if ln.startswith(b'Datasheet ')), b'')
-    cap = round(float(capl.split(b'cap ')[1].split()[0]) * 1000)
+    cap = round(float(pstart.split(b'cap ')[1].split()[0]) * 1000)
     want = [max(k for k in table if k <= 74500)]
     while True:
         nxt = [k for k in table if k >= want[-1] + 100]
@@ -2724,9 +2803,9 @@ def t_mclk(c):
     # Three 0.5 MHz steps under the 75 MHz cap: the recommendation is a step that passed, at least
     # 1 % below the highest pass (kHz x 100 <= highest x 99), and the highest such step.
     ms = c.machine(keys=[0x1579])
-    sw = ms.run_com(com, '/I 73.9', name='MCLK.COM', max_insn=6_000_000_000)
+    sw = ms.run_com(com, '/T /I 73.9', name='MCLK.COM', max_insn=6_000_000_000)
     sbody = bytes(sw.stdout).replace(b'\r\n', b'\n')
-    check(sw.exit == ('exit', 0), 'MCLK /I 73.9 exit %s\n%s' % (sw.exit, sbody.decode('latin1', 'replace')[:1500]))
+    check(sw.exit == ('exit', 0), 'MCLK /T /I 73.9 exit %s\n%s' % (sw.exit, sbody.decode('latin1', 'replace')[:1500]))
     slines = [ln for ln in sbody.split(b'\n') if ln]
     passed = [ln[len(b'STEP '):-len(b' PASS')] for ln in slines if ln.startswith(b'STEP ') and ln.endswith(b' PASS')]
     shigh = next((ln for ln in slines if ln.startswith(b'Highest ')), b'')
@@ -2738,6 +2817,8 @@ def t_mclk(c):
     check(khz(rec) * 100 <= khz(shigh) * 99, 'recommended %r is less than 1 %% under %r' % (srec, shigh))
     better = [p for p in passed if khz(rec) < khz(p) and khz(p) * 100 <= khz(shigh) * 99]
     check(not better, 'recommended %r, but %r also pass 1 %% under %r' % (srec, better, shigh))
+    use = next((ln for ln in slines if ln.startswith(b'To use it: MCLK /S ')), b'')
+    check(use == b'To use it: MCLK /S ' + rec.split(b' MHz')[0], 'the /S hint %r for %r' % (use, srec))
     c.save('MCLK', sw)
     return 'recommended %s' % rec.split(b' SR10')[0].decode('latin1')
 
@@ -2761,7 +2842,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'mclk': 'tools s3 card', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_dac_retry': 'vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
@@ -2908,7 +2989,9 @@ def main():
                          'PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
                     help='video memory size in MB (CR36 bits 7-5 after POST, and the size of Machine.vram): '
-                         '2 (the card, default), 4 (the maximum of every Trio64-family chip but the Trio32) '
+                         '2 (the card, default), 4 (the maximum of every Trio64-family chip but the Trio32; on '
+                         'the Trio64 a run by hand only, as no 4 MB Trio64 card was built and make emu-test and '
+                         'CI stop at 2 MB there) '
                          'or 1 (the smallest configuration of every chip); seen through the banked A0000 '
                          'window (no LFB)')
     a = ap.parse_args()
