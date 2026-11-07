@@ -109,6 +109,11 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   file; anything meant for the person at the screen goes to stderr.
 - Write and commit the log (INT 21h AH=40h, then AH=68h) before each test starts, so that after a
   freeze the last line in the log names the test that hung.
+- A program that writes a file flushes it before it exits, on every exit path (normal end, error,
+  Esc, a failed option): write what is still buffered, commit it (INT 21h AH=68h) and close the handle
+  (AH=3Eh) before INT 21h AH=4Ch, or in a Win32 program (S3REGS32) call FlushFileBuffers and
+  CloseHandle. A log, debug file (/V) or snapshot that is cut short is worse than none, and the
+  emulator tests read the files a tool leaves.
 - Start from a known state and leave one: set mode 03, take a baseline, zero VRAM without destroying
   the DOS screen, and restore the screen and the PIT at the end.
 - Exit code 0 when nothing failed, 1 otherwise.
