@@ -1,6 +1,6 @@
 # Trio64V2/DX ROM (775): fixes and improvements
 
-What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p24) changes against the S3 reference BIOS
+What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p25) changes against the S3 reference BIOS
 2.04.07, each with the issue that has the details: what was wrong or missing, the cause, the effect
 and how it is tested. The build, the byte-level changes, what was borrowed, not taken or omitted, and
 what is left are in [`docs/775-rom.md`](775-rom.md); the speed measured on the card is in README "Speed". The Trio64V+
@@ -23,6 +23,7 @@ and Trio64 ROMs carry backports of many of these ([`docs/765-changes.md`](765-ch
 | 32-bit text and planar scrolls, AH=09h | speed | p13 | [#62](https://github.com/perchrh/trio64-vbios-tools/issues/62) |
 | Attribute controller flip-flop reset after a mode set | fix | p7 | [#52](https://github.com/perchrh/trio64-vbios-tools/issues/52) |
 | FIFO fetch (CR90 bit 7) off in VGA modes | fix | p7 | [#53](https://github.com/perchrh/trio64-vbios-tools/issues/53) |
+| FIFO fetch clear only in mode 13h | speed | p25 | [#166](https://github.com/perchrh/trio64-vbios-tools/issues/166) |
 | 512x384x8: CR50 pixel length | fix | p8 | [#54](https://github.com/perchrh/trio64-vbios-tools/issues/54) |
 | 4F06 BL=3: the real maximum line length | fix | p8 | [#55](https://github.com/perchrh/trio64-vbios-tools/issues/55) |
 | DDC (4F15): delay, probe count, interrupts off | fix | p19 | [#49](https://github.com/perchrh/trio64-vbios-tools/issues/49) |
@@ -106,8 +107,10 @@ Fixes
 
 - **Attribute controller** ([#52](https://github.com/perchrh/trio64-vbios-tools/issues/52)): an input status read after every mode set resets the index/data
   flip-flop, for programs that write port 3C0h right after a mode set.
-- **FIFO fetch** ([#53](https://github.com/perchrh/trio64-vbios-tools/issues/53)): CR90 bit 7 is cleared after setting any VGA mode 00h-13h; fixes stripes and garbage
-  in Mode X and 360-wide modes after a VESA mode (Quake 360x200).
+- **FIFO fetch** ([#53](https://github.com/perchrh/trio64-vbios-tools/issues/53), [#166](https://github.com/perchrh/trio64-vbios-tools/issues/166)): CR90 bit 7 is cleared after setting mode 13h
+  (p7 cleared every VGA mode 00h-13h; p25 only 13h). Mode X and 360-wide modes are built on BIOS 13h, so
+  the picture fix stays; other VGA modes keep leftover L1 after VESA or Windows as stock did (text is
+  fine there, and the leftover was the VIDSPEED read advantage of stock in #166).
 - **512x384x8 (151h)** ([#54](https://github.com/perchrh/trio64-vbios-tools/issues/54)): CR50 40h, the correct graphics engine pixel length (the reference has the
   reserved 10b).
 - **VBE 4F06 BL=3** ([#55](https://github.com/perchrh/trio64-vbios-tools/issues/55)): the real maximum line length, BX = min(8184, memory / lines) rounded down to 8 and

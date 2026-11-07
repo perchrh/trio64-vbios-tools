@@ -862,7 +862,7 @@ prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131
 ;   1  MISC, FEAT, SR, CRTC, ATC or GR register differs from IBM (all 62, detail lines show which)
 ;   2  AH=1Bh state block differs from IBM (bit 4 of +2Dh ignored), or AH=0Fh mode/columns/page wrong
 ;   4  an S3 extension is still on (vgaext: clock select, CR31, CR58, CR67, CR51, CR43, CR5D, CR5E,
-;      CR69, CR90 bit 7 (Trio64V2 only, a SKIP line on the other chips, #72), SR15, SR18)
+;      CR69, CR90 bit 7 in mode 13h only (Trio64V2; p25/#166; SKIP on other chips, #72), SR15, SR18)
 ;   8  measured refresh more than 1.5 Hz from the reference (70 Hz, 60 Hz for 11h/12h)
 ;   10 memory test of the mode's video memory failed
 ;   20 default DAC not loaded as IBM does: 256-colour table (13h), CGA palette (04h-06h, 0Dh, 0Eh),
@@ -4851,13 +4851,13 @@ dschk:  call rdall
 ; WARN rather than FAIL for the two CR86/CR90 rules: they are new and not confirmed in general. On the
 ; card with the 2.04.07-p18 ROM, the modes that break them (012Eh, 010Fh, 0131h, 0134h: CR86 with End
 ; Horizontal Blank 00h; 012Ah: L1 FFh) show a clean picture (30 October 2026, README Known remaining items).
-; The VGA mode lines' CR90 bit 7 check (vgaext) runs on the Trio64V2 only (#72): one SKIP line on the
+; The mode 13h CR90 bit 7 check (vgaext, #166) runs on the Trio64V2 only (#72): one SKIP line on the
 ; other chips of the family. Keeps every register.
 vskips: cmp byte [chip],CHIP_T64V2
         je .n
         cmp byte [chip],CHIP_NONE
         je .n
-        SKIPL C_VGA,'VGA lines: CR90 bit 7 (FIFO L1) off','CR90 is a Trio64V2 register'
+        SKIPL C_VGA,'Mode 13h: CR90 bit 7 (FIFO L1) off','CR90 is a Trio64V2 register'
 .n:     ret
 
 ; The register rules regchk leaves out on this chip (registers of other chips), as one SKIP line.
@@ -7189,13 +7189,23 @@ cmpsnap:                                ; SI list, BX actual, DI expected, CX n,
         ret
 
 extchk: ; SI list (type,idx,mask,exp) FF-terminated, DX fail bit. The CR90 entry only on the Trio64V2
-        ; (#72): no other chip has CR90; the Trio64 decodes CRTC index bits 6-0, so CR90 reads as CR10
+        ; (#72) and only when the current BIOS mode is 13h (p25, #166: the ROM clears L1 there only;
+        ; Mode X / 360-wide are built on 13h). No other chip has CR90; the Trio64 decodes CRTC index
+        ; bits 6-0, so CR90 reads as CR10.
 .l:     mov al,[si]
         cmp al,0xFF
         je .d
         cmp word [si],0x9003            ; type 3 (CRTC), index 90h
         jne .r
         cmp byte [chip],CHIP_T64V2
+        jne .n
+        push ax                         ; keep type in AL for readreg
+        push ds
+        xor ax,ax
+        mov ds,ax
+        cmp byte [0x449],0x13           ; FIFO clear required in mode 13h only
+        pop ds
+        pop ax
         jne .n
 .r:     mov ah,[si+1]
         call readreg
@@ -7860,7 +7870,7 @@ vgaext: db 0,0,0x08,0x00                ; clock select 0/1 (25/28 MHz)
         db 3,0x5D,0xFF,0x00             ; horizontal overflow
         db 3,0x5E,0x57,0x00             ; vertical overflow
         db 3,0x69,0x0F,0x00             ; display start bits 19-16
-        db 3,0x90,0x80,0x00             ; FIFO L1 (p3 fix)
+        db 3,0x90,0x80,0x00             ; FIFO L1 off in mode 13h (p7/#53; selective p25/#166)
         db 2,0x15,0x10,0x00             ; DCLK/2 off
         db 2,0x18,0x80,0x00             ; clock doubling off
         db 0xFF

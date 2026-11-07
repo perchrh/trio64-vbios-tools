@@ -14,7 +14,7 @@
 %define VERSION '1.0.0'
 %endif
 %ifndef VER775
-%define VER775 '2.04.07-p24'
+%define VER775 '2.04.07-p25'
 %endif
 %ifndef VER765
 %define VER765 '1.03-08N-p5'

@@ -70,9 +70,10 @@
 ;   Each mode in modelist: the mode set returns 004Fh, the measured refresh is within 1.5 Hz of
 ;                    the expected value, the total line length is the expected one, the pedestal is
 ;                    still off (SR1A bit 5, on the Trio64V2 only, #79), and depending on the mode type:
-;                    VGA (F_VGA)       linear addressing off, CR90 bit 7 = 0 (FIFO fix), and
-;                                      CR59/CR5A back to the real base (CR59 at POST) and 00 after
-;                                      the booster
+;                    VGA (F_VGA)       linear addressing off, CR59/CR5A back to the real base
+;                                      (CR59 at POST) and 00 after the booster; in mode 13h only,
+;                                      CR90 bit 7 = 0 (FIFO fix, #53; selective since p25, #166)
+
 ;                    banked (F_BOOST)  (plain DOS: under Windows enhanced mode the ROM keeps the
 ;                                      booster off since p17, and these checks fail there)
 ;                                      the booster is on right after 4F02 (p18) and still after
@@ -784,7 +785,9 @@ t_mode: VS 'D:TEST mode '
         jnz .fail
         cmp byte [rkind],RK_V2  ; CR90 exists on the Trio64V2 only
         jne .nf
-        test byte [r90],0x80    ; FIFO fix
+        cmp word [m_mode],0x13  ; FIFO fix only in mode 13h (p25, #166)
+        jne .nf
+        test byte [r90],0x80
         jnz .fail
 .nf:
         mov al,[r59]            ; real base restored, CR5A cleared
@@ -2660,8 +2663,8 @@ modelist:
         dw 0x0106,602,0,1280,1688         ; 1280x1024x4 (p9: DMT 60 Hz, 108.4 MHz)
         dw 0x0107,602,F_BOOST|F_2MB,1280,1688   ; 1280x1024x8 (p6 60 Hz, DMT)
         dw 0x0120,600,F_BOOST|F_2MB,1600,2160   ; 1600x1200x8 (p6 60 Hz)
-        dw 0x0003,700,F_VGA,720,900       ; back to text: FIFO fix, base restore
-        dw 0x0013,700,F_VGA,320,400
+        dw 0x0003,700,F_VGA,720,900       ; back to text: base restore (FIFO clear is mode 13h, #166)
+        dw 0x0013,700,F_VGA,320,400       ; FIFO fix after VESA (#53, #166)
         dw 0xFFFF
 
 ; Trio64V+, our ROM 1.03-08N-pN: the booster in the banked modes, the base back in the VGA modes. The rates
@@ -2802,7 +2805,7 @@ s_sum4  db 'Time spent: $'
 s_sum6  db '  Skipped: $'
 s_skip  db '  SKIP: $'
 s_mlist db 'VBE  Mode list of our ROM ................ $'
-s_mchk  db 'S3   Mode lines: CR90 FIFO fix, CR6D base  $'
+s_mchk  db 'S3   Mode lines: CR90 FIFO (13h), CR6D base $'
 s_mskip db 'VBE  Mode $'
 s_mskip2 db ' (over 1 MB) ............... $'
 s_f06s  db 'VBE  4F06 BL=3 max line 101h ............. $'
