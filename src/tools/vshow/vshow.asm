@@ -16,7 +16,7 @@
 ;                        VSHOW /R /V /S > VSHOW.LOG
 ;   VSHOW /H, /?, /HELP  parameter list
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
-;   /V                   debug log in VSHOW.DBG (see src/tools/common/vdebug.inc): every INT 10h call, 4F00/4F01
+;   /V                   debug log in VSHOW.DBG (see src/tools/common/vdebug.inc): the ROM version (D:ENV ROM=), every INT 10h call, 4F00/4F01
 ;                        blocks, registers and per-frame timer counts of each mode shown
 ;   /S                   silent: no monitor warning and no key press before the modes (batch runs)
 ;
@@ -1704,7 +1704,7 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db '                      logs of every mode switch, e.g. VSHOW /R /V /S > VSHOW.LOG',13,10
         db '  /L                  1-pixel vertical line pattern (LCD clock/phase adjustment)',13,10
         db '                      instead of the colour bars',13,10
-        db '  /V                  debug log: raw BIOS calls, registers and timing in VSHOW.DBG',13,10
+        db '  /V                  debug log: ROM version, BIOS calls, registers and timing in VSHOW.DBG',13,10
         db '  /S                  silent: no monitor warning, no key press before the modes',13,10
         db '  /H, /?, /HELP       this help',13,10
         db 'Each mode shows a white frame, the pattern, the mode, measured refresh,',13,10

@@ -47,6 +47,9 @@ Tests
                    registers and the AH=1Bh state block equal the IBM reference
   vga_palettes     default DAC after each mode set: 256-colour table (13h), CGA (04h-06h, 0Dh, 0Eh),
                    EGA (all others)
+  romver           ROMVER.COM prints the version S3TEST reads ("Version " in C000:0000-00FF, at most
+                   12 characters, stopping before a byte below 20h); /Q prints only that version.
+                   S3COMPAT's ROM line and a /V log (D:ENV ROM=) use that same scan
   s3test           S3TEST runs to the end; every check passes except the banked write throughput (no
                    real bus speed); with /V the output is the same (except the Time spent line) and
                    S3TEST.DBG is well formed
@@ -2485,9 +2488,52 @@ def t_stores(c):
     return '%d operations' % len(ops)
 
 
+def t_romver(c):
+    """ROMVER, S3COMPAT's ROM line and the /V log all print the version romfind reads from C000:0000-00FF."""
+    raw = c.rom[:0x100]
+    at = raw.find(b'Version ')
+    check(at >= 0, 'the ROM image has no "Version " in the first 256 bytes')
+    rest = raw[at + 8:at + 8 + 12]
+    n = next((i for i, b in enumerate(rest) if b < 0x20), len(rest))
+    want = rest[:n]
+    com = c.tool('ROMVER.COM')
+    m = c.machine()
+    r = m.run_com(com, '', name='ROMVER.COM')
+    check(r.exit == ('exit', 0), 'ROMVER exit %s stdout %r' % (r.exit, bytes(r.stdout)))
+    lines = bytes(r.stdout).replace(b'\r\n', b'\n').split(b'\n')
+    check(lines[0].startswith(b'ROMVER '), 'title %r' % lines[:2])
+    check(len(lines) > 1 and lines[1] == want, 'ROMVER printed %r, the ROM has %r' % (lines[1:2], want))
+    q = m.run_com(com, '/Q', name='ROMVER.COM')
+    check(q.exit == ('exit', 0), 'ROMVER /Q exit %s' % (q.exit,))
+    check(bytes(q.stdout).replace(b'\r\n', b'') == want, 'ROMVER /Q printed %r, expected %r' % (bytes(q.stdout), want))
+    mark = b'D:ENV ROM=' + want
+
+    def vlog(tool, tail, insn, fname):
+        # a new machine: run_com keeps DOS handles on the machine, so a second /V file
+        # would write under the previous tool's name
+        run = c.machine().run_com(c.tool(tool), tail, name=tool, max_insn=insn)
+        dbg = run.files.get(fname)
+        check(dbg is not None and mark in dbg, '%s /V log has no %r (exit %s)' % (tool, mark, run.exit))
+        return run, dbg
+
+    vlog('VSHOW.COM', '/V /S', 3_000_000, 'VSHOW.DBG')
+    comp, _cdbg = vlog('S3COMPAT.COM', '/S /V', 8_000_000, 'S3COMPAT.DBG')
+    check(b'ROM: ' + want in bytes(comp.stdout), 'S3COMPAT ROM line missing in %r (exit %s)' % (bytes(comp.stdout)[:400], comp.exit))
+    _st, sdbg = vlog('S3TEST.COM', '/S /V', 6_000_000, 'S3TEST.DBG')
+    sig = next((ln for ln in sdbg.split(b'\r\n') if b'ROM signature' in ln), b'')
+    found = b''
+    for tok in sig.split():
+        if tok in (b'PASS', b'FAIL', b'INFO', b'WARN'):
+            break
+        found = tok
+    check(found == want, 'S3TEST signature line %r, expected the found version %r' % (sig, want))
+    c.save('ROMVER', r)
+    return want.decode('latin1')
+
+
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -2504,7 +2550,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
