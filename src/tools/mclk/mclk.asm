@@ -57,6 +57,9 @@
 ;   goes on; any other key ends the run with the PLL untouched, an "ERROR: Not confirmed" line and exit 1.
 ;   The answer goes into the log. /H, a bad argument, no chip, no datasheet maximum and a request
 ;   out of range end before the question, also without a PLL write.
+;   /Y answers the question with Y, for a run without a person at the keyboard (a batch file): the
+;   question still goes to stderr, followed by "Y (/Y)", no key is read, and the log says
+;   "Confirmed: /Y given" where a pressed Y gives "Confirmed: Y pressed".
 ;
 ; Usage
 ;   MCLK                 report only, changes nothing
@@ -65,8 +68,9 @@
 ;   MCLK /T /P           finer steps: the next PLL pair at least 0.1 MHz up, instead of 0.5 MHz
 ;                        (the table has pairs 46 kHz apart; finer than 0.1 MHz is not needed)
 ;   MCLK /T /I 52.5      start at 52.5 MHz (a pair at or below the request, not below the lowest)
+;   MCLK /S 70 /Y        /Y: yes to every question, no key is read (with /S or /T)
 ;   MCLK /H              the help
-;   /P and /I go only with /T, /S not with /T: otherwise "bad argument".
+;   /P and /I go only with /T, /Y only with /S or /T, /S not with /T: otherwise "bad argument".
 ;   Esc during a test pass stops the sweep and puts the clock found at the start back.
 ;   Exit codes: report 0 (1 when no chip is found). /S 0 when the clock was set, 1 otherwise. /T 0
 ;   when at least one step passed and the sweep was not stopped, 1 otherwise (a later step that
@@ -132,7 +136,8 @@ start:  cld
 
 ; ---------------------------------------------------------------------------
 ; argument tail. Sets [dohelp], [badarg], [doset] with [sreq], [dotest], [precise], [havei] with
-; [ireq]. /P and /I without /T, or /S together with /T, are a bad argument.
+; [ireq], [yesall]. /P and /I without /T, /Y without /S or /T, or /S together with /T, are a bad
+; argument.
 
 parse:  mov si,0x81
 .op:    lodsb
@@ -173,10 +178,19 @@ parse:  mov si,0x81
         mov byte [doset],1
         jmp .op
 .tt:    cmp al,'t'
-        jne .bad
+        jne .yy
         mov byte [dotest],1
         jmp .op
-.chk:   cmp byte [dotest],1             ; the end of the tail: check the combination
+.yy:    cmp al,'y'
+        jne .bad
+        mov byte [yesall],1
+        jmp .op
+.chk:   mov al,[doset]                  ; the end of the tail: check the combination
+        or al,[dotest]
+        jnz .c2
+        cmp byte [yesall],1             ; /Y without /S or /T: nothing to answer
+        je .bad
+.c2:    cmp byte [dotest],1
         je .t
         mov al,[precise]
         or al,[havei]
@@ -653,20 +667,45 @@ confirm:
         call lstr
         call ask
         jc .r
-        call lbegin
         mov si,s_yes
-        call lstr
-        call lend
+        call yesline
         clc
 .r:     ret
+
+; The log line after a Y: "Confirmed: Y pressed" or, with /Y, "Confirmed: /Y given", then the
+; text at SI. Clobbers AX, CX, DX, SI, DI.
+yesline:
+        push si
+        call lbegin
+        mov si,s_conf
+        call lstr
+        mov si,s_ykey
+        cmp byte [yesall],1
+        jne .k
+        mov si,s_yarg
+.k:     call lstr
+        pop si
+        call lstr
+        jmp lend
 
 ; The one question of a run, before the first PLL write. In: the warning and the prompt in the
 ; line buffer up to DI (lbegin, lstr ...); they go to stderr only (meant for the person at the
 ; screen). The answer goes to the log: a "Not confirmed" line here, the caller's line on Y.
 ; Keys already in the BIOS keyboard buffer are dropped first, so only a key pressed after the
 ; prompt counts. The key is read with INT 16h AH=00h, not from stdin.
-; Out: CF clear when Y or y was pressed, CF set for any other key. Clobbers AX, BX, CX, DX, SI, DI.
-ask:    call lerr
+; With /Y ([yesall]) no key is read: "Y (/Y)" follows the prompt on stderr and the answer is Y.
+; Out: CF clear when Y or y was pressed (or /Y given), CF set for any other key. Clobbers AX, BX,
+; CX, DX, SI, DI.
+ask:    cmp byte [yesall],1
+        jne .key
+        mov si,s_yecho                  ; the prompt, then "Y (/Y)" as if typed
+        call lstr
+        mov ax,0x0A0D
+        stosw
+        call lerr
+        clc
+        ret
+.key:   call lerr
         push es
         mov ax,0x40
         mov es,ax
@@ -736,10 +775,8 @@ setclk: cmp byte [nobook],1
         call lstr
         call ask
         jc declined
-        call lbegin
         mov si,s_yes2
-        call lstr
-        call lend
+        call yesline
 .go:    mov bl,[cur10]
         mov bh,[cur11]
         call loadp
@@ -1794,6 +1831,7 @@ precise db 0
 havei   db 0
 doset   db 0
 dotest  db 0
+yesall  db 0                    ; /Y: answer the question with Y, read no key
 clamped db 0
 nobook  db 0
 vid     db 0
@@ -1907,8 +1945,12 @@ s_sw2   db ', above the datasheet maximum',13,10
 s_sw3   db '.',13,10,0
 s_risk  db 'A clock above what the memory takes can corrupt video memory or hang the',13,10
         db 'machine (then reset it). Press Y to continue, any other key to quit: ',0
-s_yes   db 'Confirmed: Y pressed, the clock steps start',0
-s_yes2  db 'Confirmed: Y pressed',0
+s_conf  db 'Confirmed: ',0
+s_ykey  db 'Y pressed',0
+s_yarg  db '/Y given',0
+s_yecho db 'Y (/Y)',0
+s_yes   db ', the clock steps start',0
+s_yes2  db 0
 s_no    db 'ERROR: Not confirmed: the clock was not changed',0
 s_4     db '4 MB',0
 s_2     db '2 MB',0
@@ -1938,6 +1980,7 @@ s_use   db 'MCLK ',VERSION,' - show, set or test the memory clock (MCLK)',13,10
         db '                  datasheet maximum + 25%, and recommend a clock',13,10
         db '  MCLK /T /P      test in steps of 0.1 MHz or more',13,10
         db '  MCLK /T /I 55   start the test at 55 MHz',13,10
+        db '  MCLK /S 70 /Y   /Y answers yes to every question (no key is read)',13,10
         db '  MCLK /H         this help',13,10
         db 13,10
         db '/S asks for Y above the datasheet maximum, /T always. The BIOS sets its own',13,10

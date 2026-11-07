@@ -61,7 +61,8 @@ Tests
                    SR11=.. read back): OK"; mode sets keep it on our 2.04.07 ROM and the next report
                    shows it. /S 45 and /S 90 are refused without a write, with an "ERROR: ... the
                    clock was not changed" line; /S 70 asks once: N writes nothing ("ERROR: Not
-                   confirmed"), Y sets it (the OK line). /T /I 90 (above the cap) changes nothing and asks nothing. Before
+                   confirmed"), Y sets it (the OK line); /S 70 /Y sets it without reading a key
+                   ("Confirmed: /Y given"), and /Y without /S or /T is a bad argument. /T /I 90 (above the cap) changes nothing and asks nothing. Before
                    the first PLL write /T asks once on stderr: N leaves SR08/SR10/SR11/SR15 as they
                    were (exit 1). With Y, /T /I 74.9 (cap 75 MHz) runs one step and recommends none
                    (no tested pass 1 % below it); /T /I 73.9 runs three steps and recommends the
@@ -2637,7 +2638,7 @@ def t_mclk(c):
     helptext = bytes(h.stdout)
     check(all(sw in helptext for sw in (b'/S', b'/T', b'/P', b'/I')), 'MCLK /H text %r' % helptext[:300])
 
-    for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X'):
+    for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X', '/Y'):
         bad = c.machine().run_com(com, tail, name='MCLK.COM', max_insn=1_000_000)
         check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
               'bad %r %s %r' % (tail, bad.exit, bytes(bad.stdout)[:200]))
@@ -2721,6 +2722,15 @@ def t_mclk(c):
     check(ry.exit == ('exit', 0) and b'Confirmed: Y pressed' in yl and okline(k70, '70.000') in yl,
           '/S 70 %s %r' % (ry.exit, yl))
     check(clk(my) == pair[k70], '/S 70 left %s, expected %s' % (clk(my), pair[k70]))
+    # /Y: yes to the question without a key (an empty keyboard: a read would not return); the question
+    # and "Y (/Y)" still go to stderr, the log says "Confirmed: /Y given"
+    ma = c.machine(keys=[])
+    ra = ma.run_com(com, '/S 70 /Y', name='MCLK.COM', max_insn=20_000_000)
+    al = lines_of(ra)
+    check(ra.exit == ('exit', 0) and b'Confirmed: /Y given' in al and okline(k70, '70.000') in al and
+          b'Y (/Y)' in bytes(ra.stderr) and bytes(ra.stderr).count(b'Press Y') == 1,
+          '/S 70 /Y %s %r %r' % (ra.exit, al, bytes(ra.stderr)[-200:]))
+    check(clk(ma) == pair[k70], '/S 70 /Y left %s, expected %s' % (clk(ma), pair[k70]))
 
     m = c.machine()
     before = (m.r['seq'].get(0x10), m.r['seq'].get(0x11))
