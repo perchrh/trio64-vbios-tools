@@ -23,6 +23,7 @@ Mutants
 The sign-on and the checksums are kept valid in every mutant. Results go to stdout and to
 emu/logs/mutants.txt; the exit code is 1 when a mutant survived that is not in EXPECTED.
 """
+from __future__ import annotations
 import argparse, os, subprocess, sys, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -35,7 +36,7 @@ ORDER = ('post,rom_patches,vga_registers,vga_palettes,mono,errors,display_switch
          'vgalog_mem,s3alias,s3regs,dos_exe,vshow,s3test,s3compat_full')
 
 
-def int10_mutants():
+def int10_mutants() -> list[tuple[str, str]]:
     out = []
 
     def add(name, **pat):
@@ -75,12 +76,12 @@ def int10_mutants():
     return out
 
 
-def fix(d):
+def fix(d: bytearray) -> None:
     d[0x7FFF] = 0
     d[0x7FFF] = (-sum(d[:0x8000])) & 0xFF
 
 
-def ret_mutants(rom):
+def ret_mutants(rom: bytes) -> list[tuple[str, bytes]]:
     import s3patch
     _, lab = s3patch.assemble(s3patch.bios_symbols(), NASM)
     out = []
@@ -95,7 +96,7 @@ def ret_mutants(rom):
     return out
 
 
-def revert_mutants(rom, ref):
+def revert_mutants(rom: bytes, ref: bytes) -> list[tuple[str, bytes]]:
     """One mutant per patch site outside the new code areas: contiguous changed bytes (gaps of up to
     3 equal bytes joined), each put back to the reference."""
     import s3patch
@@ -133,7 +134,7 @@ EXPECTED = {
 }
 
 
-def run(m, rom_path, tmp, timeout, tests, limit, vram):
+def run(m: tuple, rom_path: str, tmp: str, timeout: int, tests: list[str], limit: int, vram: int) -> tuple[str, str, str, float]:
     name, what = m
     args = [sys.executable, os.path.join(HERE, 'tests.py'), '-x', '--nasm', NASM, '--tests', ','.join(tests), '--vram', str(vram),
             '--call-limit', str(limit), '--logs', tempfile.mkdtemp(dir=tmp)]
@@ -141,13 +142,14 @@ def run(m, rom_path, tmp, timeout, tests, limit, vram):
         args += ['--rom', rom_path, '--noop', what]
     else:
         p = os.path.join(tmp, name.replace(' ', '_') + '.bin')
-        open(p, 'wb').write(what)
+        if open(p, 'wb').write(what) != len(what):
+            raise OSError('%s: short write' % p)
         args += ['--rom', p]
     t0 = time.time()
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
         out = r.stdout
-    except subprocess.TimeoutExpired as e:
+    except subprocess.TimeoutExpired:
         return name, 'killed', 'timeout (hang)', time.time() - t0
     for line in out.split('\n'):
         if line[15:19] == 'FAIL':
@@ -158,7 +160,7 @@ def run(m, rom_path, tmp, timeout, tests, limit, vram):
     return name, 'SURVIVED', '', time.time() - t0
 
 
-def matches(spec, calls):
+def matches(spec: str, calls: list[tuple[int, int, int]]) -> bool:
     pats = [{k: int(v, 16) for k, v in (f.split('=') for f in spec.split(','))}]
     for ax, bx, dl in calls:
         v = {'ax': ax, 'ah': ax >> 8, 'al': ax & 0xFF, 'bx': bx, 'bh': bx >> 8, 'bl': bx & 0xFF, 'dl': dl}
@@ -167,7 +169,7 @@ def matches(spec, calls):
     return False
 
 
-def main():
+def main() -> int:
     global NASM
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
     ap.add_argument('--rom', required=True)
@@ -223,7 +225,9 @@ def main():
             print('the unchanged ROM does not pass every test (with --call-limit %d):\n%s' % (a.call_limit, r.stdout))
             return 2
         prof = {'rom': sha, 'call_limit': a.call_limit, 'vram': a.vram, 'tests': json.load(open(pf))}
-        json.dump(prof, open(a.profile, 'w'))
+        with open(a.profile, 'w') as f:
+            if f.write(json.dumps(prof)) < 0:
+                raise OSError('%s: write failed' % a.profile)
     order = [t for t in ORDER.split(',') if t in prof['tests']]
 
     def tests_for(m):
@@ -245,16 +249,17 @@ def main():
     logf = os.path.join(HERE, 'logs', 'mutants.txt')
     os.makedirs(os.path.dirname(logf), exist_ok=True)
     with ThreadPoolExecutor(a.j) as ex, open(logf, 'w') as lf:
+        def log(line: str) -> None:
+            print(line, flush=True)
+            if lf.write(line + '\n') != len(line) + 1:
+                raise OSError('%s: short write' % logf)
         for m in ms:
             if m[0] in done:
                 line = done[m[0]]
-                print(line, flush=True)
-                lf.write(line + '\n')
+                log(line)
                 res.append((m[0], line[25:33].strip()))
         for name, st, why, dt in ex.map(lambda mt: run(mt[0], a.rom, tmp, a.timeout, mt[1], a.call_limit, a.vram), todo):
-            line = '%-24s %-8s %-70s %5.0fs' % (name, st, why or EXPECTED.get(name, ''), dt)
-            print(line, flush=True)
-            lf.write(line + '\n')
+            log('%-24s %-8s %-70s %5.0fs' % (name, st, why or EXPECTED.get(name, ''), dt))
             res.append((name, st))
     surv = [n for n, s in res if s == 'SURVIVED']
     bad = [n for n in surv if n not in EXPECTED]

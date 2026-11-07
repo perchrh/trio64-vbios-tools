@@ -16,6 +16,7 @@ be the same. The Trio64V+ ROM (src/roms/vplus) has the same goal against its bas
 runs both on the Trio64V+ model. The S3 extended registers are not compared: the ROM sets the memory clock, the pedestal
 and the FIFO bit on purpose. Exit code 1 when any call differs; the differences are listed.
 """
+from __future__ import annotations
 import argparse
 import os, sys, random, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -35,17 +36,17 @@ ref=open(a.ref,'rb').read(); rom=open(a.rom,'rb').read()
 up=open(a.upper,'rb').read()[0x8000:] if a.upper else ref[:0x8000] if rom[0x8000:0x10000]==rom[:0x8000] else bytes(0x8000)
 A=Machine(ref[:0x8000]+up); A.post(); B=Machine(rom); B.post()
 R32=(UC_X86_REG_EAX,UC_X86_REG_EBX,UC_X86_REG_ECX,UC_X86_REG_EDX,UC_X86_REG_ESI,UC_X86_REG_EDI)
-def std(m):
+def std(m: Machine) -> tuple:
     r=m.r
     return (r['misc'],tuple(r['seq'].get(i,0) for i in range(5)),tuple(r['crtc'].get(i,0) for i in range(0x19)),
             tuple(r['gc'].get(i,0) for i in range(9)),tuple(r['atc'].get(i,0) for i in range(0x15)))
-def state(m): return std(m)+(m.mem(0x400,0x100),m.mem(0xA0000,0x20000),tuple(bytes(p) for p in m.planes),tuple(map(tuple,m.dac)))
+def state(m: Machine) -> tuple: return std(m)+(m.mem(0x400,0x100),m.mem(0xA0000,0x20000),tuple(bytes(p) for p in m.planes),tuple(map(tuple,m.dac)))
 names=['misc','seq','crtc','gc','atc','bda','mem','planes','dac']
-def call(m,ax,**kw):
+def call(m: Machine,ax: int,**kw) -> tuple:
     for reg,v in zip(R32,(0x11110000,0x22220000,0x33330000,0x44440000,0x55550000,0x66660000)): m.mu.reg_write(reg,v)
     res=m.int10(ax,**kw); return res,tuple(m.mu.reg_read(r)>>16 for r in R32)
 n=0; bad=collections.Counter(); ex=[]
-def both(label,ax,**kw):
+def both(label: str,ax: int,**kw) -> None:
     global n
     ra=call(A,ax,**kw); rb=call(B,ax,**kw); n+=1
     sa,sb=state(A),state(B)
@@ -54,7 +55,7 @@ def both(label,ax,**kw):
     if d:
         bad[(label.split()[0],tuple(d))]+=1
         if len(ex)<12: ex.append((label,'%04X'%ax,d, [ (i,sa[2][i],sb[2][i]) for i in range(0x19) if sa[2][i]!=sb[2][i]] if 'crtc' in d else ''))
-def fill(seed):
+def fill(seed: int) -> None:
     rnd=random.Random(seed); data=bytes(rnd.randrange(256) for _ in range(0x20000))
     for m in (A,B):
         m.mu.mem_write(0xA0000,data); m.planes=[bytearray(data[p*0x8000:p*0x8000+0x8000]*2) for p in range(4)]

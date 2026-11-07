@@ -18,6 +18,7 @@ bytes lie in such ranges; the exit code counts only the other runs.
 
 Exit code 0 when no run outside those ranges reaches --min, 1 otherwise.
 """
+from __future__ import annotations
 import argparse, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -26,14 +27,14 @@ DEFAULT_REFS = [os.path.join(REPO, 'reference', p) for p in
                 ('trio64/1_5_07.bin', '64vplus/1_03_08n.bin', 'v2/2_04_07.bin')]
 
 
-def rom32(path):
+def rom32(path: str) -> bytes:
     d = open(path, 'rb').read()
     if d[:2] == b'\x55\xAA' and d[2]:
         d = d[:d[2] * 512]
     return d
 
 
-def runs(cand, ref, k, minlen):
+def runs(cand: bytes, ref: bytes, k: int, minlen: int) -> list[tuple[int, int, int]]:
     """Every maximal common run of minlen bytes or more (one value repeated, padding, excepted).
 
     Exhaustive (#144: an earlier version kept only the first 32 places of each k-byte window of ref and
@@ -74,7 +75,7 @@ def runs(cand, ref, k, minlen):
     return sorted(out)
 
 
-def merge(ranges):
+def merge(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
     """Overlapping or touching (start, end) ranges, end inclusive, joined (#144: the coverage test
     counted an overlap twice)."""
     out = []
@@ -86,7 +87,7 @@ def merge(ranges):
     return out
 
 
-def self_test():
+def self_test() -> int:
     """The case the window cap missed (#144): every 16-byte window of a 32-byte run occurs 33 times
     earlier in the reference (two families of copies, each with one byte changed at an end), the run
     itself once at the end; and overlapping exclusion ranges. Returns the number of failures."""
@@ -109,7 +110,7 @@ def self_test():
     return fails
 
 
-def main():
+def main() -> int:
     if sys.argv[1:] == ['--self-test']:
         return 1 if self_test() else 0
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])

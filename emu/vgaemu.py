@@ -53,6 +53,8 @@ Usage (see tests.py for complete examples)
   r = m.run_com(open('build/S3TEST.COM','rb').read(), '/V')
   print(r.stdout.decode('latin1'), r.files.get('S3TEST.DBG'))
 """
+from __future__ import annotations
+from typing import Any, Callable, Iterator
 import struct
 import sys
 try:
@@ -94,7 +96,7 @@ CHIP_CODES = {'775': 'v2', '765': 'vplus', '764': 'trio64', '764x': 'trio64', '7
 CHIP_CR2F = {'764': 0x20, '764x': 0x20, '764p': 0x00}     # CR2F where it is not the PCI revision
 
 
-def chip_ids():
+def chip_ids() -> tuple[int, int, int, int]:
     """CR2D, CR2E, CR2F and CR30 of the model's chip: CHIPS' ids, with CR2F from Machine.cr2f when set."""
     c = CHIPS[Machine.chip]['ids']
     return (c[0], c[1], c[2] if Machine.cr2f is None else Machine.cr2f, c[3])
@@ -105,7 +107,7 @@ MEM_TOP = 0x9000           # first segment after conventional memory available t
 STUB = 0x7C00              # small code stubs (POST far call, INT 10h call) live here
 
 
-def budget_msg(what, limit, knob, where):
+def budget_msg(what: str, limit: int, knob: str, where: str) -> str:
     """The message for a run that the emulator stopped because its instruction count ran out. Unicorn
     stops at the count either way, so a hang and a call that only needs more instructions (a 4 MB clear
     traced by VGALOG, for example) look the same: the message says which budget, and where it stopped."""
@@ -114,7 +116,7 @@ def budget_msg(what, limit, knob, where):
 
 
 class ComResult:
-    def __init__(self):
+    def __init__(self) -> None:
         self.stdout = bytearray()      # handle 1 and console output (AH=02h/09h)
         self.stderr = bytearray()      # handle 2
         self.files = {}                # created files: name -> bytes written
@@ -128,38 +130,87 @@ class ComResult:
 
 class _Plane:
     """One VGA plane as a view on the interleaved video memory: address a of plane p is vram[4a + p]."""
-    def __init__(self, vram, p):
+    def __init__(self, vram: bytearray, p: int) -> None:
         self.v, self.p = vram, p
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.v) // 4
 
-    def _sl(self, i):
+    def _sl(self, i: Any) -> slice:
         start, stop, step = i.indices(len(self))
         if step != 1:
             raise ValueError('plane slices take no step')
         return slice(4 * start + self.p, 4 * stop + self.p if stop > start else 4 * start + self.p, 4)
 
-    def __getitem__(self, i):
+    def __getitem__(self, i: Any) -> bytes | int:
         if isinstance(i, slice):
             return bytes(self.v[self._sl(i)])
         return self.v[4 * i + self.p]
 
-    def __setitem__(self, i, val):
+    def __setitem__(self, i: Any, val: int | bytes | bytearray) -> None:
         if isinstance(i, slice):
             self.v[self._sl(i)] = bytes(val)
         else:
             self.v[4 * i + self.p] = val
 
-    def __bytes__(self):
+    def __bytes__(self) -> bytes:
         return bytes(self.v[self.p::4])
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         return iter(self.v[self.p::4])
 
 
+def _pe_info(exe: bytes) -> tuple[int, int, int, int, int, int, int]:
+    """The PE32 header fields run_pe32 needs: (lfanew, nsec, optsz, entry, base, simg, shdr, imp_rva)."""
+    lfanew = struct.unpack_from('<I', exe, 0x3C)[0]
+    if exe[lfanew:lfanew + 4] != b'PE\0\0' or struct.unpack_from('<H', exe, lfanew + 4)[0] != 0x14C:
+        raise ValueError('not a 32-bit PE')
+    nsec = struct.unpack_from('<H', exe, lfanew + 6)[0]
+    optsz = struct.unpack_from('<H', exe, lfanew + 20)[0]
+    o = lfanew + 24
+    entry = struct.unpack_from('<I', exe, o + 16)[0]
+    base = struct.unpack_from('<I', exe, o + 28)[0]
+    simg = struct.unpack_from('<I', exe, o + 56)[0]
+    shdr = struct.unpack_from('<I', exe, o + 60)[0]
+    imp_rva = struct.unpack_from('<I', exe, o + 96 + 8)[0]
+    return lfanew, nsec, optsz, entry, base, simg, shdr, imp_rva
+
+
+def _pe_load(u: Uc, exe: bytes, pe: tuple[int, int, int, int, int, int, int, int]) -> None:
+    """Map the image at its base and write the headers and every section."""
+    lfanew, nsec, optsz, entry, base, simg, shdr, imp_rva = pe
+    u.mem_map(base, (simg + 0xFFF) & ~0xFFF)
+    u.mem_write(base, exe[:shdr])
+    o = lfanew + 24
+    for i in range(nsec):
+        s = o + optsz + 40 * i
+        vs, va, rs, rp = struct.unpack_from('<IIII', exe, s + 8)
+        u.mem_write(base + va, exe[rp:rp + rs])
+
+
+def _pe_imports(u: Uc, base: int, imp_rva: int, stubs: int) -> list[str]:
+    """Walk the import directory, point every IAT entry at a stub, return the import names in order."""
+    names = []
+    d = imp_rva
+    while True:
+        ilt, _, _, name, iat = struct.unpack('<IIIII', u.mem_read(base + d, 20))
+        if not name:
+            break
+        k = 0
+        while True:
+            hn = struct.unpack('<I', u.mem_read(base + (ilt or iat) + 4 * k, 4))[0]
+            if not hn:
+                break
+            fn = bytes(u.mem_read(base + hn + 2, 64)).split(b'\0')[0].decode()
+            u.mem_write(base + iat + 4 * k, struct.pack('<I', stubs + 4 * len(names)))
+            names.append(fn)
+            k += 1
+        d += 20
+    return names
+
+
 class Machine:
-    def __init__(self, rom, keys=None):
+    def __init__(self, rom: bytes, keys: list[int] | None=None) -> None:
         self.rom = rom
         mu = self.mu = Uc(UC_ARCH_X86, UC_MODE_16)
         mu.mem_map(0, 0x110000)
@@ -211,7 +262,7 @@ class Machine:
 
     # ------------------------------------------------------------------ ports
     # ------------------------------------------------------------------ virtual clock
-    def frame(self, xres=None):
+    def frame(self, xres: int | None=None) -> tuple[float | None, int | None, int, int]:
         """Timing the programmed registers define: (Hz, pixels per line, frame period in PIT counts,
         total lines). Hz is None when the clock source is unknown. Same rules as S3COMPAT's predict."""
         r = self.r
@@ -247,12 +298,12 @@ class Machine:
         pix = round(xres * htot / hdisp) if xres else htot * cw
         return hz, pix, max(1000, round(1193182 / hz)), vtot
 
-    def _retrace(self):
+    def _retrace(self) -> bool:
         """Vertical retrace bit from the virtual clock: on for about 3 lines at the start of each frame."""
         hz, pix, period, vtot = self.frame()
         return (self.t % period) < max(60, period * 3 // max(vtot, 1))
 
-    def _pit_count(self, ch):
+    def _pit_count(self, ch: int) -> int:
         p = self.pit[ch]
         reload = p['reload'] or 0x10000
         el = self.t - p['t0']
@@ -260,14 +311,14 @@ class Machine:
             return (reload - (2 * el) % reload) & 0xFFFF
         return (reload - el % reload) & 0xFFFF
 
-    def _ci(self):
+    def _ci(self) -> int:
         """The CRTC register the index in 3D4h/3B4h selects. The Trio32/Trio64 decode index bits 6-0 only:
         on the DSP-3364P (Trio64) CR80-CRFF read back as CR00-CR7F (S3REGS, 31 October 2026), so CR90 is
         CR10 there (#72). The later chips have registers above 7Fh (CR80-CR93 on the Trio64V2)."""
         i = self.r['ci']
         return i & 0x7F if Machine.chip in ('trio64', 'trio32') else i
 
-    def _dac_hit(self, op, entry, comp, value):
+    def _dac_hit(self, op: str, entry: int, comp: int, value: int) -> bool:
         """True when [dac_fault] acts on this DAC access (and counts it down)."""
         f = self.dac_fault
         if not f or f['op'] != op or (f['entry'], f['comp'], f['value']) != (entry, comp, value):
@@ -279,7 +330,7 @@ class Machine:
         f['hits'] = f.get('hits', 0) + 1
         return True
 
-    def _in(self, uc, port, size, ud):
+    def _in(self, uc: Any, port: int, size: int, ud: Any) -> int:
         r = self.r
         self.t += 3                                     # about one ISA I/O cycle
         if port == 0x3C5:
@@ -356,7 +407,7 @@ class Machine:
             return v & {1: 0xFF, 2: 0xFFFF, 4: 0xFFFFFFFF}[size]
         return 0xFF if size == 1 else 0xFFFF
 
-    def _out(self, uc, port, size, val, ud):
+    def _out(self, uc: Any, port: int, size: int, val: int, ud: Any) -> None:
         r = self.r
         if port == 0x9AE8:                              # a graphics engine command: not modelled (a BIOS
             if self.ge_cmds == 0:                       # that clears memory with it leaves it as it was)
@@ -452,14 +503,14 @@ class Machine:
             w8(port, val & 0xFF)
             w8(port + 1, (val >> 8) & 0xFF)
 
-    def _planar(self):
+    def _planar(self) -> bool:
         """16-colour and unchained 256-colour modes: chain-4 off, odd/even off, A0000 64 KB window."""
         sr4 = self.r['seq'].get(4, 0)
         return not sr4 & 0x08 and sr4 & 0x04 and (self.r['gc'].get(6, 0) >> 2) & 3 == 1
 
     WINDOW_CR = (0x31, 0x35, 0x51, 0x58, 0x59, 0x5A, 0x6A)
 
-    def _wkey(self):
+    def _wkey(self) -> tuple[str, int]:
         """What the window A0000-AFFFF shows (module docstring): ('packed', byte offset), ('planar', plane
         address) or ('off', 0) when linear addressing is on at another base than A0000h."""
         cr = self.r['crtc']
@@ -473,7 +524,7 @@ class Machine:
             return ('planar', page * 0x4000)
         return ('packed', page * 0x10000)
 
-    def sync(self):
+    def sync(self) -> None:
         """Write what the packed window holds back into vram (the window is plain RAM for speed)."""
         kind, base = self.win
         if kind == 'packed':
@@ -482,7 +533,7 @@ class Machine:
             base %= n
             self.vram[base:base + 0x10000] = data[:n - base]
 
-    def _remap(self):
+    def _remap(self) -> None:
         """After a register write that can move the window: keep the old page, show the new one."""
         k = self._wkey()
         if k == self.win:
@@ -498,13 +549,13 @@ class Machine:
         self.win = k
 
     @property
-    def planes(self):
+    def planes(self) -> list[_Plane]:
         """The four planes as views on vram (after sync, so a packed window's bytes are in)."""
         self.sync()
         return [_Plane(self.vram, p) for p in range(4)]
 
     @planes.setter
-    def planes(self, data):
+    def planes(self, data: list) -> None:
         self.sync()
         for p, d in enumerate(data):
             self.vram[p:p + 4 * len(d):4] = bytes(d)
@@ -512,7 +563,7 @@ class Machine:
             self.win = ('none', 0)
             self._remap()
 
-    def _vwrite(self, uc, acc, addr, size, val, ud):
+    def _vwrite(self, uc: Any, acc: int, addr: int, size: int, val: int, ud: Any) -> None:
         self.t += 1                                     # video memory writes take time too
         if addr >= 0xB0000 or self.win[0] != 'planar':
             return
@@ -548,7 +599,7 @@ class Machine:
                     d = (d & mask) | (self.latch[p] & ~mask & 0xFF)
                 vm[4 * off + p] = d
 
-    def _vread(self, uc, acc, addr, size, val, ud):
+    def _vread(self, uc: Any, acc: int, addr: int, size: int, val: int, ud: Any) -> None:
         """Before the CPU reads a planar address: load the latches and put the selected plane's bytes
         (read mode 0) or the colour compare result (read mode 1: GR02 colour, GR07 colour don't care)
         into RAM, so the read returns them."""
@@ -576,20 +627,20 @@ class Machine:
                 data.append(vm[4 * off + plane])
         uc.mem_write(addr, bytes(data))
 
-    def _ticks(self):
+    def _ticks(self) -> int:
         """BIOS ticks: one per channel 0 period (IRQ 0), in step with the channel 0 counter."""
         p = self.pit[0x40]
         return self.tick_base + (self.t - p['t0']) // (p['reload'] or 0x10000)
 
-    def _tread(self, uc, acc, addr, size, val, ud):
+    def _tread(self, uc: Any, acc: int, addr: int, size: int, val: int, ud: Any) -> None:
         self.t += 40                                    # loops that wait for the tick move time on
         uc.mem_write(0x46C, struct.pack('<H', self._ticks() & 0xFFFF))
 
     # ------------------------------------------------------------------ interrupts
-    def _reg(self, n):
+    def _reg(self, n: int) -> int:
         return self.mu.reg_read(n)
 
-    def _intr(self, uc, n, ud):
+    def _intr(self, uc: Any, n: int, ud: Any) -> None:
         ah = (self._reg(UC_X86_REG_AX) >> 8) & 0xFF
         if n == 0xF1:                                   # the DOS stub behind the INT 21h vector
             if self.com is not None:
@@ -623,7 +674,7 @@ class Machine:
         uc.reg_write(UC_X86_REG_CS, seg)
         uc.reg_write(UC_X86_REG_IP, off)
 
-    def _pci_cfg(self, reg):
+    def _pci_cfg(self, reg: int) -> int:
         """The PCI configuration dword at reg for the chip of the model (device ID and revision)."""
         c = CHIPS[Machine.chip]
         if reg == 0x00:
@@ -642,13 +693,13 @@ class Machine:
             return 0x03000000 | c['ids'][2]
         return PCI_CONFIG.get(reg, 0)
 
-    def _pci_read(self, reg):
+    def _pci_read(self, reg: int) -> int:
         reg &= 0xFC
         if reg == 0x10:
             return (self.r['crtc'].get(0x59, 0) << 24) | (self.r['crtc'].get(0x5A, 0) << 16)
         return self._pci_cfg(reg)
 
-    def _pcibios(self, uc):
+    def _pcibios(self, uc: Any) -> None:
         """PCI BIOS 2.1: the card is bus 0, device 9 (BX = 0048h), the only device."""
         al = self._reg(UC_X86_REG_AX) & 0xFF
         di = self._reg(UC_X86_REG_DI)
@@ -684,22 +735,82 @@ class Machine:
         uc.reg_write(UC_X86_REG_AX, (ax & 0x00FF) | (0 if ok else 0x8600))
         self._ret_cf(uc, 0 if ok else 1)
 
-    def _ret_cf(self, uc, cf, ax=None):
+    def _ret_cf(self, uc: Any, cf: int, ax: int | None=None) -> None:
         fl = self._reg(UC_X86_REG_EFLAGS)
         uc.reg_write(UC_X86_REG_EFLAGS, (fl | 1) if cf else (fl & ~1))
         if ax is not None:
             uc.reg_write(UC_X86_REG_AX, ax)
 
-    def _dos(self, uc, ah):
+    def _dos_files(self, uc: Any, ah: int, ax: int, bx: int, cx: int, dx: int, ds: int) -> int | None:
+        """The file functions (3Ch, 3Eh, 40h, 44h, 68h, 0Dh). Returns CF, or None when AH is not one of them."""
         c = self.com
-        c.dos_calls.add(ah)
-        ax = self._reg(UC_X86_REG_AX)
-        bx = self._reg(UC_X86_REG_BX)
-        cx = self._reg(UC_X86_REG_CX)
-        dx = self._reg(UC_X86_REG_DX)
-        ds = self._reg(UC_X86_REG_DS)
+        if ah == 0x3C:
+            name = bytes(uc.mem_read(ds * 16 + dx, 64)).split(b'\0')[0].decode('latin1').upper()
+            h = 5 + len(self.handles)
+            self.handles[h] = name
+            c.files[name] = bytearray()
+            uc.reg_write(UC_X86_REG_AX, h)
+        elif ah == 0x3E:
+            self.handles.pop(bx, None)
+        elif ah == 0x40:
+            data = bytes(uc.mem_read(ds * 16 + dx, cx))
+            if bx == 1: c.stdout.extend(data)
+            elif bx == 2: c.stderr.extend(data)
+            elif bx in self.handles:
+                c.files[self.handles[bx]].extend(data)
+                c.synced.discard(self.handles[bx])
+            uc.reg_write(UC_X86_REG_AX, cx)
+        elif ah == 0x44:
+            uc.reg_write(UC_X86_REG_DX, 0x0000 if self.stdout_is_file else 0x0080)
+        elif ah == 0x68:
+            if self.handles.get(bx) in c.files:
+                c.synced.add(self.handles[bx])
+        elif ah == 0x0D:
+            c.synced.update(c.files)
+        else:
+            return None
+        return 0
+
+    def _dos_mem(self, uc: Any, ah: int, ax: int, bx: int, cx: int, dx: int, es: int) -> int | None:
+        """The memory-block functions (48h, 49h, 4Ah, 31h). Returns CF, or None when AH is not one of them."""
         cf = 0
-        es = self._reg(UC_X86_REG_ES)
+        if ah == 0x4A:                                # resize: only the program's own block matters
+            if es == self.psp:
+                if es + bx > MEM_TOP:
+                    cf = 1
+                    uc.reg_write(UC_X86_REG_AX, 8)
+                    uc.reg_write(UC_X86_REG_BX, MEM_TOP - es)
+                else:
+                    self.prog_end = es + bx
+                    self._mcb(es - 1, b'Z', self.psp, bx)
+        elif ah == 0x48:                              # allocate above the program and earlier blocks
+            seg = max(self.prog_end, self.heap) + 1
+            if seg + bx > MEM_TOP:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 8)
+                uc.reg_write(UC_X86_REG_BX, max(0, MEM_TOP - seg))
+            else:
+                self._mcb(seg - 1, b'M', self.psp, bx)
+                self.heap = seg + bx
+                uc.reg_write(UC_X86_REG_AX, seg)
+        elif ah == 0x49:                              # free: the block's MCB gets owner 0
+            if es >= 1 and self.mem((es - 1) * 16, 1) in (b'M', b'Z'):
+                self.mu.mem_write((es - 1) * 16 + 1, b'\0\0')
+        elif ah == 0x31:                              # resident: its block shrinks to DX paragraphs,
+            c = self.com                             # a free block after it ends the chain
+            c.exit = ('tsr', ax & 0xFF, dx)
+            self._mcb(self.psp - 1, b'M', self.psp, dx)
+            self.res_end = self.psp + dx
+            if self.res_end < MEM_TOP:
+                self._mcb(self.res_end, b'Z', 0, MEM_TOP - self.res_end - 1)
+            uc.emu_stop()
+        else:
+            return None
+        return cf
+
+    def _dos_misc(self, uc: Any, ah: int, ax: int, bx: int, cx: int, dx: int, ds: int, es: int) -> int:
+        """Console, vectors, info and exit functions. Returns CF (1 for an unknown AH)."""
+        c = self.com
         if ah == 0x02:
             c.stdout.append(dx & 0xFF)
         elif ah == 0x09:
@@ -720,51 +831,6 @@ class Machine:
             uc.reg_write(UC_X86_REG_ES, seg)
         elif ah == 0x25:
             uc.mem_write((ax & 0xFF) * 4, struct.pack('<HH', dx, ds))
-        elif ah == 0x3C:
-            name = bytes(uc.mem_read(ds * 16 + dx, 64)).split(b'\0')[0].decode('latin1').upper()
-            h = 5 + len(self.handles)
-            self.handles[h] = name
-            c.files[name] = bytearray()
-            uc.reg_write(UC_X86_REG_AX, h)
-        elif ah == 0x3E:
-            self.handles.pop(bx, None)
-        elif ah == 0x40:
-            data = bytes(uc.mem_read(ds * 16 + dx, cx))
-            if bx == 1: c.stdout.extend(data)
-            elif bx == 2: c.stderr.extend(data)
-            elif bx in self.handles:
-                c.files[self.handles[bx]].extend(data)
-                c.synced.discard(self.handles[bx])
-            uc.reg_write(UC_X86_REG_AX, cx)
-        elif ah == 0x44:
-            uc.reg_write(UC_X86_REG_DX, 0x0000 if self.stdout_is_file else 0x0080)
-        elif ah == 0x4A:                                # resize: only the program's own block matters
-            if es == self.psp:
-                if es + bx > MEM_TOP:
-                    cf = 1
-                    uc.reg_write(UC_X86_REG_AX, 8)
-                    uc.reg_write(UC_X86_REG_BX, MEM_TOP - es)
-                else:
-                    self.prog_end = es + bx
-                    self._mcb(es - 1, b'Z', self.psp, bx)
-        elif ah == 0x48:                                # allocate above the program and earlier blocks
-            seg = max(self.prog_end, self.heap) + 1
-            if seg + bx > MEM_TOP:
-                cf = 1
-                uc.reg_write(UC_X86_REG_AX, 8)
-                uc.reg_write(UC_X86_REG_BX, max(0, MEM_TOP - seg))
-            else:
-                self._mcb(seg - 1, b'M', self.psp, bx)
-                self.heap = seg + bx
-                uc.reg_write(UC_X86_REG_AX, seg)
-        elif ah == 0x49:                                # free: the block's MCB gets owner 0
-            if es >= 1 and self.mem((es - 1) * 16, 1) in (b'M', b'Z'):
-                self.mu.mem_write((es - 1) * 16 + 1, b'\0\0')
-        elif ah == 0x68:
-            if self.handles.get(bx) in c.files:
-                c.synced.add(self.handles[bx])
-        elif ah == 0x0D:
-            c.synced.update(c.files)
         elif ah == 0x50:
             pass
         elif ah in (0x51, 0x62):
@@ -780,7 +846,7 @@ class Machine:
             uc.mem_write(ds * 16 + dx, bytes(34))
             uc.reg_write(UC_X86_REG_BX, 1)
         elif ah == 0x19:
-            uc.reg_write(UC_X86_REG_AX, (ax & 0xFF00) | 2)  # drive C:
+            uc.reg_write(UC_X86_REG_AX, (ax & 0xFF00) | 2)  # drive C:\    
         elif ah == 0x0B:
             uc.reg_write(UC_X86_REG_AX, ax & 0xFF00)       # no key waiting
         elif ah == 0x33:
@@ -793,21 +859,30 @@ class Machine:
             for s in (self.psp - 0x11, self.psp - 1):
                 uc.mem_write(s * 16 + 1, b'\0\0')
             uc.emu_stop()
-        elif ah == 0x31:                                # resident: its block shrinks to DX paragraphs,
-            c.exit = ('tsr', ax & 0xFF, dx)             # a free block after it ends the chain
-            self._mcb(self.psp - 1, b'M', self.psp, dx)
-            self.res_end = self.psp + dx
-            if self.res_end < MEM_TOP:
-                self._mcb(self.res_end, b'Z', 0, MEM_TOP - self.res_end - 1)
-            uc.emu_stop()
         else:
-            cf = 1
+            return 1
+        return 0
+
+    def _dos(self, uc: Any, ah: int) -> None:
+        c = self.com
+        c.dos_calls.add(ah)
+        ax = self._reg(UC_X86_REG_AX)
+        bx = self._reg(UC_X86_REG_BX)
+        cx = self._reg(UC_X86_REG_CX)
+        dx = self._reg(UC_X86_REG_DX)
+        ds = self._reg(UC_X86_REG_DS)
+        es = self._reg(UC_X86_REG_ES)
+        cf = self._dos_files(uc, ah, ax, bx, cx, dx, ds)
+        if cf is None:
+            cf = self._dos_mem(uc, ah, ax, bx, cx, dx, es)
+        if cf is None:
+            cf = self._dos_misc(uc, ah, ax, bx, cx, dx, ds, es)
         self._ret_cf(uc, cf)
 
     # ------------------------------------------------------------------ BIOS
     post_limit = 50_000_000                             # instructions the ROM initialisation may take
 
-    def post(self, limit=None):
+    def post(self, limit: int | None=None) -> tuple[int, int]:
         """Run the ROM initialisation; returns the INT 10h vector (segment, offset). Raises RuntimeError
         when the ROM does not return to the caller's far call: a run that stops anywhere else (a loop
         that used up the budget, a HLT) is not a POST that passed (#143)."""
@@ -838,7 +913,7 @@ class Machine:
     chip = 'v2'                                         # CHIPS key: v2 (the card), vplus, uvplus, trio64, trio32
     cr2f = None                                         # CR2F when it is not the PCI revision (CHIP_CR2F)
 
-    def _noop_hook(self, entry):
+    def _noop_hook(self, entry: int) -> None:
         def hit(uc, addr, size, ud):
             ax, bx = self._reg(UC_X86_REG_AX), self._reg(UC_X86_REG_BX)
             dx = self._reg(UC_X86_REG_DX)
@@ -857,7 +932,7 @@ class Machine:
         self.mu.hook_add(UC_HOOK_CODE, hit, None, entry, entry)
         self.mu.ctl_remove_cache(entry, entry + 1)      # POST has run the entry: retranslate it with the hook
 
-    def _start(self, cs, ip, until, count, ss=0, sp=0x7000):
+    def _start(self, cs: int, ip: int, until: int, count: int, ss: int=0, sp: int=0x7000) -> None:
         mu = self.mu
         mu.reg_write(UC_X86_REG_CS, cs)
         mu.reg_write(UC_X86_REG_SS, ss)
@@ -871,7 +946,7 @@ class Machine:
             raise RuntimeError('emulation error %s at %04x:%04x' % (e, self._reg(UC_X86_REG_CS),
                                                                     self._reg(UC_X86_REG_IP)))
 
-    def int10(self, ax, bx=0, cx=0, dx=0, es=0, di=0, si=0, bp=0):
+    def int10(self, ax: int, bx: int=0, cx: int=0, dx: int=0, es: int=0, di: int=0, si: int=0, bp: int=0) -> dict[str, int]:
         """INT 10h from a stub at 0000:7D00; returns a dict of the registers after the call."""
         mu = self.mu
         mu.mem_write(0x7D00, b'\xCD\x10\xF4')
@@ -895,7 +970,7 @@ class Machine:
                                               ('dx', UC_X86_REG_DX), ('es', UC_X86_REG_ES), ('bp', UC_X86_REG_BP),
                                               ('flags', UC_X86_REG_EFLAGS))}
 
-    def snapshot(self):
+    def snapshot(self) -> list[int]:
         """The 62 standard registers in the order of S3COMPAT's vgalist (MISC, FEAT, SR0-4, CR00-18,
         AR00-14, GR00-08)."""
         r = self.r
@@ -903,22 +978,22 @@ class Machine:
                [r['crtc'].get(i, 0) for i in range(25)] + [r['atc'].get(i, 0) for i in range(21)] + \
                [r['gc'].get(i, 0) for i in range(9)]
 
-    def state_block(self):
+    def state_block(self) -> bytes:
         """INT 10h AH=1Bh state block, 64 bytes."""
         self.int10(0x1B00, bx=0, es=0x0800, di=0)
         return bytes(self.mu.mem_read(0x8000, 64))
 
-    def dac_bytes(self):
+    def dac_bytes(self) -> bytes:
         return bytes(sum(self.dac, []))
 
-    def mem(self, addr, n):
+    def mem(self, addr: int, n: int) -> bytes:
         return bytes(self.mu.mem_read(addr, n))
 
     # ------------------------------------------------------------------ DOS programs
-    def _mcb(self, seg, kind, owner, paras, name=b''):
+    def _mcb(self, seg: int, kind: bytes, owner: int, paras: int, name: bytes=b'') -> None:
         self.mu.mem_write(seg * 16, kind + struct.pack('<HH', owner, paras) + bytes(3) + name[:8].ljust(8, b'\0'))
 
-    def _psp(self, seg, tail, name):
+    def _psp(self, seg: int, tail: str, name: str) -> None:
         """PSP at seg:0000, environment (empty, then the program name) in the 15 paragraphs before it,
         MCBs in front of both."""
         mu = self.mu
@@ -943,7 +1018,7 @@ class Machine:
         self._mcb(seg - 0x11, b'M', seg, 0x0F)
         self._mcb(seg - 1, b'Z', seg, MEM_TOP - seg, name.split('.')[0].encode())
 
-    def _go(self, start, max_insn):
+    def _go(self, start: int, max_insn: int) -> ComResult:
         c = self.com
         try:
             self.mu.emu_start(start, 0, count=max_insn)
@@ -955,7 +1030,7 @@ class Machine:
         self.com = None
         return c
 
-    def run_com(self, com, tail='', seg=0x2000, stdout_is_file=True, max_insn=600_000_000, name='PROG.COM'):
+    def run_com(self, com: bytes, tail: str='', seg: int=0x2000, stdout_is_file: bool=True, max_insn: int=600_000_000, name: str='PROG.COM') -> ComResult:
         """Run a .COM program at seg:0100 with the command tail; returns a ComResult. The program's
         resident part stays in memory when it ends with INT 21h AH=31h."""
         mu = self.mu
@@ -972,7 +1047,7 @@ class Machine:
         mu.reg_write(UC_X86_REG_EFLAGS, 0x202)
         return self._go(base + 0x100, max_insn)
 
-    def run_exe(self, exe, tail='', seg=0x2000, stdout_is_file=True, max_insn=600_000_000, name='PROG.EXE'):
+    def run_exe(self, exe: bytes, tail: str='', seg: int=0x2000, stdout_is_file: bool=True, max_insn: int=600_000_000, name: str='PROG.EXE') -> ComResult:
         """Run an MZ .EXE with its PSP at seg:0000 and the load image at seg+10h (relocations applied);
         returns a ComResult like run_com."""
         mu = self.mu
@@ -1002,7 +1077,7 @@ class Machine:
         return self._go((load + cs) * 16 + ip, max_insn)
 
     # ------------------------------------------------------------------ Win32 console programs
-    def run_pe32(self, exe, cmdline, sleep_hook=None, max_insn=200_000_000):
+    def run_pe32(self, exe: bytes, cmdline: str, sleep_hook: Callable[[int], None] | None=None, max_insn: int=200_000_000) -> ComResult:
         """Run a 32-bit Windows console program (PE, no relocations, KERNEL32 imports only) in a flat 32-bit
         CPU of its own whose IN/OUT go to this machine's VGA/S3 and PCI model, as on the Windows 9x
         desktop. Supported imports: ExitProcess, GetStdHandle, WriteFile, FlushFileBuffers (marks the file
@@ -1013,57 +1088,27 @@ class Machine:
         from unicorn.x86_const import (UC_X86_REG_ESP, UC_X86_REG_EAX, UC_X86_REG_EIP, UC_X86_REG_EDX,
                                        UC_X86_REG_ECX)
         c = ComResult()
-        lfanew = struct.unpack_from('<I', exe, 0x3C)[0]
-        check_pe = exe[lfanew:lfanew + 4] == b'PE\0\0' and struct.unpack_from('<H', exe, lfanew + 4)[0] == 0x14C
-        if not check_pe:
-            raise ValueError('not a 32-bit PE')
-        nsec = struct.unpack_from('<H', exe, lfanew + 6)[0]
-        optsz = struct.unpack_from('<H', exe, lfanew + 20)[0]
-        o = lfanew + 24
-        entry, base, simg, shdr = (struct.unpack_from('<I', exe, o + 16)[0], struct.unpack_from('<I', exe, o + 28)[0],
-                                   struct.unpack_from('<I', exe, o + 56)[0], struct.unpack_from('<I', exe, o + 60)[0])
-        imp_rva = struct.unpack_from('<I', exe, o + 96 + 8)[0]
+        pe = _pe_info(exe)
+        entry, base = pe[3], pe[4]
         u = Uc(UC_ARCH_X86, UC_MODE_32)
-        u.mem_map(base, (simg + 0xFFF) & ~0xFFF)
-        u.mem_write(base, exe[:shdr])
-        for i in range(nsec):
-            s = o + optsz + 40 * i
-            vs, va, rs, rp = struct.unpack_from('<IIII', exe, s + 8)
-            u.mem_write(base + va, exe[rp:rp + rs])
+        _pe_load(u, exe, pe)
         STUBS, STACK, CMD = 0x70000000, 0x7F000000, 0x7E000000
         u.mem_map(STUBS, 0x1000)
         u.mem_map(STACK - 0x100000, 0x101000)
         u.mem_map(CMD, 0x1000)
         u.mem_write(CMD, cmdline.encode() + b'\0')
-        names = []
-        d = imp_rva
-        while True:
-            ilt, _, _, name, iat = struct.unpack('<IIIII', u.mem_read(base + d, 20))
-            if not name:
-                break
-            k = 0
-            while True:
-                hn = struct.unpack('<I', u.mem_read(base + (ilt or iat) + 4 * k, 4))[0]
-                if not hn:
-                    break
-                fn = bytes(u.mem_read(base + hn + 2, 64)).split(b'\0')[0].decode()
-                u.mem_write(base + iat + 4 * k, struct.pack('<I', STUBS + 4 * len(names)))
-                names.append(fn)
-                k += 1
-            d += 20
+        names = _pe_imports(u, base, pe[7], STUBS)
         u.mem_write(STUBS, b'\xF4' * 0x1000)
         st = {'tick': 0x10000, 'files': {}, 'h': {}, 'next': 8}
 
-        def ret(esp, nargs, val):
+        def ret(esp: int, nargs: int, val: int) -> None:
             raddr = struct.unpack('<I', u.mem_read(esp, 4))[0]
             u.reg_write(UC_X86_REG_EAX, val & 0xFFFFFFFF)
             u.reg_write(UC_X86_REG_ESP, esp + 4 + 4 * nargs)
             u.reg_write(UC_X86_REG_EIP, raddr)
 
-        def api(uc, addr, size, ud):
-            fn = names[(addr - STUBS) // 4]
-            esp = uc.reg_read(UC_X86_REG_ESP)
-            a = struct.unpack('<6I', uc.mem_read(esp + 4, 24))
+        def api_misc(uc: Any, fn: str, a: tuple[int, ...], esp: int) -> None:
+            """The non-file imports."""
             if fn == 'ExitProcess':
                 c.exit = ('exit', a[0])
                 uc.emu_stop()
@@ -1078,7 +1123,12 @@ class Machine:
                 ret(esp, 1, 0)
             elif fn == 'GetStdHandle':
                 ret(esp, 1, 1 if a[0] == 0xFFFFFFF5 else 2)
-            elif fn == 'CreateFileA':
+            else:
+                raise RuntimeError('import %s not emulated' % fn)
+
+        def api_files(uc: Any, fn: str, a: tuple[int, ...], esp: int) -> None:
+            """The file imports."""
+            if fn == 'CreateFileA':
                 nm = bytes(uc.mem_read(a[0], 128)).split(b'\0')[0].decode('latin1').upper()
                 h = st['next']
                 st['next'] += 4
@@ -1108,22 +1158,37 @@ class Machine:
                 ret(esp, 1, 1)
             else:
                 raise RuntimeError('import %s not emulated' % fn)
-        u.hook_add(UC_HOOK_CODE, api, None, STUBS, STUBS + 0xFFF)
+
+        def api(uc: Any, addr: int, size: int, ud: Any) -> None:
+            fn = names[(addr - STUBS) // 4]
+            esp = uc.reg_read(UC_X86_REG_ESP)
+            a = struct.unpack('<6I', uc.mem_read(esp + 4, 24))
+            if fn in ('CreateFileA', 'SetFilePointer', 'WriteFile', 'FlushFileBuffers', 'CloseHandle'):
+                api_files(uc, fn, a, esp)
+            else:
+                api_misc(uc, fn, a, esp)
+        self._pe_go(u, c, base, entry, STUBS, STACK, max_insn, api)
+        return c
+
+    def _pe_go(self, u: Uc, c: ComResult, base: int, entry: int, stubs: int, stack: int, max_insn: int,
+               api: Callable) -> None:
+        """Hook the stubs and the port model, run the PE entry point, record the exit in c."""
+        from unicorn.x86_const import UC_X86_REG_ESP, UC_X86_REG_EIP
+        u.hook_add(UC_HOOK_CODE, api, None, stubs, stubs + 0xFFF)
         u.hook_add(UC_HOOK_INSN, lambda uc, port, size, ud: self._in(uc, port, size, ud), None, 1, 0, UC_X86_INS_IN)
         u.hook_add(UC_HOOK_INSN, lambda uc, port, size, val, ud: self._out(uc, port, size, val, ud), None, 1, 0,
                    UC_X86_INS_OUT)
-        u.mem_write(STACK - 16, struct.pack('<I', STUBS + 0xFF0))     # return address of the entry point
-        u.reg_write(UC_X86_REG_ESP, STACK - 16)
+        u.mem_write(stack - 16, struct.pack('<I', stubs + 0xFF0))     # return address of the entry point
+        u.reg_write(UC_X86_REG_ESP, stack - 16)
         try:
-            u.emu_start(base + entry, STUBS + 0xFF0, count=max_insn)
+            u.emu_start(base + entry, stubs + 0xFF0, count=max_insn)
         except UcError as e:
             c.exit = ('error', '%s at %08x' % (e, u.reg_read(UC_X86_REG_EIP)))
         if c.exit is None:              # neither an exit nor an error: the count ran out
             c.exit = ('budget', budget_msg('the program', max_insn, 'max_insn', '%08X' % u.reg_read(UC_X86_REG_EIP)))
-        return c
 
     # ------------------------------------------------------------------ coverage
-    def track_coverage(self):
+    def track_coverage(self) -> tuple[bytearray, bytearray]:
         """Record which bytes of C000:0000-7FFF are executed (code) or read as data; returns (code, data)
         bytearrays that fill in while the machine runs. code: bit 0 executed, bit 1 a basic block starts
         there."""

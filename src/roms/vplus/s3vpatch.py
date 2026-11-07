@@ -43,7 +43,7 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
   MCLK   50.11 MHz for every memory type (p6): the 1-cycle EDO entry A8h as in 1.03-08N, the fast page
          and 2-cycle EDO entry A6h lowered from 59.96 MHz to it (DEFAULT_MCLK). With --mclk the entry of
          --memtype gets that clock instead, at most 60 MHz
-  sign-on "1.03-08N-p4", checksum byte 7FFF
+  sign-on "1.03-08N-pN" (VER765), checksum byte 7FFF
 
 Not applied, and why (docs/765-rom.md): the VCO fix (the Trio64V+ post divider R has 2 bits, at
 most divide by 8, so 12.6 MHz for 10Dh-10Fh cannot come from a VCO of 135 MHz or more), the FIFO fix,
@@ -55,7 +55,9 @@ written and the exit code is 1. The result is checked before it is written: the 
 declare 32 KB, the free block that the code does not use is still zeros, and with the known 1.03-08N
 image the SHA-256 of the build that passed the emulator tests.
 """
+from __future__ import annotations
 import argparse, hashlib, os, re, struct, sys
+from typing import Callable
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED = os.path.dirname(HERE)                  # src/roms/: s3patch.py and the shared .asm files
@@ -169,7 +171,7 @@ ILACE_ENT = (0x055A, 0x0587, 0x0605, 0x0656)
 HALF_DCLK = {0x05A2: 'b8 02 80 7d 70', 0x05AB: '93 06 80 7d 70'}
 
 
-def drop_interlaced(d, put):
+def drop_interlaced(d: bytearray, put: Callable) -> None:
     """p2: remove 118h, 119h, 11Ah and 120h (interlaced only on the Trio64V+) and the interlaced refresh
     entries of the other modes (see above)."""
     for off in ILACE_ENT:
@@ -190,14 +192,8 @@ def drop_interlaced(d, put):
         'VESA mode entries moved with the list')
 
 
-def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
-    """lo: the 32 KB 1.03-08 image; mclk: MHz for the MCLK entry of memtype (None: as 1.03-08).
-    Returns (new 32 KB, log lines)."""
-    d = bytearray(lo)
-    log = []
-    m = re.search(rb'S3 86C765 Video BIOS\. Version (\d\.\d\d-\d\dN?)\r\n', d[:0x100])
-    if not m:
-        raise PatchError('no "S3 86C765 Video BIOS. Version x.xx-xx[N]" sign-on in the first 256 bytes')
+def _check_103(d: bytearray, m: re.Match) -> None:
+    """The input must be a clean 1.03-08N image: sign-on version, checksum, header, free block, code SHA."""
     if m.group(1).decode() != VERSION:
         raise PatchError('BIOS version %s: only the Trio64V+ BIOS %s is supported' % (m.group(1).decode(), VERSION))
     if sum(d) & 0xFF:
@@ -209,10 +205,10 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     if s3patch.code_sha(d, CODE_RANGE) != CODE_SHA:
         raise PatchError('%04X-%04X is not the code of %s (another build, or changed?)'
                          % (CODE_RANGE[0], CODE_RANGE[1] - 1, VERSION))
-    sym = s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
-    site = SITES
 
-    # 1. the original code must be where bios.inc and SITES say
+
+def _check_vplus_sites(d: bytes, site: dict[str, int], sym: dict[str, int]) -> None:
+    """The original code must be where vplus/bios.inc and SITES say."""
     for k, off in site.items():
         if k in SIG and not sig_match(d, off, SIG[k]):
             raise PatchError('%s: original code not found at %04X' % (k, off))
@@ -248,23 +244,10 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     if not sig_match(d, 0x0A3B, 'b3 10 be a6 00 b0 36 e8 ?? ?? f6 c4 08 75 03 be a8 00 e8'):
         raise PatchError('POST does not pick the MCLK entries A6h/A8h by CR36 bit 3 at 0A3Bh')
 
-    def put(off, old, new, why):
-        old, new = (bytes.fromhex(x) if isinstance(x, str) else bytes(x) for x in (old, new))
-        if bytes(d[off:off + len(old)]) != old:
-            raise PatchError('%04X: expected %s, found %s (%s)' % (off, old.hex(' '), d[off:off + len(old)].hex(' '), why))
-        d[off:off + len(new)] = new
-        log.append('%04X  %-17s -> %-17s %s' % (off, old.hex(' '), new.hex(' '), why))
 
-    # 2. code
-    blocks, lab = s3patch.assemble(sym, nasm, (HERE, SHARED), BLOCKS)
-    patch.blocks = blocks
-    for off, code, name in blocks:
-        if off >= FREE_START and off + len(code) > FREE_END:
-            raise PatchError('%s does not fit the free block' % name)
-        d[off:off + len(code)] = code
-        log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
-                   ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[0] == name for k in b[3])))
-
+def _apply_vplus(d: bytearray, put: Callable, site: dict[str, int], sym: dict[str, int], lab: dict[str, int],
+                 mclk: float | None, memtype: str, log: list[str]) -> None:
+    """Blocks, patch sites, the interlaced timings out, the 320x200 DCLK, the default MCLK, fonts."""
     a = site['modetab']
     put(a, struct.pack('<H', sym['MODESET']), struct.pack('<H', lab['hook']), 'INT 10h AH=00 table: mode set via the hook')
     a = site['m4f02'] + 6
@@ -291,33 +274,46 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
                  known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first
-
     s3patch.put_fonts_in_place(d, FONT_TABLES, log)
 
+
+def patch(lo: bytes, nasm: str='nasm', mclk: float | None=None, memtype: str='edo1') -> tuple[bytes, list[str]]:
+    """lo: the 32 KB 1.03-08 image; mclk: MHz for the MCLK entry of memtype (None: as 1.03-08).
+    Returns (new 32 KB, log lines)."""
+    d = bytearray(lo)
+    log = []
+    m = re.search(rb'S3 86C765 Video BIOS\. Version (\d\.\d\d-\d\dN?)\r\n', d[:0x100])
+    if not m:
+        raise PatchError('no "S3 86C765 Video BIOS. Version x.xx-xx[N]" sign-on in the first 256 bytes')
+    _check_103(d, m)
+    sym = s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
+    site = SITES
+    _check_vplus_sites(d, site, sym)
+    put = s3patch._make_put(d, log)
+
+    # 2. code
+    blocks, lab = s3patch.assemble(sym, nasm, (HERE, SHARED), BLOCKS)
+    patch.blocks = blocks
+    for off, code, name in blocks:
+        if off >= FREE_START and off + len(code) > FREE_END:
+            raise PatchError('%s does not fit the free block' % name)
+        d[off:off + len(code)] = code
+        log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
+                   ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[0] == name for k in b[3])))
+    _apply_vplus(d, put, site, sym, lab, mclk, memtype, log)
+
     # 3. sign-on and checksum
-    s = m.start(1)
-    end = d.index(b'\x00', s)
-    txt = bytes(d[s:end]).replace(VERSION.encode(), (VERSION + '-' + LEVEL).encode(), 1)
-    stop = end
-    while stop < 0x100 and d[stop] == 0:
-        stop += 1
-    if s + len(txt) + 1 > stop:
-        raise PatchError('no room for the longer sign-on')
-    d[s:s + len(txt) + 1] = txt + b'\x00'
-    log.append('%04X  sign-on "%s"' % (s, txt.split(b'\r')[0].decode()))
-    d[0x7FFF] = 0
-    d[0x7FFF] = (-sum(d)) & 0xFF
-    log.append('7FFF  checksum %02X -> %02X' % (lo[0x7FFF], d[0x7FFF]))
+    s3patch._signon(d, lo, m, log, VERSION, LEVEL)
     return bytes(d), log
 
 
-def used_ranges(sym):
+def used_ranges(sym: dict[str, int]) -> list[tuple[int, int]]:
     """The bytes the blocks may use: [(start, end)]."""
     return [((sym[o] if isinstance(o, str) else o), (sym[o] if isinstance(o, str) else o) + room)
             for _, o, room, _ in BLOCKS]
 
 
-def verify(img, size):
+def verify(img: bytes, size: int) -> list[str]:
     errs = []
     if len(img) != size * 1024:
         errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
@@ -335,7 +331,7 @@ def verify(img, size):
     return errs
 
 
-def diagnose(nasm, output, img):
+def diagnose(nasm: str, output: str, img: bytes) -> list[str]:
     """As s3patch.diagnose, with the blocks of this build."""
     try:
         v = s3patch.subprocess.run([nasm, '-v'], capture_output=True, text=True).stdout.strip()
@@ -345,13 +341,12 @@ def diagnose(nasm, output, img):
     diff = [n for _, c, n in getattr(patch, 'blocks', []) if hashlib.sha256(c).hexdigest()[:16] != BLOCK_SHA.get(n)]
     out.append('blocks assembled differently: %s' % ', '.join(diff) if diff else
                'every block is as in the tested build: the difference is in the patch sites')
-    with open(output + '.untested', 'wb') as f:
-        f.write(img)
+    s3patch.write_file(output + '.untested', img)
     out.append('the untested image is in %s.untested; do not flash it' % output)
     return out
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 Trio64V+ BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the Trio64V+ BIOS 1.03-08N: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the 32 KB twice; 32 KB with --size 32)')
@@ -390,8 +385,7 @@ def main():
     except (PatchError, OSError) as e:
         print('s3vpatch: %s' % e, file=sys.stderr)
         return 1
-    with open(a.output, 'wb') as f:
-        f.write(img)
+    s3patch.write_file(a.output, img)
     if not a.quiet:
         ref = hashlib.sha256(lo).hexdigest() == REF_SHA
         print('base %s%s' % (VERSION, ' (the known 1.03-08N image)' if ref else ''))

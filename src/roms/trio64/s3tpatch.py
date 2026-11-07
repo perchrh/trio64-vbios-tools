@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""s3tpatch.py - build the Trio64 ROM (1.5-07-p3) from the Phoenix S3 Trio64 BIOS 1.5-07.
+"""s3tpatch.py - build the Trio64 ROM (the level of VER764 in src/tools/common/version.inc) from the Phoenix S3 Trio64 BIOS 1.5-07.
 
     python3 src/roms/trio64/s3tpatch.py 1_5_07.BIN -o S3T64P3.BIN [--size 64|32] [--mclk MHZ [--overclock]] [--nasm nasm] [-q]
     make 764x-rom OUT=S3T64P3.BIN [MCLK=55] [MCLK=69.8 OVERCLOCK=1]
@@ -62,7 +62,7 @@ What is applied (docs/764-rom.md)
           A --mclk outside the model's range is refused (above it, --overclock allows up to 100 MHz)
           With --overclock up to 100 MHz (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their
           lowest): the card owner's choice, never the default
-  sign-on "1.5-07-p3", checksum byte 7FFF
+  sign-on "1.5-07-pN" (VER764), checksum byte 7FFF
 
 Not applied: the fast 4F05 path (Phoenix's 4F05 is short: 6 OUTs for a bank in 101h in the emulator, 14 in
 1.5-07-p1 with the booster check and the sequencer index kept), the 32-bit S3/VESA
@@ -74,7 +74,9 @@ written and the exit code is 1. The result is checked before it is written: the 
 declare 32 KB, no interlaced entry is the first of any refresh list, and with the reference image the
 SHA-256 of the build that passed the emulator tests.
 """
+from __future__ import annotations
 import argparse, hashlib, os, re, struct, sys
+from typing import Callable
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHARED = os.path.dirname(HERE)
@@ -205,7 +207,7 @@ BLOCKS = [
 ]
 
 
-def lists_of(d):
+def lists_of(d: bytes | bytearray) -> tuple[list, int, dict[int, list[int]]]:
     """The mode table as [(entry offset, mode, block, list end)] and each mode's refresh entries."""
     modes = []
     a = MTAB
@@ -230,7 +232,7 @@ def lists_of(d):
     return modes, a, chains
 
 
-def edit_tables(d, log):
+def edit_tables(d: bytearray, log: list[str]) -> list[tuple[int, int]]:
     """Remove the interlaced entries and modes and move the tables together (see the file header).
     Returns the freed ranges [(start, end)]."""
     for e, b in ILACE.items():
@@ -311,7 +313,7 @@ def edit_tables(d, log):
     return free + DROPPED
 
 
-def put_fonts(d, log):
+def put_fonts(d: bytearray, log: list[str]) -> None:
     """Replace Phoenix's fonts in d by the tables of src/roms/fonts and point Phoenix's references to
     the moved tables (FONT_REFS) at their new places; every table and reference is checked first."""
     bad = fonts.check()
@@ -343,14 +345,8 @@ def put_fonts(d, log):
                    'AX=1130h table' if a not in FONT_REF_OP else 'mov %s' % ('bx' if FONT_REF_OP[a] == 0xBB else 'si')))
 
 
-def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
-    """lo: the 32 KB 1.5-07 image. Returns (new 32 KB,
-    log lines)."""
-    d = bytearray(lo)
-    log = []
-    m = re.search(rb'Phoenix S3 TRIO64 Enhanced VGA BIOS\. Version (\d\.\d-\d\d)', d[:0x100])
-    if not m:
-        raise PatchError('no "Phoenix S3 TRIO64 Enhanced VGA BIOS. Version x.x-xx" sign-on in the first 256 bytes')
+def _check_15(d: bytearray, m: re.Match) -> None:
+    """The input must be a clean 1.5-07 build: sign-on version, checksum, header, code SHA, free space."""
     if m.group(1).decode() != VERSION:
         raise PatchError('BIOS version %s: only the Phoenix Trio64 BIOS %s is supported' % (m.group(1).decode(), VERSION))
     if sum(d) & 0xFF:
@@ -367,8 +363,10 @@ def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
     for lo_, hi in UNUSED:
         if bytes(d[lo_:hi]) != bytes(hi - lo_):
             raise PatchError('%04X-%04X is not free (another build, or already patched?)' % (lo_, hi - 1))
-    sym = s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
-    site = SITES
+
+
+def _check_t64_sites(d: bytes, site: dict[str, int], sym: dict[str, int]) -> None:
+    """The original code must be where trio64/bios.inc and SITES say."""
     for k, off in site.items():
         if k in SIG and not sig_match(d, off - (2 if k == 'cr67' else 0), SIG[k]):
             raise PatchError('%s: original code not found at %04X' % (k, off))
@@ -395,15 +393,9 @@ def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
     if sym['P13C'] != site['font'] + 3:
         raise PatchError('P13C is not the dead code after the font load jump')
 
-    def put(off, old, new, why):
-        old, new = (bytes.fromhex(x) if isinstance(x, str) else bytes(x) for x in (old, new))
-        if bytes(d[off:off + len(old)]) != old:
-            raise PatchError('%04X: expected %s, found %s (%s)' % (off, old.hex(' '), d[off:off + len(old)].hex(' '), why))
-        d[off:off + len(new)] = new
-        log.append('%04X  %-17s -> %-17s %s' % (off, old.hex(' '), new.hex(' '), why))
 
-    # 1. tables, then the sign-on (its padding holds code too)
-    edit_tables(d, log)
+def _signon_15(d: bytearray, m: re.Match, sym: dict[str, int], log: list[str]) -> None:
+    """The -pN level into the sign-on; its padding holds code (tfifo2.asm), so the room ends there."""
     s = m.start(1)
     end = d.index(b'\x00', s)
     txt = bytes(d[s:end]).replace(VERSION.encode(), (VERSION + '-' + LEVEL).encode(), 1)
@@ -416,17 +408,21 @@ def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
     d[s:s + len(txt) + 1] = txt + b'\x00'
     log.append('%04X  sign-on "%s"' % (s, txt.split(b'\r')[0].decode()))
 
-    put_fonts(d, log)
 
+def _prepare_15(d: bytearray, m: re.Match, sym: dict[str, int], log: list[str]) -> None:
+    """The tables, the sign-on, the fonts and the freed VDIF code - everything before the blocks."""
+    edit_tables(d, log)
+    _signon_15(d, m, sym, log)
+    put_fonts(d, log)
     for lo_, hi, sig in DDC_FREED:                  # the VDIF code: zeroed first, tfifo.asm goes there
         if not sig_match(d, lo_, sig):
             raise PatchError('%04X: not the VDIF code (%s)' % (lo_, sig))
         d[lo_:hi] = bytes(hi - lo_)
         log.append('%04X-%04X  VBE 4F15: VDIF code zeroed (%d bytes free)' % (lo_, hi - 1, hi - lo_))
 
-    # 2. code, each block into space that is zero now
-    blocks, lab = s3patch.assemble(sym, nasm, (HERE, SHARED), BLOCKS)
-    patch.blocks = blocks
+
+def _write_blocks(d: bytearray, blocks: list, lab: dict[str, int], log: list[str]) -> None:
+    """Each assembled block into space that is zero now."""
     for off, code, name in blocks:
         if name != 'p13bfa.asm' and bytes(d[off:off + len(code)]) != bytes(len(code)):
             raise PatchError('%s: %04X-%04X is not free' % (name, off, off + len(code) - 1))
@@ -434,7 +430,10 @@ def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
         log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
                    ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[0] == name for k in b[3])))
 
-    # 3. sites
+
+def _apply_t64(d: bytearray, put: Callable, site: dict[str, int], sym: dict[str, int], lab: dict[str, int],
+               mclk: float | None, overclock: bool, model: str) -> None:
+    """The patch sites, the default/--mclk MCLK entry and the FIFO constant."""
     a = site['modetab']
     put(a, struct.pack('<H', sym['MODESET']), struct.pack('<H', lab['hook']), 'INT 10h AH=00 table: mode set via the hook')
     a = site['m4f02'] + 6
@@ -479,6 +478,31 @@ def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
     patch.kmclk = a                                 # for the --mclk comparison in main
     put(a, d[a:a + 4], struct.pack('<I', k), 'FIFO code: 112 x MCLK = %d (MCLK %.2f MHz)' % (k, mclk_of(d)))
 
+
+def patch(lo: bytes, nasm: str='nasm', mclk: float | None=None, overclock: bool=False, model: str='764x') -> tuple[bytes, list[str]]:
+    """lo: the 32 KB 1.5-07 image. Returns (new 32 KB,
+    log lines)."""
+    d = bytearray(lo)
+    log = []
+    m = re.search(rb'Phoenix S3 TRIO64 Enhanced VGA BIOS\. Version (\d\.\d-\d\d)', d[:0x100])
+    if not m:
+        raise PatchError('no "Phoenix S3 TRIO64 Enhanced VGA BIOS. Version x.x-xx" sign-on in the first 256 bytes')
+    _check_15(d, m)
+    sym = s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
+    site = SITES
+    _check_t64_sites(d, site, sym)
+    put = s3patch._make_put(d, log)
+
+    _prepare_15(d, m, sym, log)
+
+    # 2. code, each block into space that is zero now
+    blocks, lab = s3patch.assemble(sym, nasm, (HERE, SHARED), BLOCKS)
+    patch.blocks = blocks
+    _write_blocks(d, blocks, lab, log)
+
+    # 3. sites, the MCLK entry and the FIFO constant
+    _apply_t64(d, put, site, sym, lab, mclk, overclock, model)
+
     # 4. checksum
     d[0x7FFF] = 0
     d[0x7FFF] = (-sum(d)) & 0xFF
@@ -486,7 +510,7 @@ def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
     return bytes(d), log
 
 
-def verify(img, size):
+def verify(img: bytes, size: int) -> list[str]:
     errs = []
     if len(img) != size * 1024:
         errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
@@ -510,7 +534,7 @@ def verify(img, size):
     return errs
 
 
-def diagnose(nasm, output, img):
+def diagnose(nasm: str, output: str, img: bytes) -> list[str]:
     """As s3patch.diagnose, with the blocks of this build."""
     try:
         v = s3patch.subprocess.run([nasm, '-v'], capture_output=True, text=True).stdout.strip()
@@ -520,19 +544,18 @@ def diagnose(nasm, output, img):
     diff = [n for _, c, n in getattr(patch, 'blocks', []) if hashlib.sha256(c).hexdigest()[:16] != BLOCK_SHA.get(n)]
     out.append('blocks assembled differently: %s' % ', '.join(diff) if diff else
                'every block is as in the tested build: the difference is in the patch sites or tables')
-    with open(output + '.untested', 'wb') as f:
-        f.write(img)
+    s3patch.write_file(output + '.untested', img)
     out.append('the untested image is in %s.untested; do not flash it' % output)
     return out
 
 
-def mclk_of(img):
+def mclk_of(img: bytes) -> float:
     """The MCLK in MHz of the PLL pair at 3B5h (M, then N and R)."""
     m, nr = img[0x3B5], img[0x3B6]
     return 14.31818 * (m + 2) / ((nr & 0x1F) + 2) / (1 << ((nr >> 5) & 3))
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description='build %s-%s from the Phoenix S3 Trio64 BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='a Phoenix Trio64 BIOS 1.5-07: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the 32 KB twice; 32 KB with --size 32)')
@@ -560,8 +583,7 @@ def main():
             put_fonts(d, log)
             d[0x7FFF] = 0
             d[0x7FFF] = (-sum(d)) & 0xFF
-            with open(a.output, 'wb') as f:
-                f.write(bytes(d) * (2 if a.size == 64 else 1))
+            s3patch.write_file(a.output, bytes(d) * (2 if a.size == 64 else 1))
             print('%s: %s with the fonts of src/roms/fonts only (the 764-ref-compare reference)' % (a.output, VERSION))
             return 0
         if a.overclock and a.mclk is None:
@@ -588,8 +610,7 @@ def main():
     except (PatchError, OSError) as e:
         print('s3tpatch: %s' % e, file=sys.stderr)
         return 1
-    with open(a.output, 'wb') as f:
-        f.write(img)
+    s3patch.write_file(a.output, img)
     if not a.quiet:
         ref = hashlib.sha256(lo).hexdigest() == REF_SHA
         print('base %s%s' % (VERSION, ' (the reference CP764 build)' if ref else ' (another 1.5-07 build: its own clock and timing bytes kept)'))

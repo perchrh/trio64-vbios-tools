@@ -10,6 +10,7 @@ ranges that were never touched (at least --min bytes) with their share of zero b
 space in the ROM: an untouched range is a candidate to study, not proof that it is dead (error paths,
 other memory sizes and monitor types are not exercised).
 """
+from __future__ import annotations
 import argparse, os, struct, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,7 +19,7 @@ from vgaemu import Machine  # noqa: E402
 BUF = 0x0800
 
 
-def workload(m):
+def workload(m: Machine) -> None:
     I = m.int10
     for mode in range(0x14):
         for alt in (0, 1, 2):
@@ -89,7 +90,7 @@ def workload(m):
     I(3)
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
     ap.add_argument('--rom', required=True)
     ap.add_argument('--min', type=int, default=32, help='smallest untouched range to list')

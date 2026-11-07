@@ -32,6 +32,7 @@ Checked (2 November 2026): the five tables equal byte for byte the ones S3's BIO
 2.04.07 for the 8x8, the 8x16 and the 9x16 alternates), so our ROMs show what they showed before; the
 SHA-256 values below pin that.
 """
+from __future__ import annotations
 import hashlib, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -52,14 +53,14 @@ ALT14_CHARS = (0x1D, 0x22, 0x2B, 0x2D, 0x4D, 0x54, 0x56, 0x57, 0x58, 0x59, 0x5A,
                0x9B, 0x9D, 0x9E, 0xF1, 0xF6)
 
 
-def _read(name, height):
+def _read(name: str, height: int) -> bytes:
     data = open(os.path.join(HERE, name), 'rb').read()
     if len(data) != 256 * height or hashlib.sha256(data).hexdigest() != SOURCES[name]:
         raise SystemExit('%s: not the file of FNTCOL16.ZIP (size or SHA-256)' % name)
     return data
 
 
-def _glyph(table, height, c):
+def _glyph(table: bytes, height: int, c: int) -> bytes:
     return table[c * height:(c + 1) * height]
 
 
@@ -87,7 +88,7 @@ TABLE_SHA = {
 }
 
 
-def check():
+def check() -> list[str]:
     """Every table has the SHA-256 it is pinned to; returns a list of the ones that differ."""
     tabs = {'F8': F8, 'F14': F14, 'F16': F16, 'ALT14': ALT14, 'ALT16': ALT16}
     return [n for n, t in tabs.items() if hashlib.sha256(t).hexdigest() != TABLE_SHA[n]]

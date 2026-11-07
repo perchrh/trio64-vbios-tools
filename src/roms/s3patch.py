@@ -68,11 +68,13 @@ and declares 32 KB, the upper 32 KB is a copy of it, every DCLK VCO in the data 
 and with the known reference image the SHA-256 (of the lower 32 KB) of the build that passed the
 emulator tests.
 """
+from __future__ import annotations
+from typing import Callable
 import argparse, hashlib, os, re, shutil, struct, subprocess, sys, tempfile
 
 
 
-def rom_level(name, version):
+def rom_level(name: str, version: str) -> str:
     """The level (pN) of one of our ROMs from src/tools/common/version.inc, the one place the ROM
     levels are kept: `%define NAME 'VERSION-pN'` with NAME = VER775 (Trio64V2), VER765 (Trio64V+) or
     VER764 (Trio64). The patchers write it into the sign-on; S3TEST, built from the same file, expects it."""
@@ -119,7 +121,16 @@ class PatchError(Exception):
     pass
 
 
-def bios_symbols(path=os.path.join(HERE, 'bios.inc')):
+def write_file(path: str, data: bytes) -> None:
+    """Write data to path, checking that every byte was written (a short write would leave a truncated
+    ROM or log). Shared by all patchers and their tests."""
+    with open(path, 'wb') as f:
+        n = f.write(data)
+    if n != len(data):
+        raise PatchError('%s: wrote %d of %d bytes' % (path, n, len(data)))
+
+
+def bios_symbols(path: str=os.path.join(HERE, 'bios.inc')) -> dict[str, int]:
     """The addresses in bios.inc ('%define NAME 0xVALUE')."""
     sym = {}
     for line in open(path):
@@ -222,27 +233,27 @@ BLOCKS = [
 ]
 
 
-def hexb(s):
+def hexb(s: str) -> bytes:
     return bytes.fromhex(s)
 
 
-def sig_match(img, off, sig):
+def sig_match(img: bytes | bytearray, off: int, sig: str) -> bool:
     toks = sig.split()
     if off < 0 or off + len(toks) > len(img):
         return False
     return all(t == '??' or img[off + i] == int(t, 16) for i, t in enumerate(toks))
 
 
-def rel16(at, length, to):
+def rel16(at: int, length: int, to: int) -> bytes:
     return struct.pack('<h', to - (at + length))
 
 
-def call_target(img, at):
+def call_target(img: bytes | bytearray, at: int) -> int:
     assert img[at] == 0xE8
     return (at + 3 + struct.unpack_from('<h', img, at + 1)[0]) & 0xFFFF
 
 
-def assemble(sym, nasm, srcdirs=(HERE,), blocks=None):
+def assemble(sym: dict[str, int], nasm: str, srcdirs: tuple[str, ...] | tuple=(HERE,), blocks: list | None=None) -> tuple[list, dict[str, int]]:
     """Assemble the blocks (default BLOCKS). Each file is taken from the first of srcdirs that has it,
     and '%include "bios.inc"' finds the bios.inc of the first directory (NASM searches the -i paths
     in order), so the Trio64V+ patcher (vplus/s3vpatch.py) can assemble the shared files here with
@@ -300,16 +311,16 @@ def assemble(sym, nasm, srcdirs=(HERE,), blocks=None):
 # Trio64V2 DCLK PLL (docs/chip-rules.md): f = 14.31818 MHz * (M+2) / ((N+2) * 2^R) with M 1-127 and N
 # 1-31 (PLL-2), R in SR12 bits 6-5 plus bit 7 as the third bit, of which only 100b (divide by 16) is
 # defined among the codes with bit 7 set (V2-PLL-3).
-def rcode(nr):
+def rcode(nr: int) -> int:
     return ((nr >> 5) & 3) | (4 if nr & 0x80 else 0)
 
 
-def pll(m, nr):
+def pll(m: int, nr: int) -> tuple[float, float]:
     vco = 14.31818 * (m + 2) / ((nr & 0x1F) + 2)
     return vco, vco / (1 << rcode(nr))
 
 
-def pll_rule(m, nr):
+def pll_rule(m: int, nr: int) -> str | None:
     """None when the M and N/R bytes follow the datasheet, else what is wrong."""
     if not 1 <= m <= 0x7F:
         return 'M = %d (1-127)' % m
@@ -320,7 +331,7 @@ def pll_rule(m, nr):
     return None
 
 
-def refresh_entries(img):
+def refresh_entries(img: bytes | bytearray) -> list[int]:
     """The refresh entries of the S3 mode table at 0158h: 9 bytes per mode (mode, VGA parameter pointer,
     4 flag bytes, refresh list pointer). A list has 14-byte entries (CRTC table pointer, refresh index
     in bits 2-0 of byte 2, Hz, PLL M, N/R, ...); the pointer gives its last (highest refresh) entry and
@@ -340,7 +351,7 @@ def refresh_entries(img):
     return sorted(seen)
 
 
-def vco_fix(d, log, lo=170.0):
+def vco_fix(d: bytearray, log: list[str], lo: float=170.0) -> int:
     n = 0
     for e in refresh_entries(d):
         m, nr = d[e + 4], d[e + 5]
@@ -408,7 +419,7 @@ KNOWN_MCLK_8811 = [
 KNOWN_TOLERANCE = 0.5       # MHz: a known pair this close to the request is taken instead of the computed one
 
 
-def mclk_pll(target, fmax, fmin=MCLK_MIN, known=()):
+def mclk_pll(target: float, fmax: float, fmin: float=MCLK_MIN, known: tuple | list=()) -> tuple[int, int, float, float, str]:
     """The MCLK PLL setting for target MHz, at most fmax: (M, N/R byte, MHz, VCO MHz, source). With known
     (a list like KNOWN_MCLK_8811), a pair other BIOSes of the chip use is taken when it is within
     KNOWN_TOLERANCE MHz of target and inside the limits: the closest, then the one more images use.
@@ -443,7 +454,7 @@ def mclk_pll(target, fmax, fmin=MCLK_MIN, known=()):
     return best[1:] + ('computed',)
 
 
-def put_fonts_in_place(d, tables, log):
+def put_fonts_in_place(d: bytearray, tables: list, log: list[str]) -> None:
     """Write the font tables of src/roms/fonts over the base BIOS's own, at the same places (2.04.07,
     1.03-08N). tables: (name, table of fonts.py, address). Each place must hold that very table already
     (Gil's public domain fonts are the bytes S3's BIOSes carry), so another base, or a table at another
@@ -462,12 +473,12 @@ def put_fonts_in_place(d, tables, log):
                                                                                         name, len(t)))
 
 
-def code_sha(d, rng):
+def code_sha(d: bytes | bytearray, rng: tuple[int, int]) -> str:
     """SHA-256 of d[rng[0]:rng[1]], the part of an input image that every accepted build has in common."""
     return hashlib.sha256(bytes(d[rng[0]:rng[1]])).hexdigest()
 
 
-def mclk_build_errors(default_lo, new_lo, allowed, result_sha):
+def mclk_build_errors(default_lo: bytes, new_lo: bytes, allowed: set[int], result_sha: str) -> list[str]:
     """Whether a --mclk build is the tested build with another MCLK (all three patchers, #143): the
     default build of the same input must be the tested one (result_sha), and the --mclk build may differ
     from it only at the offsets in allowed (the MCLK entry, a constant the code derives from the MCLK,
@@ -484,7 +495,7 @@ def mclk_build_errors(default_lo, new_lo, allowed, result_sha):
     return errs
 
 
-def mclk_put(d, put, entries, memtype, mhz, fmax, known=()):
+def mclk_put(d: bytearray, put: Callable, entries: dict[str, int], memtype: str, mhz: float, fmax: float, known: tuple | list=()) -> float:
     """Set the MCLK entry of memtype to mhz (all three patchers; known: see mclk_pll). Returns the MHz."""
     m, nr, f, vco, src = mclk_pll(mhz, fmax, known=known)
     a = entries[memtype]
@@ -494,22 +505,22 @@ def mclk_put(d, put, entries, memtype, mhz, fmax, known=()):
 
 
 # ------------------------------------------------------------------ the patcher
-def jmp(at, to):
+def jmp(at: int, to: int) -> bytes:
     return b'\xE9' + rel16(at, 3, to)
 
 
-def call(at, to):
+def call(at: int, to: int) -> bytes:
     return b'\xE8' + rel16(at, 3, to)
 
 
-def jcc(op, at, to):
+def jcc(op: int, at: int, to: int) -> bytes:
     """A short conditional or unconditional jump at 'at'."""
     r = to - (at + 2)
     assert -128 <= r <= 127
     return bytes([op, r & 0xFF])
 
 
-def speed_sites(d, put, site, sym, lab, tags=True, skip=()):
+def speed_sites(d: bytearray, put: Callable, site: dict[str, int], sym: dict[str, int], lab: dict[str, int], tags: bool=True, skip: tuple[str, ...]=()) -> None:
     """The patch sites the other builds share (vplus/s3vpatch.py, trio64/s3tpatch.py: the same
     signatures in 1.03-08 and Phoenix 1.5-07): the window set booster entry, the fast 4F05 jump, the
     32-bit mode set clears, font load, scrolls and AH=09h. put(off, old, new, why) checks the old bytes;
@@ -558,14 +569,8 @@ def speed_sites(d, put, site, sym, lab, tags=True, skip=()):
         t('VGA mode set clear: in place, rep stosw replaced by a jump to wfill', 'p14'))
 
 
-def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
-    """lo: the lower 32 KB (2.04.07); mclk: MHz for the MCLK entry of memtype (None: the default build).
-    Returns (new lower 32 KB, log lines)."""
-    d = bytearray(lo)
-    log = []
-    m = re.search(rb'S3 86C775/86C785 Video BIOS\. Version (2\.04\.\d\d)\r\n', d[:0x100])
-    if not m:
-        raise PatchError('no "S3 86C775/86C785 Video BIOS. Version 2.04.xx" sign-on in the first 256 bytes')
+def _check_input(d: bytearray, m: re.Match) -> None:
+    """The input image must be a clean 2.04.07: sign-on version, checksum, header, free space, code SHA."""
     if m.group(1).decode() != VERSION:
         raise PatchError('BIOS version %s: only the reference BIOS %s is supported' % (m.group(1).decode(), VERSION))
     if sum(d) & 0xFF:
@@ -577,9 +582,10 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     if code_sha(d, CODE_RANGE) != CODE_SHA:
         raise PatchError('%04X-%04X is not the code of %s (another build, or changed?)'
                          % (CODE_RANGE[0], CODE_RANGE[1] - 1, VERSION))
-    sym, site = bios_symbols(), SITES
 
-    # 1. the original code must be where bios.inc and SITES say
+
+def _check_sites(d: bytes, site: dict[str, int], sym: dict[str, int]) -> None:
+    """The original code must be where bios.inc and SITES say."""
     for k, off in site.items():
         if k in SIG and not sig_match(d, off, SIG[k]):
             raise PatchError('%s: original code not found at %04X' % (k, off))
@@ -616,28 +622,20 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     if call_target(d, site['postdly'] + 4) != sym['DDCWAIT']:
         raise PatchError('POST engine reset does not call DDCWAIT at %04X' % (site['postdly'] + 4))
 
-    def put(off, old, new, why):
+
+def _make_put(d: bytearray, log: list[str]) -> Callable[[int, object, object, str], None]:
+    """The patch writer: checks the original bytes first, then replaces and logs."""
+    def put(off: int, old, new, why: str) -> None:
         old, new = (hexb(x) if isinstance(x, str) else bytes(x) for x in (old, new))
         if bytes(d[off:off + len(old)]) != old:
             raise PatchError('%04X: expected %s, found %s (%s)' % (off, old.hex(' '), d[off:off + len(old)].hex(' '), why))
         d[off:off + len(new)] = new
         log.append('%04X  %-17s -> %-17s %s' % (off, old.hex(' '), new.hex(' '), why))
+    return put
 
-    # 2. data
-    for off, old, new, why in DATA:
-        put(off, old, new, why)
-    put_fonts_in_place(d, FONT_TABLES, log)
-    if mclk is not None:
-        mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype])
 
-    # 3. code
-    blocks, lab = assemble(sym, nasm)
-    patch.blocks = blocks                   # for the diagnosis in main when the result differs
-    for off, code, name in blocks:
-        d[off:off + len(code)] = code
-        log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
-                   ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[0] == name for k in b[3])))
-
+def _apply_sites(d: bytearray, put: Callable, site: dict[str, int], sym: dict[str, int], lab: dict[str, int]) -> None:
+    """The code patch sites: each replaced instruction, then the shared speed sites."""
     a = site['modetab']
     put(a, struct.pack('<H', sym['MODESET']), struct.pack('<H', lab['hook']), 'INT 10h AH=00 table: mode set via the hook')
     a = site['m4f02'] + 4
@@ -662,18 +660,12 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     put(a, 'bb 0a 00', 'b8 0a 00', 'POST delay before the engine reset: count 0Ah in AX, not BX (p20)')
     speed_sites(d, put, site, sym, lab)
 
-    # 4. DCLK VCO
-    if vcofix:
-        vlog = []
-        n = vco_fix(d, vlog)
-        log += vlog
-        if n:
-            log.append('      %d refresh entries: VCO moved into 170-340 MHz, same pixel clock' % n)
 
-    # 5. sign-on and checksum
+def _signon(d: bytearray, lo: bytes, m: re.Match, log: list[str], version: str=VERSION, level: str=LEVEL) -> None:
+    """The -pN level into the sign-on, then the checksum byte (all three patchers share this)."""
     s = m.start(1)
     end = d.index(b'\x00', s)
-    txt = bytes(d[s:end]).replace(VERSION.encode(), (VERSION + '-' + LEVEL).encode(), 1)
+    txt = bytes(d[s:end]).replace(version.encode(), (version + '-' + level).encode(), 1)
     stop = end
     while stop < 0x100 and d[stop] == 0:
         stop += 1
@@ -684,10 +676,60 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     d[0x7FFF] = 0
     d[0x7FFF] = (-sum(d)) & 0xFF
     log.append('7FFF  checksum %02X -> %02X' % (lo[0x7FFF], d[0x7FFF]))
+
+
+def patch(lo: bytes, nasm: str='nasm', vcofix: bool=True, mclk: float | None=None, memtype: str='edo1') -> tuple[bytes, list[str]]:
+    """lo: the lower 32 KB (2.04.07); mclk: MHz for the MCLK entry of memtype (None: the default build).
+    Returns (new lower 32 KB, log lines)."""
+    d = bytearray(lo)
+    log = []
+    m = re.search(rb'S3 86C775/86C785 Video BIOS\. Version (2\.04\.\d\d)\r\n', d[:0x100])
+    if not m:
+        raise PatchError('no "S3 86C775/86C785 Video BIOS. Version 2.04.xx" sign-on in the first 256 bytes')
+    if m.group(1).decode() != VERSION:
+        raise PatchError('BIOS version %s: only the reference BIOS %s is supported' % (m.group(1).decode(), VERSION))
+    if sum(d) & 0xFF:
+        raise PatchError('the lower 32 KB do not checksum to 00: not a clean %s image' % VERSION)
+    if d[0:2] != b'\x55\xAA':
+        raise PatchError('no 55AAh ROM header at offset 0')
+    if bytes(d[FREE_START:FREE_END]) != bytes(FREE_END - FREE_START) or d[FREE_START - 1] != 0:
+        raise PatchError('%04X-%04X is not free (already patched?)' % (FREE_START, FREE_END - 1))
+    _check_input(d, m)
+    sym, site = bios_symbols(), SITES
+    _check_sites(d, site, sym)
+    put = _make_put(d, log)
+
+    # 2. data
+    for off, old, new, why in DATA:
+        put(off, old, new, why)
+    put_fonts_in_place(d, FONT_TABLES, log)
+    if mclk is not None:
+        mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype])
+
+    # 3. code
+    blocks, lab = assemble(sym, nasm)
+    patch.blocks = blocks                   # for the diagnosis in main when the result differs
+    for off, code, name in blocks:
+        d[off:off + len(code)] = code
+        log.append('%04X-%04X  %-12s %s' % (off, off + len(code) - 1, name,
+                   ', '.join('%s %04X' % (k, lab[k]) for b in BLOCKS if b[0] == name for k in b[3])))
+
+    _apply_sites(d, put, site, sym, lab)
+
+    # 4. DCLK VCO
+    if vcofix:
+        vlog = []
+        n = vco_fix(d, vlog)
+        log += vlog
+        if n:
+            log.append('      %d refresh entries: VCO moved into 170-340 MHz, same pixel clock' % n)
+
+    # 5. sign-on and checksum
+    _signon(d, lo, m, log)
     return bytes(d), log
 
 
-def verify(img, vcofix, size=64):
+def verify(img: bytes, vcofix: bool, size: int=64) -> list[str]:
     errs = []
     if len(img) != size * 1024:
         errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
@@ -705,7 +747,7 @@ def verify(img, vcofix, size=64):
     return errs
 
 
-def diagnose(nasm, output, img):
+def diagnose(nasm: str, output: str, img: bytes) -> list[str]:
     """Why the result differs: the assembler version, the blocks whose code differs from the tested
     build; the image goes to OUTPUT.untested for a comparison (never to OUTPUT)."""
     out = []
@@ -723,13 +765,12 @@ def diagnose(nasm, output, img):
                        '(make 775-rom ... NASM=/path/to/nasm)' % TESTED_NASM)
     else:
         out.append('every block is as in the tested build: the difference is in the data patches')
-    with open(output + '.untested', 'wb') as f:
-        f.write(img)
+    write_file(output + '.untested', img)
     out.append('the untested image is in %s.untested; do not flash it' % output)
     return out
 
 
-def mclk_note(checked, mhz):
+def mclk_note(checked: bool, mhz: float | None) -> str:
     """The end of the result line of a --mclk build (all three patchers)."""
     if mhz is None:
         return ''
@@ -739,7 +780,7 @@ def mclk_note(checked, mhz):
     return ', MCLK build option on an input other than the reference image: not compared with the tested build'
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description='build %s-%s from the S3 reference BIOS %s' % (VERSION, LEVEL, VERSION))
     ap.add_argument('input', help='the reference BIOS: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
@@ -780,8 +821,7 @@ def main():
     except (PatchError, OSError) as e:
         print('s3patch: %s' % e, file=sys.stderr)
         return 1
-    with open(a.output, 'wb') as f:
-        f.write(img)
+    write_file(a.output, img)
     if not a.quiet:
         ref = hashlib.sha256(lo).hexdigest() == REF_SHA
         print('base %s%s' % (VERSION, ' (the known reference image)' if ref else ''))

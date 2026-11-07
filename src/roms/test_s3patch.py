@@ -33,7 +33,9 @@ Tests
                  --stock)
 Exit code 0 when every test passed.
 """
+from __future__ import annotations
 import argparse, hashlib, os, subprocess, sys, tempfile
+from typing import Callable
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -43,24 +45,25 @@ failed = []
 NASM = 'nasm'
 
 
-def result(name, ok, info=''):
+def result(name: str, ok: bool, info: str='') -> None:
     print('%-12s %s%s' % (name, 'PASS' if ok else 'FAIL', '  ' + info if info else ''))
     if not ok:
         failed.append(name)
 
 
-def run(tmp, data, args=()):
+def run(tmp: str, data: bytes, args: tuple[str, ...] | list[str]=()) -> tuple[int, bytes | None, str]:
     """Run s3patch.py on data; returns (exit code, output bytes or None, stderr)."""
     inp, out = os.path.join(tmp, 'in.bin'), os.path.join(tmp, 'out.bin')
     if os.path.exists(out):
         os.remove(out)
-    open(inp, 'wb').write(data)
+    if open(inp, 'wb').write(data) != len(data):
+        raise OSError('%s: short write' % inp)
     cmd = [sys.executable, os.path.join(HERE, 's3patch.py'), inp, '-o', out, '-q', '--nasm', NASM] + list(args)
     r = subprocess.run(cmd, capture_output=True, text=True)
     return r.returncode, (open(out, 'rb').read() if os.path.exists(out) else None), r.stderr.strip()
 
 
-def image_checks(img):
+def image_checks(img: bytes) -> list[str]:
     errs = []
     if len(img) != 0x10000:
         return ['size %d' % len(img)]
@@ -75,27 +78,27 @@ def image_checks(img):
     return errs
 
 
-def pll_bad(img):
+def pll_bad(img: bytes) -> list[int]:
     return [e for e in s3patch.refresh_entries(img) if s3patch.pll_rule(img[e + 4], img[e + 5])]
 
 
-def vco_out(img, lo=135):
+def vco_out(img: bytes, lo: int=135) -> list[int]:
     return [e for e in s3patch.refresh_entries(img) if not lo <= s3patch.pll(img[e + 4], img[e + 5])[0] <= 340]
 
 
-def untouched(ref, img):
+def untouched(ref: bytes, img: bytes) -> int:
     """A code offset at least 16 bytes from any byte the build changes: no byte assertion covers it."""
     return next(i for i in range(0x3000, 0x7000) if ref[i - 16:i + 16] == img[i - 16:i + 16])
 
 
-def corrupt(img, off):
+def corrupt(img: bytes, off: int) -> bytes:
     t = bytearray(img)
     t[off] ^= 1
     t[0x7FFF] = (-sum(t[:0x7FFF])) & 0xFF
     return bytes(t)
 
 
-def mclk_cases(tmp, ref, img, entries, run):
+def mclk_cases(tmp: str, ref: bytes, img: bytes, entries: dict[str, int], run: Callable) -> list[str]:
     """--mclk: 50, 55 and 60 MHz for edo1 and the highest allowed value for fpm give a valid MCLK PLL pair
     (M 1-127, N 1-31, SR10 bit 7 clear, VCO 135-270 MHz) within 0.5 MHz of the request in the entry of
     that memory type, and differ from the default build only there and in the checksum byte; values
@@ -122,7 +125,7 @@ def mclk_cases(tmp, ref, img, entries, run):
     return bad
 
 
-def main():
+def main() -> int:
     global NASM
     ap = argparse.ArgumentParser(description='checksum tests for s3patch.py')
     ap.add_argument('--ref', required=True, help='32 KB S3 reference BIOS 2.04.07')

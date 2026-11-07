@@ -19,7 +19,9 @@ Coverage = bytes of code the tests executed / bytes of code. --list prints the c
 executed (at least --min bytes), with the nearest entry point before them, to see which functions
 need tests.
 """
-import argparse, os, struct, sys
+from __future__ import annotations
+from typing import Any
+import argparse, struct, sys
 
 try:
     import capstone
@@ -33,12 +35,12 @@ STOP = {'ret', 'retf', 'iret', 'jmp', 'ljmp', 'hlt'}
 BRANCH = {'jmp', 'call', 'loop', 'loope', 'loopne', 'jcxz', 'jecxz'}
 
 
-def is_jcc(mn):
+def is_jcc(mn: str) -> bool:
     return mn.startswith('j') and mn not in ('jmp',)
 
 
 class Map:
-    def __init__(self, rom):
+    def __init__(self, rom: bytes) -> None:
         self.rom = rom
         self.md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_16)
         self.md.detail = True
@@ -46,12 +48,12 @@ class Map:
         self.entries = set()
         self.tables = {}
 
-    def insn(self, off):
+    def insn(self, off: int) -> Any:
         for i in self.md.disasm(self.rom[off:off + 16], off):
             return i
         return None
 
-    def plausible(self, off, n=3):
+    def plausible(self, off: int, n: int=3) -> bool:
         """n instructions decode at off without running out of the ROM or into zero padding."""
         for _ in range(n):
             if not 0x60 <= off < ROMSZ:
@@ -64,7 +66,7 @@ class Map:
             off += i.size
         return True
 
-    def table(self, base):
+    def table(self, base: int) -> list[int]:
         """Word table of code offsets at base. Zero words before the first entry are skipped (a table
         indexed from a nonzero number, e.g. [si+table] with SI = 2 * BH and BH >= 2)."""
         out = []
@@ -80,7 +82,7 @@ class Map:
             out.append(t)
         return out
 
-    def walk(self, seeds):
+    def walk(self, seeds: list[int]) -> None:
         work = list(seeds)
         while work:
             off = work.pop()
@@ -123,7 +125,7 @@ class Map:
                 off += i.size
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
     ap.add_argument('--rom', required=True)
     ap.add_argument('--cover', required=True, help='coverage file of emu/tests.py --coverage')

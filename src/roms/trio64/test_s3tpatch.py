@@ -41,6 +41,7 @@ Tests
                  in the code (1000h-7EFFh), a wrong checksum, the Trio64V+ BIOS 1.03-08
 Exit code 0 when every test passed.
 """
+from __future__ import annotations
 import argparse, hashlib, os, struct, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -52,31 +53,32 @@ failed = []
 NASM = 'nasm'
 
 
-def result(name, ok, info=''):
+def result(name: str, ok: bool, info: str='') -> None:
     print('%-12s %s%s' % (name, 'PASS' if ok else 'FAIL', '  ' + info if info else ''))
     if not ok:
         failed.append(name)
 
 
-def run(tmp, data, args=()):
+def run(tmp: str, data: bytes, args: list[str]=()) -> tuple[int, bytes | None, str]:
     """Run s3tpatch.py on data; returns (exit code, output bytes or None, stderr)."""
     inp, out = os.path.join(tmp, 'in.bin'), os.path.join(tmp, 'out.bin')
     if os.path.exists(out):
         os.remove(out)
-    open(inp, 'wb').write(data)
+    if open(inp, 'wb').write(data) != len(data):
+        raise OSError('%s: short write' % inp)
     cmd = [sys.executable, os.path.join(HERE, 's3tpatch.py'), inp, '-o', out, '-q', '--nasm', NASM] + list(args)
     r = subprocess.run(cmd, capture_output=True, text=True)
     return r.returncode, (open(out, 'rb').read() if os.path.exists(out) else None), r.stderr.strip()
 
 
-def fixsum(b):
+def fixsum(b: bytearray) -> None:
     b = bytearray(b)
     b[0x7FFF] = 0
     b[0x7FFF] = (-sum(b[:0x7FFF])) & 0xFF
     return bytes(b)
 
 
-def table_check(ref, img):
+def table_check(ref: bytes, img: bytes) -> None:
     """The table property of the tables test: [] when it holds, else the problems."""
     errs = []
     modes, mend, chains = s3tpatch.lists_of(img)
@@ -110,18 +112,8 @@ def table_check(ref, img):
     return errs
 
 
-def main():
-    global NASM
-    ap = argparse.ArgumentParser(description='checksum and table tests for s3tpatch.py')
-    ap.add_argument('--ref', default=os.path.join(REPO, 'reference', 'trio64', '1_5_07.bin'), help='32 KB Phoenix Trio64 BIOS 1.5-07')
-    ap.add_argument('--ref765', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08n.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
-    ap.add_argument('--rom', help='a build to compare with')
-    ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3tpatch.py')
-    a = ap.parse_args()
-    NASM = a.nasm
-    ref = open(a.ref, 'rb').read()[:0x8000]
-    tmp = tempfile.mkdtemp(prefix='t_s3tpatch_')
-
+def _check_build(a: argparse.Namespace, ref: bytes, tmp: str) -> tuple[int, bytes | None, str, str]:
+    """The default build of the reference: the pinned SHA-256, the sign-on, a copy in the upper half."""
     rc, img, err = run(tmp, ref)
     want = 'Version %s-%s' % (s3tpatch.VERSION, s3tpatch.LEVEL)
     ok = rc == 0 and img is not None and len(img) == 0x10000 and img[0x8000:] == img[:0x8000]
@@ -133,9 +125,11 @@ def main():
         same = open(a.rom, 'rb').read()[:0x8000] == lo
         ok, info = same, info + (', identical to ' if same else ', differs from ') + os.path.basename(a.rom)
     result('build', ok, info)
-    if not img:
-        print('%d failed' % len(failed))
-        return 1
+    return rc, img, err, sha
+
+
+def _check_image(ref: bytes, img: bytes, tmp: str) -> None:
+    """Checksums, tables, fonts, DDC/FIFO sites, and that every changed byte is accounted for."""
     errs = []
     if sum(img) & 0xFF:
         errs.append('checksum %02X' % (sum(img) & 0xFF))
@@ -183,7 +177,11 @@ def main():
     result('fifo', kpos(img) > 0 and img[s3tpatch.SITES['cr67']] == 0xE8,
            'CR67 site calls the FIFO code, 112 x MCLK = %d at %04X' % (round(112000 * s3tpatch.mclk_of(img)), kpos(img))
            if kpos(img) > 0 else 'no 112 x MCLK constant in the FIFO code')
-    # every changed byte belongs to the tables, the fonts, a site, a block, the sign-on or the checksum
+    _check_unchanged(ref, img, sym)
+
+
+def _check_unchanged(ref: bytes, img: bytes, sym: dict[str, int]) -> None:
+    """Every changed byte belongs to the tables, the fonts, a site, a block, the sign-on or the checksum."""
     allowed = set(range(*s3tpatch.LISTS)) | set(range(s3tpatch.MTAB, 0x0631)) | set(range(s3tpatch.VLIST, 0x4DE0))
     allowed |= set(range(*s3tpatch.FONTS))
     for a_, old, _ in s3tpatch.DDC_SITES:
@@ -204,7 +202,10 @@ def main():
     diff = [i for i in range(0x8000) if img[i] != ref[i] and i not in allowed]
     result('unchanged', not diff, 'changed elsewhere: %s' % ', '.join('%04X' % i for i in diff[:8]) if diff else
            '%d bytes differ, all in the tables, fonts, sites, blocks, sign-on, checksum' % sum(1 for i in range(0x8000) if img[i] != ref[i]))
-    # another card maker's build: other timing bytes (entry bytes 5-8) and MCLK
+
+
+def _check_oem_sizes(ref: bytes, img: bytes, tmp: str) -> None:
+    """Another card maker's build (other timing bytes, another MCLK), a 64 KB input, --size 32."""
     oem = bytearray(ref)
     for e in range(s3tpatch.LISTS[0], s3tpatch.LISTS[1], s3tpatch.ENT):
         oem[e + 5] ^= 0x10
@@ -218,6 +219,12 @@ def main():
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
     rc, small, err = run(tmp, ref, ['--size', '32'])
     result('size32', rc == 0 and small == img[:0x8000], err or '32 KB, the same lower half')
+
+
+def _check_mclk(ref: bytes, img: bytes, tmp: str) -> None:
+    """--mclk inside and outside the models' ranges, the known pairs, --overclock, and the FIFO constant."""
+    sym = s3tpatch.s3patch.bios_symbols(os.path.join(HERE, 'bios.inc'))
+    kpos = lambda b: b.find(struct.pack('<I', round(112000 * s3tpatch.mclk_of(b))), sym['TFIFO'], sym['TFIFO'] + 97)
     bad = []
     for mhz, model in (('50', '764x'), ('50', '764p'), ('55', '764x'), ('60', '764x')):
         rc, out, err = run(tmp, ref, ['--mclk', mhz, '--model', model])
@@ -260,6 +267,11 @@ def main():
     result('mclk', not bad, '; '.join(bad) or '50 (both models), 55, 60, 69.8 and 70 MHz valid at 3B5h, 57, 53 (764p) and 70 MHz the known pairs, '
            '71, 49 and 39 MHz refused for the 764x, 61 and 49 MHz for the 764p; '
            'with --overclock 85 and 100 MHz valid, 101 MHz refused')
+
+
+def _check_refusals(a: argparse.Namespace, ref: bytes, img: bytes, tmp: str) -> None:
+    """Nothing is written and the exit code is 1 for an already patched image, a changed code byte,
+    a bad checksum, or the Trio64V+ BIOS."""
     code = bytearray(ref)
     code[0x3000] ^= 1
     cases = [('already patched', img), ('code byte changed', fixsum(code)),
@@ -272,6 +284,28 @@ def main():
         if rc != 1 or out is not None or not err:
             bad.append(name)
     result('refusals', not bad, 'not refused: ' + ', '.join(bad) if bad else '%d inputs refused' % len(cases))
+
+
+def main() -> int:
+    global NASM
+    ap = argparse.ArgumentParser(description='checksum and table tests for s3tpatch.py')
+    ap.add_argument('--ref', default=os.path.join(REPO, 'reference', 'trio64', '1_5_07.bin'), help='32 KB Phoenix Trio64 BIOS 1.5-07')
+    ap.add_argument('--ref765', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08n.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
+    ap.add_argument('--rom', help='a build to compare with')
+    ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3tpatch.py')
+    a = ap.parse_args()
+    NASM = a.nasm
+    ref = open(a.ref, 'rb').read()[:0x8000]
+    tmp = tempfile.mkdtemp(prefix='t_s3tpatch_')
+
+    rc, img, err, sha = _check_build(a, ref, tmp)
+    if not img:
+        print('%d failed' % len(failed))
+        return 1
+    _check_image(ref, img, tmp)
+    _check_oem_sizes(ref, img, tmp)
+    _check_mclk(ref, img, tmp)
+    _check_refusals(a, ref, img, tmp)
     print('%d failed' % len(failed))
     return 1 if failed else 0
 

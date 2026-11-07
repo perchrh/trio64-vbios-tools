@@ -15,7 +15,7 @@ so the LFB lines and the banked write throughput stay with the hardware runs.
 
 Tests
   version          the tests are for the newest ROM: the ROM under test carries the sign-on of its level in
-                   src/tools/common/version.inc (VER775 2.04.07-p21, VER765 1.03-08N-p4, VER764 1.5-07-p2), where
+                   src/tools/common/version.inc (VER775, VER765, VER764), where
                    the patchers read it and S3TEST expects it; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on VER775, the checksum and 32 KB size of the lower
@@ -170,10 +170,12 @@ Tests
   dos_exe          the emulated DOS runs an MZ program built with nasm: relocation, memory blocks
                    (62h/4Ah/48h), and an INT 21h hook that turns the program's own AH=4Ch into AH=31h
 """
+from __future__ import annotations
+from typing import Callable
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES, CHIP_CR2F, chip_ids, budget_msg  # noqa: E402
+from vgaemu import Machine, ComResult, REGNAMES, CHIPS, CHIP_CODES, CHIP_CR2F, chip_ids, budget_msg  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -198,13 +200,13 @@ class Skip(Exception):
     pass
 
 
-def check(cond, msg):
+def check(cond: bool, msg: str) -> None:
     if not cond:
         raise AssertionError(msg)
 
 
 # ---------------------------------------------------------------- reference data from vgaref.inc
-def read_vgaref():
+def read_vgaref() -> tuple[list, bytes]:
     t = open(os.path.join(TOOLS, 's3compat', 'vgaref.inc')).read()
     lines = [l.strip() for l in t.split('\n')]
     ents = []
@@ -230,12 +232,12 @@ def read_vgaref():
     return ents, bytes(dac)
 
 
-def ega(i):
+def ega(i: int) -> tuple[int, int, int]:
     c = lambda hi, lo: (0x2A if i & hi else 0) + (0x15 if i & lo else 0)
     return (c(4, 0x20), c(2, 0x10), c(1, 8))
 
 
-def cga(i):
+def cga(i: int) -> tuple[int, int, int]:
     n = 0x15 if i & 0x10 else 0
     r, g, b = (0x2A if i & 4 else 0) + n, (0x2A if i & 2 else 0) + n, (0x2A if i & 1 else 0) + n
     if (i & 0x17) == 6:
@@ -245,7 +247,7 @@ def cga(i):
 
 # ---------------------------------------------------------------- helpers
 class Ctx:
-    def __init__(self, rom, build, verbose, logs):
+    def __init__(self, rom: str, build: str, verbose: bool, logs: str) -> None:
         self.rom = open(rom, 'rb').read()
         self.build = build
         self.verbose = verbose
@@ -260,7 +262,7 @@ class Ctx:
         self.tours = bool(re.search(rb'Version 1\.5-07-p\d+', self.rom[:0x100]))
         os.makedirs(logs, exist_ok=True)
 
-    def save(self, name, res):
+    def save(self, name: str, res: ComResult) -> None:
         """Keep a tool run in the log folder: NAME.LOG (stdout and stderr) and every file it created."""
         with open(os.path.join(self.logs, name + '.LOG'), 'wb') as f:
             f.write(bytes(res.stdout))
@@ -270,23 +272,23 @@ class Ctx:
             with open(os.path.join(self.logs, name + '-' + fn if not fn.startswith(name) else fn), 'wb') as f:
                 f.write(bytes(data))
 
-    def machine(self, keys=None):
+    def machine(self, keys: list[int] | None=None) -> Machine:
         m = Machine(self.rom, keys)
         seg, off = m.post()
         return m
 
-    def tool(self, name):
+    def tool(self, name: str) -> bytes:
         p = os.path.join(self.build, name)
         if not os.path.exists(p):
             raise Skip('%s not built (run make)' % p)
         return open(p, 'rb').read()
 
 
-def has_verbose():
+def has_verbose() -> bool:
     return os.path.exists(os.path.join(TOOLS, 'common', 'vdebug.inc'))
 
 
-def check_dbg(dbg, name):
+def check_dbg(dbg: bytes | None, name: str) -> list[str]:
     """A /V debug file: first line D:ENV NASM=<version>, every line a D: record, INT 10h records balanced, ends with D:END lost=0."""
     check(dbg is not None, '%s was not created' % name)
     lines = dbg.decode('latin1').split('\r\n')
@@ -310,7 +312,7 @@ def check_dbg(dbg, name):
 
 
 # ---------------------------------------------------------------- tests
-def t_version(c):
+def t_version(c: Ctx) -> str:
     """The tests are for the newest ROM: the ROM under test carries the sign-on of the level in
     src/tools/common/version.inc (VER775, VER765 for our Trio64V+ ROM, VER764 for our Trio64 ROM), which the
     patchers write and S3TEST expects."""
@@ -335,7 +337,7 @@ def t_version(c):
     return want
 
 
-def rom_header_errors(rom):
+def rom_header_errors(rom: bytes) -> list[str]:
     """What is wrong with the option ROM header, read without running a byte of the ROM (PCI Local Bus
     Specification 2.3, 6.3.1): 55AAh, the size in 512-byte units, a byte sum of 0 over that size, and a
     PCI data structure ('PCIR', S3's vendor ID 5333h, an image length equal to the size byte, code type 0,
@@ -363,7 +365,7 @@ def rom_header_errors(rom):
     return errs
 
 
-def hang_rom():
+def hang_rom() -> bytes:
     """A 32 KB option ROM that hooks INT 10h, as a real one does early in POST, and then loops forever:
     POST must not count as passed for it (#143)."""
     code = (b'\xFA'                                     # cli
@@ -380,7 +382,7 @@ def hang_rom():
     return bytes(rom) + bytes(0x8000)
 
 
-def t_post(c):
+def t_post(c: Ctx) -> None:
     """The ROM header is valid without running it, POST returns to its caller and leaves INT 10h at
     C000h; and a ROM that hooks INT 10h and then hangs fails POST here (#143)."""
     errs = rom_header_errors(c.rom)
@@ -396,7 +398,7 @@ def t_post(c):
         raise AssertionError('a ROM that hooks INT 10h and then loops passed POST')
 
 
-def t_vga_registers(c):
+def t_vga_registers(c: Ctx) -> str:
     ents, _ = read_vgaref()
     m = c.machine()
     errs = []
@@ -428,7 +430,7 @@ def t_vga_registers(c):
     return '%d modes' % len(ents)
 
 
-def t_vga_palettes(c):
+def t_vga_palettes(c: Ctx) -> None:
     ents, dac_col = read_vgaref()
     m = c.machine()
     errs = []
@@ -453,32 +455,22 @@ def t_vga_palettes(c):
 
 
 # ---------------------------------------------------------------- the patches on top of the stock ROM
-def romver(name='VER775'):
+def romver(name: str='VER775') -> str:
     """The ROM version S3TEST is built to expect (src/tools/common/version.inc): VER775 on a Trio64V2, VER765 on a
     Trio64V+."""
     t = open(os.path.join(TOOLS, 'common', 'version.inc')).read()
     return re.search(r"%%define %s '([^']*)'" % name, t).group(1)
 
 
-def latest(patcher='s3patch.py'):
+def latest(patcher: str='s3patch.py') -> str:
     """The newest ROM version in the repository, which the patcher builds: src/tools/common/version.inc, where the
-    patchers read their level (VER775 for src/roms/s3patch.py, 2.04.07-p21; VER765 for
+    patchers read their level (VER775 for src/roms/s3patch.py; VER765 for
     'vplus/s3vpatch.py'; VER764 for 'trio64/s3tpatch.py')."""
     return romver({'s3patch.py': 'VER775', 'vplus/s3vpatch.py': 'VER765', 'trio64/s3tpatch.py': 'VER764'}[patcher])
 
 
-def t_rom_patches(c):
-    """What S3TEST cannot check on the card or in the model: the ROM file itself and the FIFO fix with
-    CR90 bit 7 set the way the chip leaves it after a VESA mode (the model does not set it): mode 03h
-    must leave the bit set, mode 13h must clear it (#166). Every other patch is checked by S3TEST,
-    which t_s3test runs here and which also runs on the hardware."""
-    m = c.machine()
-    fails = []
-
-    def chk(cond, what):
-        if not cond:
-            fails.append(what)
-
+def _rp_file(c: Ctx, m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_rom_patches: the fonts, the ROM file, the MCLK/CR88 after POST, the sign-on and the checksums."""
     font_tables(m, chk, has14=False)    # p24 (#141): the fonts of src/roms/fonts, in place; no 8x14 in 2.04.07
     rom = c.rom
     # p26: POST loads the MCLK entry of the strapped memory type (the model straps 1-cycle EDO, CR36 bits
@@ -498,7 +490,10 @@ def t_rom_patches(c):
     if len(rom) >= 0x10000:
         chk(rom[0x8000:0x10000] in (rom[:0x8000], bytes(0x8000)), 'the upper 32 KB is neither a copy of the lower '
             '32 KB (#78) nor zeros (p15-p21 as built before)')
-    cr = m.r['crtc']
+
+
+def _rp_booster(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_rom_patches: the mode set clear, the booster after 4F02/4F05, the Windows refusal, the base restore."""
     base = (cr.get(0x59, 0), cr.get(0x5A, 0))           # the PCI base the BIOS found at POST
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
     m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # p11 clears with 32-bit stores: EAX bits 31-16 kept
@@ -553,6 +548,10 @@ def t_rom_patches(c):
     cr[0x59] = base[0]
     m.int10(0x4F02, bx=0x0101)
     m.int10(0x4F05, bx=0, dx=0)
+
+
+def _rp_fast4f05(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_rom_patches: the fast 4F05 path (few port accesses, 32-bit registers kept) and the window function."""
     # p12: the fast 4F05 path from the INT 10h entry runs without the dispatcher, which saves the 32-bit
     # registers; it must keep them itself and use few port accesses
     io = [0]
@@ -590,6 +589,10 @@ def t_rom_patches(c):
     chk(cr.get(0x58, 0) & 0x13 == 0x10 and cr.get(0x5A) == 0x0A and cr.get(0x6A) == 2,
         'window function (far call) in 101h: booster not on or bank wrong (CR58 %02X, CR5A %02X, CR6A %02X)'
         % (cr.get(0x58, 0), cr.get(0x5A, 0), cr.get(0x6A, 0)))
+
+
+def _rp_regkeep(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_rom_patches: EAX kept across the clears, font load, scrolls and AH=09h; the FIFO fix in mode 13h (#166)."""
     for ax, bx in ((0x0003, 0), (0x0013, 0), (0x1114, 0)):  # p12: 32-bit clear and font load, EAX kept
         m.mu.reg_write(UC_X86_REG_EAX, 0x9ABC0000 | ax)
         m.mu.reg_write(UC_X86_REG_ECX, 0x9ABC0000)
@@ -622,19 +625,13 @@ def t_rom_patches(c):
         % cr.get(0x90, 0))
     m.int10(0x0013)
     chk(cr.get(0x90, 0) & 0x80 == 0, 'FIFO fix: CR90 bit 7 still set after mode 13 (CR90 = %02X)' % cr.get(0x90, 0))
-    check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return 'ROM file and FIFO fix as expected'
 
 
-def t_vplus_patches(c):
-    """Our Trio64V+ ROM (1.03-08N-pN, src/roms/vplus): the ROM file, the booster with the Windows check,
-    the base back at the next mode set, the fast 4F05 path and the window function, the attribute
-    controller flip-flop after the mode set, the 32-bit registers kept across the 32-bit clears, font load
-    and scrolls (the shared speed patches themselves: stores). Only on the Trio64V+ and UV+ models."""
-    if not c.vours:
-        raise Skip('not our Trio64V+ ROM (1.03-08N-pN)')
-    if Machine.chip not in ('vplus', 'uvplus'):
-        raise Skip('Trio64V+ ROM (--chip 765)')
+def t_rom_patches(c: Ctx) -> str:
+    """What S3TEST cannot check on the card or in the model: the ROM file itself and the FIFO fix with
+    CR90 bit 7 set the way the chip leaves it after a VESA mode (the model does not set it): mode 03h
+    must leave the bit set, mode 13h must clear it (#166). Every other patch is checked by S3TEST,
+    which t_s3test runs here and which also runs on the hardware."""
     m = c.machine()
     fails = []
 
@@ -642,6 +639,17 @@ def t_vplus_patches(c):
         if not cond:
             fails.append(what)
 
+    _rp_file(c, m, chk)
+    cr = m.r['crtc']
+    _rp_booster(m, cr, chk)
+    _rp_fast4f05(m, cr, chk)
+    _rp_regkeep(m, cr, chk)
+    check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
+    return 'ROM file and FIFO fix as expected'
+
+
+def _vp_file(c: Ctx, m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_vplus_patches: the fonts, the ROM file, the sign-on, the checksums, the POST base in CR6B."""
     font_tables(m, chk)                 # p5 (#141): the fonts of src/roms/fonts, in place
     rom = c.rom
     chk(('Version ' + latest('vplus/s3vpatch.py')).encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes'
@@ -655,12 +663,21 @@ def t_vplus_patches(c):
     chk(base[0] and not base[1] and cr.get(0x6B) == base[0], 'POST: CR59/5A %02X%02X, CR6B %02X'
         % (base[0], base[1], cr.get(0x6B, 0)))
 
-    def booster():
-        return cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A)
 
-    def regs():
-        return 'CR58 %02X, CR59/5A %02X%02X, CR6B %02X, CR6D %02X, CR6A %02X' % tuple(
-            cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x6B, 0x6D, 0x6A))
+def _vp_regs(cr: dict) -> str:
+    return 'CR58 %02X, CR59/5A %02X%02X, CR6B %02X, CR6D %02X, CR6A %02X' % tuple(
+        cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x6B, 0x6D, 0x6A))
+
+
+def _vp_booster_on(cr: dict) -> bool:
+    return cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A)
+
+
+def _vp_booster(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_vplus_patches: the mode set clear, the booster, the base back at the next mode set, the ATC
+    flip-flop, the Windows refusal."""
+    base = (cr.get(0x59, 0), cr.get(0x5A, 0))
+    booster, regs = _vp_booster_on, _vp_regs
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
     m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)        # the clear with 32-bit stores keeps EAX bits 31-16
     m.int10(0x4F02, bx=0x0101)
@@ -668,17 +685,17 @@ def t_vplus_patches(c):
     chk(eaxh == 0x1234, 'mode set: EAX bits 31-16 = %04X after 4F02 101h, the caller had 1234' % eaxh)
     chk(m.mem(0xA0000, 0x10000).count(0) == 0x10000, 'mode set clear: bank 0 at A0000 not zeroed by 4F02 101h')
     # the banked 4F02 turns the booster on (64 KB linear window at A0000h); it stays on through 4F05
-    chk(booster() and cr.get(0x6A, 0) == 0, 'booster not on after 4F02 101h: ' + regs())
+    chk(booster(cr) and cr.get(0x6A, 0) == 0, 'booster not on after 4F02 101h: ' + regs(cr))
     m.int10(0x4F05, bx=0, dx=1)
-    chk(booster() and cr.get(0x6A) == 1, 'booster not on after 4F05 in 101h: ' + regs())
+    chk(booster(cr) and cr.get(0x6A) == 1, 'booster not on after 4F05 in 101h: ' + regs(cr))
     # the next mode set puts the real base back (1.03-08 from CR6B, and the hook)
     m.r['aff'] = 1                                     # the ATC flip-flop at data: the hook resets it
     m.int10(0x0003)
     chk(cr.get(0x58, 0) & 0x10 == 0 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == base,
-        'mode 03h after the booster: base not back: ' + regs())
+        'mode 03h after the booster: base not back: ' + regs(cr))
     chk(m.r['aff'] == 0, 'ATC flip-flop not reset after the mode set')
     m.int10(0x0013)
-    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on in mode 13h: ' + regs())
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on in mode 13h: ' + regs(cr))
     # under Windows enhanced mode (INT 2Fh AX=1600h returns AL=04h) the booster stays off after 4F02 and
     # after 4F05, and CR6D = 01h remembers it, so INT 2Fh is asked once per mode set; the next mode set
     # clears the mark and without Windows the booster goes on again
@@ -690,11 +707,17 @@ def t_vplus_patches(c):
     m.int10(0x4F05, bx=0, dx=2)
     asked = m.mem(0x7E08, 1)[0]
     chk(cr.get(0x58, 0) & 0x10 == 0 and cr.get(0x59, 0) == base[0] and cr.get(0x6D) == 1 and cr.get(0x6A) == 2,
-        'Windows: booster on or bank wrong: ' + regs())
+        'Windows: booster on or bank wrong: ' + regs(cr))
     chk(asked == 1, 'Windows: INT 2Fh asked %d times in one mode, expected once' % asked)
     m.mu.mem_write(0x2F * 4, ivt2f)
     m.int10(0x4F02, bx=0x0101)
-    chk(booster() and cr.get(0x6D, 0) == 0, 'no booster after Windows ended (the CR6D mark not cleared?): ' + regs())
+    chk(booster(cr) and cr.get(0x6D, 0) == 0, 'no booster after Windows ended (the CR6D mark not cleared?): ' + regs(cr))
+
+
+def _vp_fast4f05(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_vplus_patches: the fast 4F05 path (few ports, index and 32-bit registers kept), BH=1 and a bad BH,
+    the planar bank, and the window function far call."""
+    regs = _vp_regs
     # the fast 4F05 path from the INT 10h entry runs without the dispatcher: it keeps the registers
     # itself, puts the sequencer index back and writes fewer ports (1.03-08: 10 OUTs, the unlock of
     # CR38/CR39 twice and SR08 saved, set and restored; the fast path: 6)
@@ -723,7 +746,7 @@ def t_vplus_patches(c):
     # the window function (far call): bank set, and the booster on for the S3 mode set with INT 10h
     # AH=00 (69h = 101h), which does not pass the end of 4F02
     m.int10(0x0069)
-    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after AH=00 69h: ' + regs())
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after AH=00 69h: ' + regs(cr))
     m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
     off, seg = struct.unpack('<HH', m.mem(0x3000C, 4))
     m.mu.mem_write(0x7D10, b'\x9A' + struct.pack('<HH', off, seg) + b'\xF4')
@@ -733,7 +756,11 @@ def t_vplus_patches(c):
     m.mu.reg_write(UC_X86_REG_SS, 0)
     m.mu.reg_write(UC_X86_REG_SP, 0x7000)
     m.mu.emu_start(0x7D10, 0x7D15, count=100000)
-    chk(booster() and cr.get(0x6A) == 6, 'window function (far call) in 69h: booster not on or bank wrong: ' + regs())
+    chk(_vp_booster_on(cr) and cr.get(0x6A) == 6, 'window function (far call) in 69h: booster not on or bank wrong: ' + regs(cr))
+
+
+def _vp_regkeep(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_vplus_patches: EAX/ECX kept across the clears and font load, EAX kept across the scrolls and AH=09h."""
     for ax, bx in ((0x0003, 0), (0x0013, 0), (0x1114, 0)):  # 32-bit clear and font load: EAX/ECX kept
         m.mu.reg_write(UC_X86_REG_EAX, 0x9ABC0000 | ax)
         m.mu.reg_write(UC_X86_REG_ECX, 0x9ABC0000)
@@ -756,7 +783,10 @@ def t_vplus_patches(c):
             high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
             chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
                 % (mode, ax, ['%04X' % h for h in high]))
-    # p2: the VBE dispatcher keeps the 32-bit registers (4F06 computes in EAX, ECX, EDX)
+
+
+def _vp_4f06(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_vplus_patches p2: the VBE dispatcher keeps the 32-bit registers (4F06 computes in EAX, ECX, EDX)."""
     m.int10(0x4F02, bx=0x0101)
     for bl in (0, 1, 3):
         for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI):
@@ -765,7 +795,10 @@ def t_vplus_patches(c):
         high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX,
                                                      UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
         chk(high == [0x9ABC] * 6, '4F06 BL=%d: bits 31-16 of EAX-EDI changed: %s' % (bl, ['%04X' % h for h in high]))
-    # p2: 4F02 refuses (014Fh, mode kept) exactly the listed modes 4F01 marks unsupported (too large)
+
+
+def _vp_modes(m: Machine) -> list[int]:
+    """The VESA mode list of 4F00h (up to 64 entries, before the first FFFFh)."""
     m.int10(0x4F00, es=0x3000, di=0)
     loff, lseg = struct.unpack('<HH', m.mem(0x3000E, 4))
     modes = []
@@ -774,6 +807,11 @@ def t_vplus_patches(c):
         if v == 0xFFFF:
             break
         modes.append(v)
+    return modes
+
+
+def _vp_fit(m: Machine, modes: list[int], chk: Callable[[bool, str], None]) -> tuple[int, list]:
+    """t_vplus_patches p2: 4F02 refuses (014Fh, mode kept) exactly the modes 4F01 marks unsupported."""
     refused, why = 0, []
     for v in modes:
         m.int10(0x4F01, cx=v, es=0x3000, di=0x400)
@@ -789,9 +827,12 @@ def t_vplus_patches(c):
             chk(r['ax'] == 0x014F and m.mem(0x449, 1)[0] == mode0,
                 '4F02 %03X (4F01: unsupported) not refused: AX=%04X, mode %02X; %s'
                 % (v, r['ax'], m.mem(0x449, 1)[0], vesa_fit(m, v)[2]))
-    # p2: no interlaced timing. 118h, 119h, 11Ah, 120h (interlaced only on the Trio64V+) are not listed and
-    # refused, their S3 numbers 78h-7Ch too (AH=00 changes nothing); 1024x768 and 1280x1024 run
-    # non-interlaced at every CR41 refresh index, 0 included
+    return refused, why
+
+
+def _vp_nointerlace(m: Machine, modes: list[int], chk: Callable[[bool, str], None]) -> None:
+    """t_vplus_patches p2: no interlaced timing - the removed modes are not listed and refused, the S3
+    numbers too, and 1024x768/1280x1024 run non-interlaced at every CR41 index."""
     chk(not {0x118, 0x119, 0x11A, 0x120} & set(modes), '4F00 still lists ' + ' '.join(
         '%03X' % v for v in sorted({0x118, 0x119, 0x11A, 0x120} & set(modes))))
     for v in (0x118, 0x119, 0x11A, 0x120):
@@ -809,16 +850,47 @@ def t_vplus_patches(c):
             m.int10(0x4F02, bx=v | 0x8000)
             chk(not m.r['crtc'].get(0x42, 0) & 0x20, '4F02 %03X with CR41 = %02X: interlaced (CR42 %02X)'
                 % (v, c41, m.r['crtc'].get(0x42, 0)))
-    # p2: 320x200 at 15/16/32 bpp with the DCLK VCO in 135-270 MHz (PLL-1): 25.06 MHz halved by SR01 bit 3,
-    # the frame rate as before within 1 Hz (70.3 Hz with 1.03-08's 12.62 MHz)
+
+
+def _vp_320x200(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_vplus_patches p2: 320x200 at 15/16/32 bpp with the DCLK VCO in 135-270 MHz, halved by SR01 bit 3,
+    the frame rate within 1 Hz of before."""
     for v in (0x10D, 0x10E, 0x10F):
         m.int10(0x4F02, bx=v)
         sq = m.r['seq']
-        mm, nn, rr = (sq.get(0x13, 0) & 0x7F) + 2, (sq.get(0x12, 0) & 0x1F) + 2, (sq.get(0x12, 0) >> 5) & 3
+        mm, nn = (sq.get(0x13, 0) & 0x7F) + 2, (sq.get(0x12, 0) & 0x1F) + 2
         vco = 14.31818 * mm / nn
         hz = m.frame()[0]
         chk(135 <= vco <= 270 and sq.get(1, 0) & 8 and abs(hz - 70.3) < 1, '4F02 %03X: VCO %.1f MHz, SR01 %02X, %.1f Hz'
             % (v, vco, sq.get(1, 0), hz))
+
+
+def t_vplus_patches(c: Ctx) -> str:
+    """Our Trio64V+ ROM (1.03-08N-pN, src/roms/vplus): the ROM file, the booster with the Windows check,
+    the base back at the next mode set, the fast 4F05 path and the window function, the attribute
+    controller flip-flop after the mode set, the 32-bit registers kept across the 32-bit clears, font load
+    and scrolls (the shared speed patches themselves: stores). Only on the Trio64V+ and UV+ models."""
+    if not c.vours:
+        raise Skip('not our Trio64V+ ROM (1.03-08N-pN)')
+    if Machine.chip not in ('vplus', 'uvplus'):
+        raise Skip('Trio64V+ ROM (--chip 765)')
+    m = c.machine()
+    fails = []
+
+    def chk(cond: bool, what: str) -> None:
+        if not cond:
+            fails.append(what)
+
+    _vp_file(c, m, chk)
+    cr = m.r['crtc']
+    _vp_booster(m, cr, chk)
+    _vp_fast4f05(m, cr, chk)
+    _vp_regkeep(m, cr, chk)
+    _vp_4f06(m, chk)
+    modes = _vp_modes(m)
+    refused, why = _vp_fit(m, modes, chk)
+    _vp_nointerlace(m, modes, chk)
+    _vp_320x200(m, chk)
     m.int10(0x03)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return ('booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers, %d of %d modes refused by 4F02, '
@@ -826,44 +898,26 @@ def t_vplus_patches(c):
             + ''.join('; refused: %s' % w[2] for w in why))
 
 
-def t_t64_patches(c):
-    """Our Trio64 ROM (1.5-07-pN, src/roms/trio64): the ROM file, the refresh defaults (no mode runs
-    interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
-    check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
-    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2),
-    4F15 without VDIF, the window function, the sequencer
-    index kept by the window set and get (4F05 BH=0 and 1), the 32-bit
-    registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh, and the display FIFO M
-    (CR54) within the memory bandwidth in the packed modes (p2). Only on the Trio64 model."""
-    if not c.tours:
-        raise Skip('not our Trio64 ROM (1.5-07-pN)')
-    if Machine.chip != 'trio64':
-        raise Skip('Trio64 ROM (--chip 764)')
-    m = c.machine()
-    fails = []
+def _t64_regs(cr: dict) -> str:
+    return 'CR58 %02X, CR59/5A %02X%02X, CR52 %02X, CR6A %02X, CR38/39 %02X/%02X' % tuple(
+        cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x52, 0x6A, 0x38, 0x39))
 
-    def chk(cond, what):
-        if not cond:
-            fails.append(what)
 
+def _t64_booster_on(cr: dict) -> bool:
+    return cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A)
+
+
+def _t64_file(c: Ctx, m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: the ROM file sign-on, checksum and size."""
     rom = c.rom
     chk(('Version ' + latest('trio64/s3tpatch.py')).encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes'
         % latest('trio64/s3tpatch.py'))
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
     chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])
-    cr = m.r['crtc']
-    base = (cr.get(0x59, 0), cr.get(0x5A, 0))
 
-    def booster():
-        return cr.get(0x58, 0) & 0x13 == 0x10 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == (0, 0x0A)
 
-    def regs():
-        return 'CR58 %02X, CR59/5A %02X%02X, CR52 %02X, CR6A %02X, CR38/39 %02X/%02X' % tuple(
-            cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x52, 0x6A, 0x38, 0x39))
-    chk(base[0] and not base[1] and cr.get(0x52, 0) == 0x80, 'POST: CR59/5A %02X%02X, CR52 %02X (expected 80h)'
-        % (base[0], base[1], cr.get(0x52, 0)))
-    # the fonts of src/roms/fonts (#141; before p5 S3's from 1.03-08, the same bytes), all five tables
-    # whole: AX=1130h finds each, the moved 8x16 font and 9x16 table too
+def _t64_fonts(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: the five font tables of src/roms/fonts (#141), and the 8x16/9x16 glyphs in plane 2."""
     font_tables(m, chk)
     # the mode set and AX=1114h load them into plane 2 through the moved addresses: the 8x16 glyphs (8-dot
     # shapes), and in the 9-dot modes 03h and 07h all 19 9x16 alternate glyphs (9-dot shapes) on top
@@ -875,9 +929,11 @@ def t_t64_patches(c):
         got = sum(g[c] == alt[c] for c in alt)
         chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not the 8x16 of src/roms/fonts, %d of 19 '
             'alternate glyphs (expected %d)' % (ax, len(plain), got, nalt))
-    # VBE 4F15 without VDIF (the model has no monitor on the DDC lines): BL=00h answers 004Fh with BX = 0000h
-    # and BL=01h fails, as on 1.5-07, after its 50-frame watch for a DDC1 monitor (DDC1 kept); BL=02h, read
-    # VDIF, fails at once (1.5-07 also watched 50 frames first)
+
+
+def _t64_ddc(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: VBE 4F15 without VDIF - BL=00h answers 004Fh, BL=01h fails after the DDC1 watch,
+    BL=02h fails at once."""
     m.int10(0x0003)
     for bl, ax, bx, lo, hi in ((0, 0x004F, 0x0000, 45, 60), (1, 0x014F, 0x0001, 45, 60), (2, 0x014F, 0x0002, 0, 1)):
         t = m.t
@@ -885,7 +941,11 @@ def t_t64_patches(c):
         frames = (m.t - t) * 70 / 1193182
         chk(r['ax'] == ax and r['bx'] == bx and lo <= frames < hi, '4F15 BL=%d: AX=%04X BX=%04X, %.1f frames '
             '(expected %04X %04X, %d to %d frames)' % (bl, r['ax'], r['bx'], frames, ax, bx, lo, hi))
-    # the defaults: no interlace, 800x600 at 60 Hz (line total 1056, VESA DMT)
+
+
+def _t64_defaults(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: the refresh defaults - no interlace, 800x600 at 60 Hz, the removed modes refused
+    and not in the 4F00 list."""
     for mode in (0x101, 0x103, 0x105, 0x107, 0x111, 0x114, 0x117, 0x110, 0x116, 0x204, 0x205, 0x208):
         r = m.int10(0x4F02, bx=mode)
         if r['ax'] != 0x004F:
@@ -904,18 +964,26 @@ def t_t64_patches(c):
     modes = modes[:modes.index(0xFFFF)] if 0xFFFF in modes else modes
     left = sorted(set(modes) & {0x106, 0x118, 0x119, 0x11A, 0x120})
     chk(not left, '4F00 still lists %s' % ', '.join('%03Xh' % v for v in left))
-    # the booster: on after a banked 4F02, through 4F05; the base back at the next mode set
+
+
+def _t64_booster(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: the booster after a banked 4F02 and through 4F05, the base back, the lock and the
+    ATC flip-flop after a mode set, the Windows refusal (mark in CR52 bit 3)."""
+    base = (cr.get(0x59, 0), cr.get(0x5A, 0))
+    booster, regs = _t64_booster_on, _t64_regs
+    chk(base[0] and not base[1] and cr.get(0x52, 0) == 0x80, 'POST: CR59/5A %02X%02X, CR52 %02X (expected 80h)'
+        % (base[0], base[1], cr.get(0x52, 0)))
     m.mu.mem_write(0xA0000, b'\x55' * 0x10000)
     m.mu.reg_write(UC_X86_REG_EAX, 0x12340000)
     m.int10(0x4F02, bx=0x0101)
     chk(m.mu.reg_read(UC_X86_REG_EAX) >> 16 == 0x1234, '4F02 101h: EAX bits 31-16 changed')
-    chk(booster(), 'booster not on after 4F02 101h: ' + regs())
+    chk(booster(cr), 'booster not on after 4F02 101h: ' + regs(cr))
     m.int10(0x4F05, bx=0, dx=1)
-    chk(booster() and cr.get(0x6A) == 1, 'booster not on after 4F05 in 101h: ' + regs())
+    chk(booster(cr) and cr.get(0x6A) == 1, 'booster not on after 4F05 in 101h: ' + regs(cr))
     lock = (cr.get(0x38, 0), cr.get(0x39, 0))
     m.r['aff'] = 1
     m.int10(0x0003)
-    chk(cr.get(0x58, 0) & 0x10 == 0 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == base, 'mode 03h: base not back: ' + regs())
+    chk(cr.get(0x58, 0) & 0x10 == 0 and (cr.get(0x59, 0), cr.get(0x5A, 0)) == base, 'mode 03h: base not back: ' + regs(cr))
     chk(m.r['aff'] == 0, 'ATC flip-flop not reset after the mode set')
     chk((cr.get(0x38, 0), cr.get(0x39, 0)) == lock, 'S3 register lock %02X/%02X after mode 03h, %02X/%02X before'
         % (cr.get(0x38, 0), cr.get(0x39, 0), lock[0], lock[1]))
@@ -926,12 +994,17 @@ def t_t64_patches(c):
     m.int10(0x4F02, bx=0x0101)
     m.int10(0x4F05, bx=0, dx=1)
     m.int10(0x4F05, bx=0, dx=2)
-    chk(cr.get(0x58, 0) & 0x10 == 0 and cr.get(0x52, 0) & 0x08 and cr.get(0x6A) == 2, 'Windows: booster on or bank wrong: ' + regs())
+    chk(cr.get(0x58, 0) & 0x10 == 0 and cr.get(0x52, 0) & 0x08 and cr.get(0x6A) == 2, 'Windows: booster on or bank wrong: ' + regs(cr))
     chk(m.mem(0x7E08, 1)[0] == 1, 'Windows: INT 2Fh asked %d times in one mode, expected once' % m.mem(0x7E08, 1)[0])
     m.mu.mem_write(0x2F * 4, ivt2f)
     m.int10(0x4F02, bx=0x0101)
-    chk(booster() and not cr.get(0x52, 0) & 0x08, 'no booster after Windows ended (CR52 bit 3 not cleared?): ' + regs())
-    # 4F05 BH=1 and a bad BH as Phoenix answers them; the window function turns the booster on in AH=00 69h
+    chk(booster(cr) and not cr.get(0x52, 0) & 0x08, 'no booster after Windows ended (CR52 bit 3 not cleared?): ' + regs(cr))
+
+
+def _t64_4f05(m: Machine, cr: dict, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: 4F05 BH=1 and a bad BH as Phoenix answers them, the SR04 index kept, and the window
+    function far call turning the booster on in AH=00 69h."""
+    regs = _t64_regs
     res = m.int10(0x4F05, bx=0x0100)
     chk(res['ax'] == 0x004F, '4F05 BH=1: AX=%04X' % res['ax'])
     # the window set and get read SR04 and put the sequencer index back (Phoenix leaves 04h)
@@ -943,14 +1016,18 @@ def t_t64_patches(c):
     res = m.int10(0x4F05, bx=0x0200, dx=4)
     chk(res['ax'] != 0x004F, '4F05 BH=2: AX=%04X, expected a refusal' % res['ax'])
     m.int10(0x0069)
-    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after AH=00 69h: ' + regs())
+    chk(cr.get(0x58, 0) & 0x10 == 0, 'booster on after AH=00 69h: ' + regs(cr))
     m.int10(0x4F01, cx=0x0101, es=0x3000, di=0)
     off, seg = struct.unpack('<HH', m.mem(0x3000C, 4))
     m.mu.mem_write(0x7D10, b'\x9A' + struct.pack('<HH', off, seg) + b'\xF4')
     for reg, v in ((UC_X86_REG_BX, 0), (UC_X86_REG_DX, 6), (UC_X86_REG_CS, 0), (UC_X86_REG_SS, 0), (UC_X86_REG_SP, 0x7000)):
         m.mu.reg_write(reg, v)
     m.mu.emu_start(0x7D10, 0x7D15, count=100000)
-    chk(booster() and cr.get(0x6A) == 6, 'window function (far call) in 69h: booster not on or bank wrong: ' + regs())
+    chk(_t64_booster_on(cr) and cr.get(0x6A) == 6, 'window function (far call) in 69h: booster not on or bank wrong: ' + regs(cr))
+
+
+def _t64_regkeep(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: EAX/ECX kept across the clears and font load, EAX kept across the scrolls and AH=09h."""
     for ax in (0x0003, 0x0013, 0x1114):
         m.mu.reg_write(UC_X86_REG_EAX, 0x9ABC0000 | ax)
         m.mu.reg_write(UC_X86_REG_ECX, 0x9ABC0000)
@@ -970,13 +1047,16 @@ def t_t64_patches(c):
             high = [m.mu.reg_read(reg) >> 16 for reg in (UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_ESI, UC_X86_REG_EDI)]
             chk(high == [0x9ABC] * 4, 'mode %02X AX=%04X: EAX/ECX/ESI/EDI bits 31-16 changed: %s'
                 % (mode, ax, ['%04X' % h for h in high]))
-    # the display FIFO M (CR54 bits 7-3, #75), from the bandwidth: 112 of the FIFO's 128 bytes drain in
-    # t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs, two entry cycles and an access take 23 and each
-    # access 6 (p3, #82; p2 counted 5), so M = (t - 23) / 6 at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM
-    # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 or 4 MB 103h, 105h and 114h have
-    # it exactly, since Phoenix's own values there are higher (with 1 MB, a 32-bit memory bus, Phoenix's own
-    # values are lower than the formula, which counts the 64-bit bus, and stay). The MCLK from the SR10/SR11
-    # the POST loads.
+
+
+def _t64_fifo(m: Machine, cr: dict, rom: bytes, chk: Callable[[bool, str], None]) -> None:
+    """t_t64_patches: the display FIFO M (CR54 bits 7-3, #75) within the memory bandwidth in the packed modes."""
+    # the bandwidth: 112 of the FIFO's 128 bytes drain in t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs,
+    # two entry cycles and an access take 23 and each access 6 (p3, #82; p2 counted 5), so M = (t - 23) / 6
+    # at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM only lowers Phoenix's
+    # values); at the default MCLK (54.9 MHz) with 2 or 4 MB 103h, 105h and 114h have it exactly, since
+    # Phoenix's own values there are higher (with 1 MB, a 32-bit memory bus, Phoenix's own values are lower
+    # than the formula, which counts the 64-bit bus, and stay). The MCLK from the SR10/SR11 the POST loads.
     seq = m.r['seq']
     mn, mm = (seq[0x10], seq[0x11]) if 0x10 in seq and 0x11 in seq else (rom[0x3B6], rom[0x3B5])
     mclk = 14318.18 * ((mm & 0x7F) + 2) / (((mn & 0x1F) + 2) << ((mn >> 5) & 3))
@@ -993,6 +1073,37 @@ def t_t64_patches(c):
         chk(got <= lim[1] and (not exact or got >= lim[0]), '%03Xh: CR54 M = %d, expected %s %d (t = %.1f MCLKs, '
             'MCLK %.2f MHz, DCLK %.2f MHz, %d bytes per pixel)' % (mode, got, 'about' if exact else 'at most',
                                                                    lim[1], t, mclk / 1000, dclk / 1000, bpp))
+
+
+def t_t64_patches(c: Ctx) -> str:
+    """Our Trio64 ROM (1.5-07-pN, src/roms/trio64): the ROM file, the refresh defaults (no mode runs
+    interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
+    check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
+    S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2),
+    4F15 without VDIF, the window function, the sequencer
+    index kept by the window set and get (4F05 BH=0 and 1), the 32-bit
+    registers kept across the clears, font load, scrolls, AH=09h and AH=0Eh, and the display FIFO M
+    (CR54) within the memory bandwidth in the packed modes (p2). Only on the Trio64 model."""
+    if not c.tours:
+        raise Skip('not our Trio64 ROM (1.5-07-pN)')
+    if Machine.chip != 'trio64':
+        raise Skip('Trio64 ROM (--chip 764)')
+    m = c.machine()
+    fails = []
+
+    def chk(cond: bool, what: str) -> None:
+        if not cond:
+            fails.append(what)
+
+    _t64_file(c, m, chk)
+    cr = m.r['crtc']
+    _t64_booster(m, cr, chk)
+    _t64_fonts(m, chk)
+    _t64_ddc(m, chk)
+    _t64_defaults(m, cr, chk)
+    _t64_4f05(m, cr, chk)
+    _t64_regkeep(m, chk)
+    _t64_fifo(m, cr, c.rom, chk)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return 'defaults, removed modes, booster, Windows check, lock, ATC flip-flop, 32-bit registers, FIFO M'
 
@@ -1003,7 +1114,7 @@ RESULT_RE = r'  (PASS|FAIL [0-9A-F]+|FAIL|WARN [0-9A-F]+|INFO)$'
 CATS = ('ROM', 'MDA', 'CGA', 'EGA', 'VGA', 'VBE', 'S3')
 
 
-def mode_cat(mode):
+def mode_cat(mode: int) -> str:
     """The category of a BIOS mode: the IBM adapter that introduced it, VBE for VESA modes."""
     if mode >= 0x100:
         return 'VBE'
@@ -1011,7 +1122,7 @@ def mode_cat(mode):
     return 'MDA' if mode in (7, 0x0F) else 'CGA' if mode <= 6 else 'EGA' if 0x0D <= mode <= 0x10 else 'VGA'
 
 
-def tagged(text, tool):
+def tagged(text: str, tool: str) -> list[tuple[str, str]]:
     """The result lines of S3TEST/S3COMPAT as (category, line without the category column); every
     result line must start with a category in a 5-column field, and the summary by category at the
     end must count the same lines."""
@@ -1043,7 +1154,7 @@ def tagged(text, tool):
     return out
 
 
-def skips_counted(text, tool):
+def skips_counted(text: str, tool: str) -> list[str]:
     """The SKIP lines (tests and steps the chip, its ROM or the memory leave out) and the 'Skipped: N' of
     the summary agree; returns the SKIP lines."""
     lines = [l for l in text.split('\r\n') if '  SKIP: ' in l]
@@ -1052,7 +1163,7 @@ def skips_counted(text, tool):
     return lines
 
 
-def t_s3test(c):
+def t_s3test(c: Ctx) -> str | None:
     com = c.tool('S3TEST.COM')
     v = '/V' if has_verbose() else ''
     r1 = c.machine().run_com(com, v)
@@ -1093,7 +1204,7 @@ def t_s3test(c):
     return 'exit code %d' % r1.exit[1]
 
 
-def t_s3test_any(c):
+def t_s3test_any(c: Ctx) -> str | None:
     """S3TEST /C, the set for a ROM that is not ours (a stock BIOS, a clean ROM, #143), runs on every ROM
     and chip: the version found is INFO, the tests of our ROM are SKIP with the /C reason, and every
     test that needs no ROM of ours passes except the banked write throughput (no real bus speed)."""
@@ -1117,7 +1228,7 @@ def t_s3test_any(c):
     return '%d results, %d SKIP' % (len(results), len(skips))
 
 
-def t_vshow(c):
+def t_vshow(c: Ctx) -> str | None:
     com = c.tool('VSHOW.COM')
     v = ' /V' if has_verbose() else ''
     r1 = c.machine().run_com(com, '101' + v)
@@ -1160,12 +1271,12 @@ def t_vshow(c):
         check(any(l.startswith('D:FRM n=31') for l in lines), 'no frame timing')
 
 
-def no_time(out):
+def no_time(out: bytes) -> bytes:
     """The output without the 'Time spent:' line of S3TEST and S3COMPAT (the run time differs with /V)."""
     return re.sub(rb'Time spent: [0-9.]+ s\r\n', b'', bytes(out))
 
 
-def build_s3compat_vga(tmp):
+def build_s3compat_vga(tmp: str) -> bytes:
     """S3COMPAT with POST/setup tests and everything after the VGA BIOS functions cut out."""
     nasm = shutil.which(NASM)
     if not nasm:
@@ -1187,7 +1298,7 @@ def build_s3compat_vga(tmp):
     return open(out, 'rb').read()
 
 
-def build_s3compat_vbe(tmp):
+def build_s3compat_vbe(tmp: str) -> bytes:
     """S3COMPAT with only the VBE function tests of vesa_more (4F00/4F08, 4F04 masks, invalid and
     undefined functions, 4F0A table, 4F10, 4F15), which need no banked or linear video memory."""
     nasm = shutil.which(NASM)
@@ -1209,7 +1320,7 @@ def build_s3compat_vbe(tmp):
     return open(out, 'rb').read()
 
 
-def t_s3compat_vbe(c):
+def t_s3compat_vbe(c: Ctx) -> str | None:
     with tempfile.TemporaryDirectory() as tmp:
         com = build_s3compat_vbe(tmp)
     r = c.machine().run_com(com, '')
@@ -1229,7 +1340,7 @@ def t_s3compat_vbe(c):
     return '%d tests' % len(tests)
 
 
-def t_s3compat_vga(c):
+def t_s3compat_vga(c: Ctx) -> str | None:
     with tempfile.TemporaryDirectory() as tmp:
         com = build_s3compat_vga(tmp)
     v = '/V' if has_verbose() else ''
@@ -1262,7 +1373,7 @@ def t_s3compat_vga(c):
     return '%d tests' % len(tests)
 
 
-def t_s3compat_dac_retry(c):
+def t_s3compat_dac_retry(c: Ctx) -> str | None:
     """S3COMPAT's DAC checks confirm a mismatch before failing (dacconf): the model corrupts one DAC
     access (vgaemu dac_fault) and the line must give WARN 02 (a read wrong once), WARN 04 (a write lost
     once, right after the BIOS call again) or FAIL (lost every time). Cases: the AX=101Bh grey of
@@ -1324,7 +1435,7 @@ S3COMPAT_KNOWN_4MB = [r'VESA 0118 .*WARN 02$', r'VESA 0164 .*WARN 02$', r'VESA 0
                       r'VESA 011A .*WARN 02$']
 
 
-def t_s3compat_full(c):
+def t_s3compat_full(c: Ctx) -> str | None:
     """The whole S3COMPAT (/Q: without the 2 MB VRAM pattern test) on the model."""
     com = c.tool('S3COMPAT.COM')
     m = c.machine()
@@ -1353,7 +1464,7 @@ def t_s3compat_full(c):
     return '%d lines, %d judged by memory the model lacks' % (len(tests), lim)
 
 
-def vgalog_info(c, m, blk, what, tail=bytes(8)):
+def vgalog_info(c: Ctx, m: Machine, blk: bytes, what: str, tail: bytes=bytes(8)) -> str:
     """The chip and ROM block VGALOG writes (32 bytes): CR2D-CR30 and CR36 as the model's chip reports
     them, the ROM size byte, SR10/SR11 as the POST left them, and the word after "Vers" in the ROM's
     first 256 bytes; +24 the /W window function count and routine (tail), 0 without /W."""
@@ -1368,7 +1479,7 @@ def vgalog_info(c, m, blk, what, tail=bytes(8)):
     return (v.group(1) if v else b'').decode()
 
 
-def t_vgalog(c):
+def t_vgalog(c: Ctx) -> str | None:
     if not os.path.exists(os.path.join(TOOLS, 'vgalog', 'vgalog.asm')):
         raise Skip('no src/tools/vgalog/ in this tree')
     com = c.tool('VGALOG.COM')
@@ -1378,7 +1489,7 @@ def t_vgalog(c):
     log = r.files.get('VGALOG.BIN')
     check(log is not None, 'VGALOG.BIN not created')
     check(log[:16] == b'VGALOGF1' + bytes(8), 'no file-mode header: %r' % bytes(log[:16]))
-    ver = vgalog_info(c, m, bytes(log[16:48]), 'file mode')
+    vgalog_info(c, m, bytes(log[16:48]), 'file mode')
     del log[:48]                                # the records follow
     m.com = r                                   # keep collecting the resident copy's DOS writes
     m.stdout_is_file = True
@@ -1414,7 +1525,7 @@ def t_vgalog(c):
     check(r.exit == ('exit', 1), 'second /U not refused: %s' % (r.exit,))
 
 
-def t_s3alias(c):
+def t_s3alias(c: Ctx) -> str | None:
     com = c.tool('S3ALIAS.COM')
     m = c.machine()
     runs = []
@@ -1486,7 +1597,7 @@ msg     db 'MZ OK',13,10,'$'
 """
 
 
-def build_exe(tmp):
+def build_exe(tmp: str) -> bytes:
     """A small MZ program (one relocation, stack after the image) built from EXE_SRC with nasm."""
     nasm = shutil.which(NASM)
     if not nasm:
@@ -1501,7 +1612,7 @@ def build_exe(tmp):
     return hdr.ljust(32, b'\0') + img
 
 
-def t_dos_exe(c):
+def t_dos_exe(c: Ctx) -> str | None:
     """The emulated DOS runs an MZ program: relocation, 62h/4Ah/48h with MCBs, and an INT 21h hook that
     sees the program's own AH=4Ch (how S3VBE20 and other TSR kits stay resident)."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1517,7 +1628,7 @@ def t_dos_exe(c):
     return 'MZ program ran, hooked INT 21h, stayed resident'
 
 
-def t_vgalog_mem(c):
+def t_vgalog_mem(c: Ctx) -> str | None:
     """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped, nested BIOS calls with their
     depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order, and with
     no call yet it writes no file and says so. /D commits the file and resets the disk before it reports
@@ -1605,7 +1716,7 @@ def t_vgalog_mem(c):
     return '%d calls, %d of them nested' % (n, len(nested))
 
 
-def t_vgalog_trace(c):
+def t_vgalog_trace(c: Ctx) -> str | None:
     """VGALOG /T traces the port accesses of the mode sets: every OUT the BIOS makes during AX=0003h and
     4F02h 101h is in the trace, in order and with its value (the model's own record of the OUTs as the
     reference), behind a marker that names the call's record; the reads are there (kind 1), polling loops
@@ -1701,7 +1812,7 @@ def t_vgalog_trace(c):
         tn, len(seen.get(0x0003, [])), len(seen.get(0x4F02, [])), reads, reps)
 
 
-def vgalog_trace_part(b):
+def vgalog_trace_part(b: bytes) -> tuple[list[bytes], list[tuple[int, int, int]]]:
     """The records and the trace events of a VGALOG.BIN with a trace part: (records, [(port, value,
     kind byte)])."""
     n = struct.unpack_from('<H', b, 12)[0]
@@ -1712,7 +1823,7 @@ def vgalog_trace_part(b):
     return recs, [struct.unpack_from('<HBB', b, t + 16 + 4 * i) for i in range(tn)]
 
 
-def t_vgalog_post(c):
+def t_vgalog_post(c: Ctx) -> str | None:
     """VGALOG /P traces the program after its 4F02h: the program's own OUTs (CR6A through 3D4h/3D5h, the
     DAC index 3C8h) follow the 4F02h's events in the trace, also after an INT 21h; its next mode set ends
     it (OUTs after mode 03h are not traced), INT 1 is put back and the trap flag clear when the program
@@ -1765,7 +1876,7 @@ def t_vgalog_post(c):
     return 'P1 %d OUTs, P2 %d of 13000 DAC OUTs before the stop, P3 stopped at 0F 01h' % (len(o1), len(dac))
 
 
-def t_vgalog_win(c):
+def t_vgalog_win(c: Ctx) -> str | None:
     """VGALOG /W hooks the window function: the WinFuncPtr a 4F01h returns points to VGALOG, a far call
     through it reaches the BIOS's routine (the bank 4F05h BH=1 then reads back is the one set) and
     returns to the caller with the stack as it was; the first 64 far calls are records (AX=4F05h, BX,
@@ -1828,7 +1939,7 @@ def t_vgalog_win(c):
     return '%d far calls through %04X:%04X, %d records' % (n, rsg, rof, len(far))
 
 
-def t_s3regs(c):
+def t_s3regs(c: Ctx) -> str | None:
     """S3REGS (DOS) and S3REGS32 (Win32, run on the same register model) write the same snapshot of SR, CR,
     GR and PCI, leave indexes and locks as found, and S3REGS32 /W logs register changes."""
     com, exe = c.tool('S3REGS.COM'), c.tool('S3REGS32.EXE')
@@ -1886,7 +1997,7 @@ def t_s3regs(c):
 # and feed the BIOS invalid input: harmless on the model, not something to do to the test machine.
 # Expected values from the IBM PC AT and PS/2 BIOS interface (INT 10h) and the VBE 2.0 specification.
 
-def vesa_supported(m):
+def vesa_supported(m: Machine) -> list[int]:
     """The modes of the 4F00h list that 4F01h marks as supported; uses 3000:0000-05FF."""
     m.mu.mem_write(0x30000, b'VBE2' + bytes(508))
     m.int10(0x4F00, es=0x3000, di=0)
@@ -1902,7 +2013,7 @@ def vesa_supported(m):
     return out
 
 
-def font_tables(m, chk, has14=True):
+def font_tables(m: Machine, chk: Callable[[bool, str], None], has14: bool=True) -> None:
     """Our ROMs' fonts are the tables of src/roms/fonts (#141): AX=1130h BH=2-7 point at them, whole.
     2.04.07 has no 8x14 font (BH=2 gives the 8x16) and one alternate table, the 9x16 one (has14=False)."""
     want = {3: fonts.F8[:0x400], 4: fonts.F8[0x400:], 2: fonts.F14 if has14 else fonts.F16, 6: fonts.F16,
@@ -1913,7 +2024,7 @@ def font_tables(m, chk, has14=True):
             'src/roms/fonts' % (bh, r['es'], r['bp'], len(t)))
 
 
-def vesa_fit(m, mode):
+def vesa_fit(m: Machine, mode: int) -> tuple[bool, int | None, str]:
     """Why a VESA mode does or does not fit: 'WxHxBPP needs N KB (bytes per line x lines[ x 4 planes]),
     the BIOS reports M KB' from 4F01h and 4F00h's TotalMemory; uses 3000:0000-05FF. Also returns whether it
     fits and 4F01h's attributes (None when 4F01h does not know the mode)."""
@@ -1931,7 +2042,7 @@ def vesa_fit(m, mode):
         mode, x, y, bpp, -(-need // 1024), bpl, y, ' x 4 planes' if planes == 4 else '', mem // 1024)
 
 
-def refusal(m, mode, ax):
+def refusal(m: Machine, mode: int, ax: int) -> str:
     """One line saying why 4F02h refused a VESA mode, for the test output: the return code, then the
     memory arithmetic (vesa_fit), then whether 4F01h marks the mode as not supported."""
     fit, attr, why = vesa_fit(m, mode)
@@ -1942,14 +2053,14 @@ def refusal(m, mode, ax):
     return '4F02h refused %s with AX=%04Xh: %s; %s (attributes %02Xh)' % (why, ax, cause, mark, attr)
 
 
-def vbe_version(m):
+def vbe_version(m: Machine) -> int:
     """The VBE version 4F00h reports (0 when it fails); uses 3000:0000-01FF."""
     m.mu.mem_write(0x30000, b'VBE2' + bytes(508))
     r = m.int10(0x4F00, es=0x3000, di=0)
     return word(m, 0x30004) if r['ax'] == 0x004F else 0
 
 
-def int10x(m, ax, bx=0, cx=0, dx=0, si=0, di=0, bp=0, es=0, std=False):
+def int10x(m: Machine, ax: int, bx: int=0, cx: int=0, dx: int=0, si: int=0, di: int=0, bp: int=0, es: int=0, std: bool=False) -> dict[str, int]:
     """INT 10h like Machine.int10, optionally with DF set by the caller; returns all 16-bit registers."""
     mu = m.mu
     mu.mem_write(0x7D00, (b'\xFD' if std else b'\xFC') + b'\xCD\x10\xF4')
@@ -1968,11 +2079,11 @@ def int10x(m, ax, bx=0, cx=0, dx=0, si=0, di=0, bp=0, es=0, std=False):
                                             ('bp', UC_X86_REG_BP), ('es', UC_X86_REG_ES))}
 
 
-def word(m, a):
+def word(m: Machine, a: int) -> int:
     return struct.unpack('<H', m.mem(a, 2))[0]
 
 
-def vga_state(m):
+def vga_state(m: Machine) -> tuple:
     """Standard VGA registers, BIOS data area, video memory and DAC (to see that nothing changed)."""
     r = m.r
     return (r['misc'], tuple(r['seq'].get(i, 0) for i in range(5)), tuple(r['crtc'].get(i, 0) for i in range(0x19)),
@@ -1980,24 +2091,15 @@ def vga_state(m):
             m.mem(0x400, 0x100), m.mem(0xA0000, 0x20000), tuple(bytes(p) for p in m.planes), tuple(map(tuple, m.dac)))
 
 
-def text_pattern(r, c):
+def text_pattern(r: int, c: int) -> int:
     return ((7 * c + 13 * r) & 0xFF) | ((((5 * c + 11 * r) & 0x7F) | 0) << 8)
 
 
-def t_mono(c):
-    """Monochrome addressing (mode 07h at B000, CRTC at 3B4h, mode 0Fh) and the equipment word."""
-    m = c.machine()
-    fails = []
-
-    def chk(cond, what):
-        if not cond:
-            fails.append(what)
-
-    def setequip(bits):
+def _mono_port(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_mono: mode 07h from colour, mode 03h back - CRTC port, MISC bit 0, equipment bits 4-5, geometry."""
+    def setequip(bits: int) -> None:
         m.mu.mem_write(0x410, struct.pack('<H', (word(m, 0x410) & ~0x30) | bits))
-    # 1. mode 07h from colour, mode 03h back: CRTC port, MISC bit 0, equipment bits 4-5 (IBM VGA BIOS:
-    #    30h for the monochrome modes, 20h for 80-column colour), geometry
-    for eq in (0x20, 0x30):
+    for eq in (0x20, 0x30):                             # IBM VGA BIOS: 30h mono, 20h 80-column colour
         setequip(eq)
         m.int10(0x07)
         chk(word(m, 0x463) == 0x3B4 and m.r['misc'] & 1 == 0, 'mode 07h (equipment %02X): CRTC %04X MISC %02X'
@@ -2008,7 +2110,10 @@ def t_mono(c):
         m.int10(0x03)
         chk(word(m, 0x463) == 0x3D4 and m.r['misc'] & 1 == 1 and word(m, 0x410) & 0x30 == 0x20,
             'mode 03h after 07h: CRTC %04X MISC %02X equipment %02X' % (word(m, 0x463), m.r['misc'], word(m, 0x410) & 0x30))
-    # 2. text in mode 07h: B000, cursor in the 3B4h CRTC
+
+
+def _mono_text(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_mono: text in mode 07h - B000, the cursor in the 3B4h CRTC, scrolls checked cell by cell."""
     m.int10(0x07)
     m.mu.mem_write(0xB0000, b''.join(struct.pack('<H', text_pattern(r, k)) for r in range(25) for k in range(80)))
     m.int10(0x0200, bx=0, dx=0x0102)
@@ -2033,14 +2138,19 @@ def t_mono(c):
     got = struct.unpack('<2000H', m.mem(0xB0000, 4000))
     bad = [(r, k) for r in range(25) for k in range(80) if got[r * 80 + k] != exp[r][k]]
     chk(not bad, 'mode 07h AH=06h/07h: %d cells differ, first %s' % (len(bad), bad[:3]))
-    # 3. 350 lines: 14-line characters (IBM: AH=12h BL=30h AL=1 then the mode set)
+
+
+def _mono_350(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_mono: 350 lines - 14-line characters (IBM: AH=12h BL=30h AL=1 then the mode set)."""
     m.int10(0x1201, bx=0x30)
     m.int10(0x07)
     chk(m.mem(0x485, 1)[0] == 14 and m.mem(0x484, 1)[0] == 24, 'mode 07h at 350 lines: height %d rows %d'
         % (m.mem(0x485, 1)[0], m.mem(0x484, 1)[0] + 1))
     m.int10(0x1202, bx=0x30)
-    # 4. mode 0Fh (640x350 monochrome graphics, planes 0 and 2): pixel values 0, 1, 4, 5 read back,
-    #    a character reads back, CRTC at 3B4h
+
+
+def _mono_mode0f(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_mono: mode 0Fh (640x350 monochrome graphics, planes 0 and 2) - pixels and a character read back."""
     m.int10(0x0F)
     chk(word(m, 0x463) == 0x3B4 and word(m, 0x410) & 0x30 == 0x30, 'mode 0Fh: CRTC %04X equipment %02X'
         % (word(m, 0x463), word(m, 0x410) & 0x30))
@@ -2056,11 +2166,11 @@ def t_mono(c):
     m.int10(0x0200, bx=0, dx=0x0204)
     r = m.int10(0x0800, bx=0)
     chk(r['ax'] & 0xFF == 0x41, "mode 0Fh AH=06h: 'A' not one row up (read %02X)" % (r['ax'] & 0xFF))
-    # 5. display combination code: each pair of the BIOS's DCC table (save pointer table, secondary
-    #    table, DCC table; 4-byte header, then 2 bytes an entry: the alternate, then the active display)
-    #    set with AX=1A01h reads back with AX=1A00h as the same pair: BX in either order (the BIOS, as
-    #    IBM's, gives the display that matches the current mono/colour addressing as the active one), and
-    #    BDA 48Ah holds the index of that table entry (IBM PS/2)
+
+
+def _mono_dcc(m: Machine, chk: Callable[[bool, str], None]) -> list[tuple[int, int]]:
+    """t_mono: each pair of the BIOS's DCC table set with AX=1A01h reads back with AX=1A00h, and BDA 48Ah
+    holds the index of that entry (IBM PS/2). Returns the (active, alternate) pairs."""
     sp = struct.unpack('<HH', m.mem(0x4A8, 4))
     sec = struct.unpack('<HH', m.mem(sp[1] * 16 + sp[0] + 16, 4))
     pairs = []
@@ -2076,7 +2186,11 @@ def t_mono(c):
             m.mem(0x48A, 1)[0], 'AX=1A01h BX=%04X: read back %04X, index %d (expected %d)'
             % ((b << 8) | a, r2['bx'], m.mem(0x48A, 1)[0], k))
     m.int10(0x1A01, bx=0x0008)
-    # 6. mono and colour modes in turn: every switch leaves the BIOS data and MISC consistent
+    return pairs
+
+
+def _mono_sequence(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_mono: mono and colour modes in turn - every switch leaves the BIOS data and MISC consistent."""
     for mode in (0x07, 0x12, 0x0F, 0x03, 0x07, 0x07, 0x01, 0x0F, 0x13, 0x07):
         m.int10(mode)
         mono = mode in (0x07, 0x0F)
@@ -2085,11 +2199,28 @@ def t_mono(c):
             'mode %02X in the sequence: BDA %02X, CRTC %04X, MISC %02X, equipment %02X'
             % (mode, m.mem(0x449, 1)[0], word(m, 0x463), m.r['misc'], word(m, 0x410) & 0x30))
     m.int10(0x03)
+
+
+def t_mono(c: Ctx) -> str | None:
+    """Monochrome addressing (mode 07h at B000, CRTC at 3B4h, mode 0Fh) and the equipment word."""
+    m = c.machine()
+    fails = []
+
+    def chk(cond: bool, what: str) -> None:
+        if not cond:
+            fails.append(what)
+
+    _mono_port(m, chk)
+    _mono_text(m, chk)
+    _mono_350(m, chk)
+    _mono_mode0f(m, chk)
+    pairs = _mono_dcc(m, chk)
+    _mono_sequence(m, chk)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return 'mode 07h/0Fh, equipment word, %d DCC pairs' % len(pairs)
 
 
-def t_errors(c):
+def t_errors(c: Ctx) -> str | None:
     """Invalid input: the BIOS must refuse it and change nothing."""
     m = c.machine()
     fails = []
@@ -2192,7 +2323,7 @@ R32 = (('eax', UC_X86_REG_EAX), ('ebx', UC_X86_REG_EBX), ('ecx', UC_X86_REG_ECX)
        ('esi', UC_X86_REG_ESI), ('edi', UC_X86_REG_EDI), ('ebp', UC_X86_REG_EBP))
 
 
-def int10w(m, regs, ds=0, es=0, flags=0x202, count=None):
+def int10w(m: Machine, regs: dict[str, int], ds: int=0, es: int=0, flags: int=0x202, count: int=None) -> dict[str, int]:
     """INT 10h with 32-bit registers and DS/ES as the Windows INT 10h interfaces pass them
     (VIDEO_X86_BIOS_ARGUMENTS / INT10_BIOS_ARGUMENTS). Returns the 32-bit registers, DS, ES; raises
     when the call does not return within count instructions (a hang)."""
@@ -2213,20 +2344,11 @@ def int10w(m, regs, ds=0, es=0, flags=0x202, count=None):
     return out
 
 
-def t_windows(c):
-    """The ways Windows calls the video BIOS (emulator only), from Microsoft's documented interfaces:
-    VideoPortInt10 and the INT 10h interface of Windows 2000 and later pass 32-bit registers and DS/ES
-    with a buffer below 1 MB; the calls may come with interrupts off (VDM, x86 BIOS emulator); the
-    Windows 9x display driver of S3 uses 4F00, 4F02 and 4F08 and needs CR59/CR5A at the PCI base after its
-    banked 4F02 (README, Windows 9x driver test)."""
-    fails = []
+WIN_BUF = 0x2000                                        # the buffer segment (Int10AllocateBuffer-like)
 
-    def chk(cond, what):
-        if not cond:
-            fails.append(what)
-
-    BUF = 0x2000                                        # the buffer segment (Int10AllocateBuffer-like)
-    calls = [('4F00', dict(eax=0x4F00, edi=0)), ('4F01 101h', dict(eax=0x4F01, ecx=0x101, edi=0x200)),
+# The calls Windows makes of the video BIOS (VideoPortInt10 and the INT 10h interface pass 32-bit
+# registers and DS/ES with a buffer below 1 MB), plus the extra ones the no-IRQ run adds.
+WIN_CALLS = [('4F00', dict(eax=0x4F00, edi=0)), ('4F01 101h', dict(eax=0x4F01, ecx=0x101, edi=0x200)),
              ('4F01 111h', dict(eax=0x4F01, ecx=0x111, edi=0x200)), ('4F02 101h', dict(eax=0x4F02, ebx=0x101)),
              ('4F03', dict(eax=0x4F03)), ('4F05 set', dict(eax=0x4F05, ebx=0, edx=1)),
              ('4F05 get', dict(eax=0x4F05, ebx=0x100)), ('4F06 get', dict(eax=0x4F06, ebx=1)),
@@ -2241,21 +2363,30 @@ def t_windows(c):
              ('AX=1C01', dict(eax=0x1C01, ecx=7, ebx=0x600)), ('AX=1C02', dict(eax=0x1C02, ecx=7, ebx=0x600)),
              ('AH=00 12h', dict(eax=0x0012)), ('AH=06', dict(eax=0x0600, ebx=0x0700, edx=0x1D4F)),
              ('AH=00 03h', dict(eax=0x0003))]
-    # 32-bit callers: the same results with garbage in the upper halves, which stay as they were
-    # (a 16-bit BIOS function returns 16-bit results; 4F0A returns ES = C000; the S3 OEM query 4F14
-    # BL=00 returns ESI and EDI as 32-bit values, as BL=02 BH=03 does EDI)
+
+WIN_NOIRQ_EXTRA = [('4F02 105h', dict(eax=0x4F02, ebx=0x105)), ('4F02 112h', dict(eax=0x4F02, ebx=0x112)),
+                   ('4F10 off', dict(eax=0x4F10, ebx=0x0401)), ('4F10 on', dict(eax=0x4F10, ebx=0x0001)),
+                   ('4F14 set', dict(eax=0x4F14, ebx=0x0001, ecx=0x101, edi=72)),
+                   ('4F15 read', dict(eax=0x4F15, ebx=1, ecx=0, edx=0, edi=0)),
+                   ('AH=00 13h', dict(eax=0x0013)), ('AH=00 03h', dict(eax=0x0003))]
+
+
+def _win_dirty(c: Ctx, chk: Callable[[bool, str], None]) -> None:
+    """t_windows: 32-bit callers - the same results with garbage in the upper halves, which stay as they
+    were (a 16-bit BIOS function returns 16-bit results; 4F0A returns ES = C000; the S3 OEM query
+    4F14 BL=00 returns ESI and EDI as 32-bit values, as BL=02 BH=03 does EDI)."""
     HI = 0xA55A0000
     runs = []
     for dirty in (False, True):
         m = c.machine()
-        m.mu.mem_write(BUF * 16 + 0x300, bytes(range(64)))
+        m.mu.mem_write(WIN_BUF * 16 + 0x300, bytes(range(64)))
         res = []
-        for name, regs in calls:
+        for name, regs in WIN_CALLS:
             r = dict(regs)
             if dirty:
                 r = {k: v | (HI ^ (i << 28)) for i, (k, v) in enumerate((k, r.get(k, 0)) for k, _ in R32)}
-            o = int10w(m, r, ds=BUF, es=BUF)
-            res.append((name, r, o, m.mem(BUF * 16, 0x800), vga_state(m)))
+            o = int10w(m, r, ds=WIN_BUF, es=WIN_BUF)
+            res.append((name, r, o, m.mem(WIN_BUF * 16, 0x800), vga_state(m)))
         runs.append(res)
     for (name, _, o0, b0, s0), (_, rin, o1, b1, s1) in zip(*runs):
         lo = lambda o: {k: (v & 0xFFFF if k[0] == 'e' else v) for k, v in o.items()}
@@ -2264,31 +2395,31 @@ def t_windows(c):
         chk(s0 == s1, '%s: other video state with the upper halves set' % name)
         hi = [k for k, _ in R32 if (o1[k] ^ rin[k]) & 0xFFFF0000 and not (name == '4F14 query' and k in ('esi', 'edi'))]
         chk(not hi, '%s: upper halves changed: %s' % (name, ', '.join('%s %08X->%08X' % (k, rin[k], o1[k]) for k in hi)))
-        chk(o1['ds'] == BUF and (o1['es'] == BUF or name == '4F0A'), '%s: DS/ES not kept (%04X/%04X)' % (name, o1['ds'], o1['es']))
-    # interrupts off and no timer tick (a VDM or the x86 BIOS emulator of 64-bit Windows may deliver
-    # no IRQ 0): every call returns; mode sets, scroll, palette, DPMS, refresh, DDC
+        chk(o1['ds'] == WIN_BUF and (o1['es'] == WIN_BUF or name == '4F0A'), '%s: DS/ES not kept (%04X/%04X)' % (name, o1['ds'], o1['es']))
+
+
+def _win_noirq(c: Ctx, chk: Callable[[bool, str], None]) -> None:
+    """t_windows: interrupts off and no timer tick (a VDM or the x86 BIOS emulator of 64-bit Windows may
+    deliver no IRQ 0): every call returns; mode sets, scroll, palette, DPMS, refresh, DDC."""
     m = c.machine()
     m._ticks = lambda: 0x1234
-    for name, regs in calls + [('4F02 105h', dict(eax=0x4F02, ebx=0x105)), ('4F02 112h', dict(eax=0x4F02, ebx=0x112)),
-                               ('4F10 off', dict(eax=0x4F10, ebx=0x0401)), ('4F10 on', dict(eax=0x4F10, ebx=0x0001)),
-                               ('4F14 set', dict(eax=0x4F14, ebx=0x0001, ecx=0x101, edi=72)),
-                               ('4F15 read', dict(eax=0x4F15, ebx=1, ecx=0, edx=0, edi=0)),
-                               ('AH=00 13h', dict(eax=0x0013)), ('AH=00 03h', dict(eax=0x0003))]:
+    for name, regs in WIN_CALLS + WIN_NOIRQ_EXTRA:
         try:                                            # the DDC read bit-bangs 128 bytes: 60M instructions
-            int10w(m, regs, ds=BUF, es=BUF, flags=0x002, count=200_000_000 if name == '4F15 read' else None)
+            int10w(m, regs, ds=WIN_BUF, es=WIN_BUF, flags=0x002, count=200_000_000 if name == '4F15 read' else None)
         except AssertionError as e:
             chk(False, '%s with IF=0 and no tick: %s' % (name, e))
-    # the S3 Windows 9x driver: 4F00, 4F01 for the modes, 4F02, 4F08 to 8 bits, the palette, a mode
-    # change, back to text. VBE 2.0: 4F08 BH = the width set; mode 03h after it as IBM's (6-bit DAC,
-    # the EGA palette, the registers of vgaref.inc)
-    ents, _ = read_vgaref()
+
+
+def _win_driver(c: Ctx, chk: Callable[[bool, str], None]) -> tuple[Machine, list[int], set[int]]:
+    """t_windows: the S3 Windows 9x driver - 4F00, 4F01 for the modes, 4F02, 4F08 to 8 bits, the palette.
+    Returns (the machine after the driver's mode changes, the mode list, the modes that fit the memory)."""
     m = c.machine()
-    m.mu.mem_write(BUF * 16, b'VBE2')
-    o = int10w(m, dict(eax=0x4F00, edi=0), es=BUF)
-    chk(o['eax'] & 0xFFFF == 0x4F and m.mem(BUF * 16, 4) == b'VESA', '4F00: %04X' % (o['eax'] & 0xFFFF))
-    caps = m.mem(BUF * 16 + 10, 1)[0]
-    vbe = word(m, BUF * 16 + 4)
-    loff, lseg = struct.unpack('<HH', m.mem(BUF * 16 + 14, 4))
+    m.mu.mem_write(WIN_BUF * 16, b'VBE2')
+    o = int10w(m, dict(eax=0x4F00, edi=0), es=WIN_BUF)
+    chk(o['eax'] & 0xFFFF == 0x4F and m.mem(WIN_BUF * 16, 4) == b'VESA', '4F00: %04X' % (o['eax'] & 0xFFFF))
+    caps = m.mem(WIN_BUF * 16 + 10, 1)[0]
+    vbe = word(m, WIN_BUF * 16 + 4)
+    loff, lseg = struct.unpack('<HH', m.mem(WIN_BUF * 16 + 14, 4))
     modes = []
     while len(modes) < 120:
         v = word(m, lseg * 16 + loff + 2 * len(modes))
@@ -2297,12 +2428,12 @@ def t_windows(c):
         modes.append(v)
     fits = set()                                        # the modes 4F01h marks as supported with this memory
     for v in modes:
-        o = int10w(m, dict(eax=0x4F01, ecx=v, edi=0x1000), es=BUF)
+        o = int10w(m, dict(eax=0x4F01, ecx=v, edi=0x1000), es=WIN_BUF)
         chk(o['eax'] & 0xFFFF == 0x4F, '4F01 %03Xh: %04X' % (v, o['eax'] & 0xFFFF))
-        if m.mem(BUF * 16 + 0x1000, 1)[0] & 1:
+        if m.mem(WIN_BUF * 16 + 0x1000, 1)[0] & 1:
             fits.add(v)
     for v in (0x101, 0x103, 0x105):
-        o = int10w(m, dict(eax=0x4F02, ebx=v), es=BUF)
+        o = int10w(m, dict(eax=0x4F02, ebx=v), es=WIN_BUF)
         chk(o['eax'] & 0xFFFF == 0x4F, '4F02 %03Xh: %04X' % (v, o['eax'] & 0xFFFF))
         o = int10w(m, dict(eax=0x4F08, ebx=0x0800))
         if caps & 1:
@@ -2313,18 +2444,22 @@ def t_windows(c):
         if vbe < 0x0200:                # 4F09h is VBE 2.0
             continue
         pal = bytes((3 * i + k * 85) & 0xFF for i in range(256) for k in range(4))
-        m.mu.mem_write(BUF * 16 + 0x2000, pal)
-        int10w(m, dict(eax=0x4F09, ebx=0, ecx=256, edx=0, edi=0x2000), es=BUF)
-        o = int10w(m, dict(eax=0x4F09, ebx=1, ecx=256, edx=0, edi=0x3000), es=BUF)
-        rd = m.mem(BUF * 16 + 0x3000, 1024)
+        m.mu.mem_write(WIN_BUF * 16 + 0x2000, pal)
+        int10w(m, dict(eax=0x4F09, ebx=0, ecx=256, edx=0, edi=0x2000), es=WIN_BUF)
+        o = int10w(m, dict(eax=0x4F09, ebx=1, ecx=256, edx=0, edi=0x3000), es=WIN_BUF)
+        rd = m.mem(WIN_BUF * 16 + 0x3000, 1024)
         width = 8 if caps & 1 else 6
         msk = 0xFF if width == 8 else 0x3F
         exp = bytes((b & msk) if k % 4 != 3 else rd[k] for k, b in enumerate(pal))
         chk(o['eax'] & 0xFFFF == 0x4F and rd == exp, '%03Xh 4F09 palette not read back as written (%d bits)' % (v, width))
-    # the mode sets VGALOG recorded from the S3 driver (stock BIOS 2.04.11): banked 4F02 with bit 15, CX =
-    # lines, DX = 3D4h; then the driver turns its own linear window on (CR58 = 92h) at CR59/CR5A, so
-    # they must still hold the PCI base the BIOS found at POST (the p15 booster moved them to 000Ah:
-    # garbage on the desktop)
+    return m, modes, fits
+
+
+def _win_banked(c: Ctx, m: Machine, fits: set[int], chk: Callable[[bool, str], None]) -> list[str]:
+    """t_windows: the mode sets VGALOG recorded from the S3 driver (banked 4F02 with bit 15, CX = lines,
+    DX = 3D4h); the driver then turns its own linear window on at CR59/CR5A, so they must still hold the
+    PCI base the BIOS found at POST. Returns the skipped modes' notes."""
+    ents, _ = read_vgaref()
     m2 = c.machine()
     cr2 = m2.r['crtc']
     m2.mu.mem_write(0x7E00, bytes.fromhex('b004cf'))      # INT 2Fh AX=1600h: Windows 98 (enhanced mode)
@@ -2349,7 +2484,11 @@ def t_windows(c):
     sr4 = lambda j, v: v & 0xFE if REGNAMES[j] == 'SR4' else v     # SR4 bit 0 reserved (as vga_registers)
     diff = [REGNAMES[j] for j, (a, e) in enumerate(zip(snap, regs3)) if REGNAMES[j] != 'SR0' and sr4(j, a) != sr4(j, e)]
     chk(not diff, 'mode 03h after the driver: registers differ from IBM: %s' % ' '.join(diff))
-    # AH=00h with AL bit 7 (IBM: keep video memory; BDA 0487h bit 7 set while the mode runs)
+    return skipped
+
+
+def _win_keepmem(m: Machine, chk: Callable[[bool, str], None]) -> None:
+    """t_windows: AH=00h with AL bit 7 (IBM: keep video memory; BDA 0487h bit 7 set while the mode runs)."""
     m.int10(0x03)
     m.mu.mem_write(0xB8000, b''.join(struct.pack('<H', text_pattern(r, k)) for r in range(25) for k in range(80)))
     keep = m.mem(0xB8000, 4000)
@@ -2359,12 +2498,31 @@ def t_windows(c):
         % (m.mem(0x449, 1)[0], m.mem(0x487, 1)[0]))
     m.int10(0x03)
     chk(m.mem(0xB8000, 4) == b'\x20\x07\x20\x07' and not m.mem(0x487, 1)[0] & 0x80, 'AH=00h AL=03h after 83h: no clear')
+
+
+def t_windows(c: Ctx) -> str | None:
+    """The ways Windows calls the video BIOS (emulator only), from Microsoft's documented interfaces:
+    VideoPortInt10 and the INT 10h interface of Windows 2000 and later pass 32-bit registers and DS/ES
+    with a buffer below 1 MB; the calls may come with interrupts off (VDM, x86 BIOS emulator); the
+    Windows 9x display driver of S3 uses 4F00, 4F02 and 4F08 and needs CR59/CR5A at the PCI base after its
+    banked 4F02 (README, Windows 9x driver test)."""
+    fails = []
+
+    def chk(cond: bool, what: str) -> None:
+        if not cond:
+            fails.append(what)
+
+    _win_dirty(c, chk)
+    _win_noirq(c, chk)
+    m, modes, fits = _win_driver(c, chk)
+    skipped = _win_banked(c, m, fits, chk)
+    _win_keepmem(m, chk)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
-    return ('%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(calls), len(modes))
+    return ('%d calls with 32-bit registers, IF=0 without tick, the 9x driver sequence (%d modes)' % (len(WIN_CALLS), len(modes))
             + ''.join('; ' + t for t in skipped))
 
 
-def t_display_switch(c):
+def t_display_switch(c: Ctx) -> str | None:
     """AH=12h BL=35h display switch (emulator only: on the card AL=02h turns the video off). IBM: AL=02h
     switches the active video off and saves its state in the 128-byte buffer at ES:DX, AL = 12h when
     supported."""
@@ -2379,7 +2537,7 @@ def t_display_switch(c):
     return 'AL=02h: AL=12h, state saved'
 
 
-def t_v2_writes(c):
+def t_v2_writes(c: Ctx) -> str | None:
     """Trio64V2 datasheet rules about writes, which only the model can see (docs/chip-rules.md):
     V2-REG-5: the BIOS writes 00h to CR26 on each mode set, with A5h in CR39 first ('Synchronization 2',
     section 4.2), and CR23 must be 00h when CR26 is written: CR23 is set to 5Ah before each mode set (a
@@ -2423,7 +2581,7 @@ def t_v2_writes(c):
     return '%d mode sets%s' % (len(sets) - len(skipped), ''.join('; skipped: ' + t for t in skipped))
 
 
-def t_post_delay(c):
+def t_post_delay(c: Ctx) -> str | None:
     """p20: the POST step at 14C6h turns RAM refresh off (CR88 bit 6), waits with the DDC delay (5F4Eh),
     resets the graphics engine (CR66 = 02h, then 00h) and turns refresh on again. 2.04.07 and 2.04.11
     load the count 0Ah into BX, but the delay takes AX, which still holds the CR88 index and value
@@ -2463,7 +2621,7 @@ def t_post_delay(c):
     return 'refresh off, PIT channel 2 loaded with 0014h, engine reset'
 
 
-def t_ddc(c):
+def t_ddc(c: Ctx) -> str | None:
     """p19: the DDC code of VBE 4F15 as in the S3 BIOS 2.04.11. BL=00h (the probe the S3COMPAT 4F15 line
     makes): returns 004Fh; every access to the serial port register (A000:FF20h through MMIO) happens
     with interrupts off (2.04.11 pushf/cli around the operation, p19 ddcin/ddcout); the delays program
@@ -2527,7 +2685,7 @@ def t_ddc(c):
         len(mmio), len(loads), r['bx'])
 
 
-def t_engine_init(c):
+def t_engine_init(c: Ctx) -> str | None:
     """ENG-1 (docs/chip-rules.md): the power-on values of BEE8h index D and E are undefined, so software
     writes both before the first graphics engine command (Trio64UV+ update ER010-B item 4, about the
     Trio64V+ data book; Trio64V2 section 4.1). Through POST, mode 03h and the VESA modes 101h, 103h,
@@ -2548,7 +2706,7 @@ def t_engine_init(c):
     return '%d engine commands, BEE8h D and E written first' % m.ge_cmds
 
 
-def t_stores(c):
+def t_stores(c: Ctx) -> str | None:
     """The p11-p14 speed patches do their video memory work with 32-bit stores (the reference BIOS uses
     8- and 16-bit ones, the same result): the share of the bytes written to A0000-BFFFF by 4-byte stores,
     per operation. Only this shows that one of those patch sites is in place (emu/mutants.py)."""
@@ -2585,7 +2743,7 @@ def t_stores(c):
     return '%d operations' % len(ops)
 
 
-def t_romver(c):
+def t_romver(c: Ctx) -> str | None:
     """ROMVER, S3COMPAT's ROM line and the /V log all print the version romfind reads from C000:0000-00FF."""
     raw = c.rom[:0x100]
     at = raw.find(b'Version ')
@@ -2628,34 +2786,48 @@ def t_romver(c):
     return want.decode('latin1')
 
 
-def t_mclk(c):
-    """MCLK without a switch reports the chip, the memory, the memory clock and the datasheet range and
-    changes nothing; /S sets a clock (asking for Y above the datasheet maximum); /T asks once for Y
-    before the first PLL write (any other key: no write, exit 1), tests steps and puts the POST clock back."""
-    com = c.tool('MCLK.COM')
+def _pll_of(m: Machine) -> tuple[int | None, int | None, int | None, int | None]:
+    """SR08, SR10, SR11, SR15 as the machine has them."""
+    return tuple(m.r['seq'].get(i) for i in (0x08, 0x10, 0x11, 0x15))
+
+
+def _clk_of(m: Machine) -> tuple[int | None, int | None]:
+    return (m.r['seq'].get(0x10), m.r['seq'].get(0x11))
+
+
+def _lines_of(r: ComResult) -> list[bytes]:
+    return [ln for ln in bytes(r.stdout).replace(b'\r\n', b'\n').split(b'\n') if ln]
+
+
+def _mhz_of(line: bytes) -> float:
+    return float(line.split(b' MHz')[0].split()[-1])
+
+
+def _mclk_table() -> tuple[list[int], dict[int, tuple[int, int]]]:
+    """The pll.inc table as (sorted kHz list, kHz -> (SR10, SR11))."""
+    with open(os.path.join(HERE, '..', 'src', 'tools', 'mclk', 'pll.inc')) as f:
+        tab = re.findall(r'\bdd\s+(\d+)\s+db\s+0x([0-9A-F]{2}),\s*0x([0-9A-F]{2})', f.read())
+    return [int(k) for k, _, _ in tab], {int(k): (int(a, 16), int(b, 16)) for k, a, b in tab}
+
+
+def _mclk_help_args(c: Ctx, com: bytes) -> None:
+    """t_mclk: /H prints the switches, and the bad argument combinations exit 1 without doing anything."""
     h = c.machine().run_com(com, '/H', name='MCLK.COM', max_insn=2_000_000)
     check(h.exit == ('exit', 0), 'MCLK /H exit %s' % (h.exit,))
     helptext = bytes(h.stdout)
     check(all(sw in helptext for sw in (b'/S', b'/T', b'/P', b'/I')), 'MCLK /H text %r' % helptext[:300])
-
     for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X', '/Y'):
         bad = c.machine().run_com(com, tail, name='MCLK.COM', max_insn=1_000_000)
         check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
               'bad %r %s %r' % (tail, bad.exit, bytes(bad.stdout)[:200]))
 
-    with open(os.path.join(HERE, '..', 'src', 'tools', 'mclk', 'pll.inc')) as f:
-        tab = re.findall(r'\bdd\s+(\d+)\s+db\s+0x([0-9A-F]{2}),\s*0x([0-9A-F]{2})', f.read())
-    table = [int(k) for k, _, _ in tab]
-    pair = {int(k): (int(a, 16), int(b, 16)) for k, a, b in tab}
-    pll = lambda mm: tuple(mm.r['seq'].get(i) for i in (0x08, 0x10, 0x11, 0x15))
-    clk = lambda mm: (mm.r['seq'].get(0x10), mm.r['seq'].get(0x11))
-    lines_of = lambda r: [ln for ln in bytes(r.stdout).replace(b'\r\n', b'\n').split(b'\n') if ln]
 
-    # The report: the version, four facts and the datasheet range (MEM-1, V2-MEM-1), nothing changed.
+def _mclk_report(c: Ctx, com: bytes) -> tuple[int | None, ...]:
+    """t_mclk: the report - version, chip, memory, clock, datasheet range - and that it changes nothing."""
     mi = c.machine()
-    beforei = pll(mi)
+    beforei = _pll_of(mi)
     info = mi.run_com(com, '', name='MCLK.COM', max_insn=20_000_000)
-    il = lines_of(info)
+    il = _lines_of(info)
     check(info.exit == ('exit', 0), 'MCLK report exit %s %r' % (info.exit, il))
     check(il[0].startswith(b'MCLK ') and il[1].startswith(b'Chip:') and il[2].startswith(b'Memory:') and
           il[3].startswith(b'Memory clock:') and il[4].startswith(b'The datasheet supports ') and len(il) == 6,
@@ -2666,7 +2838,7 @@ def t_mclk(c):
     want_type = b'fast page' if Machine.chip == 'trio64' and vram == 4 else b'EDO'   # 4 MB Trio64: fast page
     check(il[2].split(b':', 1)[1].strip().startswith(want_mem + b' ') and want_type in il[2],
           'memory line %r, %d MB' % (il[2], vram))
-    post = clk(mi)
+    post = _clk_of(mi)
     pk = 14318 * ((post[1] & 0x7F) + 2) // ((post[0] & 0x1F) + 2) >> ((post[0] >> 5) & 3)
     check(('%d.%03d MHz' % (pk // 1000, pk % 1000)).encode() in il[3], 'clock line %r, SR10/SR11 %s' % (il[3], post))
     cr36 = mi.r['crtc'].get(0x36)
@@ -2674,17 +2846,22 @@ def t_mclk(c):
     check(('supports 50.113 MHz to %d.%03d MHz' % (book // 1000, book % 1000)).encode() in il[4],
           'datasheet line %r, expected %d kHz' % (il[4], book))
     check(not info.stderr or b'Press Y' not in bytes(info.stderr), 'the report asked %r' % bytes(info.stderr)[:300])
-    check(pll(mi) == beforei, 'report changed SR08/SR10/SR11/SR15 %s, before %s' % (pll(mi), beforei))
+    return beforei
 
-    # /S below the datasheet maximum: no question, the pair at or below the request, kept by mode sets
-    # (our ROM programs the MCLK at POST only) and shown by the next report.
+
+def _mclk_set(c: Ctx, com: bytes, table: list[int], pair: dict[int, tuple[int, int]],
+              beforei: tuple[int | None, ...]) -> None:
+    """t_mclk: /S below the datasheet maximum (no question), out of range (refused), above it (asks once;
+    N writes nothing, Y and /Y set it)."""
+    # /S below the datasheet maximum: no question, the pair at or below the request (our ROM programs
+    # the MCLK at POST only) and shown by the next report.
     ms = c.machine()
     s1 = ms.run_com(com, '/S 57.5', name='MCLK.COM', max_insn=20_000_000)
-    sl = lines_of(s1)
+    sl = _lines_of(s1)
     k = max(t for t in table if t <= 57500)
     check(s1.exit == ('exit', 0), 'MCLK /S 57.5 exit %s %r' % (s1.exit, sl))
     check(b'Press Y' not in bytes(s1.stderr), '/S 57.5 asked: %r' % bytes(s1.stderr)[:300])
-    check(clk(ms) == pair[k], '/S 57.5 left SR10/SR11 %s, expected %s (%d kHz)' % (clk(ms), pair[k], k))
+    check(_clk_of(ms) == pair[k], '/S 57.5 left SR10/SR11 %s, expected %s (%d kHz)' % (_clk_of(ms), pair[k], k))
     okline = lambda kk, req: ('Memory clock set to %d.%03d MHz (requested %s MHz, SR10=%02X SR11=%02X read back): OK'
                               % (kk // 1000, kk % 1000, req, pair[kk][0], pair[kk][1])).encode()
     check(okline(k, '57.500') in sl and not any(ln.startswith(b'ERROR') for ln in sl), '/S 57.5 lines %r' % sl)
@@ -2694,59 +2871,89 @@ def t_mclk(c):
             ms.int10(mode)
         ms.int10(0x4F02, 0x0101)
         ms.int10(0x0003)
-        check(clk(ms) == pair[k], 'a mode set changed the /S clock to %s' % (clk(ms),))
-    again = lines_of(ms.run_com(com, '', name='MCLK.COM', max_insn=20_000_000))
+        check(_clk_of(ms) == pair[k], 'a mode set changed the /S clock to %s' % (_clk_of(ms),))
+    again = _lines_of(ms.run_com(com, '', name='MCLK.COM', max_insn=20_000_000))
     check(('Memory clock: %d.%03d MHz' % (k // 1000, k % 1000)).encode() in again, 'report after /S %r' % again)
 
     # /S out of range: refused, nothing written, no question.
     for tail, word in (('/S 45', b'is below'), ('/S 90', b'above the cap')):
         mo = c.machine()
-        bo = pll(mo)
+        bo = _pll_of(mo)
         ro = mo.run_com(com, tail, name='MCLK.COM', max_insn=20_000_000)
         check(ro.exit == ('exit', 1) and any(ln.startswith(b'ERROR: ') and word in ln and
-                                             ln.endswith(b'the clock was not changed') for ln in lines_of(ro)),
-              '%s %s %r' % (tail, ro.exit, lines_of(ro)))
-        check(pll(mo) == bo and b'Press Y' not in bytes(ro.stderr), '%s wrote %s or asked' % (tail, pll(mo)))
+                                             ln.endswith(b'the clock was not changed') for ln in _lines_of(ro)),
+              '%s %s %r' % (tail, ro.exit, _lines_of(ro)))
+        check(_pll_of(mo) == bo and b'Press Y' not in bytes(ro.stderr), '%s wrote %s or asked' % (tail, _pll_of(mo)))
 
     # /S above the datasheet maximum (below every cap): asks once; N writes nothing, Y sets it.
     k70 = max(t for t in table if t <= 70000)
     mn = c.machine(keys=[0x316E])                       # 'n'
-    bn = pll(mn)
+    bn = _pll_of(mn)
     rn = mn.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
     check(rn.exit == ('exit', 1) and b'ERROR: Not confirmed' in bytes(rn.stdout) and bytes(rn.stderr).count(b'Press Y') == 1,
-          '/S 70 declined %s %r' % (rn.exit, lines_of(rn)))
-    check(pll(mn) == bn, '/S 70 declined wrote %s, before %s' % (pll(mn), bn))
+          '/S 70 declined %s %r' % (rn.exit, _lines_of(rn)))
+    check(_pll_of(mn) == bn, '/S 70 declined wrote %s, before %s' % (_pll_of(mn), bn))
     my = c.machine(keys=[0x1579])                       # 'y'
     ry = my.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
-    yl = lines_of(ry)
+    yl = _lines_of(ry)
     check(ry.exit == ('exit', 0) and b'Confirmed: Y pressed' in yl and okline(k70, '70.000') in yl,
           '/S 70 %s %r' % (ry.exit, yl))
-    check(clk(my) == pair[k70], '/S 70 left %s, expected %s' % (clk(my), pair[k70]))
+    check(_clk_of(my) == pair[k70], '/S 70 left %s, expected %s' % (_clk_of(my), pair[k70]))
     # /Y: yes to the question without a key (an empty keyboard: a read would not return); the question
     # and "Y (/Y)" still go to stderr, the log says "Confirmed: /Y given"
     ma = c.machine(keys=[])
     ra = ma.run_com(com, '/S 70 /Y', name='MCLK.COM', max_insn=20_000_000)
-    al = lines_of(ra)
+    al = _lines_of(ra)
     check(ra.exit == ('exit', 0) and b'Confirmed: /Y given' in al and okline(k70, '70.000') in al and
           b'Y (/Y)' in bytes(ra.stderr) and bytes(ra.stderr).count(b'Press Y') == 1,
           '/S 70 /Y %s %r %r' % (ra.exit, al, bytes(ra.stderr)[-200:]))
-    check(clk(ma) == pair[k70], '/S 70 /Y left %s, expected %s' % (clk(ma), pair[k70]))
+    check(_clk_of(ma) == pair[k70], '/S 70 /Y left %s, expected %s' % (_clk_of(ma), pair[k70]))
 
+
+def _mclk_precise(c: Ctx, com: bytes, table: list[int]) -> None:
+    """t_mclk /P: each step is the first PLL pair (pll.inc, rising order) at least 0.1 MHz above the one
+    before, so pairs closer than that are skipped; the highest of the three recommends none."""
+    mp = c.machine(keys=[0x1579])
+    postp = _clk_of(mp)
+    prec = mp.run_com(com, '/T /P /I 74.5', name='MCLK.COM', max_insn=6_000_000_000)
+    pbody = bytes(prec.stdout).replace(b'\r\n', b'\n')
+    check(prec.exit == ('exit', 0), 'MCLK /P exit %s\n%s' % (prec.exit, pbody.decode('latin1', 'replace')[:800]))
+    plines = [ln for ln in pbody.split(b'\n') if ln]
+    pstart = next((ln for ln in plines if ln.startswith(b'Start ')), b'')
+    check(b', step 0.100 MHz or more (/P), cap ' in pstart, 'precise start line %r' % pstart)
+    ptested = [round(_mhz_of(ln[len(b'STEP '):]) * 1000) for ln in plines if ln.startswith(b'STEP ') and ln.endswith(b'testing')]
+    cap = round(float(pstart.split(b'cap ')[1].split()[0]) * 1000)
+    want = [max(k for k in table if k <= 74500)]
+    while True:
+        nxt = [k for k in table if k >= want[-1] + 100]
+        if not nxt or nxt[0] > cap:
+            break
+        want.append(nxt[0])
+    check(ptested == want, 'precise steps %r, expected %r' % (ptested, want))
+    phigh = next(ln for ln in plines if ln.startswith(b'Highest '))
+    ppub = next(ln for ln in plines if ln.startswith(b'Recommended max '))
+    check(ppub.startswith(b'Recommended max none'), 'precise recommended %r (highest %r)' % (ppub, phigh))
+    check(_clk_of(mp) == postp, 'precise left the clock at %s, POST was %s' % (_clk_of(mp), postp))
+
+
+def _mclk_sweep(c: Ctx, com: bytes, table: list[int]) -> str:
+    """t_mclk: /T - refused above the cap without asking, declined on any key but Y (no write), one step
+    under the cap recommends none, /P steps by PLL pair, and three steps recommend the highest pass at
+    least 1 % below the highest. Returns the recommendation."""
     m = c.machine()
-    before = (m.r['seq'].get(0x10), m.r['seq'].get(0x11))
+    before = _clk_of(m)
     over = m.run_com(com, '/T /I 90', name='MCLK.COM', max_insn=20_000_000)
     check(over.exit == ('exit', 1), 'MCLK /T /I 90 exit %s stdout %r' % (over.exit, bytes(over.stdout)[:500]))
     text = bytes(over.stdout).replace(b'\r\n', b'\n')
     check(b'Chip:' in text and b'Memory:' in text, 'report missing in %r' % text[:400])
     check(b'above the cap' in text, 'cap refusal missing in %r' % text[:800])
     check(b'STEP ' not in text, 'a step ran above the cap: %r' % text[:800])
-    check((m.r['seq'].get(0x10), m.r['seq'].get(0x11)) == before,
-          'SR10/SR11 changed on refusal: %s was %s' % ((m.r['seq'].get(0x10), m.r['seq'].get(0x11)), before))
+    check(_clk_of(m) == before, 'SR10/SR11 changed on refusal: %s was %s' % (_clk_of(m), before))
     check(b'Press Y' not in bytes(over.stderr), 'asked before a refusal: %r' % bytes(over.stderr)[:400])
 
     # Any key but Y: the question on stderr, a "Not confirmed" line, no step, no PLL or SR15 write.
     mn = c.machine(keys=[0x316E])                       # 'n'
-    beforen = pll(mn)
+    beforen = _pll_of(mn)
     no = mn.run_com(com, '/T /I 60', name='MCLK.COM', max_insn=20_000_000)
     ntext = bytes(no.stdout).replace(b'\r\n', b'\n')
     check(no.exit == ('exit', 1), 'MCLK declined exit %s\n%s' % (no.exit, ntext.decode('latin1', 'replace')[:800]))
@@ -2754,14 +2961,14 @@ def t_mclk(c):
     check(b'Press Y' not in ntext, 'question in the log: %r' % ntext[:800])
     check(b'Not confirmed' in ntext and b'STEP ' not in ntext and b'Restored ' not in ntext,
           'declined run %r' % ntext[:800])
-    check(pll(mn) == beforen, 'SR08/SR10/SR11/SR15 after a declined run %s, before %s' % (pll(mn), beforen))
+    check(_pll_of(mn) == beforen, 'SR08/SR10/SR11/SR15 after a declined run %s, before %s' % (_pll_of(mn), beforen))
 
     # One step, just under a 60 MHz datasheet cap of 75 MHz. The UV+ book is 66.67 MHz,
     # so the same request keeps stepping and is not this test.
     if Machine.chip == 'uvplus':
         raise Skip('Trio64UV+ cap is 83.333 MHz; /T /I 74.9 is not a single step')
     m2 = c.machine(keys=[0x1579])                       # 'y'
-    post = (m2.r['seq'].get(0x10), m2.r['seq'].get(0x11))
+    post = _clk_of(m2)
     one = m2.run_com(com, '/T /I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
     body = bytes(one.stdout).replace(b'\r\n', b'\n')
     check(one.exit == ('exit', 0), 'MCLK /T /I 74.9 exit %s\n%s' % (one.exit, body.decode('latin1', 'replace')[:1500]))
@@ -2778,43 +2985,15 @@ def t_mclk(c):
     high = next((ln for ln in lines if ln.startswith(b'Highest ')), b'')
     pub = next((ln for ln in lines if ln.startswith(b'Recommended max ')), b'')
 
-    def mhz_of(line):
-        return float(line.split(b' MHz')[0].split()[-1])
-
     # One pass has no tested step 1 % below it: no value rather than an untested clock.
     check(high and pub.startswith(b'Recommended max none'), 'one pass, recommended %r (highest %r)' % (pub, high))
     check(not any(ln.startswith(b'To use it') for ln in lines), 'a /S hint without a recommendation: %r' % lines)
     rest = next((ln for ln in lines if ln.startswith(b'Restored ')), b'')
     check(('SR10=%02X' % post[0]).encode() in rest and ('SR11=%02X' % post[1]).encode() in rest,
           'restored %r, POST SR10/SR11 %02X %02X' % (rest, post[0], post[1]))
-    check((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)) == post,
-          'clock left at %s, POST was %s' % ((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)), post))
+    check(_clk_of(m2) == post, 'clock left at %s, POST was %s' % (_clk_of(m2), post))
 
-    # /P: each step is the first PLL pair (src/tools/mclk/pll.inc, rising order) at least 0.1 MHz
-    # above the one before, so pairs closer than that are skipped (from 74.453: 74.572, then 74.771,
-    # not 74.658). The highest of the three has no tested pass 1 % below it: "none".
-    mp = c.machine(keys=[0x1579])
-    postp = (mp.r['seq'].get(0x10), mp.r['seq'].get(0x11))
-    prec = mp.run_com(com, '/T /P /I 74.5', name='MCLK.COM', max_insn=6_000_000_000)
-    pbody = bytes(prec.stdout).replace(b'\r\n', b'\n')
-    check(prec.exit == ('exit', 0), 'MCLK /P exit %s\n%s' % (prec.exit, pbody.decode('latin1', 'replace')[:800]))
-    plines = [ln for ln in pbody.split(b'\n') if ln]
-    pstart = next((ln for ln in plines if ln.startswith(b'Start ')), b'')
-    check(b', step 0.100 MHz or more (/P), cap ' in pstart, 'precise start line %r' % pstart)
-    ptested = [round(mhz_of(ln[len(b'STEP '):]) * 1000) for ln in plines if ln.startswith(b'STEP ') and ln.endswith(b'testing')]
-    cap = round(float(pstart.split(b'cap ')[1].split()[0]) * 1000)
-    want = [max(k for k in table if k <= 74500)]
-    while True:
-        nxt = [k for k in table if k >= want[-1] + 100]
-        if not nxt or nxt[0] > cap:
-            break
-        want.append(nxt[0])
-    check(ptested == want, 'precise steps %r, expected %r' % (ptested, want))
-    phigh = next(ln for ln in plines if ln.startswith(b'Highest '))
-    ppub = next(ln for ln in plines if ln.startswith(b'Recommended max '))
-    check(ppub.startswith(b'Recommended max none'), 'precise recommended %r (highest %r)' % (ppub, phigh))
-    check((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)) == postp,
-          'precise left the clock at %s, POST was %s' % ((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)), postp))
+    _mclk_precise(c, com, table)
 
     # Three 0.5 MHz steps under the 75 MHz cap: the recommendation is a step that passed, at least
     # 1 % below the highest pass (kHz x 100 <= highest x 99), and the highest such step.
@@ -2827,7 +3006,7 @@ def t_mclk(c):
     shigh = next((ln for ln in slines if ln.startswith(b'Highest ')), b'')
     srec = next((ln for ln in slines if ln.startswith(b'Recommended max ')), b'')
     check(len(passed) >= 3, 'expected at least three passing steps, got %r' % passed)
-    khz = lambda t: round(mhz_of(t) * 1000)
+    khz = lambda t: round(_mhz_of(t) * 1000)
     rec = srec[len(b'Recommended max '):]
     check(rec in passed, 'recommended %r is not a tested passing step %r' % (srec, passed))
     check(khz(rec) * 100 <= khz(shigh) * 99, 'recommended %r is less than 1 %% under %r' % (srec, shigh))
@@ -2837,6 +3016,18 @@ def t_mclk(c):
     check(use == b'To use it: MCLK /S ' + rec.split(b' MHz')[0], 'the /S hint %r for %r' % (use, srec))
     c.save('MCLK', sw)
     return 'recommended %s' % rec.split(b' SR10')[0].decode('latin1')
+
+
+def t_mclk(c: Ctx) -> str | None:
+    """MCLK without a switch reports the chip, the memory, the memory clock and the datasheet range and
+    changes nothing; /S sets a clock (asking for Y above the datasheet maximum); /T asks once for Y
+    before the first PLL write (any other key: no write, exit 1), tests steps and puts the POST clock back."""
+    com = c.tool('MCLK.COM')
+    _mclk_help_args(c, com)
+    table, pair = _mclk_table()
+    beforei = _mclk_report(c, com)
+    _mclk_set(c, com, table, pair, beforei)
+    return _mclk_sweep(c, com, table)
 
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
@@ -2896,7 +3087,7 @@ T64_BASE = {
 }
 
 
-def base_only(c, name, msg):
+def base_only(c: Ctx, name: str, msg: str) -> int:
     """The number of failure lines when every one is a known failure of the base BIOS of our Trio64V+ or
     Trio64 ROM (VPLUS_BASE, T64_BASE), else 0."""
     lines = [l.strip() for l in msg.split('\n')[1:] if l.strip()]
@@ -2910,7 +3101,7 @@ def base_only(c, name, msg):
 STOCK = False
 
 
-def run_test(c, name, fn, verbose):
+def run_test(c: Ctx, name: str, fn: Callable[[Ctx], str | None], verbose: bool) -> tuple[str, bool, float]:
     """One test: returns (result text, failed, seconds)."""
     t0 = time.time()
     bad = False
@@ -2935,14 +3126,14 @@ def run_test(c, name, fn, verbose):
     return res, bad, time.time() - t0
 
 
-def _worker(args):
+def _worker(args: tuple[Ctx, str, bool]) -> tuple[str, str, bool, float, int]:
     c, name, verbose = args
     print('%-14s started' % name, flush=True)
     res, bad, dt = run_test(c, name, dict(TESTS)[name], verbose)
     return name, res, bad, dt, Machine.noop_hits
 
 
-def run_parallel(c, tests, a):
+def run_parallel(c: Ctx, tests: list, a: argparse.Namespace) -> int:
     """Run the tests in a.j processes (fork: the Machine settings are inherited), the long ones
     first; prints each result when it is done. Returns the number of failed tests."""
     import multiprocessing
@@ -2963,7 +3154,8 @@ def run_parallel(c, tests, a):
     return failed
 
 
-def main():
+def _main_args() -> argparse.Namespace:
+    """The command line; sets Machine.vram/chip/cr2f and checks the chip's memory limit."""
     global NASM
     ap = argparse.ArgumentParser(description='emulator tests for the Trio64V2 VBIOS tools')
     ap.add_argument('--rom', required=True, help='64 KB VBIOS image')
@@ -3020,8 +3212,14 @@ def main():
     if a.list:
         for n, _ in TESTS:
             print('%-15s %s' % (n, TAGS[n]))
-        return
+        return a
     Machine.call_limit = a.call_limit
+    NASM = os.path.abspath(a.nasm) if os.sep in a.nasm or '/' in a.nasm else a.nasm
+    return a
+
+
+def _main_hooks(a: argparse.Namespace) -> tuple[dict, list[str], list]:
+    """Install the --profile/--calls/--noop/--coverage hooks on Machine. Returns (prof, cur, covs)."""
     prof, cur = {}, ['']
     if a.profile:
         init0 = Machine.__init__
@@ -3044,16 +3242,18 @@ def main():
             init(self, *args, **kw)
             covs.append(self.track_coverage())
         Machine.__init__ = init_cov
-    NASM = os.path.abspath(a.nasm) if os.sep in a.nasm or '/' in a.nasm else a.nasm
-    c = Ctx(a.rom, a.build, a.v, a.logs)
-    failed = 0
+    return prof, cur, covs
+
+
+def _main_select(a: argparse.Namespace, c: Ctx) -> list:
+    """The tests to run, after -k/-t/--tests/--skip, and the not-our-ROM note. Sets STOCK."""
+    global STOCK
     tests = TESTS
     if a.tests:
         byname = dict(TESTS)
         tests = [(t, byname[t]) for t in a.tests.split(',')]
     tests = [(n, f) for n, f in tests if a.k in n and (not a.t or set(a.t.split(',')) & set(TAGS[n].split()))
              and n not in a.skip.split(',')]
-    global STOCK
     STOCK = a.stock
     if not c.ours and STOCK:
         print('--stock: the tests tagged patch run although the ROM is not our Trio64V2 build; failures where '
@@ -3063,11 +3263,12 @@ def main():
               + (' unless tagged 765 (our Trio64V+ ROM 1.03-08N-pN)' if c.vours else
                  ' unless tagged 764 (our Trio64 ROM 1.5-07-pN)' if c.tours else '')
               + ' (--stock runs them)')
+    return tests
 
-    if a.j > 1 and not (a.coverage or a.profile or a.calls):
-        failed = run_parallel(c, tests, a)
-        print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
-        sys.exit(1 if failed else 0)
+
+def _main_run_serial(c: Ctx, tests: list, a: argparse.Namespace, prof: dict, cur: list[str]) -> int:
+    """Run the tests one after another, printing each result. Returns the number of failed tests."""
+    failed = 0
     for name, fn in tests:
         if a.x and failed:
             break
@@ -3079,11 +3280,15 @@ def main():
         failed += bad
         first, _, rest = res.partition('\n')
         print('%-60s %5.0fs' % (first, dt) + ('\n' + rest if rest else ''), flush=True)
-    print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+    return failed
+
+
+def _main_outputs(a: argparse.Namespace, prof: dict, covs: list) -> None:
+    """Write the --calls, --profile and --coverage files, and print the noop hit count."""
     if a.calls:
         with open(a.calls, 'w') as f:
-            for ax, bx, dl in sorted(Machine.calls):
-                f.write('%04X %04X %02X\n' % (ax, bx, dl))
+            n = sum(f.write('%04X %04X %02X\n' % (ax, bx, dl)) for ax, bx, dl in sorted(Machine.calls))
+        check(n > 0, 'no INT 10h calls recorded for %s' % a.calls)
     if a.noop:
         print('noop: %d INT 10h calls matched %s' % (Machine.noop_hits, a.noop))
     if a.profile:
@@ -3107,16 +3312,34 @@ def main():
                     i += 1
             out[name] = {'calls': sorted(d['calls']), 'rom': runs}
         with open(a.profile, 'w') as f:
-            json.dump(out, f)
+            if f.write(json.dumps(out)) < 0:
+                raise OSError('%s: write failed' % a.profile)
     if a.coverage:
         code, data = bytearray(0x8000), bytearray(0x8000)
         for cc, dd in covs:
             for i in range(0x8000):
                 code[i] |= cc[i]
                 data[i] |= dd[i]
-        open(a.coverage, 'wb').write(bytes(code) + bytes(data))
+        with open(a.coverage, 'wb') as f:
+            if f.write(bytes(code) + bytes(data)) != 0x10000:
+                raise OSError('%s: short write' % a.coverage)
         print('coverage of %d machines in %s: %d bytes executed, %d read as data'
               % (len(covs), a.coverage, sum(code), sum(data)))
+
+
+def main() -> int:
+    a = _main_args()
+    if a.list:
+        return 0
+    prof, cur, covs = _main_hooks(a)
+    c = Ctx(a.rom, a.build, a.v, a.logs)
+    tests = _main_select(a, c)
+    if a.j > 1 and not (a.coverage or a.profile or a.calls):
+        failed = run_parallel(c, tests, a)
+    else:
+        failed = _main_run_serial(c, tests, a, prof, cur)
+    print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
+    _main_outputs(a, prof, covs)
     sys.exit(1 if failed else 0)
 
 
