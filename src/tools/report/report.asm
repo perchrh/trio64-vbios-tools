@@ -11,7 +11,10 @@
 ;   It creates the archive under the final name with AX=716Ch (Ralf Brown: DX=0012h is bit 4
 ;   create plus bit 1 truncate), so the file is born as runall-<part>.zip. If that call is
 ;   refused, AH=3Ch creates the 8.3 name <part>.ZIP instead (86C775.ZIP; 86C362/86C368 becomes
-;   86C362.ZIP, the text before the slash). With no part, the name is RUNALL.ZIP. A slash in the
+;   86C362.ZIP, the text before the slash). An existing file of either name is deleted first.
+;   After the archive is written, a zero-length write at the new end truncates the file, so a
+;   create that left the old bytes in place cannot keep a previous end record past the new one.
+;   With no part, the name is RUNALL.ZIP. A slash in the
 ;   part becomes a hyphen, and the long name is lower case. After the archive is written, a
 ;   leftover runall.zip and the other form of this part's name are deleted. Carry is set before
 ;   every AH=71h call so an unsupported call returns carry set (RBIL AH=71h: otherwise a DOS
@@ -115,6 +118,7 @@ start:  cld
         jmp fail
 .cd:    call wrcent
         jc failmsg
+        call zipcut                     ; drop any bytes past the archive just written
         call commit
         call zipclose
         call dropold
@@ -201,9 +205,14 @@ plainname:
 openzip:
         cmp byte [named],1
         jne .sfn
+        mov dx,lfnname
+        call delany
+        mov dx,sfnname
+        call delany
         call trylong
         jnc .ok
 .sfn:   mov dx,sfnname
+        call delany
         xor cx,cx
         mov ah,0x3C
         int 0x21
@@ -588,6 +597,17 @@ wreocd: mov ax,ds
         mov dx,hdr
         call zipwr
         ret
+
+; Seek to the bytes written and write CX=0. DOS sets the file length to the file pointer,
+; so an old longer archive cannot keep its end record. CF from the write.
+zipcut: mov eax,[zippos]
+        call zipseek
+        jc .r
+        mov bx,[ziph]
+        xor cx,cx
+        mov ah,0x40
+        int 0x21
+.r:     ret
 
 ; Commit and flush before we say the archive exists (same idea as VGALOG /D, #158).
 commit: mov bx,[ziph]
