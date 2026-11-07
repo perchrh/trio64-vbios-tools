@@ -5,13 +5,16 @@
 ;            Trio64V2/DX/GX; device 8814h the Trio64UV+ (Trio64UV+ datasheet section 4.1: CR2E = 14h);
 ;            device 8811h is the Trio32 or Trio64 (Trio32/Trio64 datasheet: hardwired to 8811 for
 ;            both; CR2E = 10h Trio32, 11h Trio64) or, with revision bit 6 set (4xh), the Trio64V+
-;            (Trio64V+ datasheet: CR2E = 11h, CR2F = 4xh). CR2E is read with the S3 registers
-;            unlocked (CR38 = 48h) and CR38 put back. docs/chip-rules.md T64-ID-1, VP-ID-1, UV-ID-1,
-;            V2-ID-1.
+;            (Trio64V+ datasheet: CR2E = 11h, CR2F = 4xh; same rule Velocity9x uses to name
+;            86C765 vs 86C764 on that device id). CR2E is read with the S3 registers unlocked
+;            (CR38 = 48h) and CR38 put back. docs/chip-rules.md T64-ID-1, VP-ID-1, UV-ID-1, V2-ID-1.
 ;            Out: CF=1 when none of them is found ([chip] = CHIP_NONE); else CF=0 and [chip] = CHIP_*,
 ;            [chipbx] = the PCI bus/device/function (BX of the PCI BIOS), [chipdev], [chiprev] and the
 ;            limits below. Keeps every register except flags.
-; chipname   DX -> the '$' string with the chip's name ([chip])
+; chipname   DX -> the '$' string with the chip's market name ([chip])
+; chippart   DX -> the '$' string with the S3 part number for [chip] (README "Chip codes"): 86C732,
+;            86C764X (PCI cannot tell the earlier 86C764-P), 86C765, 86C775/86C785, 86C767. Same
+;            PCI-revision split Velocity9x uses for Adapter= on 8811h (bit 6 set -> 86C765).
 ;
 ; Limits per chip (kHz), rule IDs from docs/chip-rules.md:
 ;   [vcomin]   DCLK PLL VCO minimum below which a VCO in the datasheet range is a WARN: 135 MHz on every
@@ -139,14 +142,29 @@ chipname:
         pop bx
         ret
 
+chippart:
+        push bx
+        movzx bx,byte [chip]
+        shl bx,1
+        mov dx,[chipparts+bx]
+        pop bx
+        ret
+
 chipdevs    dw 0x8901, 0x8811, 0x8814, 0
 chipnames   dw s_chipnone, s_chipt32, s_chipt64, s_chipt64vp, s_chipt64v2, s_chipt64uvp
+chipparts   dw s_partnone, s_part732, s_part764x, s_part765, s_part775, s_part767
 s_chipnone  db 'no Trio64-family chip found$'
 s_chipt32   db 'Trio32$'
 s_chipt64   db 'Trio64$'
 s_chipt64vp db 'Trio64V+$'
 s_chipt64v2 db 'Trio64V2/DX/GX$'
 s_chipt64uvp db 'Trio64UV+$'
+s_partnone  db '$'
+s_part732   db '86C732$'
+s_part764x  db '86C764X$'                  ; PCI 8811 with rev bit 6 clear; 86C764-P is the same ID
+s_part765   db '86C765$'                  ; PCI 8811 with rev bit 6 set (VP-ID-1)
+s_part775   db '86C775/86C785$'           ; PCI 8901; CR6F bit 0 would split DX/GX, not read here
+s_part767   db '86C767$'
 
 ; vcomin, vcomax, dsingle, ddouble, dpack24, d32 (dd, kHz), r3bit (db), vcodsmin, mvcomax, dstream,
 ; mclkmax (dd, kHz): one row per chip, CHIP_T32 first

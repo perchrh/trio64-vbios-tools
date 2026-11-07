@@ -43,7 +43,8 @@
 ; Run order and expected outcome on the p9 ROM (219 pass, 0 fail, 4 warn on p8 before the 350-line
 ; and palette additions; the four warnings are known stock items)
 ;   1. ROM version string                      INFO
-;      Chip ID (CR2D-CR30, PCI revision)        INFO (89 01 06 E1, PCI 06 on the test card)
+;      Chip ID (CR2D-CR30, PCI, S3 part)        INFO (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX/GX
+;                                                   86C775/86C785 on the test card)
 ;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-270 MHz, 1-cycle EDO
 ;      limit 60 MHz)
 ;      SR1A bit 4 set at POST (Trio64V2 only)   PASS
@@ -222,6 +223,9 @@ start:  cld
         PS 'Chip: '
         call chipname
         call psd
+        PS ' '
+        call chippart                   ; S3 part number (86C764X, 86C765, ...)
+        call psd
         PS 13,10
         PS 'Category column: MDA CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
@@ -337,8 +341,9 @@ bios_id:
 
 ; INFO: chip identification, so a log shows which stepping produced it. CR2D/CR2E = device ID (89h 01h
 ; on the 86C775/785), CR2F = revision ID ("varies with stepping", Trio64V2 datasheet section 4.1),
-; CR30 = chip ID (E1h), then the PCI revision ID (configuration byte 08h) of device 5333:8901, which
-; should equal CR2F. The test card reads 89 01 06 E1 and PCI 06. No pass or fail.
+; CR30 = chip ID (E1h), then the PCI device and revision from chipfind and the S3 part number from
+; chippart (same PCI / 8811 revision bit-6 split as Velocity9x). The test card reads 89 01 06 E1,
+; PCI 8901 rev 06 Trio64V2/DX/GX 86C775/86C785. No pass or fail.
 chip_id:
         TB C_S3,'Chip ID CR2D 2E 2F 30, PCI rev ...... '
         call unlock
@@ -363,6 +368,9 @@ chip_id:
         call phex2
         call sp1
         call chipname
+        call psd
+        PS ' '
+        call chippart
         call psd
         jmp .e
 .np:    PS 'n/a'

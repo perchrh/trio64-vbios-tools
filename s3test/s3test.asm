@@ -49,9 +49,12 @@
 ;                    "2.04.07-p21") on a Trio64V2, VER765 ("1.03-08N-p4") on a Trio64V+, VER764
 ;                    ("1.5-07-p2") on a Trio64; the version found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
-;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID and the
-;                    chip they name (common/chip.inc), so the log shows the stepping (89 01 06 E1,
-;                    PCI 8901 rev 06 Trio64V2/DX/GX on the test card)
+;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID, the
+;                    market name and the S3 part number (common/chip.inc chipfind/chippart: the same
+;                    PCI device and 8811 revision bit-6 split Velocity9x uses), so the log shows the
+;                    stepping (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX/GX 86C775/86C785 on the test
+;                    card; 8811 rev 40h -> Trio64V+ 86C765; 8811 rev 00h with CR2E 11h -> Trio64
+;                    86C764X)
 ;   MCLK             SR10/SR11 after POST: a valid PLL setting (M, N at least 1, SR10 bit 7 clear, VCO
 ;                    135-270 MHz) at or below the maximum for the chip (the data book's; 70 MHz on the Trio64,
 ;                    T64-MEM-7) and the strapped memory
@@ -421,9 +424,10 @@ t_rom:  mov dx,s_sig
         ret
 
 ; ---------------- chip identification (INFO) ----------------
-; CR2D/CR2E = device ID (89h 01h), CR2F = revision ID (varies with stepping, datasheet section 4.1),
-; CR30 = chip ID (E1h), then the PCI revision ID (configuration byte 08h) of device 5333:8901, which
-; should equal CR2F. Prints one line ending in INFO; it is not a test and not counted.
+; CR2D/CR2E = device ID (89h 01h on the V2), CR2F = revision ID (varies with stepping, datasheet
+; section 4.1; equals PCI configuration byte 08h), CR30 = chip ID (E1h), then the PCI device and
+; revision from chipfind and the S3 part number from chippart (86C732 / 86C764X / 86C765 /
+; 86C775/86C785 / 86C767). Prints one line ending in INFO; it is not a test and not counted.
 t_chip: call unlock
         mov dx,s_chip
         call puts
@@ -450,6 +454,9 @@ t_chip: call unlock
         call phex2
         call sp1
         call chipname
+        call puts
+        call sp1
+        call chippart                   ; S3 part number from the PCI id (and 8811 rev bit 6)
         call puts
         jmp .e
 .np:    mov dx,s_na
