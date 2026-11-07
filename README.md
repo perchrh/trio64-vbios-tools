@@ -35,8 +35,8 @@ What the three ROMs make faster than their reference BIOSes, on every chip:
   scrolls and AH=09h: half the store operations or fewer (mode set 03h: 9368 writes instead of 20632 on
   the Trio64V2; per-call counts in `docs/765-rom.md`).
 - **Fast 4F05 set window** ([#59](https://github.com/perchrh/trio64-vbios-tools/issues/59)) at the INT 10h entry: 6 port writes instead of 10 to 13.
-- **Memory clock** ([#58](https://github.com/perchrh/trio64-vbios-tools/issues/58), [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112)): 59.96 MHz on the Trio64V2 instead of 50.11 MHz; on every ROM a build option for the
-  card's memory (`make roms`, "MCLK build option").
+- **Memory clock** ([#58](https://github.com/perchrh/trio64-vbios-tools/issues/58), [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112)): 59.96 MHz on the Trio64V2 instead of 50.11 MHz (the clock of 2.04.07 and of the test card's stock
+  2.04.11); on every ROM a build option for the card's memory (`make roms`, "MCLK build option").
 
 VIDSPEED in plain DOS on the Trio64V2 card (80486, 31 October 2026), once with the card's stock BIOS
 2.04.11 and once with 2.04.07-p21. p22 changed only the DDC delay and where the booster keeps
@@ -517,7 +517,7 @@ gives 55.04 MHz, 60 gives 59.96 MHz).
 
 | Chip, ROM | MEMTYPE | Entry | Default | Data book maximum |
 | --- | --- | --- | --- | --- |
-| Trio64V2, 2.04.07-p24 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07: 50.11) | 60 MHz (V2-MEM-1) |
+| Trio64V2, 2.04.07-p24 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07 and the card's stock 2.04.11: 50.11) | 60 MHz (V2-MEM-1) |
 | | fpm (fast page and 2-cycle EDO) | C9h | 59.96 MHz | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
 | | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
 | Trio64V+, 1.03-08N-p5 | edo1 | A8h | 50.11 MHz (1.03-08: 52.79) | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
