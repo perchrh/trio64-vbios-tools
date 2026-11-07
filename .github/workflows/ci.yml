@@ -17,8 +17,8 @@
 # trio64-tools-<VERSION>.zip with trio64/tools/ in it, no ROM). The tests run as parallel jobs, one
 # matrix row per chip and memory clock: the slowest and the fastest clock of each chip.
 # Each row tests its image with 2 MB, then runs the tests tagged `vram` (the ones whose result depends on
-# the memory size) with 4 MB and with 1 MB (the Trio64 rows with 1 MB only: no Trio64 card was built with
-# 4 MB). On the Trio64V2 the longest
+# the memory size) with 4 MB and with 1 MB; the Trio64 rows (764X, 764P) with 1 MB only, as no Trio64
+# card was built with 4 MB (the emulator still takes --vram 4 on the Trio64 model, for a run by hand). On the Trio64V2 the longest
 # test, s3compat_full, has rows of its own: 2 MB on the 50 MHz image, 4 MB on the 60 MHz one. Every job
 # builds NASM 3.02 from its release source (cached) and the tools with `make tools`. The first row of each
 # chip also runs the patcher tests, which build the default ROM (without MCLK) and check it against the

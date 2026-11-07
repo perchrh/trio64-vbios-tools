@@ -3,8 +3,8 @@
 
     python3 emu/similarity.py CANDIDATE.BIN [--min 32] [--ref FILE ...] [--fonts S-E ...] [--tables S-E ...]
 
-The clean-room check of docs/clean-room.md ("The process", step 6) and docs/seavgabios-trio64.md
-("Clean-room steps"): a ROM written from the specification must not share long byte runs with the
+The clean-room check of docs/clean-room.md ("The process", step 6) and docs/cleanroom/README.md
+("Checking the clean ROM (on the dirty side)"): a ROM written from the specification must not share long byte runs with the
 BIOSes the dirty side read. The default references are the three in reference/ (Phoenix 1.5-07,
 S3 1.03-08, S3 2.04.07); --ref adds others (and replaces the defaults when given).
 

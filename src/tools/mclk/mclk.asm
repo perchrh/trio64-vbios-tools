@@ -31,7 +31,12 @@
 ;   BIOS programs its own clock again at the next boot. A request below the lowest pair or above
 ;   the cap is refused. A pair above the datasheet maximum is set only after the Y question
 ;   (below). After the write SR10 and SR11 are read back; when they differ the clock found at the
-;   start is put back (exit 1). One result line: "Set: <MHz> SR10=.. SR11=..".
+;   start is put back (exit 1). The run ends with one result line, either
+;     Memory clock set to 57.479 MHz (requested 57.500 MHz, SR10=41 SR11=2E read back): OK
+;   (the pair was written and reads back as written; exit 0), or a line that starts with "ERROR:"
+;   and says why and that the clock was not changed (exit 1): below the lowest pair, above the
+;   cap, the question not answered with Y, no datasheet maximum, or SR10/SR11 read back other
+;   than written (then the clock found at the start is put back).
 ;
 ; /T: test steps
 ;   0.5 MHz steps from the lowest pair up to the cap, or /P for finer steps, or /I to start
@@ -49,7 +54,7 @@
 ;   /T always, and /S above the datasheet maximum, ask once on stderr before the first PLL write:
 ;   it names the clock (/S) or the range (/T) and waits for a key from the BIOS keyboard (INT 16h,
 ;   so a redirected stdin cannot answer it; keys typed before the prompt are dropped). Only Y or y
-;   goes on; any other key ends the run with the PLL untouched, a "Not confirmed" line and exit 1.
+;   goes on; any other key ends the run with the PLL untouched, an "ERROR: Not confirmed" line and exit 1.
 ;   The answer goes into the log. /H, a bad argument, no chip, no datasheet maximum and a request
 ;   out of range end before the question, also without a PLL write.
 ;
@@ -750,12 +755,16 @@ setclk: cmp byte [nobook],1
         mov al,[prv10]
         cmp al,[cur10]
         jne .bad
-        call lbegin                     ; "Set: 57.272 MHz SR10=41 SR11=2E"
-        mov si,s_set
+        call lbegin                     ; "Memory clock set to 57.479 MHz (requested 57.500 MHz,
+        mov si,s_set                    ;  SR10=41 SR11=2E read back): OK"
         call lstr
         mov eax,[curk]
         call pmhz
-        mov si,s_sr
+        mov si,s_setreq
+        call lstr
+        mov eax,[sreq]
+        call pmhz
+        mov si,s_setsr
         call lstr
         mov al,[cur10]
         call phex2
@@ -763,6 +772,8 @@ setclk: cmp byte [nobook],1
         call lstr
         mov al,[cur11]
         call phex2
+        mov si,s_setok
+        call lstr
         call lend
         call lbegin
         mov si,s_set2
@@ -775,8 +786,12 @@ setclk: cmp byte [nobook],1
         mov bh,[post11]
         call loadp
         call settle
-        call lbegin
-        mov si,s_setbad
+        call lbegin                     ; "ERROR: memory clock not set to 57.479 MHz: SR10/SR11
+        mov si,s_setbad                 ;  read back as SR10=.. SR11=..; the clock found ..."
+        call lstr
+        mov eax,[curk]
+        call pmhz
+        mov si,s_setbd1
         call lstr
         mov al,[prv10]
         call phex2
@@ -788,7 +803,9 @@ setclk: cmp byte [nobook],1
         call lstr
         call lend
         jmp .x
-.low:   call lbegin
+.low:   call lbegin                     ; "ERROR: 45.000 MHz is below 50.113 MHz, the lowest ..."
+        mov si,s_err
+        call lstr
         mov eax,[sreq]
         call pmhz
         mov si,s_low
@@ -797,9 +814,13 @@ setclk: cmp byte [nobook],1
         call pmhz
         mov si,s_low2
         call lstr
+        mov si,s_unch
+        call lstr
         call lend
         jmp .x
-.high:  call lbegin
+.high:  call lbegin                     ; "ERROR: 90.000 MHz is above the cap: 75.000 MHz (...)"
+        mov si,s_err
+        call lstr
         mov eax,[sreq]
         call pmhz
         mov si,s_high2
@@ -807,6 +828,8 @@ setclk: cmp byte [nobook],1
         mov eax,[capk]
         call pmhz
         mov si,s_plus
+        call lstr
+        mov si,s_unch
         call lstr
         call lend
 .x:     call relock
@@ -1857,9 +1880,15 @@ s_pub1  db 'none: no tested step 1% or more below the highest (run again with a 
 s_use1  db 'To use it: MCLK /S ',0
 s_none  db 'No step passed',0
 s_rest  db 'Restored ',0
-s_set   db 'Set: ',0
+s_set   db 'Memory clock set to ',0
+s_setreq db ' (requested ',0
+s_setsr db ', SR10=',0
+s_setok db ' read back): OK',0
 s_set2  db 'The BIOS sets its own clock again at the next boot.',0
-s_setbad db 'Not set: SR10/SR11 read back as SR10=',0
+s_err   db 'ERROR: ',0
+s_unch  db '; the clock was not changed',0
+s_setbad db 'ERROR: memory clock not set to ',0
+s_setbd1 db ': SR10/SR11 read back as SR10=',0
 s_setbd2 db '; the clock found at the start was put back',0
 s_low   db ' is below ',0
 s_low2  db ', the lowest clock MCLK sets',0
@@ -1867,7 +1896,7 @@ s_high2 db ' is above the cap: ',0
 s_nomode db 'Mode 101h was not set; the clock was not changed',0
 s_nomem db 'No video memory to test',0
 s_nodata db 'No datasheet MCLK maximum for this chip in MCLK',0
-s_nodat2 db '/S and /T need the datasheet maximum; the clock was not changed',0
+s_nodat2 db 'ERROR: /S and /T need the datasheet maximum; the clock was not changed',0
 s_warn1 db 'MCLK /T changes the memory clock of this card. It programs the MCLK PLL from',13,10,0
 s_warn2 db ' up to ',0
 s_warn3 db ' (the datasheet maximum plus 25 percent).',13,10
@@ -1879,8 +1908,8 @@ s_sw3   db '.',13,10,0
 s_risk  db 'A clock above what the memory takes can corrupt video memory or hang the',13,10
         db 'machine (then reset it). Press Y to continue, any other key to quit: ',0
 s_yes   db 'Confirmed: Y pressed, the clock steps start',0
-s_yes2  db 'Confirmed: Y pressed, the clock is set',0
-s_no    db 'Not confirmed: the clock was not changed',0
+s_yes2  db 'Confirmed: Y pressed',0
+s_no    db 'ERROR: Not confirmed: the clock was not changed',0
 s_4     db '4 MB',0
 s_2     db '2 MB',0
 s_15    db '1.5 MB',0
