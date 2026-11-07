@@ -19,7 +19,9 @@ Tests
                    the patchers read it and S3TEST expects it; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on VER775, the checksum and 32 KB size of the lower
-                   half and the upper 32 KB a copy of it (#78; p15-p21 were built with zeros there) in the file, the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
+                   half and the upper 32 KB a copy of it (#78; p15-p21 were built with zeros there) in the file,
+                   the MCLK after POST (SR11/SR10 = the 1-cycle EDO entry 00C7h; CR88 bit 1 set exactly when
+                   that pair is 28h 41h, 50.11 MHz, the default since p26, on a CR2F revision 6), the mode set clear (bank 0 zeroed, CR6A back to 0, EAX bits 31-16 kept
                    across 4F02), the booster (p18: on after a banked 4F02, real base in CR6D; p16: on
                    after the window function by far call in AH=00 mode 59h; p17: off under Windows
                    enhanced mode, INT 2Fh AX=1600h asked once per mode set), the
@@ -471,6 +473,17 @@ def t_rom_patches(c):
 
     font_tables(m, chk, has14=False)    # p24 (#141): the fonts of src/roms/fonts, in place; no 8x14 in 2.04.07
     rom = c.rom
+    # p26: POST loads the MCLK entry of the strapped memory type (the model straps 1-cycle EDO, CR36 bits
+    # 3-2 = 00: entry 00C7h, SR11 then SR10); the default build has 50.11 MHz (28h 41h) in every entry.
+    # At that pair 2.04.07's POST sets CR88 bit 1 (PD bus delay of 1/2 MCLK) when CR2F bits 3-0 = 6, the
+    # revision of the test card; an MCLK= build with another pair leaves the bit off (p9-p25: 59.96 MHz)
+    sq, pair = m.r['seq'], bytes(rom[0xC7:0xC9])
+    chk((sq.get(0x11), sq.get(0x10)) == (pair[0], pair[1]), 'MCLK after POST: SR11/SR10 = %s/%s, the 1-cycle EDO '
+        'entry 00C7h holds %s' % (sq.get(0x11), sq.get(0x10), pair.hex(' ')))
+    cr88 = bool(m.r['crtc'].get(0x88, 0) & 2)
+    want88 = chip_ids()[2] & 0x0F == 6 and pair == b'\x28\x41'
+    chk(cr88 == want88, 'CR88 bit 1 after POST is %d, expected %d (CR2F %02Xh, MCLK pair %s)'
+        % (cr88, want88, chip_ids()[2], pair.hex(' ')))
     chk(romver().encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
     chk(rom[2] == 0x40, 'ROM header size byte %02X, expected 40h (32 KB)' % rom[2])

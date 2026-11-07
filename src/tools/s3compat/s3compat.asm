@@ -51,7 +51,7 @@
 ;      Chip ID (CR2D-CR30, PCI, S3 part)        INFO (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX
 ;                                                   86C775 on the test card; /GX 86C785 when CR6F
 ;                                                   bit 0 is set)
-;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-270 MHz, 1-cycle EDO
+;   2. POST: MCLK PLL and memory type           PASS (50.11 MHz, VCO in 135-270 MHz, 1-cycle EDO
 ;      limit 60 MHz)
 ;      SR1A bit 4 set at POST (Trio64V2 only)   PASS
 ;      PCI subsystem ID from the ROM (Trio64V2)  PASS (ROM 40h = CR81-84 = PCI 2Ch, CR37 bit 2 = 0)
@@ -7017,7 +7017,8 @@ markchk:                                ; -> EAX, EDX
 
 ; All VRAM through the banks with two patterns (address XOR 5AA5C33Ch, then inverted), written fully
 ; before reading: catches MCLK too fast for the RAM and bank aliasing. Fail bit 1, the error count and
-; the first bad address are printed. Expect 0 errors at 59.96 MHz.
+; the first bad address are printed. Expect 0 errors at the default 50.11 MHz (and at 59.96 MHz on the
+; Trio64V2 test card, p9-p25).
 vram_test:
         TB C_S3,'VRAM all banks, 2 patterns (MCLK)'
         call tdots

@@ -15,7 +15,8 @@ Tests
   free_space     the bytes of the free block 7AE0-7FEF that no code uses are still 00, and 'Cardex1'
                  at 7FF0h is kept
   unchanged      outside the patch sites, the code blocks, the table edits of p2 (the interlaced modes and
-                 refresh entries), the sign-on and the checksum every byte is as in 1.03-08 (the DCLK
+                 refresh entries), the MCLK entries (p6: A6h 50.11 MHz), the sign-on and the checksum
+                 every byte is as in 1.03-08 (the DCLK
                  values among them: no VCO fix on the Trio64V+)
   input_64k      a 64 KB image with 1.03-08 in the lower half gives the same result, whatever its upper
                  half holds
@@ -149,6 +150,7 @@ def main():
         sites.update(range(off, off + len(b.split())))
     sites.update(off + 2 for off in s3vpatch.ILACE_END)
     sites.update(i for off in s3vpatch.HALF_DCLK for i in (off + 3, off + 4))
+    sites.update(i for off, _, _ in s3vpatch.DEFAULT_MCLK for i in (off, off + 1))   # the MCLK entries (p6)
     signon = set(range(0x3F, 0x8F))
     diff = [i for i in range(0x8000) if img[i] != ref[i] and i not in used | sites | signon | {0x7FFF}]
     result('unchanged', not diff, 'changed outside the patches: %s' % ', '.join('%04X' % i for i in diff[:8])

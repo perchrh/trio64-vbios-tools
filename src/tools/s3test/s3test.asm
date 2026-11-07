@@ -68,7 +68,7 @@
 ;                    T64-MEM-7) and the strapped memory
 ;                    type (Trio64V2: 60 MHz 1-cycle EDO, 66.67 MHz the others; Trio32/V+ 60 MHz;
 ;                    UV+ 66.67 MHz). The line shows the kHz and the limit; the default build of our
-;                    Trio64V2 ROM sets 59.96 MHz, a build with MCLK=... another value
+;                    ROMs sets 50.11 MHz (since 2.04.07-p26), a build with MCLK=... another value
 ;   Memory type      INFO, not counted: CR36 bits 3-2 as strapped on the card (the BIOS keeps them;
 ;                    the test card is 1-cycle EDO, 00)
 ;   Pedestal         SR1A bit 5 = 0 (no blank pedestal, deepest black) and bit 4 = 1
@@ -506,7 +506,7 @@ t_chipv:
 ; maximum for the chip and the memory type the card is strapped for (CR36 bits 3-2): [mclkmax] (MEM-1:
 ; 60 MHz on the Trio32 and Trio64V+, 70 MHz on the Trio64 (T64-MEM-7), 66.67 MHz on the Trio64UV+), on the Trio64V2 60 MHz for 1-cycle
 ; EDO and 66.67 MHz for the others (V2-MEM-1). Not a fixed value: the ROM can be built for another
-; MCLK (README "MCLK build option"); the default build sets 59.96 MHz (Trio64V2, 1-cycle EDO).
+; MCLK (README "MCLK build option"); the default build sets 50.11 MHz for every memory type.
 ; Memory type: CR36 bits 3-2, set by the card's strapping and kept by the BIOS; INFO, not counted.
 ; Our Trio64V2 ROM also: SR1A & 30h = 10h (pedestal off), CR41 bits 7-5 = 100b and CR52 bits 2-0 =
 ; 001b (60 Hz defaults).

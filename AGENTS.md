@@ -36,13 +36,14 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   standard mode returns to a program; use standard VESA/VGA timings; keep 70 Hz for 320x200 and
   640x400 text/graphics.
 - The RAM must stay treated as 1-cycle EDO (CR36 bits 3-2 = 00): the ROM never writes those bits, the
-  card's strapping decides. The default build's MCLK is 59.96 MHz, the 1-cycle EDO maximum; do not
-  raise it. Other clocks come only from the build option (`MCLK=`, `MEMTYPE=`), which sets one entry of
+  card's strapping decides. The default build's MCLK is 50.11 MHz in every MCLK entry of all three ROMs
+  (the clock S3's own Trio64V2 and Trio64V+ BIOSes use for 1-cycle EDO; owner's decision, 7 November
+  2026); do not raise it. Other clocks come only from the build option (`MCLK=`, `MEMTYPE=`), which sets one entry of
   the BIOS's MCLK table within the data book limit for that memory type (README "MCLK build option").
   The Trio64 ROM's option takes up to 70 MHz, above the data book's 60 MHz: the 86C764X's rated
   clock (vgamuseum), which DSP-3364P boards run (their own BIOS: 69.8 MHz; at 54.9 MHz windowed video
   streaks there, #75). Our Trio64 ROM is for the 86C764X (Trio64 PnP); the earlier 86C764 (86C764-P,
-  also VL-Bus) likely accepts only 60 MHz (not verified), so builds for it stay at the default or `MCLK=60`. For the Trio64 our tools take 70 MHz as the
+  also VL-Bus) likely accepts only 60 MHz (not verified), so builds for it stay at the default or at most `MCLK=60`. For the Trio64 our tools take 70 MHz as the
   chip's limit (chip.inc, T64-MEM-7):
   S3TEST's and S3COMPAT's MCLK lines and the patcher accept up to 70 MHz without a warning. Above 70 MHz, at most 100 MHz (twice 50 MHz), only as an overclock on request
   (`MCLK=... OVERCLOCK=1`, s3tpatch.py `--overclock`): the card owner's choice, never a default.

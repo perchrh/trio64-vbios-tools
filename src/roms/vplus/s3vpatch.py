@@ -40,15 +40,15 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
          Trio64 build)
-  MCLK   (only with --mclk) the MCLK PLL entry of --memtype, at most 60 MHz; without it the MCLK is as
-         in 1.03-08N (50.11 MHz with 1-cycle EDO, 59.96 MHz with fast page or 2-cycle EDO, picked by the
-         card's strapping)
+  MCLK   50.11 MHz for every memory type (p6): the 1-cycle EDO entry A8h as in 1.03-08N, the fast page
+         and 2-cycle EDO entry A6h lowered from 59.96 MHz to it (DEFAULT_MCLK). With --mclk the entry of
+         --memtype gets that clock instead, at most 60 MHz
   sign-on "1.03-08N-p4", checksum byte 7FFF
 
 Not applied, and why (docs/765-rom.md): the VCO fix (the Trio64V+ post divider R has 2 bits, at
 most divide by 8, so 12.6 MHz for 10Dh-10Fh cannot come from a VCO of 135 MHz or more), the FIFO fix,
 CR23/CR26, the POST delay and the DDC fixes (Trio64V2 registers or code 1.03-08 does not have), the
-VBE 2.0 functions (out of scope), MCLK and the black level (card decisions).
+VBE 2.0 functions (out of scope) and the black level (a card decision).
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the 32 KB sum to 00 and
@@ -72,7 +72,7 @@ REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   #
 # only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = 'd715365c584d4592277d65fd16dcf8a46b801d6b79c95d585bfd4d70e4652b40'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = 'cde0867365326366f257ac188dfa838c6c425fae31c796a1f2d61474ef08dcec'  # 1.03-08N-p5 (NASM 3.02), emulator tests passed
+RESULT_SHA = '84760b52a4504cb5dee2f70ab18471c11df17502471fd614877e969020fb2108'  # 1.03-08N-p6 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -111,6 +111,9 @@ SIG = dict({k: s3patch.SIG[k] for k in SHARED_SIG},
 # 4-6, MEM-1; its feature list names 50 MHz for EDO, which 1.03-08 itself exceeds).
 MCLK_ENTRY = {'edo1': 0x00A8, 'fpm': 0x00A6}
 MCLK_MAX = {'edo1': 60.0, 'fpm': 60.0}
+# The default build: 50.11 MHz (SR11 = 28h, SR10 = 41h) in both entries, the 1-cycle EDO clock of 1.03-08N,
+# whatever the card is strapped for (owner's decision, 7 November 2026; p6). (offset, old, new)
+DEFAULT_MCLK = [(0x00A8, '28 41', '28 41'), (0x00A6, '41 42', '28 41')]
 
 # Code at bios.inc addresses: (symbol, original bytes)
 SYMSIG = [('UNLOCK', '52 50 e8 0b 00 b8 38 48 ef b8 39 a5 ef 58 5a c3'),
@@ -278,6 +281,13 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     drop_interlaced(d, put)
     for off, b in HALF_DCLK.items():
         put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR01 bit 3 (p2)')
+    for off, old, new in DEFAULT_MCLK:
+        if old == new:
+            if bytes(d[off:off + 2]) != bytes.fromhex(old):
+                raise PatchError('%04X: expected %s, found %s (MCLK entry)' % (off, old, d[off:off + 2].hex(' ')))
+        else:
+            put(off, old, new, 'MCLK PLL for fast page and 2-cycle EDO: SR11 = 28h, SR10 = 41h (50.11 MHz, as the '
+                '1-cycle EDO entry A8h; 1.03-08N: 59.96 MHz, p6)')
     if mclk is not None:
         mclk_put(d, put, MCLK_ENTRY, memtype, mclk, MCLK_MAX[memtype],
                  known=s3patch.KNOWN_MCLK_8811)    # the pairs Trio32/64/V+ BIOSes use first
@@ -348,7 +358,7 @@ def main():
     ap.add_argument('--size', type=int, choices=(32, 64), default=64,
                     help='output size in KB (default 64: the 32 KB twice; 32 for a 32 KB EEPROM)')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype, at most 60 '
-                    '(default: as 1.03-08N, 50.11 for 1-cycle EDO, 59.96 for fast page/2-cycle EDO)')
+                    '(default: 50.11 for every memory type, as the default build)')
     ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',
                     help='the MCLK entry --mclk sets: edo1 (1-cycle EDO) or fpm (fast page and 2-cycle EDO)')
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')
