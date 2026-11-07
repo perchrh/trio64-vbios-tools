@@ -87,11 +87,20 @@ Per file and review, add a section to the "Leak review" part of [`docs/cleanroom
 Remove a `[Leak review: ...]` note when its sentence is decided: rewritten, cut, or kept with the
 reason recorded. A file crosses only when every finding is decided and nothing is returned.
 
-## Handover to the reviewer (2 November 2026)
+## Handover to the reviewer (7 November 2026)
 
 Prepared by the dirty side (the author of the files under review); the review itself, steps 1-6 above,
 is the reviewer's. Review the files as they are on `main` at the commit you start from, and name that
-commit in the record.
+commit in the record (`e224454` when this handover was written).
+
+This is the second pass. The independent review of 2 November 2026, at commit
+`cbbc2ce629f22c5ffa9b4cfeb60200df8fc1396d`, returned every file and cleared no rule ID
+([`README.md`](README.md) "Authorized independent review - 2026-11-02"). Since then the dirty side has
+rewritten the returned places, and the owner has decided several returns
+([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md)). This pass reads the files under review in
+full again, as they now stand, and says for each return in that record whether it is settled. A rule ID
+crosses only when this pass clears it; the keep, rewrite and cut decisions of 2 November are not
+clearance.
 
 ### Scope of this review
 
@@ -119,47 +128,70 @@ clean side's copy; the record names the rule IDs that crossed. [`freedos-1.4.md`
 
 | File | Crosses as | Notes |
 | --- | --- | --- |
-| [`spec-a-post.md`](spec-a-post.md) | specification | first full review |
-| [`spec-b-modeset.md`](spec-b-modeset.md) | specification | first full review; the 25.175 MHz PLL pair (step 3) |
-| [`spec-c-vbe.md`](spec-c-vbe.md) | specification | first full review; 4F14h and the S3 mode numbers (step 5) |
-| [`docs/chip-rules.md`](../chip-rules.md) | the clean side's copy | the four `[Leak review: ...]` sentences (step 5); its section "S3 OEM functions (4F14h)" crosses only through part C |
-| [`docs/bios-rules.md`](../bios-rules.md) | public-source rules | its open-question lists, written while reading another vendor's BIOS source |
-| [`milestone-calls.md`](milestone-calls.md) | requirements | new; only its part "The contract" crosses; "The run" names our ROM and what it answered |
-| [`freedos-1.4.md`](freedos-1.4.md) | requirements | not in this review (milestone 5); not in the first review either. Its section "Our ROMs against these" measures our patched ROMs by level (1.5-07-p3, 1.03-08-p1, 2.04.07-p22): dirty-side material, to cut from the clean side's copy or keep with a reason (step 5) |
-| [`freedos-reports.md`](freedos-reports.md) | defect reports to FreeDOS | not in this review (milestone 5); not in the first review either. About FreeDOS's MORE and MODE; it names S3 BIOSes as a class (4F01h for mode 03h) |
+| [`spec-a-post.md`](spec-a-post.md) | specification | second full review; returned on 2 November; rewritten on 5 November (#168), POST-6 changed on 7 November |
+| [`spec-b-modeset.md`](spec-b-modeset.md) | specification | second review of the VGA return and 101h; MODE-136 (the FIFO M of 101h), MODE-137, MODE-148, MODE-103, MQ-11 and MQ-12 are new since the pin; the 25.175 MHz PLL pair (step 3) |
+| [`spec-c-vbe.md`](spec-c-vbe.md) | specification | second review of 4F00h, 4F01h (100h, 101h), 4F02h (101h), 4F05h and its far entry, and the general rules; VBE-45 (AH=0Fh after 101h returns 40h) and the CR35 units note are new since the pin; 4F14h and the S3 mode numbers stay out of scope |
+| [`docs/chip-rules.md`](../chip-rules.md) | the clean side's copy | the IDs the parts cite; the four `[Leak review: ...]` notes of the first pass are gone (#168), two new ones at T64-ID-2 and AV-ID-1 (step 5); T64-MEM-7 was returned |
+| [`docs/bios-rules.md`](../bios-rules.md) | public-source rules | the returned rows B00-5, B09-11, B10-1, B11-1, B12-1, B1A-1, B1C-8, TAB-9 and question 17, rewritten on 5 November (#168) |
+| [`milestone-calls.md`](milestone-calls.md) | requirements | only its part "The contract" crosses; since the pin it holds EDIT's calls (milestone 2), the benchmark's bank switching through CR35 and the milestone 2 boot policy (#168), none of them reviewed yet; "The run" names our ROMs and what they answered |
+| [`freedos-1.4.md`](freedos-1.4.md) | requirements | not in this review (milestone 5). Its section "Our ROMs against these" measures our patched ROMs by level (1.5-07-p3, 1.03-08-p1, 2.04.07-p22): dirty-side material, to cut from the clean side's copy or keep with a reason (step 5) |
+| [`freedos-reports.md`](freedos-reports.md) | defect reports to FreeDOS | not in this review (milestone 5). About FreeDOS's MORE and MODE; it names S3 BIOSes as a class (4F01h for mode 03h) |
 
-What changed in these files since the first review (1 November 2026), from `git log`: file references
-became links (20b5502); [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md) are new; in
-[`docs/chip-rules.md`](../chip-rules.md) T64-MEM-8 and T64-MEM-9 were added (the latter carries one of the four notes)
-and the Trio64V2 DCLK VCO range became the data book's 135-340 MHz (c22779d). On 2 November 2026,
-after an outside review ([`review-2026-11-02.md`](review-2026-11-02.md)), MODE-130 of part B (the refresh count per line,
-now derived from the DRAM data sheet), MQ-5 and its worked example, and the 55 MHz example of POST-23
-in part A were corrected: read these three places as new. Later on 2 November 2026 part B's source note
-was changed from DMT rev. 0.7 to rev. 10 (the revision at hand; its timings of this part were checked
-against the specification's table and agree), and MQ-16 (the DMT border of 640x480) was added; the oracle
-file's "DMT has no border" was corrected. On 6 November 2026 [`docs/chip-rules.md`](../chip-rules.md) gained
-VP-SYS-1, VP-MEM-3 to VP-MEM-6, MEM-2, the section "Monitor communication (DDC)" (T64-DDC-1, VP-DDC-1)
-and one datasheet error (MM81EC bit numbers): data book text only, no `[Leak review: ...]` note; what
-the reference BIOSes do with these registers went to [`docs/765-rom.md`](../765-rom.md) and
-[`docs/764-rom.md`](../764-rom.md). On 7 November 2026 T64-ID-2 (the Trio32/Trio64 parts by CR2F) and
-AV-ID-1 (the Aurora64V+ device ID) were added, *derived* from S3's Windows 95 driver 2.41.07, each
-with a `[Leak review: ...]` note; the driver's table itself is in [`docs/764-rom.md`](../764-rom.md)
-"Chip variants by CR2F".
+### What changed since the reviewed commit `cbbc2ce`
+
+From `git log cbbc2ce..main` on the files above (merges left out). Changes before `cbbc2ce` were in front
+of the review of 2 November and are in its record.
+
+- **2 November 2026, after the pin.** [`milestone-calls.md`](milestone-calls.md): EDIT's calls
+  (milestone 2) and the benchmark's bank switching through CR35 (758bffd, e58a7fd, 642472a, 5876edb);
+  [`spec-c-vbe.md`](spec-c-vbe.md): the note on the units of CR35 now says that programs which bank
+  through CR35 themselves need 64 KB units (758bffd).
+- **5 November 2026.** The independent review's returns recorded (ae82d60), then the rewrites (#168,
+  9fb921f) in all six files: parts A, B and C, [`docs/chip-rules.md`](../chip-rules.md) (the four notes
+  cut or rewritten), [`docs/bios-rules.md`](../bios-rules.md) (the returned rows and question 17) and the
+  contract of [`milestone-calls.md`](milestone-calls.md) (Source columns, 100h and AH=0Fh wording). The
+  owner decisions in [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) and the four
+  [`primary-extracts/`](primary-extracts/) came with it.
+- **6 November 2026.** Part B: MODE-136 now fixes M = 31 (CR54 = F8h) with CR60 = FFh for 101h, from the
+  data book's FIFO size and wait (T32/64 7.4, T64-MEM-1, T64-MEM-8); MODE-137 no longer covers 101h,
+  MODE-148 takes the same pair for the VGA modes, the old M formula is marked as not a milestone 1-4
+  rule, and MODE-103, MQ-11 and MQ-12 follow (afdda72, 512df1f). Part C and the contract: AH=0Fh after
+  101h returns AL = 40h, and AH=00h with AL = 40h sets the same banked 101h again (VBE-45, decision Q0F,
+  afdda72). [`docs/chip-rules.md`](../chip-rules.md) gained VP-SYS-1, VP-MEM-3 to VP-MEM-6, MEM-2, the
+  section "Monitor communication (DDC)" (T64-DDC-1, VP-DDC-1) and one datasheet error (MM81EC bit
+  numbers): data book text only (90f30ee); the 4F14h table moved the Hercules Graphite Terminator D2g
+  under the Trio64V+ (7dba4fd).
+- **7 November 2026.** [`docs/chip-rules.md`](../chip-rules.md): T64-ID-2 (the Trio32/Trio64 parts by
+  CR2F) and AV-ID-1 (the Aurora64V+ device ID), *derived* from S3's Windows 95 driver 2.41.07, each with a
+  `[Leak review: ...]` note (b60f46d, 8d8e6e0); the driver's table itself is in
+  [`docs/764-rom.md`](../764-rom.md) "Chip variants by CR2F". VP-ID-1 now rests the Trio64V+ revisions
+  5xh on S3's driver INF (52h-5Fh) besides the card record, with no note (1b7eacb, 4ca7c61). V2-ID-1
+  gained a sentence from the same INF, and T3D-ID-1 and T3D2X-ID-1 are new, from S3 driver INFs too
+  (c20d8fd); none of the three is cited by a part. Part A: POST-6 says the 86C764 and 86C764X are told
+  apart by CR2F (T64-ID-2), which the ROM does not need, and that later Trio64V+ steppings report 5xh
+  (b60f46d, 1b7eacb). File paths in [`docs/chip-rules.md`](../chip-rules.md),
+  [`docs/bios-rules.md`](../bios-rules.md) (TAB-9) and [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md)
+  moved under `src/` (#174, 7729a0e). [`docs/bios-rules.md`](../bios-rules.md): the legend of S3COMPAT's
+  default DAC check (1afbea1), a tool name only.
 
 ### The searches, run by the author as a pre-check (counts of lines, not findings)
 
+Run on 7 November 2026 at `e224454`.
+
 | File | Step 1, names | Step 1, offsets | `[Leak review: ...]` notes |
 | --- | --- | --- | --- |
-| spec-a-post.md | 1 | 14 | 0 |
+| spec-a-post.md | 0 | 13 | 0 |
 | spec-b-modeset.md | 0 | 0 | 0 |
 | spec-c-vbe.md | 5 | 11 | 0 |
-| docs/chip-rules.md | 11 | 3 | 4 |
-| docs/bios-rules.md | 8 | 208 | 0 |
+| docs/chip-rules.md | 7 | 2 | 2 |
+| docs/bios-rules.md | 9 | 197 | 0 |
+| milestone-calls.md | 3 | 7 | 0 |
 
-Known false positives of the offset search: addresses in the BIOS data area (0040:0049h and the like)
-and the far pointers of the IBM tables and the VBE blocks, which the IBM references and VESA define;
-nearly all of bios-rules.md's 208 lines are of this kind. Read them anyway: a ROM offset (C000:xxxx, or
-a four-digit hex address inside the 32 KB image) among them is a finding.
+The milestone-calls.md counts are of the whole file; read only the hits in "The contract" (above the
+heading "The run"). Known false positives of the offset search: addresses in the BIOS data area
+(0040:0049h and the like) and the far pointers of the IBM tables and the VBE blocks, which the IBM
+references and VESA define; nearly all of bios-rules.md's 197 lines are of this kind. Read them anyway:
+a ROM offset (C000:xxxx, or a four-digit hex address inside the 32 KB image) among them is a finding.
 
 ### What the reviewer may read, and what not
 
@@ -172,21 +204,21 @@ say so in the record, and the review is done again by another session.
 | What | Why |
 | --- | --- |
 | The files under review (the table above) | the object of the review |
-| This file, [`docs/clean-room.md`](../clean-room.md), [`README.md`](README.md) of this folder | the process and the rules |
+| This file, [`docs/clean-room.md`](../clean-room.md), [`README.md`](README.md) of this folder | the process, the rules and the record of the first pass |
 | The reference ROMs: [`reference/trio64/1_5_07.bin`](../../reference/trio64/1_5_07.bin), [`reference/64vplus/1_03_08n.bin`](../../reference/64vplus/1_03_08n.bin) (the first review knew it as `1_03_08.bin`), [`reference/v2/2_04_07.bin`](../../reference/v2/2_04_07.bin) | to compare bytes and behaviour with (steps 3 and 6) |
 | The oracle files: [`oracle-a-post.md`](oracle-a-post.md), [`oracle-b-modeset.md`](oracle-b-modeset.md), [`oracle-c-vbe.md`](oracle-c-vbe.md) | what the dirty side observed, to tell observation from copying |
-| [`docs/764-rom.md`](../764-rom.md), [`docs/765-rom.md`](../765-rom.md), [`docs/775-rom.md`](../775-rom.md), except the section "Cross-check with riplin's annotated disassembly" of [`docs/764-rom.md`](../764-rom.md) | measurements of the reference ROMs and the cards |
+| [`docs/764-rom.md`](../764-rom.md), [`docs/765-rom.md`](../765-rom.md), [`docs/775-rom.md`](../775-rom.md), except the section "Cross-check with riplin's annotated disassembly" of [`docs/764-rom.md`](../764-rom.md) | measurements of the reference ROMs and the cards. One sentence of [`docs/764-rom.md`](../764-rom.md) outside that section, on memory sizing, names a routine and its offset from riplin's disassembly; reading it is not a breach, but it is no source for a finding |
 | The emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py) and [`emu/similarity.py`](../../emu/similarity.py) (step 6) to read and run; [`emu/tests.py`](../../emu/tests.py) to run, not to read | to run a reference ROM and observe it; the test file's comments describe our patches from the inside (see below) |
 | The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
 | [`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF) and [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md) | POST-41 and MODE-130 DRAM premises (independent review A-3 / B-1) |
-| [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf) and [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md) | part B 101h timing and border (MQ-16) |
+| [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md), and VESA DMT 1.0 Rev. 10 from its public copy (named in the repository-root README, "VESA standards") | part B 101h timing and border (MQ-16). The PDF was removed from the repository (9963092); the extract's link to `standards/vesa/` no longer resolves |
 | [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | part A ROM header / PCI data structure / INIT (ROM-1..6, POST-1) |
 | [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) and [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md) | part C status / failure, AH=0Fh reinit advice, ModeAttributes D0 |
 | [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) | owner decisions that close Q100, Q0F, MCLK, FIFO, POST-41, ROM-8/9 |
-| [`primary-extracts/README.md`](primary-extracts/README.md) | index of extracts |)
+| [`primary-extracts/README.md`](primary-extracts/README.md) | index of extracts |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | which places changed after the outside review |
 | The repository-root [`README.md`](../../README.md), only the sections "Windows 9x driver test", "Missing documents" and "VESA standards", and the S3ALIAS row of the tool table | spec A and spec C cite them: the black-box record of S3's Windows 9x driver, the public standards and the missing documents. The Windows section also describes our own patches as observed on the card (the p15 booster, the mode set hook that restores CR59/CR5A from CR6D): behaviour of our ROM, not reference code. The other sections are not read: the ROM sections and "MCLK build option" describe our patches byte by byte ([`README.md`](README.md) of this folder, "What stays on the dirty side") |
-| [`AGENTS.md`](../../AGENTS.md), the whole file | the specifications cite its project rules ("Hard rules for the ROM", "Assembly conventions"); it holds no code, names riplin's disassembly only as a pointer, and its two reference ROM offsets (7F51h, 3CE9h) can be checked against the reference ROMs |
+| [`AGENTS.md`](../../AGENTS.md), the whole file | the specifications cite its project rules ("Hard rules for the ROM", "Assembly conventions"), and its section "Clean-room rules and parts A/B/C" is what the files under review were written to; it holds no code, names riplin's disassembly only as a pointer, and its two reference ROM offsets (7F51h, 3CE9h) can be checked against the reference ROMs |
 
 **Must not read.**
 
@@ -194,10 +226,10 @@ say so in the record, and the review is done again by another session.
 | --- | --- |
 | The Phoenix VGA BIOS source material (an `SRC/phx` folder or similar, wherever found) | a vendor's source: the review compares with the ROMs' observed bytes and behaviour, not with anyone's source |
 | riplin's annotated disassembly ([hag](https://github.com/riplin/hag) `research/s3/bios/86c764x.asm`), and the section of [`docs/764-rom.md`](../764-rom.md) that cites it | the same: an expression of the Phoenix code, with names for its routines |
-| Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others) | the same; and a reviewer who has read it cannot tell what a file under review took from it |
-| Our patch code and patchers: [`src/roms/`](../../src/roms/) (its `bios.inc` files map routines of the reference ROMs), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour |
+| Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others), and [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md), the plan for a SeaVGABIOS port, which parts A, B and C link to | the same; and a reviewer who has read it cannot tell what a file under review took from it |
+| Our patch code and patchers: [`src/roms/`](../../src/roms/) (its `bios.inc` files map routines of the reference ROMs), except `src/roms/fonts/README.md` (step 6), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour. TAB-9 and the decision "Fonts" link to `src/roms/fonts/`: do not follow those links |
 | [`BRIEF.md`](BRIEF.md) | the clean implementer's brief, not dirty material, but the reviewer has no use for it and must not write to the clean side |
-| [`s3alias/`](../../s3alias/) (S3ALIAS's source, its header included) | our TSR's code; the owner does not allow it for the review. The README's tool table row is enough for the mode numbers (49h to 59h, 4Bh to 5Ah) |
+| [`src/tools/s3alias/`](../../src/tools/s3alias/) (S3ALIAS's source, its header included) | our TSR's code; the owner does not allow it for the review. The README's tool table row is enough for the mode numbers (49h to 59h, 4Bh to 5Ah) |
 
 Step 6: `python3 emu/similarity.py FILE --min 16` compares with the three reference ROMs above by
 default. The text mode fonts are a known match: the tables our ROMs now build from Joseph Gil's public
@@ -209,29 +241,36 @@ that one file, not the rest of `src/roms/`.
 
 ### Open items
 
-- The independent second-reader review of 2 November 2026 is done at commit
-  `cbbc2ce629f22c5ffa9b4cfeb60200df8fc1396d`: every current crossing target was **RETURNED**, no rule
-  ID cleared. The disposition table is in [`README.md`](README.md) "Authorized independent review -
-  2026-11-02". Dirty-side rewrites and owner decisions of 5 November 2026
-  ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md), [`primary-extracts/`](primary-extracts/))
-  address many returns; **nothing crosses until a fresh second-reader pass on the changed files**.
-  Dirty-side rewrites for the returned bios-rules rows and B-08 open questions are in
-  [`docs/bios-rules.md`](../bios-rules.md) (5 November 2026); primary extracts for PCI 2.3 section 6.3
-  and VBE 1.2 are in [`primary-extracts/`](primary-extracts/). A fresh second-reader pass on the
-  changed files is still required before any clearance.
+- The returns of 2 November, the working list for this pass ([`README.md`](README.md) "Authorized
+  independent review - 2026-11-02"): rating and source gaps and the POST-41 premise in part A; the FIFO
+  and refresh premises in part B (MODE-136 and MODE-130 now rest on the data book and the DRAM data
+  sheet); the 100h capability policy and AH=0Fh after 101h in part C (decisions Q100 and Q0F); T64-MEM-7
+  as a public chip rating; the bios-rules rows B00-5, B09-11, B10-1, B11-1, B12-1, B1A-1, B1C-8, TAB-9 and
+  question 17; the Source columns of the milestone contract and its 100h and AH=0Fh wording. Record each
+  as settled or still returned.
+- [`docs/chip-rules.md`](../chip-rules.md): T64-ID-2 and AV-ID-1 carry `[Leak review: ...]` notes;
+  POST-6 cites T64-ID-2, and VP-ID-1, which POST-6 also cites, now rests the revisions 5xh partly on S3's
+  driver INF without a note. A driver's identification table is neither data book nor black-box
+  observation of a BIOS: decide under steps 2 and 5 whether the clean side needs it (POST-6 says the ROM
+  does not need to tell the two Trio64 parts apart).
+- Parts A, B and C link to [`docs/seavgabios-trio64.md`](../seavgabios-trio64.md) (spec C: "It covers
+  items 3 and 5 of ..."), which the reviewer may not read. Decide whether the link is cut from the clean
+  side's copy; the links were there at the first pass too.
 - [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
-  and cites it as "README"; the quote is not in README.md, and the reviewer may not read [`s3alias/`](../../s3alias/). The
-  reviewer checks S3M-2 against the README's tool table row only and records the citation as to be fixed
-  (deferred with S3M/OEM for milestones after 1-4).
+  and cites it as "README"; the quote is not in README.md, and the reviewer may not read
+  [`src/tools/s3alias/`](../../src/tools/s3alias/). Deferred with the S3 mode numbers (outside milestones
+  1-4); the citation is to be fixed before that later review.
 - [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
-  BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4. Dirty-side next step
-  after milestone 1: Trio64V2/DX driver `VGALOG` call logs, then OEM / `AX=4F14h` **interface**
-  contracts (inputs, outputs, status only) for a later leak review before any crossing.
+  BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4 and cut from the clean
+  side's copy. Dirty-side next step: Trio64V2/DX driver `VGALOG` call logs, then OEM / `AX=4F14h`
+  **interface** contracts (inputs, outputs, status only) for a later leak review before any crossing.
 - [`spec-b-modeset.md`](spec-b-modeset.md): the 25.175 MHz PLL pair equal to the reference ROM's, derived (step 3);
   kept for the in-scope case by the independent review.
-- [`docs/chip-rules.md`](../chip-rules.md): the four sentences marked `[Leak review: ...]` (step 5) are cut
-  with their out-of-scope sections in the independent review's withheld candidate; original notes stay
-  for identification until the source file is edited.
+- [`milestone-calls.md`](milestone-calls.md): "The run" now also holds the benchmark's bank routine, read
+  from the program's own disassembly (a DJGPP program, not a BIOS), and a port trace of our 1.5-07-p5;
+  it stays on the dirty side. What the contract takes from it (CR6A = 00h, CR51 bits 3-2 = 0, CR31 bits
+  0 and 3 with 64 KB pages in CR35 after 4F02h 101h) is in the contract, which cites "spec C" without
+  rule IDs (VBE-44 and VBE-53 hold these rules); its Source column is a return of the first pass.
 - [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md): deferred with milestone 5.
 - Not to review now: the monitor sense decision of our ROMs (#134, #139) and the font change (#141)
   touched no file that crosses; the specifications say nothing yet on the monitor sense at POST
