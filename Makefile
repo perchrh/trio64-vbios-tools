@@ -27,7 +27,8 @@ endif
 
 # make (or make tools): the DOS tools, S3REGS32.EXE and the batch files into build/
 TOOLS = build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-        build/S3REGS.COM build/S3REGS32.EXE build/RUNALL.BAT build/CLEAN.BAT build/ZIP.EXE
+        build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/RUNALL.BAT build/CLEAN.BAT \
+        build/ZIP.EXE
 all: tools
 tools: $(TOOLS)
 
@@ -67,6 +68,9 @@ build/VGALOG.COM: vgalog/vgalog.asm common/version.inc | build
 	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 build/S3REGS.COM: s3regs/s3regs.asm common/version.inc common/chip.inc | build
+	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
+
+build/CHIPID.COM: chipid/chipid.asm common/version.inc common/chip.inc | build
 	"$(NASMBIN)" -f bin -icommon/ $(DEFS) -o $@ $<
 
 # Win32 console program for Windows 9x; the PE header is written in the source (no linker)
