@@ -16,7 +16,8 @@
 ;                        VSHOW /R /V /S > VSHOW.LOG
 ;   VSHOW /H, /?, /HELP  parameter list
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
-;   /V                   debug log in VSHOW.DBG (see src/tools/common/vdebug.inc): the ROM version (D:ENV ROM=), every INT 10h call, 4F00/4F01
+;   /V                   debug log in VSHOW.DBG (see src/tools/common/vdebug.inc): the NASM version
+;                        that assembled this tool (D:ENV NASM=), the ROM version (D:ENV ROM=), every INT 10h call, 4F00/4F01
 ;                        blocks, registers and per-frame timer counts of each mode shown
 ;   /S                   silent: no monitor warning and no key press before the modes (batch runs)
 ;

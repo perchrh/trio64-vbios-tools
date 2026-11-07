@@ -263,12 +263,15 @@ def has_verbose():
 
 
 def check_dbg(dbg, name):
-    """A /V debug file: every line a D: record, INT 10h records balanced, ends with D:END lost=0."""
+    """A /V debug file: first line D:ENV NASM=<version>, every line a D: record, INT 10h records balanced, ends with D:END lost=0."""
     check(dbg is not None, '%s was not created' % name)
     lines = dbg.decode('latin1').split('\r\n')
     if lines and lines[-1] == '':
         lines.pop()
     check(lines, '%s is empty' % name)
+    check(lines[0].startswith('D:ENV NASM=') and
+          re.fullmatch(r'[0-9]+(\.[0-9]+)+', lines[0][len('D:ENV NASM='):]),
+          '%s: first line %r, expected D:ENV NASM=<version>' % (name, lines[0]))
     bad = [l for l in lines if not l.startswith('D:')]
     check(not bad, '%s: line without D: tag: %r' % (name, bad[:1]))
     n_in = sum(1 for l in lines if l.startswith('D:I10>'))
