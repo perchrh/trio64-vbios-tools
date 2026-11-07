@@ -96,8 +96,10 @@ build/S3REGS32.EXE: $(TOOLS_SRC)/s3regs/s3regs32.asm $(COMMON)/version.inc | bui
 
 # Emulator tests (python3 with the unicorn package, see pyproject.toml):
 #   make emu-test ROM=path/to/S3V2P15.BIN          every test with 2 MB, then the memory-size dependent
-#                                                  ones (tag vram) again with 4 MB
-#   make emu-test ROM=... VRAM=4                   every test with one size only (2 or 4 MB)
+#                                                  ones (tag vram) again with 4 MB (not on the Trio64,
+#                                                  CHIP=764/764x/764p, nor the Trio32: 2 and 1 MB only)
+#   make emu-test ROM=... VRAM=4                   every test with one size only (1, 2 or 4 MB; VRAM=4
+#                                                  also on the Trio64 model, the run CI and test-all skip)
 #   make emu-test ROM=S3VPP1.BIN CHIP=765        our Trio64V+ ROM on the Trio64V+ model (CHIP: the chip of
 #                                                  the model, v2 by default; tests.py --chip); on the
 #                                                  Trio64V+, Trio64 and Trio32 the vram tests run with
@@ -120,7 +122,7 @@ ifdef VRAM
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM) $(EMUARGS)
 else
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) $(EMUARGS)
-ifneq ($(CHIP),732)
+ifeq ($(filter 732 764 764x 764p,$(CHIP)),)
 	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram $(EMUARGS)
 endif
 ifneq ($(filter 775 765 764 764x 764p 732,$(CHIP)),)
