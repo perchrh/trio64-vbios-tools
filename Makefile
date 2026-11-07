@@ -174,7 +174,6 @@ POC_OUT ?= build/roms/poc/HELLO64K.ROM
 POC_REPEATS ?= 2
 poc-rom:
 	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --repeats $(POC_REPEATS) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
-	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --repeats $(REPEATS) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
 
 # Removes build/ (the DOS tools and the ROM images under build/roms/)
 clean:
