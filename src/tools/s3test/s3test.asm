@@ -57,7 +57,8 @@
 ;                    PCI device and 8811 revision bit-6 split Velocity9x uses; on 8901h, CR6F bit 0
 ;                    selects Trio64V2/DX 86C775 vs /GX 86C785, V2-ID-1), so the log shows the
 ;                    stepping (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX 86C775 on the test card;
-;                    8811 rev 40h -> Trio64V+ 86C765; 8811 rev 00h with CR2E 11h -> Trio64 86C764X)
+;                    8811 rev 40h -> Trio64V+ 86C765; 8811 rev 00h with CR2E 11h -> Trio64 86C764X
+;                    with CR2F 20h, 30h, 03h or 12h, else 86C764-P, T64-ID-2)
 ;   Chip variant     INFO, not counted: CR2F and the Trio32/Trio64 variant S3's Windows 95 driver
 ;                    names by it (Trio64: 20h 86C764GSpnp, 30h NEC, 03h UMC, 12h TSMC, the 86C764X;
 ;                    any other value the plain 86C764, the earlier 764P), so a log shows which 764 a
@@ -429,7 +430,7 @@ t_rom:  mov dx,s_sig
 ; ---------------- chip identification (INFO) ----------------
 ; CR2D/CR2E = device ID (89h 01h on the V2), CR2F = revision ID (varies with stepping, datasheet
 ; section 4.1; equals PCI configuration byte 08h), CR30 = chip ID (E1h), then the PCI device and
-; revision from chipfind and the S3 part number from chippart (86C732 / 86C764X / 86C765 /
+; revision from chipfind and the S3 part number from chippart (86C732 / 86C764X or 86C764-P by CR2F / 86C765 /
 ; 86C775 or 86C785 / 86C767 / 86C365 / 86C362/86C368). Values come from src/tools/common/chip.inc
 ; (chipfind already ran chipidregs).
 ; Prints one line ending in INFO; it is not a test and not counted.

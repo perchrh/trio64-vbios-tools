@@ -86,9 +86,18 @@ CHIPS = {
     'uvplus': dict(name='Trio64UV+', dev=0x8814, ids=(0x88, 0x14, 0x00, 0xE1), r3=False),
 }
 # The chip codes the command lines take (--chip, CHIP=): the S3 part numbers, mapped to the CHIPS keys.
-# 764X and 764P are one model: the two Trio64s differ only in the MCLK they take.
+# 764X and 764P are one model apart from CR2F: the 764X model reports 20h, the GS part of the
+# DSP-3364P ("86C764GSpnp"), the 764P model 00h, a value S3's Windows 95 driver gives no pnp code
+# (docs/764-rom.md "Chip variants by CR2F"); the PCI revision stays 00h on both (T64-ID-1, T64-ID-2).
 CHIP_CODES = {'775': 'v2', '765': 'vplus', '764': 'trio64', '764x': 'trio64', '764p': 'trio64',
               '767': 'uvplus', '732': 'trio32'}
+CHIP_CR2F = {'764': 0x20, '764x': 0x20, '764p': 0x00}     # CR2F where it is not the PCI revision
+
+
+def chip_ids():
+    """CR2D, CR2E, CR2F and CR30 of the model's chip: CHIPS' ids, with CR2F from Machine.cr2f when set."""
+    c = CHIPS[Machine.chip]['ids']
+    return (c[0], c[1], c[2] if Machine.cr2f is None else Machine.cr2f, c[3])
 
 IRET_SEG = 0x0060          # every unused vector points to 0060:0000 = IRET
 DOS_STUB = 0x0520          # INT 21h vector 0050:0020: INT F1h (the emulated DOS), RETF 2 (keeps its flags)
@@ -272,7 +281,7 @@ class Machine:
             # 1-cycle EDO (00b) on the Trio64V2/V+ models, EDO (10b) on the Trio32/Trio64, whose 00b is
             # reserved, and fast page (11b) on the Trio64 with 4 MB, which the data book requires for it
             # (pin 50 as RAS1, T64-MEM-3)
-            c = CHIPS[Machine.chip]['ids']
+            c = chip_ids()
             cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
             if Machine.chip in ('trio64', 'trio32'):
                 cr36 |= 0x0C if Machine.vram == 4 else 0x08
@@ -806,6 +815,7 @@ class Machine:
     call_limit = 50_000_000                             # instructions an INT 10h call of a test may take
     vram = 2                                            # MB the CR36 bits 7-5 report: 1, 2 (the card) or 4
     chip = 'v2'                                         # CHIPS key: v2 (the card), vplus, uvplus, trio64, trio32
+    cr2f = None                                         # CR2F when it is not the PCI revision (CHIP_CR2F)
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):

@@ -11,7 +11,8 @@
 ;   It creates the archive under the final name with AX=716Ch (Ralf Brown: DX=0012h is bit 4
 ;   create plus bit 1 truncate), so the file is born as runall-<part>.zip. If that call is
 ;   refused, AH=3Ch creates the 8.3 name <part>.ZIP instead (86C775.ZIP; 86C362/86C368 becomes
-;   86C362.ZIP, the text before the slash). An existing file of either name is deleted first.
+;   86C362.ZIP, the text before the slash; 86C764-P becomes 86C764.ZIP, the text before the hyphen,
+;   and runall-86c764-p.zip). An existing file of either name is deleted first.
 ;   After the archive is written, a zero-length write at the new end truncates the file, so a
 ;   create that left the old bytes in place cannot keep a previous end record past the new one.
 ;   With no part, the name is RUNALL.ZIP. A slash in the
