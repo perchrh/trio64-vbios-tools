@@ -164,6 +164,14 @@ IN ?= $(REF775)
 	@test -n "$(REF775)" -a -n "$(ROM)" || { echo "775-ref-compare: set ROM (and REF775, default reference/v2/2_04_07.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --ref "$(REF775)" --rom "$(ROM)"
 
+# Open PCI option ROM (src/roms/open, docs/open-rom.md): a generic card ROM that beeps high-low
+# high-low and prints "Hello world" at POST. One 32 KB image with a valid checksum, written twice
+# for a 64 KB EEPROM (a board may map either half); VENDOR/DEVICE (hex) go into both headers.
+#   make open-rom OUT=HELLO.ROM [VENDOR=0x8086 DEVICE=0x1229]   (default OUT=build/roms/open/HELLO64K.ROM)
+OPEN_OUT ?= build/roms/open/HELLO64K.ROM
+open-rom:
+	python3 $(ROMS_SRC)/open/build.py --nasm "$(NASMBIN)" -o "$(OPEN_OUT)" $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
+
 # Removes build/ (the DOS tools and the ROM images under build/roms/)
 clean:
 	rm -rf build
