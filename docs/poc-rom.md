@@ -21,12 +21,18 @@ entry point at offset 3, and the code
 and returns with CF=0. The entry does not test CF: not every system BIOS
 sets CF=1 for the init call (the emulator starts a ROM with CF=0, and so do
 BIOSes without the old PCI BIOS double call), so the work runs on the first
-call whatever CF says. The application-unique byte at 07h is a done flag, so
-a BIOS that calls twice (CF=1 init, CF=0 run-time, the old PCI BIOS
-convention) gets the work exactly once; setting it is compensated in the
-checksum byte at 06h, so the image sum stays 00h (ROM-6). The card is not
-touched: the ROM works on any conventional PCI card, a network card
-included, and needs no IRQ, I/O or memory resource of its own.
+call whatever CF says.
+
+The beep sounds exactly once per machine. Two guards: the part carries the
+32 KB image once and FFh after it, so a BIOS that scans the ROM window for
+55h AAh finds one image only; and the done flag lives at 0040:00FFh in the
+BIOS data area (the inter-application communication area), which all
+shadow copies share, so a second call of the entry (CF=1 init, CF=0
+run-time, the old PCI BIOS convention) also returns at once. The image
+itself is never written - the port 61h value is kept on the stack - so the
+image sum stays 00h (ROM-6). The card is not touched: the ROM works on any
+conventional PCI card, a network card included, and needs no IRQ, I/O or
+memory resource of its own.
 
 ## Build
 
@@ -46,12 +52,14 @@ vendor/device IDs.
 NASM 3.02 assembles [hello.asm](../src/roms/poc/hello.asm) and
 [build.py](../src/roms/poc/build.py) pads the code with 00h to a 32 KB
 image (ROM-3), patches the expansion ROM checksum (offset 06h, the sum of
-all image bytes is 0 mod 256) and writes the 32 KB image REPEATS times
-into one output file (ROM-4): a board may map any 32 KB-aligned half or
-quarter of its EEPROM, so every 32 KB block must carry a complete image.
-REPEATS is 2 for a 64 KB part (the default) or 4 for a 128 KB part; the
-usual 32-pin DIP sockets on network cards (3C905B, RTL8139D) decode up to
-128 KB.
+all image bytes is 0 mod 256) and writes the image once at offset 0,
+padding the rest of the part with FFh (ROM-4). A system BIOS that scans the
+whole ROM window for 55h AAh then finds exactly one image and calls its
+init once; repeating the image instead made such a BIOS run both copies
+and beep twice (measured before the change). REPEATS is the part size in
+32 KB units: 2 for a 64 KB part (the default), 4 for a 128 KB part, 1 for a
+32 KB part; the usual 32-pin DIP sockets on network cards (3C905B,
+RTL8139D) decode up to 128 KB.
 
 **Build with the card's IDs.** A PCI 2.1 POST skips an image whose vendor
 and device IDs do not match the card's configuration space (section 6.3.2),
@@ -70,13 +78,15 @@ DOS, or the BIOS' own PCI device listing at POST.
   vendor/device IDs, structure length 0018h, structure revision 00h (PCI
   2.1), class code 000000h, image length 0040h, code type 00h (Intel x86,
   PC-AT compatible), indicator 80h (last image).
-- The image is never modified by the init code (ROM-6).
+- The image is never modified by the init code (ROM-6); the once-per-machine
+  done flag is at 0040:00FFh, outside the image.
 
 ## Flashing
 
 The output file goes into the EEPROM as is (64 KB, or 128 KB with
-REPEATS=4). The 32 KB image is self-contained in every 32 KB block of the
-part.
+REPEATS=4): the 32 KB image at offset 0, FFh after it. A board that maps
+the upper half of the part sees no ROM there - the image is meant to sit
+at the base of the mapped window.
 
 ## In the emulator
 
@@ -87,8 +97,12 @@ loads the image at C0000 and `post()` far-calls C000:0003 like a system BIOS
 IRET stub and nothing appears on a screen; the run shows the ROM returning
 to the far call, 13 INT 10h teletype calls (`Hello world` plus CR/LF), the
 divisors 03E2h/07C5h/03E2h/07C5h (1200/600/1200/600 Hz) programmed into PIT
-channel 2, four speaker-gate on/off pairs at port 61h, and a second init
-call returning at once (the done flag). The experiment is what found the two
+channel 2, four speaker-gate on/off pairs at port 61h, the image sum still
+00h after POST, and a second init call returning at once with no new tones
+(the done flag at 0040:00FFh; the same holds when a second copy of a
+REPEATS=2 image is shadowed and called, which `poc_test.py` also checks via
+a manual far call). The control word 0xB6 is written to port 43h before
+each count, the order the 8254 requires. The experiment is what found the
 subtleties above: the emulator calls with CF=0 (the CF test had to go), and
 its constant clock advance makes the latched count return to exactly the
 same value each wrap, which the wrap test must treat as "not below" (`jb`,
@@ -105,4 +119,5 @@ not `jbe`) so a wait can never hang on a PIT that stopped counting.
   the channel is never reprogrammed) and needs no interrupt and no BIOS
   tick, because the system BIOS may call the ROM with interrupts off
   (CONV-6 in [spec-a-post.md](cleanroom/spec-a-post.md)). The tones come
-  from PIT channel 2; port 61h is restored as found.
+  from PIT channel 2: the control word 0xB6 goes to port 43h first, then the
+  divisor's two bytes to port 42h; port 61h is restored as found.
