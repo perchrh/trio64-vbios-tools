@@ -1452,11 +1452,13 @@ summary:
         cmp eax,[reclim]
         ja .cand
         mov si,s_pub                    ; a tested pass at least 1 percent below the highest
-        call show_pair
-        call entry                      ; BX kept by show_pair: "To use it: MCLK /S 73.737"
-        call lbegin
+        push bx
+        call show_pair                  ; lend clobbers BX
+        pop bx
+        call lbegin                     ; "To use it: MCLK /S 73.737"
         mov si,s_use1
-        call lstr
+        call lstr                       ; clobbers AL: the entry after it
+        call entry
         call pkhz
         call lend
         jmp .rest
@@ -1489,7 +1491,7 @@ summary:
         call lend
         ret
 
-; SI = label, BX = table index. Prints the label, the frequency and SR10/SR11.
+; SI = label, BX = table index. Prints the label, the frequency and SR10/SR11. Clobbers BX.
 show_pair:
         push bx
         call lbegin

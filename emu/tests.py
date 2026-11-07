@@ -957,7 +957,7 @@ def t_t64_patches(c):
     # the display FIFO M (CR54 bits 7-3, #75), from the bandwidth: 112 of the FIFO's 128 bytes drain in
     # t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs, two entry cycles and an access take 23 and each
     # access 6 (p3, #82; p2 counted 5), so M = (t - 23) / 6 at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM
-    # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 or 4 MB 103h, 105h and 114h have
+    # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 MB 103h, 105h and 114h have
     # it exactly, since Phoenix's own values there are higher (with 1 MB, a 32-bit memory bus, Phoenix's own
     # values are lower than the formula, which counts the 64-bit bus, and stay). The MCLK from the SR10/SR11
     # the POST loads.
@@ -1344,7 +1344,7 @@ def vgalog_info(c, m, blk, what, tail=bytes(8)):
     ids = chip_ids()
     cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
     if Machine.chip in ('trio64', 'trio32'):
-        cr36 |= 0x0C if Machine.vram == 4 else 0x08
+        cr36 |= 0x08
     v = re.search(rb'Vers\S*\s+([^\s(]{1,15})', c.rom[:0x100])
     want = bytes(ids) + bytes([cr36, c.rom[2], m.r['seq'].get(0x10, 0), m.r['seq'].get(0x11, 0)]) + \
         (v.group(1) if v else b'').ljust(16, b'\0') + tail
@@ -2647,7 +2647,7 @@ def t_mclk(c):
     check(CHIPS[Machine.chip]['name'].encode() in il[1], 'chip line %r on the %s model' % (il[1], Machine.chip))
     vram = Machine.vram
     want_mem = ('%d MB' % vram).encode()
-    check(il[2].split(b':', 1)[1].strip().startswith(want_mem + b' ') and (b'EDO' in il[2] or b'fast page' in il[2]),
+    check(il[2].split(b':', 1)[1].strip().startswith(want_mem + b' ') and b'EDO' in il[2],
           'memory line %r, %d MB' % (il[2], vram))
     post = clk(mi)
     pk = 14318 * ((post[1] & 0x7F) + 2) // ((post[0] & 0x1F) + 2) >> ((post[0] >> 5) & 3)
@@ -2975,12 +2975,15 @@ def main():
                          'PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
                     help='video memory size in MB (CR36 bits 7-5 after POST, and the size of Machine.vram): '
-                         '2 (the card, default), 4 (the maximum of every Trio64-family chip but the Trio32) '
+                         '2 (the card, default), 4 (the Trio64V2 and Trio64V+ maximum; not the Trio32, whose '
+                         'maximum is 2 MB, nor the Trio64, of which no 4 MB card was built) '
                          'or 1 (the smallest configuration of every chip); seen through the banked A0000 '
                          'window (no LFB)')
     a = ap.parse_args()
     if CHIP_CODES[a.chip] == 'trio32' and a.vram == 4:
         ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')
+    if CHIP_CODES[a.chip] == 'trio64' and a.vram == 4:
+        ap.error('--vram 4: no Trio64 card was built with 4 MB (they stop at 2 MB), so the tests stop there too')
     Machine.vram = a.vram
     Machine.chip = CHIP_CODES[a.chip]
     Machine.cr2f = CHIP_CR2F.get(a.chip)
