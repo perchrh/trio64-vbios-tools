@@ -35,8 +35,10 @@ What the three ROMs make faster than their reference BIOSes, on every chip:
   scrolls and AH=09h: half the store operations or fewer (mode set 03h: 9368 writes instead of 20632 on
   the Trio64V2; per-call counts in `docs/765-rom.md`).
 - **Fast 4F05 set window** ([#59](https://github.com/perchrh/trio64-vbios-tools/issues/59)) at the INT 10h entry: 6 port writes instead of 10 to 13.
-- **Memory clock** ([#58](https://github.com/perchrh/trio64-vbios-tools/issues/58), [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112)): 59.96 MHz on the Trio64V2 instead of 50.11 MHz (the clock of 2.04.07 and of the test card's stock
-  2.04.11); on every ROM a build option for the card's memory (`make roms`, "MCLK build option").
+- **Memory clock** ([#58](https://github.com/perchrh/trio64-vbios-tools/issues/58), [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112)): by default 50.11 MHz on every ROM since 2.04.07-p26, 1.03-08N-p6 and
+  1.5-07-p6, the clock of S3's own BIOSes for 1-cycle EDO (also of the test card's stock 2.04.11), so the
+  default build is no faster there than the reference; a faster clock for the card's memory is a build
+  option (`make roms`, "MCLK build option"). p9 to p25 of the Trio64V2 ROM ran 59.96 MHz.
 
 VIDSPEED in plain DOS on the Trio64V2 card (80486, 31 October 2026), once with the card's stock BIOS
 2.04.11 and once with 2.04.07-p21. p22 changed only the DDC delay and where the booster keeps
@@ -64,7 +66,8 @@ machine was the same.
   are about equal. 16-bit stores gain 15-60 % (the booster takes them too); 8-bit stores stay at about
   10 MB/s, the bus limit.
 - **VGA and text modes (no booster):** about 22 % more in mode 13h and the 16-colour modes, 30-35 % in
-  text: the memory clock, 59.96 MHz instead of 50.11 MHz (20 % more).
+  text: the memory clock of p21, 59.96 MHz instead of 50.11 MHz (20 % more). Since p26 the default build
+  runs 50.11 MHz again; `make 775-rom MCLK=60` gives the clock of this run.
 - Other observations of the same run (refresh lines, the booster state per mode): `docs/775-rom.md`,
   "The VIDSPEED run".
 
@@ -80,7 +83,7 @@ number; the documentation also uses the market names.
 | 785 | Trio64V2/GX | 86C785 | 5333:8901 | `775-rom` (the same ROM: S3's 2.04.07 is the "86C775/86C785 Video BIOS"; the clock option has an `sgram` entry for the GX) | `775` | as 775 |
 | 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775`, `SIZE775` |
 | 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh or 5xh, bit 6 set) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
-| 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 (CR2F 20h, 30h, 03h or 12h) | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
+| 764X | Trio64 PnP (MCLK 50-70 MHz) | 86C764X | 5333:8811 (CR2F 20h, 30h, 03h or 12h) | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
 | 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 (another CR2F) | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
 | 767 | Trio64UV+ | 86C767 | 5333:8814 | none (no ROM of ours) | `767` | |
 | 732 | Trio32 | 86C732 | 5333:8811 (CR2E 10h) | none (no ROM of ours) | `732` | |
@@ -496,33 +499,42 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
-| 775 (Trio64V2/DX) | `775-P24/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p24, 64 KB (`SIZE775=32` for 32 KB), the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P5/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p5, 64 KB (`SIZE765=32` for 32 KB), the clock in the edo1 entry |
-| 764X (Trio64 PnP) | `764X-P5/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p5, 64 KB (`SIZE764=32` for 32 KB) |
-| 764P (86C764-P) | `764P-P5/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p5, 64 KB |
+| 775 (Trio64V2/DX) | `775-P26/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p26, 64 KB (`SIZE775=32` for 32 KB), the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P6/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p6, 64 KB (`SIZE765=32` for 32 KB), the clock in the edo1 entry |
+| 764X (Trio64 PnP) | `764X-P6/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p6, 64 KB (`SIZE764=32` for 32 KB) |
+| 764P (86C764-P) | `764P-P6/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p6, 64 KB |
 
 The two Trio64 models get the same ROM; `make 764x-rom` and `make 764p-rom` differ only in the MCLK range
-the build option accepts: 55-70 MHz on the 86C764X, 50-60 MHz on the 86C764-P (T64-MEM-7; above it only
-with `OVERCLOCK=1`).
+the build option accepts: 50-70 MHz on the 86C764X, 50-60 MHz on the 86C764-P (T64-MEM-7; above it only
+with `OVERCLOCK=1`). The 86C764X floor was 55 MHz up to 1.5-07-p5; it is 50 MHz since p6, so that the
+default clock is one the option accepts too.
 
 
-    make 775-rom OUT=S3V2P24-55.BIN MCLK=55 [MEMTYPE=edo1]
-    make 765-rom OUT=S3VPP5-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make 775-rom OUT=S3V2P26-55.BIN MCLK=55 [MEMTYPE=edo1]
+    make 765-rom OUT=S3VPP6-55.BIN MCLK=55 [MEMTYPE=edo1]
 
 Both BIOSes pick the memory clock at POST from a small table, by the memory type the card is strapped
 for (CR36 bits 3-2, set by resistors on the board and kept by the BIOS). `MCLK` sets the entry of
 `MEMTYPE` (the Trio64 ROM has one entry for every type) to the nearest MCLK PLL setting (M 1-127, N 1-31, R 0-3, VCO 135-270 MHz) at or below the
-data book limit; the other entries stay. The build prints the frequency it got (50 gives 50.11 MHz, 55
+data book limit; the other entries stay at the default. Without `MCLK` every entry of every ROM holds
+50.11 MHz (SR11 = 28h, SR10 = 41h), the clock S3's own Trio64V2 and Trio64V+ BIOSes use for 1-cycle
+EDO (owner's decision, 7 November 2026). The build prints the frequency it got (50 gives 50.11 MHz, 55
 gives 55.04 MHz, 60 gives 59.96 MHz).
 
 | Chip, ROM | MEMTYPE | Entry | Default | Data book maximum |
 | --- | --- | --- | --- | --- |
-| Trio64V2, 2.04.07-p24 | edo1 (1-cycle EDO, the test card) | C7h | 59.96 MHz (2.04.07 and the card's stock 2.04.11: 50.11) | 60 MHz (V2-MEM-1) |
-| | fpm (fast page and 2-cycle EDO) | C9h | 59.96 MHz | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
-| | sgram (Trio64V2/GX) | CBh | 66.2 MHz | 66.67 MHz |
-| Trio64V+, 1.03-08N-p5 | edo1 | A8h | 50.11 MHz (1.03-08: 52.79) | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
-| | fpm (fast page and 2-cycle EDO) | A6h | 59.96 MHz | 60 MHz |
-| Trio64, 1.5-07-p5 | (one entry for every type) | 3B5h | the build's own (54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
+| Trio64V2, 2.04.07-p26 | edo1 (1-cycle EDO, the test card) | C7h | 50.11 MHz (as 2.04.07 and the card's stock 2.04.11; p9-p25: 59.96) | 60 MHz (V2-MEM-1) |
+| | fpm (fast page and 2-cycle EDO) | C9h | 50.11 MHz (2.04.07: 59.96) | 66.67 MHz (15 ns; the book gives no separate 2-cycle EDO value) |
+| | sgram (Trio64V2/GX) | CBh | 50.11 MHz (2.04.07: 66.2) | 66.67 MHz |
+| Trio64V+, 1.03-08N-p6 | edo1 | A8h | 50.11 MHz (as 1.03-08N; 1.03-08: 52.79) | 60 MHz (16.67 ns cycle, table 4-6, MEM-1) |
+| | fpm (fast page and 2-cycle EDO) | A6h | 50.11 MHz (1.03-08N: 59.96) | 60 MHz |
+| Trio64, 1.5-07-p6 | (one entry for every type) | 3B5h | 50.11 MHz (the input's own pair replaced; 54.9 MHz in the reference) | 70 MHz (T64-MEM-7; the data book gives 60 MHz, MEM-1) |
+
+At 50.11 MHz the Trio64V2 ROM's POST sets CR88 bit 1 again (PD bus delay of 1/2 MCLK on memory writes),
+as 2.04.07 does when the chip is revision 06 (CR2F bits 3-0), the card has 1-cycle or 2-cycle EDO (CR36
+bit 2 = 0) and SR10/SR11 hold exactly 41h/28h; at 59.96 MHz (p9-p25) the bit stayed off. The card ran
+the `MCLK=50` build of p25 with the bit on (S3REGS: CR88 = 02h) and S3TEST and S3COMPAT found no
+error (7 November 2026).
 
 On the Trio64 ROM `MCLK` goes up to 70 MHz, above the data book's 60 MHz: our tools take 70 MHz as the
 Trio64's limit (T64-MEM-7), the clock card databases give for the 86C764X (vgamuseum), and the ExpertColor DSP-3364P runs it (its own
@@ -532,7 +544,7 @@ BIOS: 69.8 MHz, PLL bytes 25h 22h, model tag "764 M70"):
 
 The display FIFO M follows the build's clock (since p2, [#75](https://github.com/perchrh/trio64-vbios-tools/issues/75); docs/764-rom.md): windowed video on
 that card, which streaked at 54.9 MHz with Phoenix's values, was clean with p2 at 55 and 69.8 MHz; the
-card run of p3 at 60 MHz is open ([#82](https://github.com/perchrh/trio64-vbios-tools/issues/82)).
+card run of p3 at 60 MHz is open ([#82](https://github.com/perchrh/trio64-vbios-tools/issues/82)), and so is one of the 50.11 MHz default of p6.
 
 On the Trio64 and Trio64V+ ROMs `MCLK` takes the PLL pair other Trio32/Trio64/Trio64V+ BIOSes use when
 one lies within 0.5 MHz of the request (`s3patch.KNOWN_MCLK_8811`, from the survey in
@@ -551,8 +563,9 @@ its SHA-256 is checked; with it the patcher also makes the default build, checks
 and refuses the result if it differs anywhere but the MCLK entry, the constant the Trio64's FIFO code
 derives from the MCLK and the checksum (#143). The clock itself is judged on the card: S3TEST's MCLK line and S3COMPAT's POST line compare it with the
 data book limit for the strapped type, and S3COMPAT's VRAM test (without /Q) shows whether the memory
-keeps up. Which clock a given card's memory runs at is not a data book question: start at the default
-and go down if the VRAM test shows errors.
+keeps up. Which clock a given card's memory runs at is not a data book question: the default, 50.11 MHz,
+is the lowest of S3's own BIOSes; a faster build is checked with the VRAM test on the card before it is
+kept.
 
 ## Video memory sizes
 
@@ -703,8 +716,8 @@ Findings (S3REGS.TXT and VGALOG.BIN from the card, Windows 98 SE, October 2026):
 - Windows brings a full-screen DOS box back with its own 4F02 call (8101h, 8103h, C101h; CX = 0,
   DX = 03E0h), and the desktop with 4F02 8115h; the mode set hook restores CR59/CR5A from CR6D when a
   booster was on in plain DOS before.
-- The driver keeps the memory clock the BIOS sets (59.96 MHz with the ROM, 50.11 MHz with the stock
-  BIOS) on the desktop, in DOS boxes and through video playback, and uses the BIOS pixel clocks,
+- The driver keeps the memory clock the BIOS sets (59.96 MHz with the ROM up to p25, 50.11 MHz with
+  the stock BIOS and the default build since p26) on the desktop, in DOS boxes and through video playback, and uses the BIOS pixel clocks,
   also the VCO-moved ones (800x600: SR12/SR13 63h/6Eh, 40.09 MHz, VCO 320.7 MHz).
 - CR90/CR91 (L1) is set by the driver to (bytes per line / 8) - 1 in every mode (V2-REG-4); CR86 stays
   00h with an End Horizontal Blank above 1 (V2-REG-3).

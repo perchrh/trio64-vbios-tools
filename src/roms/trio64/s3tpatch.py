@@ -50,14 +50,15 @@ What is applied (docs/764-rom.md)
           the 9x16 table move up (FONT_TABLES) and the eight references to them are rewritten
           (FONT_REFS); --fonts-only applies only these, the reference of make 764-ref-compare
   DDC     VBE 4F15 without VDIF (DDC_SITES, DDC_FREED): 97 bytes free, DDC1 and DDC2B kept
-  MCLK    (only with --mclk) the single MCLK PLL entry at 3B5h, at most 70 MHz (MCLK_MAX); without it
-          the build's own clock stays (54.9 MHz in the reference build). The data book gives 60 MHz
+  MCLK    the single MCLK PLL entry at 3B5h: 50.11 MHz (SR11 = 28h, SR10 = 41h, DEFAULT_MCLK; p6) in
+          place of the build's own 54.9 MHz; with --mclk that clock instead, at most 70 MHz (MCLK_MAX).
+          The data book gives 60 MHz
           (MEM-1, DATABOOK_MAX); 70 MHz is the clock the 86C764X is rated for in card databases
           (vgamuseum) and the one DSP-3364P boards run (their own BIOS: 69.8 MHz, model tag "764 M70";
           on the card it posts and runs windowed video without the streaks of 54.9 MHz, #75). Our tools
           take 70 MHz as the Trio64's limit (src/tools/common/chip.inc), so up to 70 MHz nothing warns or fails.
           --model says which Trio64 the build is for (MODELS): 764x, the 86C764X (Trio64 PnP), takes
-          55-70 MHz and is the default; 764p, the earlier 86C764-P (also VL-Bus), takes 50-60 MHz.
+          50-70 MHz and is the default; 764p, the earlier 86C764-P (also VL-Bus), takes 50-60 MHz.
           A --mclk outside the model's range is refused (above it, --overclock allows up to 100 MHz)
           With --overclock up to 100 MHz (OVERCLOCK_MAX, twice the 50 MHz the BIOSes run at their
           lowest): the card owner's choice, never the default
@@ -86,7 +87,7 @@ VERSION = '1.5-07'
 LEVEL = s3patch.rom_level('VER764', VERSION)   # the sign-on level: src/tools/common/version.inc VER764
 REF_SHA = '6a28c6b2bd8f98cfe21e1a889d18e1d03d97427fbc6a4b6ca984f943e4962519'   # 32 KB CP764 build
 CODE_SHA = '055ec20d44308727b044d1939807886559098a4d527e5cb9a94832d6e9b89d98'  # 1000h-7EFFh: the code of every 1.5-07 build
-RESULT_SHA = '1f81b9acbb0e8f6942155fb8aed265647047e682ee27acd0c1d514239cc456b0'  # 1.5-07-p5 of the reference (NASM 3.02), emulator tests passed
+RESULT_SHA = '72e5ae968ddfc6fd0a2b83aa69f371e203783dcf5bab9ddbd670a6d14144b9bb'  # 1.5-07-p6 of the reference (NASM 3.02), emulator tests passed
 BLOCK_SHA = {
     'tlock.asm': 'a7e351fa30fbd436', 'tbon.asm': '05086e5b9273202d',
     'thook.asm': 'dc98e69ad2549c22', 'tglue.asm': '1b3f0fbe0e6d3aa4',
@@ -172,11 +173,16 @@ DDC_SITES = [
 DDC_FREED = [(0x52E1, 0x5342, '53 51 52 e8 5b 00')]
 SENSE = (0x025F, 0x0263, '33 c9 e8 61 00')     # the call of the monitor sense, the sense, its first bytes
 MCLK_ENTRY = {'any': 0x03B5}                    # the one MCLK pair (SR11, SR10), whatever the memory type
+# The default build: 50.11 MHz (SR11 = 28h, SR10 = 41h) in place of the build's own pair (54.89 MHz, 2Ch 41h,
+# in the reference; the card makers' 1.5-07 builds differ there, so any pair is replaced, as --mclk does;
+# the 'mclk' signature checks that POST loads it from 3B5h), the clock of the S3 Trio64V2 and Trio64V+
+# BIOSes for 1-cycle EDO (owner's decision, 7 November 2026; p6)
+DEFAULT_MCLK = (0x03B5, '28 41')
 DATABOOK_MAX = 60.0                             # MEM-1: 16.67 ns on the Trio32/Trio64 (named in --help only)
 MCLK_MAX = 70.0                                 # --mclk without --overclock: the 86C764X's 70 MHz, our Trio64 limit
 # The two Trio64 models, identical for this ROM except the MCLK they take (--model; T64-MEM-7):
 # (lowest MHz, highest MHz, name)
-MODELS = {'764x': (55.0, 70.0, '86C764X (Trio64 PnP)'), '764p': (50.0, 60.0, '86C764-P')}
+MODELS = {'764x': (50.0, 70.0, '86C764X (Trio64 PnP)'), '764p': (50.0, 60.0, '86C764-P')}
 OVERCLOCK_MAX = 100.0                           # --overclock: at most twice 50 MHz (the user's limit)
 
 BLOCKS = [
@@ -456,6 +462,9 @@ def patch(lo, nasm='nasm', mclk=None, overclock=False, model='764x'):
         raise PatchError('%04X is not the monitor sense of 1.5-07' % SENSE[1])
     put(SENSE[0], 'e8 01 00', '33 db 90', 'POST: no monitor sense (call %04Xh replaced by xor bx,bx: the '
         'colour result)' % SENSE[1])
+    a = DEFAULT_MCLK[0]
+    put(a, d[a:a + 2], DEFAULT_MCLK[1], 'MCLK PLL at POST: SR11 = 28h, SR10 = 41h (50.11 MHz; the input\'s own: '
+        '%.2f MHz; p6)' % mclk_of(d))
     if mclk is not None:
         fmin, fmax, name = MODELS[model]
         if mclk < fmin:
@@ -528,10 +537,10 @@ def main():
     ap.add_argument('input', help='a Phoenix Trio64 BIOS 1.5-07: 32 KB, or a 64 KB image with it in the lower half')
     ap.add_argument('-o', '--output', required=True, help='the result (64 KB, the 32 KB twice; 32 KB with --size 32)')
     ap.add_argument('--size', type=int, choices=(32, 64), default=64, help='output size in KB (default 64: the 32 KB twice)')
-    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most %g (default: the '
-                    'build\'s own; the data book gives %g)' % (MCLK_MAX, DATABOOK_MAX))
+    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the single MCLK entry, at most %g (default: 50.11, '
+                    'as the default build; the data book gives %g)' % (MCLK_MAX, DATABOOK_MAX))
     ap.add_argument('--model', choices=sorted(MODELS), default='764x',
-                    help='the Trio64 model: 764x (86C764X, MCLK 55-70 MHz, the default) or 764p (86C764-P, 50-60 MHz)')
+                    help='the Trio64 model: 764x (86C764X, MCLK 50-70 MHz, the default) or 764p (86C764-P, 50-60 MHz)')
     ap.add_argument('--overclock', action='store_true', help='allow --mclk above %g MHz, up to %g MHz: an overclock, '
                     'the card owner\'s choice' % (MCLK_MAX, OVERCLOCK_MAX))
     ap.add_argument('--nasm', default='nasm', help='nasm executable (default: nasm on PATH)')

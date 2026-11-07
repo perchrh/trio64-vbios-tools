@@ -211,7 +211,7 @@ SIZE764 ?= 64
 #   make 764-ref-compare ROM=S3T64P3.BIN [REF764=...]              (EGA/CGA behaviour against 1.5-07)
 #   make emu-test ROM=S3T64P3.BIN CHIP=764 [LOGS=emu/tlogs]
 REF764 ?= reference/trio64/1_5_07.bin
-# 764x-rom is for the 86C764X (Trio64 PnP, MCLK 55-70 MHz), 764p-rom for the 86C764-P (50-60 MHz): the same
+# 764x-rom is for the 86C764X (Trio64 PnP, MCLK 50-70 MHz), 764p-rom for the 86C764-P (50-60 MHz): the same
 # ROM, only the MCLK range the build option accepts differs (T64-MEM-7); without MCLK the two are identical.
 764x-rom 764p-rom:
 	@test -n "$(OUT)" || { echo "$@: set OUT, e.g. make $@ OUT=S3T64P3.BIN (REF764 defaults to reference/trio64/1_5_07.bin)"; exit 2; }

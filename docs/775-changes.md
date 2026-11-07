@@ -1,6 +1,6 @@
 # Trio64V2/DX ROM (775): fixes and improvements
 
-What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p25) changes against the S3 reference BIOS
+What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p26) changes against the S3 reference BIOS
 2.04.07, each with the issue that has the details: what was wrong or missing, the cause, the effect
 and how it is tested. The build, the byte-level changes, what was borrowed, not taken or omitted, and
 what is left are in [`docs/775-rom.md`](775-rom.md); the speed measured on the card is in README "Speed". The Trio64V+
@@ -14,7 +14,8 @@ and Trio64 ROMs carry backports of many of these ([`docs/765-changes.md`](765-ch
 | 320x240 at 60 Hz (131h-133h) | picture | before p9 | [#66](https://github.com/perchrh/trio64-vbios-tools/issues/66) |
 | 1600x1200: 1200 displayed lines | fix | p14 | [#56](https://github.com/perchrh/trio64-vbios-tools/issues/56) |
 | DCLK VCO in 170-340 MHz (XFree86 range) | fix | p14 | [#57](https://github.com/perchrh/trio64-vbios-tools/issues/57) |
-| Memory clock 59.96 MHz | speed | before p9 | [#58](https://github.com/perchrh/trio64-vbios-tools/issues/58) |
+| Memory clock 59.96 MHz (p9-p25) | speed | before p9 | [#58](https://github.com/perchrh/trio64-vbios-tools/issues/58) |
+| Memory clock 50.11 MHz in every entry by default (owner's decision; 59.96 MHz with `MCLK=60`) | default | p26 | none (not a fault) |
 | MCLK build option, `make roms` | speed | p16 and later | [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112) |
 | Banked VESA booster (with the Windows check, the base kept in CR6D) | speed | p7, p17, p18, p22 | [#47](https://github.com/perchrh/trio64-vbios-tools/issues/47) |
 | Fast 4F05 set window | speed | p12 | [#59](https://github.com/perchrh/trio64-vbios-tools/issues/59) |
@@ -73,9 +74,15 @@ Picture and monitor
 
 Speed
 
-- **Memory clock 59.96 MHz** ([#58](https://github.com/perchrh/trio64-vbios-tools/issues/58); other clocks: the MCLK build option, [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112)) (SR11=41h, SR10=42h, VCO 239.8 MHz) instead of 50.11 MHz: about 20% more
-  memory bandwidth; 59.96 MHz is the 1-cycle EDO maximum (16.67 ns). CR36 bits 3-2 stay 00. The CR88
-  bit 1 tweak of the reference compares SR10/SR11 with the old MCLK values and so stays off.
+- **Memory clock 50.11 MHz by default** (p26; other clocks: the MCLK build option, [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112)): every
+  MCLK entry holds SR11 = 28h, SR10 = 41h (VCO 200.5 MHz), the 1-cycle EDO clock of 2.04.07 and of the
+  card's stock 2.04.11; the fast page/2-cycle EDO entry (C9h) and the SGRAM entry (CBh) are lowered from
+  59.96 and 66.2 MHz to it (owner's decision, 7 November 2026). CR36 bits 3-2 stay 00. At this pair the
+  CR88 bit 1 tweak of the reference (PD bus delay of 1/2 MCLK, set when CR2F bits 3-0 = 6, CR36 bit 2 =
+  0 and SR10/SR11 = 41h/28h) is on again, as in 2.04.07.
+  From before p9 to p25 the 1-cycle EDO entry held 59.96 MHz (SR11=41h, SR10=42h, VCO 239.8 MHz;
+  [#58](https://github.com/perchrh/trio64-vbios-tools/issues/58)): about 20% more memory bandwidth, the 1-cycle EDO maximum (16.67 ns), with the CR88 tweak
+  off. `make 775-rom MCLK=60` builds that clock.
 - **Banked VESA booster** ([#47](https://github.com/perchrh/trio64-vbios-tools/issues/47), [#87](https://github.com/perchrh/trio64-vbios-tools/issues/87)): the banked 8/15/16/24/32 bpp modes use the linear path through a 64 KB
   window at A0000h; the real LFB base is kept in CR6D and restored on the next mode set, and 4F01 and
   4F05/4F03 report it correctly. Banked writes at 83.7 MB/s, as fast as the LFB. It is switched on at

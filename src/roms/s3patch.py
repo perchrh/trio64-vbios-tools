@@ -19,9 +19,10 @@ Output
   p14 and earlier the card's Trio64V+ BIOS 1.03-08.) --size 32: the 32 KB alone, for a 32 KB EEPROM.
 
 What is applied (trio64-vbios-tools docs/775-changes.md, each change with its issue, and docs/775-rom.md "Byte-level changes")
-  data   MCLK 59.96 MHz, POST flags 05h (blank pedestal off, the board flags of the card), CR80 POST
-         value 00h, CR41/CR52 60 Hz defaults for 1280x1024 and 1600x1200, 640x480 line total 800,
-         320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384, 1600x1200 vertical display
+  data   MCLK 50.11 MHz for every memory type (the 1-cycle EDO entry as in 2.04.07; the fast page and
+         SGRAM entries, 59.96 and 66.2 MHz there, lowered to it), POST flags 05h (blank pedestal off,
+         the board flags of the card), CR80 POST value 00h, CR41/CR52 60 Hz defaults for 1280x1024 and
+         1600x1200, 640x480 line total 800, 320x240 @ 60 Hz CRTC tables and refresh entries, CR50 for 512x384, 1600x1200 vertical display
          end (1200 lines, the reference has 1201), no monitor sense at POST (p23, #134: the call of the
          sense in the routine at 195Bh becomes xor bx,bx, the colour result; the rest of the routine,
          SR1A's blank pedestal among it, still runs)
@@ -56,7 +57,7 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
          31-16 = 0000h
   MCLK   (only with --mclk) the MCLK PLL entry POST uses for --memtype, the memory type the card is
          strapped for (CR36 bits 3-2): edo1 at most 60 MHz, fpm (fast page and 2-cycle EDO) and sgram at
-         most 66.67 MHz (V2-MEM-1); without it 59.96 MHz for edo1 and fpm, 66.2 MHz for sgram. A --mclk
+         most 66.67 MHz (V2-MEM-1); without it 50.11 MHz for every type (the data patches). A --mclk
          build of the reference image is built a second time without --mclk, that build is checked
          against the pinned SHA-256, and the two may differ only in the MCLK entry and the checksum
   sign-on "2.04.07-p22", checksum byte 7FFF
@@ -92,7 +93,7 @@ REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    
 # check the patch sites only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = '64f716e96fb3e8dd0fbdcf5de41df732b95852d373b0ade541d522026a5442a2'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = '544fa4b11bac043af876cf45fa4f10df2a9ea5cb0e3d04295958d57060fc31f7'  # 2.04.07-p25 (NASM 3.02), emulator tests passed;
+RESULT_SHA = '51af8a86862ae86915be616eb6e1648b90fd2d9b6368346c434ba4d70e3d2768'  # 2.04.07-p26 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
@@ -186,7 +187,9 @@ FONT_TABLES = [('8x8', 'F8', 0x62E0), ('8x16', 'F16', 0x6AE0), ('9x16 alternate'
 
 # Data patches: (offset, old, new, purpose)
 DATA = [
-    (0x00C7, '28 41', '41 42', 'MCLK PLL at POST: SR11 = 41h, SR10 = 42h (59.96 MHz)'),
+    (0x00C9, '41 42', '28 41', 'MCLK PLL for fast page and 2-cycle EDO: SR11 = 28h, SR10 = 41h (50.11 MHz, '
+                               'as the 1-cycle EDO entry C7h; 2.04.07: 59.96 MHz)'),
+    (0x00CB, '48 42', '28 41', 'MCLK PLL for SGRAM: SR11 = 28h, SR10 = 41h (50.11 MHz; 2.04.07: 66.2 MHz)'),
     (0x00D1, '02', '05', 'POST flags: blank pedestal off (bit 1), the card\'s board flags (bits 0 and 2)'),
     (0x00D3, '10', '00', 'CR80 POST value 00h, as on the card'),
     (0x00DE, '08 80', '88 81', 'CR41/CR52 refresh fields: 1280x1024 and 1600x1200 default 60 Hz'),
@@ -371,7 +374,13 @@ def vco_fix(d, log, lo=170.0):
 # (CR36 bits 3-2, code at 14A5h): 1-cycle EDO C7h, 2-cycle EDO and fast page C9h (bit 3 set), SGRAM
 # CBh (01b, the Trio64V2/GX). --mclk sets the entry of --memtype; the others stay. The limits are the
 # Trio64V2 data book's (V2-MEM-1): 60 MHz for 1-cycle EDO, 66 MHz (15 ns) for fast page and SGRAM; it
-# gives no separate value for 2-cycle EDO, which shares the fast page entry.
+# gives no separate value for 2-cycle EDO, which shares the fast page entry. The default build has
+# 50.11 MHz (SR11 = 28h, SR10 = 41h) in all three entries, the clock of 2.04.07's 1-cycle EDO entry and
+# of the card's stock 2.04.11 (owner's decision, 7 November 2026; p26). At that pair 2.04.07's POST also
+# sets CR88 bit 1 (PD bus delay of 1/2 MCLK on memory writes) when CR2F bits 3-0 = 6 (the test card's
+# revision) and CR36 bit 2 = 0 (1-cycle or 2-cycle EDO), code at 157Dh-15B5h: the reference behaviour,
+# on again since p26 (59.96 MHz kept it off from p9 to p25). A --mclk build with another pair leaves
+# the bit off.
 MCLK_ENTRY = {'edo1': 0x00C7, 'fpm': 0x00C9, 'sgram': 0x00CB}
 MCLK_MAX = {'edo1': 60.0, 'fpm': 66.67, 'sgram': 66.67}
 MCLK_MIN = 40.0     # no data book minimum; a guard against typing errors (2.04.07's own lowest is 50.11)
@@ -737,8 +746,8 @@ def main():
     ap.add_argument('--size', type=int, choices=(32, 64), default=64,
                     help='output size in KB (default 64: the 32 KB twice; 32 for a 32 KB EEPROM)')
     ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
-    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype (default: 59.96 '
-                    'for 1-cycle EDO and for fast page/2-cycle EDO, 66.2 for SGRAM, as the default build)')
+    ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype (default: 50.11 '
+                    'for every memory type, as the default build)')
     ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',
                     help='the MCLK entry --mclk sets: edo1 (1-cycle EDO, at most 60 MHz), fpm (fast page and '
                          '2-cycle EDO, 66.67 MHz), sgram (Trio64V2/GX, 66.67 MHz); default edo1')

@@ -24,14 +24,16 @@ Tests
   fifo           the mode set's CR67 site calls the FIFO code (p2, #75), whose constant is 112 x MCLK in kHz
                  of the build's MCLK PLL pair at 3B5h
   unchanged      outside the tables, the fonts, the patch sites (DDC ones too), the code blocks, the
-                 zeroed VDIF code, the sign-on and the checksum every byte is as in 1.5-07
+                 zeroed VDIF code, the MCLK entry (3B5h: 28h 41h, 50.11 MHz, p6), the sign-on and the
+                 checksum every byte is as in 1.5-07
   oem_build      a 1.5-07 build with other memory timing bytes in its refresh entries and another MCLK
-                 (as the card makers' builds differ) is patched too and keeps them
+                 (as the card makers' builds differ) is patched too, keeps the timing bytes and gets the
+                 default MCLK, 50.11 MHz (p6)
   input_64k      a 64 KB image with 1.5-07 in the lower half gives the same result, whatever its upper half
   size32         --size 32 gives the same lower 32 KB alone
-  mclk           --mclk 50 (--model 764p), 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change
+  mclk           --mclk 50 (both models), 55 and 60 give a valid MCLK PLL pair within 0.5 MHz at 3B5h and change
                  nothing else but the checksum and the FIFO code's 112 x MCLK; 69.8 and 70 MHz are valid; outside the
-                 model's range refused (764x 55-70 MHz: 71, 54, 39; 764p 50-60 MHz: 61, 49); 57, 53 (764p) and 70 MHz
+                 model's range refused (764x 50-70 MHz: 71, 49, 39; 764p 50-60 MHz: 61, 49); 57, 53 (764p) and 70 MHz
                  take the pair other Trio64-family BIOSes use
                  (41h 2Eh 57.27, 42h 39h 52.80, 22h 25h 69.80; s3patch.KNOWN_MCLK_8811); with --overclock 85
                  and 100 MHz are valid, 101 MHz and --overclock without --mclk refused
@@ -198,7 +200,7 @@ def main():
         allowed |= set(range(o, o + room))
     for k, off in s3tpatch.SITES.items():
         allowed |= set(range(off, off + len(s3tpatch.SIG.get(k, '?? ?? ??').split())))
-    allowed |= set(range(sym['WSET'], sym['WSET'] + 5)) | set(range(0x44, 0xE4)) | {0x7FFF}
+    allowed |= set(range(sym['WSET'], sym['WSET'] + 5)) | set(range(0x44, 0xE4)) | {0x3B5, 0x3B6, 0x7FFF}
     diff = [i for i in range(0x8000) if img[i] != ref[i] and i not in allowed]
     result('unchanged', not diff, 'changed elsewhere: %s' % ', '.join('%04X' % i for i in diff[:8]) if diff else
            '%d bytes differ, all in the tables, fonts, sites, blocks, sign-on, checksum' % sum(1 for i in range(0x8000) if img[i] != ref[i]))
@@ -210,15 +212,15 @@ def main():
     oem[0x3B5:0x3B7] = b'\x79\x46'                  # 55.04 MHz, as the 1.5-07 EDO build
     oem = fixsum(oem)
     rc, oimg, err = run(tmp, oem)
-    ok = rc == 0 and oimg is not None and not table_check(oem, oimg) and oimg[0x3B5:0x3B7] == b'\x79\x46'
-    result('oem_build', ok, err or 'other timing bytes and MCLK kept')
+    ok = rc == 0 and oimg is not None and not table_check(oem, oimg) and oimg[0x3B5:0x3B7] == b'\x28\x41'
+    result('oem_build', ok, err or 'other timing bytes kept, MCLK 55.04 MHz replaced by the default 50.11 MHz')
     rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
     rc, small, err = run(tmp, ref, ['--size', '32'])
     result('size32', rc == 0 and small == img[:0x8000], err or '32 KB, the same lower half')
     bad = []
-    for mhz in ('50', '55', '60'):                  # 50 MHz only on the 86C764-P (--model 764p)
-        rc, out, err = run(tmp, ref, ['--mclk', mhz] + (['--model', '764p'] if mhz == '50' else []))
+    for mhz, model in (('50', '764x'), ('50', '764p'), ('55', '764x'), ('60', '764x')):
+        rc, out, err = run(tmp, ref, ['--mclk', mhz, '--model', model])
         if rc or not out:
             bad.append('%s MHz: %s' % (mhz, err))
             continue
@@ -241,7 +243,7 @@ def main():
         rc, out, err = run(tmp, ref, ['--mclk', mhz] + (['--model', '764p'] if mhz == '53' else []))
         if rc or not out or out[0x3B5:0x3B7] != bytes.fromhex(pair):
             bad.append('%s MHz: %s, expected the known pair %s' % (mhz, err or out[0x3B5:0x3B7].hex(' '), pair))
-    for mhz, model in (('71', '764x'), ('39', '764x'), ('54', '764x'), ('61', '764p'), ('49', '764p')):
+    for mhz, model in (('71', '764x'), ('39', '764x'), ('49', '764x'), ('61', '764p'), ('49', '764p')):
         rc, out, err = run(tmp, ref, ['--mclk', mhz, '--model', model])   # outside the model's range
         if rc != 1 or out is not None:
             bad.append('%s MHz not refused for %s' % (mhz, model))
@@ -255,8 +257,8 @@ def main():
         rc, out, err = run(tmp, ref, args)
         if rc != 1 or out is not None:
             bad.append('%s not refused' % ' '.join(args))
-    result('mclk', not bad, '; '.join(bad) or '50 (764p), 55, 60, 69.8 and 70 MHz valid at 3B5h, 57, 53 (764p) and 70 MHz the known pairs, '
-           '71, 54 and 39 MHz refused for the 764x, 61 and 49 MHz for the 764p; '
+    result('mclk', not bad, '; '.join(bad) or '50 (both models), 55, 60, 69.8 and 70 MHz valid at 3B5h, 57, 53 (764p) and 70 MHz the known pairs, '
+           '71, 49 and 39 MHz refused for the 764x, 61 and 49 MHz for the 764p; '
            'with --overclock 85 and 100 MHz valid, 101 MHz refused')
     code = bytearray(ref)
     code[0x3000] ^= 1
