@@ -45,7 +45,7 @@ env:
 jobs:
   test:
     name: ${{ matrix.chip }} ${{ matrix.part }}
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -159,7 +159,7 @@ jobs:
 
   roms:
     name: All ROMs (make roms) and the release zip
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -207,7 +207,7 @@ jobs:
     # the three stock reference ROMs. Failures are expected and do not fail the run (not in
     # build-and-test); the logs (S3TEST, S3COMPAT, VSHOW, VGALOG, S3REGS) are kept as an artifact.
     name: Stock ROM ${{ matrix.chip }} (informational)
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -263,7 +263,7 @@ jobs:
     name: build-and-test
     if: always()
     needs: [test, roms]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - name: Every chip and memory size passed, every ROM built
         run: |
