@@ -18,10 +18,15 @@ entry point at offset 3, and the code
 - beeps high-low high-low on the PC speaker (1200 Hz, 600 Hz, 1200 Hz,
   600 Hz, each about 275 ms with a 110 ms gap),
 
-and returns with CF=0. The old PCI BIOS convention of a second call with
-CF=0 (run-time) is answered at once with CF=0; nothing else hooks in. The
-card is not touched: the ROM works on any conventional PCI card, a network
-card included, and needs no IRQ, I/O or memory resource of its own.
+and returns with CF=0. The entry does not test CF: not every system BIOS
+sets CF=1 for the init call (the emulator starts a ROM with CF=0, and so do
+BIOSes without the old PCI BIOS double call), so the work runs on the first
+call whatever CF says. The application-unique byte at 07h is a done flag, so
+a BIOS that calls twice (CF=1 init, CF=0 run-time, the old PCI BIOS
+convention) gets the work exactly once; setting it is compensated in the
+checksum byte at 06h, so the image sum stays 00h (ROM-6). The card is not
+touched: the ROM works on any conventional PCI card, a network card
+included, and needs no IRQ, I/O or memory resource of its own.
 
 ## Build
 
@@ -63,6 +68,22 @@ when they stay 0000h.
 The output file goes into the EEPROM as is (64 KB, or 128 KB with
 REPEATS=4). The 32 KB image is self-contained in every 32 KB block of the
 part.
+
+## In the emulator
+
+`python3 emu/poc_test.py` runs the image in the project's emulator
+([emu/vgaemu.py](../emu/vgaemu.py)), the way the other ROMs run: the Machine
+loads the image at C0000 and `post()` far-calls C000:0003 like a system BIOS
+(with CF clear). The PoC has no VGA code, so INT 10h stays the emulator's
+IRET stub and nothing appears on a screen; the run shows the ROM returning
+to the far call, 13 INT 10h teletype calls (`Hello world` plus CR/LF), the
+divisors 03E2h/07C5h/03E2h/07C5h (1200/600/1200/600 Hz) programmed into PIT
+channel 2, four speaker-gate on/off pairs at port 61h, and a second init
+call returning at once (the done flag). The experiment is what found the two
+subtleties above: the emulator calls with CF=0 (the CF test had to go), and
+its constant clock advance makes the latched count return to exactly the
+same value each wrap, which the wrap test must treat as "not below" (`jb`,
+not `jbe`) so a wait can never hang on a PIT that stopped counting.
 
 ## What the code relies on
 

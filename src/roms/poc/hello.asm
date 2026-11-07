@@ -5,13 +5,18 @@
 ; The BIOS maps the ROM, copies the image to RAM, far-calls the entry point
 ; at offset 3 and the code prints "Hello world" on the INT 10h teletype and
 ; beeps high-low high-low (four tones: 1200 Hz, 600 Hz, 1200 Hz, 600 Hz) on
-; the PC speaker, then returns with CF=0. The old PCI BIOS convention of a
-; second call with CF=0 (run-time) is answered with an immediate return.
+; the PC speaker, then returns with CF=0.
 ;
-; Entry (init, CF=1): AX = bus number in AH, device/function in AL; the
-; routine preserves every register and returns by RETF, status in CF
-; (0 = success, 1 = error). Called in real mode only, from the RAM copy.
-; The image is never modified (ROM-6).
+; Entry (init): AX = bus number in AH, device/function in AL; the routine
+; preserves every register and returns by RETF, status in CF (0 = success,
+; 1 = error). Called in real mode only, from the RAM copy. The entry does
+; not test CF: not every system BIOS calls with CF=1 (the emulator starts
+; a ROM with CF=0, and so do BIOSes without the old PCI BIOS double call),
+; so the work runs on the first call whatever CF says. The application-unique
+; byte at 07h is a done flag, so a BIOS that calls twice (CF=1 init, CF=0
+; run-time, the old PCI BIOS convention) gets the work exactly once. Setting
+; the flag changes the RAM copy, so the checksum byte at 06h is adjusted
+; with it and the image sum stays 00h (ROM-6).
 ;
 ; The image is exactly 32 KB (the Initialization Size byte 02h and the PCIR
 ; Image Length say so; build.py pads with 00h and fixes the checksum at
@@ -39,7 +44,8 @@ org 0
         db 0x40                 ; 02h: Initialization Size, 512-byte units (32 KB)
         jmp near init           ; 03h: init entry point (3 bytes, to 06h)
         db 0                    ; 06h: checksum (patched by build.py)
-        times 17 db 0           ; 07h-17h: reserved (application unique data)
+        db 0                    ; 07h: done flag (application unique data)
+        times 16 db 0           ; 08h-17h: reserved (application unique data)
         dw pcir                 ; 18h: offset of the PCI data structure
         times 6 db 0            ; 1Ah-1Fh: pad to the DWORD-aligned PCIR
 
@@ -63,15 +69,20 @@ pcir:   db "PCIR"               ; 00h: signature
         dw 0                    ; 16h: reserved
 
 ; ---------------------------------------------------------------------------
-; Init entry. CF=1: POST-time initialization; CF=0: the old PCI BIOS
-; run-time call, answered at once. All registers preserved, status in CF.
+; Init entry. The work runs on the first call, whatever CF says (not every
+; BIOS sets CF=1 for the init call); the done flag at 07h keeps a second
+; call (the old PCI BIOS CF=0 run-time call) from repeating it. All
+; registers preserved, status in CF.
 ; ---------------------------------------------------------------------------
-init:   jnc .ret                ; run-time call: nothing to do
-        pusha
+init:   pusha
         push ds
         push es
         push cs
         pop ds                  ; DS = ROM segment, strings are org 0 offsets
+        cmp byte [0x07], 0      ; already run (this RAM copy)?
+        jne .ret
+        mov byte [0x07], 1     ; mark it done; the RAM copy is writable in INIT
+        dec byte [0x06]        ; keep the image checksum 00h (ROM-6)
         in al, 0x61              ; remember the speaker gate as found
         mov [spk], al
         mov si, hello
@@ -95,10 +106,10 @@ init:   jnc .ret                ; run-time call: nothing to do
         jnz .beep
         mov al, [spk]           ; restore the speaker gate as found
         out 0x61, al
-        pop es
+.ret:   pop es
         pop ds
         popa
-.ret:   clc                     ; CF=0: success
+        clc                     ; CF=0: success
         retf
 
 ; ---------------------------------------------------------------------------
@@ -145,8 +156,8 @@ wait_pit:
         call pit_read
         mov bx, ax              ; baseline count
 .wl:    call pit_read
-        cmp ax, bx              ; jumped up: the counter wrapped past zero
-        jbe .wl
+        cmp ax, bx              ; not below: the counter wrapped past zero (or
+        jb .wl                  ; stopped counting; a wait must not hang on it)
         mov bx, ax
         loop .wl
         ret
