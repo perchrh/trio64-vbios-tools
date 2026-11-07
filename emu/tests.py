@@ -51,6 +51,11 @@ Tests
   romver           ROMVER.COM prints the version S3TEST reads ("Version " in C000:0000-00FF, at most
                    12 characters, stopping before a byte below 20h); /Q prints only that version.
                    S3COMPAT's ROM line and a /V log (D:ENV ROM=) use that same scan
+  mclk             MCLK.COM prints the chip, the ROM version and the CR36 memory type and size
+                   before it changes the clock. /H is the help. /I above the cap changes nothing.
+                   /I 74.9 on a 1-cycle EDO Trio64V2 (cap 75 MHz) runs one step, passes, publishes
+                   the step below it, and restores the POST SR10/SR11. The emulator's RAM does not
+                   go bad as the clock rises, so this does not measure a real maximum
   s3test           S3TEST runs to the end; every check passes except the banked write throughput (no
                    real bus speed); with /V the output is the same (except the Time spent line) and
                    S3TEST.DBG is well formed
@@ -2541,9 +2546,83 @@ def t_romver(c):
     return want.decode('latin1')
 
 
+def t_mclk(c):
+    """MCLK prints the chip, ROM version and CR36 memory before any clock step, and puts the POST clock back."""
+    com = c.tool('MCLK.COM')
+    h = c.machine().run_com(com, '/H', name='MCLK.COM', max_insn=2_000_000)
+    check(h.exit == ('exit', 0), 'MCLK /H exit %s' % (h.exit,))
+    helptext = bytes(h.stdout)
+    check(b'/P' in helptext and b'/I' in helptext and b'CR36' in helptext, 'MCLK /H text %r' % helptext[:200])
+
+    bad = c.machine().run_com(com, '/I', name='MCLK.COM', max_insn=1_000_000)
+    check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
+          'bad /I %s %r' % (bad.exit, bytes(bad.stdout)[:200]))
+
+    m = c.machine()
+    before = (m.r['seq'].get(0x10), m.r['seq'].get(0x11))
+    over = m.run_com(com, '/I 90', name='MCLK.COM', max_insn=20_000_000)
+    check(over.exit == ('exit', 1), 'MCLK /I 90 exit %s stdout %r' % (over.exit, bytes(over.stdout)[:500]))
+    text = bytes(over.stdout).replace(b'\r\n', b'\n')
+    check(b'Chip ' in text and b'ROM ' in text, 'identity missing in %r' % text[:400])
+    check(b'Memory CR36=' in text and b'type ' in text and b'size ' in text, 'CR36 line missing in %r' % text[:600])
+    check(b'above the cap' in text, 'cap refusal missing in %r' % text[:800])
+    check(b'STEP ' not in text, 'a step ran above the cap: %r' % text[:800])
+    check((m.r['seq'].get(0x10), m.r['seq'].get(0x11)) == before,
+          'SR10/SR11 changed on refusal: %s was %s' % ((m.r['seq'].get(0x10), m.r['seq'].get(0x11)), before))
+
+    # One step, just under a 60 MHz datasheet cap of 75 MHz. The UV+ book is 66.67 MHz,
+    # so the same request keeps stepping and is not this test.
+    if Machine.chip == 'uvplus':
+        raise Skip('Trio64UV+ cap is 83.333 MHz; /I 74.9 is not a single step')
+    m2 = c.machine()
+    post = (m2.r['seq'].get(0x10), m2.r['seq'].get(0x11))
+    one = m2.run_com(com, '/I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
+    body = bytes(one.stdout).replace(b'\r\n', b'\n')
+    check(one.exit == ('exit', 0), 'MCLK /I 74.9 exit %s\n%s' % (one.exit, body.decode('latin1', 'replace')[:1500]))
+    lines = [ln for ln in body.split(b'\n') if ln]
+    mem = next((ln for ln in lines if ln.startswith(b'Memory CR36=')), b'')
+    check(b'size ' in mem and b'type ' in mem and b'test ' in mem and b'EDO' in mem, 'memory line %r' % mem)
+    steps = [ln for ln in lines if ln.startswith(b'STEP ')]
+    check(steps and steps[0].endswith(b'testing'), 'first step line %r' % steps[:2])
+    check(any(ln.endswith(b'PASS') for ln in steps), 'no PASS in %r' % steps)
+    check(sum(1 for ln in steps if ln.endswith(b'testing')) == 1, 'expected one step, got %r' % steps)
+    high = next((ln for ln in lines if ln.startswith(b'Highest ')), b'')
+    pub = next((ln for ln in lines if ln.startswith(b'Published ')), b'')
+
+    def mhz_of(line):
+        return float(line.split()[1])
+
+    gap = mhz_of(high) - mhz_of(pub)
+    check(high and pub and 0.5 <= gap < 1.2, 'published %r is not one 0.5 MHz step under %r' % (pub, high))
+    rest = next((ln for ln in lines if ln.startswith(b'Restored ')), b'')
+    check(('SR10=%02X' % post[0]).encode() in rest and ('SR11=%02X' % post[1]).encode() in rest,
+          'restored %r, POST SR10/SR11 %02X %02X' % (rest, post[0], post[1]))
+    check((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)) == post,
+          'clock left at %s, POST was %s' % ((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)), post))
+
+    # /P from the same request is also one step: the next legal pair is already over the cap.
+    # Publishing then takes the previous table entry, a small step, not 0.5 MHz down.
+    mp = c.machine()
+    postp = (mp.r['seq'].get(0x10), mp.r['seq'].get(0x11))
+    prec = mp.run_com(com, '/P /I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
+    pbody = bytes(prec.stdout).replace(b'\r\n', b'\n')
+    check(prec.exit == ('exit', 0), 'MCLK /P exit %s\n%s' % (prec.exit, pbody.decode('latin1', 'replace')[:800]))
+    plines = [ln for ln in pbody.split(b'\n') if ln]
+    psteps = [ln for ln in plines if ln.startswith(b'STEP ')]
+    check(sum(1 for ln in psteps if ln.endswith(b'testing')) == 1, 'precise steps %r' % psteps)
+    phigh = next(ln for ln in plines if ln.startswith(b'Highest '))
+    ppub = next(ln for ln in plines if ln.startswith(b'Published '))
+    gap = mhz_of(phigh) - mhz_of(ppub)
+    check(0 < gap < 0.25, 'precise published %r is not the previous pair under %r' % (ppub, phigh))
+    check((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)) == postp,
+          'precise left the clock at %s, POST was %s' % ((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)), postp))
+    c.save('MCLK', one)
+    return 'one step'
+
+
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -2560,7 +2639,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'vshow': 'vbe tools card vram',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'mclk': 'tools s3 card', 'vshow': 'vbe tools card vram',
     's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',

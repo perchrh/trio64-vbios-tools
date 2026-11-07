@@ -33,11 +33,12 @@ ifdef VER764
 DEFS += -DVER764="'$(VER764)'"
 endif
 
-# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM, REPORT.COM and the batch files into build/
+# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM, REPORT.COM, MCLK.COM and the batch files into build/
 # make all: tools and every chip's ROM at its memory clocks (make roms)
 # make clean: removes build/ (tools and ROM images)
 TOOLS = build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
         build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/REPORT.COM \
+        build/MCLK.COM \
         build/RUNALL.BAT build/CLEAN.BAT
 all: tools roms
 tools: $(TOOLS)
@@ -85,6 +86,9 @@ build/CHIPID.COM: $(TOOLS_SRC)/chipid/chipid.asm $(COMMON)/version.inc $(COMMON)
 
 build/REPORT.COM: $(TOOLS_SRC)/report/report.asm $(COMMON)/version.inc $(COMMON)/chip.inc | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
+
+build/MCLK.COM: $(TOOLS_SRC)/mclk/mclk.asm $(TOOLS_SRC)/mclk/pll.inc $(COMMON)/version.inc $(COMMON)/chip.inc $(COMMON)/romver.inc | build
+	"$(NASMBIN)" -f bin -i$(COMMON)/ -i$(TOOLS_SRC)/mclk/ $(DEFS) -o $@ $<
 
 # Win32 console program for Windows 9x; the PE header is written in the source (no linker)
 build/S3REGS32.EXE: $(TOOLS_SRC)/s3regs/s3regs32.asm $(COMMON)/version.inc | build
