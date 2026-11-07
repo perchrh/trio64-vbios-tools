@@ -8,10 +8,10 @@ the font set is **closed** for this project. Not legal advice.
 
 | Asset | Path | Role |
 | --- | --- | --- |
-| Source bitmap fonts (unmodified) | [`rompatch/fonts/VGA-ROM.F08`](../../rompatch/fonts/VGA-ROM.F08), [`VGA-ROM.F14`](../../rompatch/fonts/VGA-ROM.F14), [`VGA-ROM.F16`](../../rompatch/fonts/VGA-ROM.F16), [`PP_ROMAN.F16`](../../rompatch/fonts/PP_ROMAN.F16), [`STANDARD.F14`](../../rompatch/fonts/STANDARD.F14) | Gil FNTCOL16 v1.6 individual fonts |
-| Gil notice | [`rompatch/fonts/COPYLEFT.TXT`](../../rompatch/fonts/COPYLEFT.TXT) | preserved with the files |
-| Build | [`rompatch/fonts/fonts.py`](../../rompatch/fonts/fonts.py) | builds the five ROM tables from those files |
-| Description | [`rompatch/fonts/README.md`](../../rompatch/fonts/README.md) | how 8-dot / 9-dot tables are composed |
+| Source bitmap fonts (unmodified) | [`src/roms/fonts/VGA-ROM.F08`](../../src/roms/fonts/VGA-ROM.F08), [`VGA-ROM.F14`](../../src/roms/fonts/VGA-ROM.F14), [`VGA-ROM.F16`](../../src/roms/fonts/VGA-ROM.F16), [`PP_ROMAN.F16`](../../src/roms/fonts/PP_ROMAN.F16), [`STANDARD.F14`](../../src/roms/fonts/STANDARD.F14) | Gil FNTCOL16 v1.6 individual fonts |
+| Gil notice | [`src/roms/fonts/COPYLEFT.TXT`](../../src/roms/fonts/COPYLEFT.TXT) | preserved with the files |
+| Build | [`src/roms/fonts/fonts.py`](../../src/roms/fonts/fonts.py) | builds the five ROM tables from those files |
+| Description | [`src/roms/fonts/README.md`](../../src/roms/fonts/README.md) | how 8-dot / 9-dot tables are composed |
 
 **Decision.** Use Gil's individual fonts (his notice: public domain / free to use) and **generate
 the ROM tables at build time** from them (`fonts.py`: main 8x8 / 8x14 / 8x16 tables plus the 9x14
@@ -25,7 +25,7 @@ outputs of our build script from those sources, not a redistributed Gil archive 
 name.
 
 **Implementation.** Already on the dirty side for all three patched ROMs (#141; patchers call
-`fonts.py`). The clean side receives the same `rompatch/fonts/` tree (files + `COPYLEFT.TXT` +
+`fonts.py`). The clean side receives the same `src/roms/fonts/` tree (files + `COPYLEFT.TXT` +
 `fonts.py`) after allowlist export.
 
 **Note.** The glyphs match IBM VGA / historical S3 tables byte for byte (documented in the fonts

@@ -15,7 +15,7 @@ so the LFB lines and the banked write throughput stay with the hardware runs.
 
 Tests
   version          the tests are for the newest ROM: the ROM under test carries the sign-on of its level in
-                   common/version.inc (VER775 2.04.07-p21, VER765 1.03-08N-p4, VER764 1.5-07-p2), where
+                   src/tools/common/version.inc (VER775 2.04.07-p21, VER765 1.03-08N-p4, VER764 1.5-07-p2), where
                    the patchers read it and S3TEST expects it; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on VER775, the checksum and 32 KB size of the lower
@@ -28,7 +28,7 @@ Tests
                    clear and font load, the 32-bit registers kept across the p13 text and planar scrolls,
                    the mode 13h scroll (p21), AH=09h and an AH=0Eh line feed that scrolls, and the FIFO fix (CR90 bit 7) with the bit set as the card leaves it
                    after a VESA mode; all failures listed. The other patches are S3TEST's checks
-  765_patches    (our Trio64V+ ROM 1.03-08N-pN, rompatch/vplus, with --chip 765) the ROM file (sign-on of
+  765_patches    (our Trio64V+ ROM 1.03-08N-pN, src/roms/vplus, with --chip 765) the ROM file (sign-on of
                    the level s3vpatch.py builds, checksum, 32 KB), the mode set clear (bank 0 zeroed, EAX
                    bits 31-16 kept), the booster (on after a banked 4F02 and the window function after AH=00
                    69h, off under Windows enhanced mode with INT 2Fh asked once per mode set, the PCI base
@@ -155,9 +155,13 @@ from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, U
                                UC_X86_INS_IN, UC_X86_INS_OUT)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'rompatch', 'fonts'))
-import fonts  # noqa: E402  (rompatch/fonts: the font tables of our ROMs, built from Gil's public domain fonts)
-SRC = os.path.dirname(HERE)
+REPO = os.path.dirname(HERE)
+TOOLS = os.path.join(REPO, 'src', 'tools')
+ROMS = os.path.join(REPO, 'src', 'roms')
+sys.path.insert(0, os.path.join(ROMS, 'fonts'))
+import fonts  # noqa: E402  (src/roms/fonts: the font tables of our ROMs, built from Gil's public domain fonts)
+# SRC is the repository root (legacy name used throughout this file for path joins)
+SRC = REPO
 
 
 NASM = os.environ.get('NASM', 'nasm')   # the assembler for the tests that build code (--nasm, make NASM=...)
@@ -174,7 +178,7 @@ def check(cond, msg):
 
 # ---------------------------------------------------------------- reference data from vgaref.inc
 def read_vgaref():
-    t = open(os.path.join(SRC, 's3compat', 'vgaref.inc')).read()
+    t = open(os.path.join(TOOLS, 's3compat', 'vgaref.inc')).read()
     lines = [l.strip() for l in t.split('\n')]
     ents = []
     i = 0
@@ -222,10 +226,10 @@ class Ctx:
         # our patched BIOS (2.04.07-pN sign-on) or another one (the stock BIOS of a Trio64-family card):
         # the tests tagged 'patch' check our patches and are skipped on another BIOS
         self.ours = bool(re.search(rb'Version 2\.04\.07-p\d+', self.rom[:0x100]))
-        # our Trio64V+ ROM (1.03-08N-pN, rompatch/vplus): the tests tagged 'patch' run on it only when
+        # our Trio64V+ ROM (1.03-08N-pN, src/roms/vplus): the tests tagged 'patch' run on it only when
         # they are tagged '765' too (the shared speed patches, its own patch test)
         self.vours = bool(re.search(rb'Version 1\.03-08N?-p\d+', self.rom[:0x100]))
-        # our Trio64 ROM (1.5-07-pN, rompatch/trio64): likewise with the tag 764
+        # our Trio64 ROM (1.5-07-pN, src/roms/trio64): likewise with the tag 764
         self.tours = bool(re.search(rb'Version 1\.5-07-p\d+', self.rom[:0x100]))
         os.makedirs(logs, exist_ok=True)
 
@@ -252,7 +256,7 @@ class Ctx:
 
 
 def has_verbose():
-    return os.path.exists(os.path.join(SRC, 'common', 'vdebug.inc'))
+    return os.path.exists(os.path.join(TOOLS, 'common', 'vdebug.inc'))
 
 
 def check_dbg(dbg, name):
@@ -278,7 +282,7 @@ def check_dbg(dbg, name):
 # ---------------------------------------------------------------- tests
 def t_version(c):
     """The tests are for the newest ROM: the ROM under test carries the sign-on of the level in
-    common/version.inc (VER775, VER765 for our Trio64V+ ROM, VER764 for our Trio64 ROM), which the
+    src/tools/common/version.inc (VER775, VER765 for our Trio64V+ ROM, VER764 for our Trio64 ROM), which the
     patchers write and S3TEST expects."""
     vwant = latest('vplus/s3vpatch.py')
     twant = latest('trio64/s3tpatch.py')
@@ -420,15 +424,15 @@ def t_vga_palettes(c):
 
 # ---------------------------------------------------------------- the patches on top of the stock ROM
 def romver(name='VER775'):
-    """The ROM version S3TEST is built to expect (common/version.inc): VER775 on a Trio64V2, VER765 on a
+    """The ROM version S3TEST is built to expect (src/tools/common/version.inc): VER775 on a Trio64V2, VER765 on a
     Trio64V+."""
-    t = open(os.path.join(SRC, 'common', 'version.inc')).read()
+    t = open(os.path.join(TOOLS, 'common', 'version.inc')).read()
     return re.search(r"%%define %s '([^']*)'" % name, t).group(1)
 
 
 def latest(patcher='s3patch.py'):
-    """The newest ROM version in the repository, which the patcher builds: common/version.inc, where the
-    patchers read their level (VER775 for rompatch/s3patch.py, 2.04.07-p21; VER765 for
+    """The newest ROM version in the repository, which the patcher builds: src/tools/common/version.inc, where the
+    patchers read their level (VER775 for src/roms/s3patch.py, 2.04.07-p21; VER765 for
     'vplus/s3vpatch.py'; VER764 for 'trio64/s3tpatch.py')."""
     return romver({'s3patch.py': 'VER775', 'vplus/s3vpatch.py': 'VER765', 'trio64/s3tpatch.py': 'VER764'}[patcher])
 
@@ -444,7 +448,7 @@ def t_rom_patches(c):
         if not cond:
             fails.append(what)
 
-    font_tables(m, chk, has14=False)    # p24 (#141): the fonts of rompatch/fonts, in place; no 8x14 in 2.04.07
+    font_tables(m, chk, has14=False)    # p24 (#141): the fonts of src/roms/fonts, in place; no 8x14 in 2.04.07
     rom = c.rom
     chk(romver().encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes' % romver())
     chk(sum(rom[:0x8000]) & 0xFF == 0, 'checksum of the lower 32 KB is not 00')
@@ -576,7 +580,7 @@ def t_rom_patches(c):
 
 
 def t_vplus_patches(c):
-    """Our Trio64V+ ROM (1.03-08N-pN, rompatch/vplus): the ROM file, the booster with the Windows check,
+    """Our Trio64V+ ROM (1.03-08N-pN, src/roms/vplus): the ROM file, the booster with the Windows check,
     the base back at the next mode set, the fast 4F05 path and the window function, the attribute
     controller flip-flop after the mode set, the 32-bit registers kept across the 32-bit clears, font load
     and scrolls (the shared speed patches themselves: stores). Only on the Trio64V+ and UV+ models."""
@@ -591,7 +595,7 @@ def t_vplus_patches(c):
         if not cond:
             fails.append(what)
 
-    font_tables(m, chk)                 # p5 (#141): the fonts of rompatch/fonts, in place
+    font_tables(m, chk)                 # p5 (#141): the fonts of src/roms/fonts, in place
     rom = c.rom
     chk(('Version ' + latest('vplus/s3vpatch.py')).encode() in rom[:0x100], 'sign-on: %s not in the first 256 bytes'
         % latest('vplus/s3vpatch.py'))
@@ -776,7 +780,7 @@ def t_vplus_patches(c):
 
 
 def t_t64_patches(c):
-    """Our Trio64 ROM (1.5-07-pN, rompatch/trio64): the ROM file, the refresh defaults (no mode runs
+    """Our Trio64 ROM (1.5-07-pN, src/roms/trio64): the ROM file, the refresh defaults (no mode runs
     interlaced, 800x600 at 60 Hz), the removed interlaced-only modes refused, the booster with the Windows
     check (mark in CR52 bit 3, INT 2Fh asked once per mode set), the PCI base back after a mode set, the
     S3 register lock left as Phoenix leaves it, the ATC flip-flop reset, S3's fonts (AX=1130h, plane 2),
@@ -811,7 +815,7 @@ def t_t64_patches(c):
             cr.get(i, 0) for i in (0x58, 0x59, 0x5A, 0x52, 0x6A, 0x38, 0x39))
     chk(base[0] and not base[1] and cr.get(0x52, 0) == 0x80, 'POST: CR59/5A %02X%02X, CR52 %02X (expected 80h)'
         % (base[0], base[1], cr.get(0x52, 0)))
-    # the fonts of rompatch/fonts (#141; before p5 S3's from 1.03-08, the same bytes), all five tables
+    # the fonts of src/roms/fonts (#141; before p5 S3's from 1.03-08, the same bytes), all five tables
     # whole: AX=1130h finds each, the moved 8x16 font and 9x16 table too
     font_tables(m, chk)
     # the mode set and AX=1114h load them into plane 2 through the moved addresses: the 8x16 glyphs (8-dot
@@ -822,7 +826,7 @@ def t_t64_patches(c):
         g = [bytes(m.planes[2][c * 32:c * 32 + 16]) for c in range(256)]
         plain = [c for c in range(256) if c not in alt and g[c] != fonts.F16[c * 16:c * 16 + 16]]
         got = sum(g[c] == alt[c] for c in alt)
-        chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not the 8x16 of rompatch/fonts, %d of 19 '
+        chk(not plain and got == nalt, 'AX=%04X: plane 2 %d glyphs not the 8x16 of src/roms/fonts, %d of 19 '
             'alternate glyphs (expected %d)' % (ax, len(plain), got, nalt))
     # VBE 4F15 without VDIF (the model has no monitor on the DDC lines): BL=00h answers 004Fh with BX = 0000h
     # and BL=01h fails, as on 1.5-07, after its 50-frame watch for a DDC1 monitor (DDC1 kept); BL=02h, read
@@ -1106,7 +1110,7 @@ def build_s3compat_vga(tmp):
     nasm = shutil.which(NASM)
     if not nasm:
         raise Skip('%s not found (--nasm)' % NASM)
-    t = open(os.path.join(SRC, 's3compat', 's3compat.asm')).read()
+    t = open(os.path.join(TOOLS, 's3compat', 's3compat.asm')).read()
     cuts = [("        call setup\n        call post_tests\n", ""),
             ("        PS 13,10,'--- VESA BIOS ---',13,10\n",
              "        jmp emu_end\n        PS 13,10,'--- VESA BIOS ---',13,10\n"),
@@ -1114,11 +1118,11 @@ def build_s3compat_vga(tmp):
     for a, b in cuts:
         check(t.count(a) == 1, 'cannot cut s3compat.asm at %r' % a[:40])
         t = t.replace(a, b)
-    shutil.copy(os.path.join(SRC, 's3compat', 'vgaref.inc'), tmp)
+    shutil.copy(os.path.join(TOOLS, 's3compat', 'vgaref.inc'), tmp)
     src = os.path.join(tmp, 's3cvga.asm')
     open(src, 'w').write(t)
     out = os.path.join(tmp, 'S3CVGA.COM')
-    inc = os.path.join(SRC, 'common') + os.sep
+    inc = os.path.join(TOOLS, 'common') + os.sep
     subprocess.run([nasm, '-f', 'bin', '-i' + inc, '-i' + tmp + os.sep, '-o', out, src], check=True, cwd=tmp)
     return open(out, 'rb').read()
 
@@ -1129,18 +1133,18 @@ def build_s3compat_vbe(tmp):
     nasm = shutil.which(NASM)
     if not nasm:
         raise Skip('%s not found (--nasm)' % NASM)
-    t = open(os.path.join(SRC, 's3compat', 's3compat.asm')).read()
+    t = open(os.path.join(TOOLS, 's3compat', 's3compat.asm')).read()
     cuts = [("        call setup\n        call post_tests\n", ""),
             ("        mov byte [pass],1\n", "        mov byte [pass],1\n        call vesa_more\n        jmp emu_end\n"),
             ("        call cleanup\n", "        call cleanup\nemu_end:\n")]
     for a, b in cuts:
         check(t.count(a) == 1, 'cannot cut s3compat.asm at %r' % a[:40])
         t = t.replace(a, b)
-    shutil.copy(os.path.join(SRC, 's3compat', 'vgaref.inc'), tmp)
+    shutil.copy(os.path.join(TOOLS, 's3compat', 'vgaref.inc'), tmp)
     src = os.path.join(tmp, 's3cvbe.asm')
     open(src, 'w').write(t)
     out = os.path.join(tmp, 'S3CVBE.COM')
-    inc = os.path.join(SRC, 'common') + os.sep
+    inc = os.path.join(TOOLS, 'common') + os.sep
     subprocess.run([nasm, '-f', 'bin', '-i' + inc, '-i' + tmp + os.sep, '-o', out, src], check=True, cwd=tmp)
     return open(out, 'rb').read()
 
@@ -1267,8 +1271,8 @@ def vgalog_info(c, m, blk, what, tail=bytes(8)):
 
 
 def t_vgalog(c):
-    if not os.path.exists(os.path.join(SRC, 'vgalog', 'vgalog.asm')):
-        raise Skip('no vgalog/ in this tree')
+    if not os.path.exists(os.path.join(TOOLS, 'vgalog', 'vgalog.asm')):
+        raise Skip('no src/tools/vgalog/ in this tree')
     com = c.tool('VGALOG.COM')
     m = c.machine()
     ri = r = m.run_com(com, '', seg=0x2000)
@@ -1799,14 +1803,14 @@ def vesa_supported(m):
 
 
 def font_tables(m, chk, has14=True):
-    """Our ROMs' fonts are the tables of rompatch/fonts (#141): AX=1130h BH=2-7 point at them, whole.
+    """Our ROMs' fonts are the tables of src/roms/fonts (#141): AX=1130h BH=2-7 point at them, whole.
     2.04.07 has no 8x14 font (BH=2 gives the 8x16) and one alternate table, the 9x16 one (has14=False)."""
     want = {3: fonts.F8[:0x400], 4: fonts.F8[0x400:], 2: fonts.F14 if has14 else fonts.F16, 6: fonts.F16,
             5: fonts.ALT14 if has14 else fonts.ALT16, 7: fonts.ALT16}
     for bh, t in sorted(want.items()):
         r = m.int10(0x1130, bx=bh << 8)
         chk(m.mem(r['es'] * 16 + r['bp'], len(t)) == t, 'AX=1130h BH=%d at %04X:%04X: not the %d-byte table of '
-            'rompatch/fonts' % (bh, r['es'], r['bp'], len(t)))
+            'src/roms/fonts' % (bh, r['es'], r['bp'], len(t)))
 
 
 def vesa_fit(m, mode):

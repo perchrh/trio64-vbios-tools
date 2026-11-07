@@ -9,19 +9,22 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The ROM is a 64 KB image. The lower 32 KB is the S3 reference BIOS 2.04.07 with our patches
   (currently -p24); the upper 32 KB is a copy of it (#78; p15 to p21 were built with zeros there, up to
   p14 it was the card's Trio64V+ BIOS 1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
-- The patched ROM images are kept outside this repository. `rompatch/` holds the ROM code (nasm) and
+- Layout: `src/tools/` holds the DOS tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, CHIPID, S3REGS32,
+  S3ALIAS) and shared includes (`src/tools/common/`); `src/roms/` holds the ROM patchers and assembly.
+  `make` / `make all` builds tools and ROMs; `make tools` and `make roms` build one side; `make clean`
+  removes `build/` (both). CHIPID.COM is part of the tools artefacts and the release zip.
+- The patched ROM images are kept outside this repository. `src/roms/` holds the ROM code (nasm) and
   `s3patch.py`, which builds the current level from the S3 reference 2.04.07 alone
   with byte assertions; only the latest level is built. A new level replaces the pinned SHA-256
   (`RESULT_SHA`) once the emulator tests pass, and `make 775-rom-test` checks it. Update `BLOCK_SHA` in
   `s3patch.py` together with `RESULT_SHA`: the first 16 hex digits of the SHA-256 of every assembled
   block of that same NASM 3.02 build (all files in `BLOCKS`, also new ones); s3patch uses them to name
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
-  repository also holds the Trio64V+ backport (`rompatch/vplus/`: `s3vpatch.py` builds 1.03-08N-pN
+  repository also holds the Trio64V+ backport (`src/roms/vplus/`: `s3vpatch.py` builds 1.03-08N-pN
   from the S3 Trio64V+ BIOS 1.03-08N in `reference/64vplus/`, with the same rules: byte assertions, a
   pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VER765`; docs/765-rom.md) and the Trio64 ROM
-  (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
-  `reference/trio64/`, the same rules, `VER764`; docs/764-rom.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, CHIPID, S3REGS32 for the Windows 9x desktop),
-  the TSR S3ALIAS and their documentation.
+  (`src/roms/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
+  `reference/trio64/`, the same rules, `VER764`; docs/764-rom.md), and the documentation for the tools.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a Dell
   2021FP (EDID over DDC2: Windows 98 identifies it with p21). The multiQ LCD (MQ215 B-1, native
   800x600, no 1280x1024 at all) shows no picture on any card or machine since 31 October 2026: a
@@ -49,13 +52,13 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   of its EEPROM (the DSP-3364P maps the upper one, #78; the Trio64V2 card the lower one).
 - Base every change on the reference image plus explicit patches with byte assertions, so a build
   fails when the bytes under a patch are not what the patch expects. Addresses go into
-  `rompatch/bios.inc` (the patcher reads it too), patch sites and their original bytes into
+  `src/roms/bios.inc` (the patcher reads it too), patch sites and their original bytes into
   `s3patch.py`.
 - Rejected on this card, do not retry without new evidence: SR15 bit 7 (data errors) and CR87 bit 1
   (hang), see docs/775-rom.md "Omitted".
 - Fixes that change what a standard function returns, or need more ROM space than is free, stay as
   TSRs (S3ALIAS).
-- The fonts of all three ROMs come from rompatch/fonts (Joseph Gil's public domain collection, files kept
+- The fonts of all three ROMs come from src/roms/fonts (Joseph Gil's public domain collection, files kept
   unmodified with his notice; #141), never from a BIOS image or another project's code.
 - The 8x14 font is missing in the BIOS and that is accepted for now. The Trio64 ROM keeps its 8x14
   font and 9x14 alternate table (S3's since 30 October 2026), to preserve the style of the era: do not
@@ -94,7 +97,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The ROM under test is built from the S3 2.04.07 reference BIOS; its data is not used as expected
   values in the tests.
 - The tools run on the whole Trio64 family (Trio32, Trio64, Trio64V+, Trio64V2) and on its stock
-  BIOSes. Chip limits (VCO range, DCLK maxima, R bits) come from `common/chip.inc`, after the chip is
+  BIOSes. Chip limits (VCO range, DCLK maxima, R bits) come from `src/tools/common/chip.inc`, after the chip is
   found; never write the Trio64V2 values into a test. A check whose expectation is a choice of our
   BIOS rather than a standard (default refresh rates, the mode list, the S3 mode numbers, VBE 2.0
   functions on a VBE 1.x BIOS) is WARN or INFO on another BIOS. S3TEST picks its test set by the chip
@@ -109,11 +112,11 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Start from a known state and leave one: set mode 03, take a baseline, zero VRAM without destroying
   the DOS screen, and restore the screen and the PIT at the end.
 - Exit code 0 when nothing failed, 1 otherwise.
-- VSHOW, S3TEST and S3COMPAT take /V: a debug log in <TOOL>.DBG (common/vdebug.inc). New code paths
+- VSHOW, S3TEST and S3COMPAT take /V: a debug log in <TOOL>.DBG (src/tools/common/vdebug.inc). New code paths
   should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
-- All tools share one version number (1.0.0 now), `VERSION` in `common/version.inc`; never write the
+- All tools share one version number (1.0.0 now), `VERSION` in `src/tools/common/version.inc`; never write the
   number into a tool's strings, use `VERSION` (and `VER775` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.
 
@@ -144,7 +147,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Generated documents and README text: no long dashes, no emoji, no accented letters such as e-acute.
 - In Markdown files, a reference to another Markdown file is a relative link
   (`[docs/764-rom.md](docs/764-rom.md)`, from docs/ `[764-rom.md](764-rom.md)`), and so is a reference to a
-  directory or source file in the repository (`[rompatch/trio64](rompatch/trio64/)`). Plain text is
+  directory or source file in the repository (`[src/roms/trio64](src/roms/trio64/)`). Plain text is
   kept only in code blocks, headings and for reference ROM images.
 
 ## Clean-room rules and parts A/B/C
@@ -179,7 +182,7 @@ review and a clean implementer who must not see BIOS images or BIOS source.
   numbers, and Windows acceptance unless a later milestone opens them. Prefer interface contracts
   (inputs/outputs) over implementation recipes; put primary pages the reviewer may read in
   `docs/cleanroom/primary-extracts/` and name them in LEAK-REVIEW "May read".
-- **Oracles stay dirty.** `oracle-*.md`, "The run" in milestone-calls, reference ROMs, `rompatch/`, and
+- **Oracles stay dirty.** `oracle-*.md`, "The run" in milestone-calls, reference ROMs, `src/roms/`, and
   riplin never cross. A rewrite after a RETURNED review is not clearance: only a fresh second-reader
   pass on the changed files clears IDs for export.
 
@@ -190,7 +193,7 @@ review and a clean implementer who must not see BIOS images or BIOS source.
 - A functional change is verified on the real card: S3TEST and S3COMPAT logs from the test machine are
   the final word. Compare with the previous log: the pass, fail and warn counts and every changed line
   should be explained.
-- The tests are for the newest ROM: a ROM level is kept only in common/version.inc (`VER775` for the
+- The tests are for the newest ROM: a ROM level is kept only in src/tools/common/version.inc (`VER775` for the
   Trio64V2 ROM, `VER765` for the Trio64V+ ROM, `VER764` for the Trio64 ROM). The patchers read their
   `LEVEL` from it for the sign-on, and S3TEST is built with it, so a new level changes that one line;
   the emulator test `version` fails when the ROM under test is older.
@@ -211,7 +214,7 @@ review and a clean implementer who must not see BIOS images or BIOS source.
   registers after every call (`make 775-ref-compare REF775=... ROM=...`, emu/refcompare.py). Our
   changes there are speed only (32-bit stores) or VGA/S3 extended registers; a change that makes a
   difference in those modes needs a reason in README.md. The Trio64 ROM carries the fonts of
-  rompatch/fonts (S3's tables, built from Gil's public domain collection, #141) instead of
+  src/roms/fonts (S3's tables, built from Gil's public domain collection, #141) instead of
   Phoenix's (README "Trio64 ROM"): `make 764-ref-compare` compares it with 1.5-07 with those fonts only
   (`s3tpatch.py --fonts-only`), so every other difference still shows.
 - Emulation is a useful extra check before hardware runs: `emu/` runs the ROM's POST and INT 10h, and

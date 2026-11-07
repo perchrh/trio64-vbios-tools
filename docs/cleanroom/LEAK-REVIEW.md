@@ -31,7 +31,7 @@ The oracle files, [`BRIEF.md`](BRIEF.md) and this file never cross and are not r
 
 1. **Search.** Look for names that point at dirty material, then read each hit in its sentence:
 
-       grep -n -i -E 'phoenix|riplin|reference rom|reference/|rompatch|backport|oracle|s3patch|1\.5-07|1\.03-08|2\.04\.0|2\.04\.1|-p[0-9]+\b' FILE
+       grep -n -i -E 'phoenix|riplin|reference rom|reference/|rompatch|src/roms|backport|oracle|s3patch|1\.5-07|1\.03-08|2\.04\.0|2\.04\.1|-p[0-9]+\b' FILE
        grep -n -E '\b[0-9A-F]{4}h?:[0-9A-F]{4}h?\b|\b[0-9A-F]{4}h-[0-9A-F]{4}h\b' FILE
 
    The second line finds ROM offsets and address ranges, which describe a BIOS image, not behaviour.
@@ -188,7 +188,7 @@ say so in the record, and the review is done again by another session.
 | The Phoenix VGA BIOS source material (an `SRC/phx` folder or similar, wherever found) | a vendor's source: the review compares with the ROMs' observed bytes and behaviour, not with anyone's source |
 | riplin's annotated disassembly ([hag](https://github.com/riplin/hag) `research/s3/bios/86c764x.asm`), and the section of [`docs/764-rom.md`](../764-rom.md) that cites it | the same: an expression of the Phoenix code, with names for its routines |
 | Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others) | the same; and a reviewer who has read it cannot tell what a file under review took from it |
-| Our patch code and patchers: [`rompatch/`](../../rompatch/) (its `bios.inc` files map routines of the reference ROMs), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour |
+| Our patch code and patchers: [`src/roms/`](../../src/roms/) (its `bios.inc` files map routines of the reference ROMs), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour |
 | [`BRIEF.md`](BRIEF.md) | the clean implementer's brief, not dirty material, but the reviewer has no use for it and must not write to the clean side |
 | [`s3alias/`](../../s3alias/) (S3ALIAS's source, its header included) | our TSR's code; the owner does not allow it for the review. The README's tool table row is enough for the mode numbers (49h to 59h, 4Bh to 5Ah) |
 
@@ -197,8 +197,8 @@ default. The text mode fonts are a known match: the tables our ROMs now build fr
 domain collection (#141) are byte for byte S3's, and S3's equal IBM's VGA font. A font table in a file
 under review is therefore reported as a long run; pass its range with `--fonts START-END` and judge its
 source (Gil's files, or the reference ROM) rather than the match. The fonts' origin is documented in
-`rompatch/fonts/README.md`; the reviewer takes it from there only if a font table turns up, and reads
-that one file, not the rest of `rompatch/`.
+`src/roms/fonts/README.md`; the reviewer takes it from there only if a font table turns up, and reads
+that one file, not the rest of `src/roms/`.
 
 ### Open items
 
