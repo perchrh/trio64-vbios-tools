@@ -12,7 +12,7 @@
 ;   S3COMPAT /H (or /?) prints the parameters and the monitor note below.
 ;   /S  silent: no start notice and monitor warning on stderr, no key press (for batch runs).
 ;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VSHOW)
-;   /V  debug log in S3COMPAT.DBG (src/tools/common/vdebug.inc): every INT 10h call with registers and duration,
+;   /V  debug log in S3COMPAT.DBG (src/tools/common/vdebug.inc): the ROM version (D:ENV ROM=), every INT 10h call with registers and duration,
 ;       a register dump and the result line after every test, 4F00/4F01/AH=1Bh blocks, per-frame
 ;       timer counts, memory mismatches. The normal log is the same with or without /V. Needs 64 KB
 ;       more memory and runs longer (the debug file is committed before every mode set).
@@ -310,34 +310,23 @@ start:  cld
 
 ; ======================================================================
 
-; INFO: print the version string: what follows 'Version ' in the first 512 bytes of C000 (S3 BIOSes
-; 1.x and 2.x both sign on with 'Video BIOS. Version x.yy.zz').
+; INFO: the sign-on version, via romfind (src/tools/common/romver.inc). Same scan as S3TEST's
+; signature line, ROMVER and the /V log: "Version " in C000:0000-00FF, at most 12 characters.
+; S3 BIOSes 1.x and 2.x sign on with 'Video BIOS. Version x.yy.zz'.
 bios_id:
         PS 'ROM: '
-        push es
-        mov ax,0xC000
-        mov es,ax
-        xor si,si
-        mov cx,0x200
-.f:     cmp dword [es:si],'Vers'
-        jne .n
-        cmp dword [es:si+4],'ion '
-        je .g
-.n:     inc si
-        loop .f
-        pop es
-        PS '(version string not found)',13,10
-        ret
-.g:     add si,8
-        mov cx,24
-.p:     mov al,[es:si]
-        cmp al,32
-        jb .e
+        call romfind
+        jc .no
+        mov si,romvbuf
+        mov cx,[romvlen]
+        jcxz .nl
+.p:     mov al,[cs:si]
         call putc
         inc si
         loop .p
-.e:     pop es
-        PS 13,10
+.nl:    PS 13,10
+        ret
+.no:    PS '(version string not found)',13,10
         ret
 
 ; INFO: chip identification, so a log shows which stepping produced it. CR2D-CR30 and the S3 part
@@ -7900,7 +7889,7 @@ s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for Trio
         db '  S3COMPAT [/Q] [/V] [/S] > S3COMPAT.LOG',13,10
         db '  /Q                  skip the 2 MB VRAM test',13,10
         db '  /S                  silent: no start notice and monitor warning, no key press',13,10
-        db '  /V                  debug log in S3COMPAT.DBG (BIOS calls, registers, timing)',13,10
+        db '  /V                  debug log in S3COMPAT.DBG (ROM version, BIOS calls, registers, timing)',13,10
         db '  /H, /?              this help',13,10
         db 'About 3 minutes; a key starts it, Esc cancels. Exit code 0 = no FAIL, 1 = a FAIL.',13,10
         db 'Monitor: line frequencies up to 91 kHz (1280x1024 at 85 Hz in the 4F14 refresh test)',13,10

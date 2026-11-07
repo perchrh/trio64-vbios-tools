@@ -11,6 +11,7 @@
 ;
 ; Line format (one record per line, fields separated by spaces, all numbers hex unless noted)
 ;   D:ENV ...                         environment, once at the start
+;   D:ENV ROM=text                    version after "Version " (romfind), or (no version string)
 ;   D:PCI ...                         PCI configuration of the display controller
 ;   D:HEX tag oooo: xx xx ...          16 bytes of a memory block (tag says which block)
 ;   D:TEST name                       a test starts (S3COMPAT, S3TEST) or a mode is shown (VSHOW)
@@ -551,6 +552,19 @@ venv:   pushad
         mov al,bl
         call vhex2
         call vnl
+        call romfind                    ; same scan as S3TEST, S3COMPAT and ROMVER
+        jc .rvm
+        VS 'D:ENV ROM='
+        mov si,romvbuf
+        mov cx,[cs:romvlen]
+        jcxz .rve
+.rvc:   mov al,[cs:si]
+        call vput
+        inc si
+        loop .rvc
+        jmp .rve
+.rvm:   VS 'D:ENV ROM=(no version string)'
+.rve:   call vnl
         mov dword [cs:vtag],'VROM'
         xor si,si
         mov cx,256
@@ -1009,3 +1023,5 @@ vmisc   db 0
 vsx     db 0
 vgx     db 0
 vcx     db 0
+
+%include "romver.inc"
