@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Build the open PCI option ROM from src/roms/open/hello.asm.
+"""Build the PoC PCI option ROM from src/roms/poc/hello.asm.
 
-Assembles hello.asm with NASM, pads the code with 0FFh to a 32 KB image,
-patches the expansion ROM checksum (offset 06h) so the sum of all image
-bytes is 0 mod 256, optionally writes the vendor/device IDs into the
-legacy header and the PCIR structure, and writes the 32 KB image twice
-into one 64 KB output file: a board may map either half of the EEPROM.
+Assembles hello.asm with NASM, pads the code with 00h to a 32 KB image
+(ROM-3), patches the expansion ROM checksum (offset 06h) so the sum of all
+image bytes is 0 mod 256, optionally writes the vendor/device IDs into the
+PCI data structure, and writes the 32 KB image twice into one 64 KB output
+file: a board may map either half of the EEPROM (ROM-4).
 
-Usage: build.py --nasm PATH [-o OUT] [--vendor 0x8086] [--device 0x1229]
+A PCI 2.1 POST skips an image whose vendor/device IDs do not match the
+card (PCI 2.3 section 6.3.2), so pass the card's real IDs.
+
+Usage: build.py --nasm PATH -o OUT [--vendor 0x8086] [--device 0x1229]
 Out: a 64 KB file, two identical 32 KB images, each with a valid checksum.
 """
 
@@ -47,18 +50,14 @@ def main():
             % (len(rom), IMAGE_SIZE))
     if rom[0] != 0x55 or rom[1] != 0xAA:
         die("assembled code does not start with the 55h AAh signature")
-    rom += b"\xff" * (IMAGE_SIZE - len(rom))        # pad to 32 KB, erased EEPROM
-    rom[2] = IMAGE_SIZE // 512                      # length in 512-byte units
-    pcir_off = pcir(rom)                            # the pointer must resolve
+    rom += b"\x00" * (IMAGE_SIZE - len(rom))    # pad to 32 KB with 00h (ROM-3)
+    rom[2] = IMAGE_SIZE // 512                  # Initialization Size, 512-byte units
+    pcir_off = pcir(rom)                         # the pointer at 18h must resolve
 
     if args.vendor:
-        vid = int(args.vendor, 16)
-        rom[0x0A:0x0C] = vid.to_bytes(2, "little")  # legacy header
-        rom[pcir_off + 4:pcir_off + 6] = vid.to_bytes(2, "little")
+        rom[pcir_off + 4:pcir_off + 6] = int(args.vendor, 16).to_bytes(2, "little")
     if args.device:
-        did = int(args.device, 16)
-        rom[0x0C:0x0E] = did.to_bytes(2, "little")
-        rom[pcir_off + 6:pcir_off + 8] = did.to_bytes(2, "little")
+        rom[pcir_off + 6:pcir_off + 8] = int(args.device, 16).to_bytes(2, "little")
 
     rom[6] = (-(sum(rom) - rom[6])) & 0xFF     # checksum over the image
     if (sum(rom) & 0xFF) != 0:
@@ -69,15 +68,21 @@ def main():
     with open(args.out, "wb") as f:
         f.write(out)
 
+    if not (args.vendor and args.device):
+        print("build.py: warning: vendor/device IDs are 0000h/0000h; a PCI 2.1\n"
+              "POST skips an image whose IDs do not match the card (section\n"
+              "6.3.2): build with --vendor and --device", file=sys.stderr)
     print("build.py: %s, %d KB, %d x %d KB images, checksum %02Xh in each half"
           % (args.out, len(out) // 1024, REPEATS, IMAGE_SIZE // 1024, rom[6]))
 
 
 def pcir(rom):
-    """Offset of the PCIR structure, from the pointer at 10h."""
-    off = int.from_bytes(rom[0x10:0x12], "little")
+    """Offset of the PCIR structure, from the pointer at 18h-19h (PCI 2.1)."""
+    off = int.from_bytes(rom[0x18:0x1A], "little")
     if rom[off:off + 4] != b"PCIR":
         die("PCIR signature not found at offset %04Xh" % off)
+    if off & 3:
+        die("PCIR at offset %04Xh is not DWORD aligned" % off)
     return off
 
 

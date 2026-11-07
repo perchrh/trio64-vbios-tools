@@ -1,0 +1,173 @@
+; Open PCI option ROM: a POST-time "hello world" for any conventional PCI card
+; (PCI 2.1 and later; the image follows the expansion ROM header and PCI data
+; structure of PCI Local Bus Specification 2.1/2.3, section 6.3, and the
+; project's option ROM rules ROM-1 to ROM-4, docs/cleanroom/spec-a-post.md).
+; The BIOS maps the ROM, copies the image to RAM, far-calls the entry point
+; at offset 3 and the code prints "Hello world" on the INT 10h teletype and
+; beeps high-low high-low (four tones: 1200 Hz, 600 Hz, 1200 Hz, 600 Hz) on
+; the PC speaker, then returns with CF=0. The old PCI BIOS convention of a
+; second call with CF=0 (run-time) is answered with an immediate return.
+;
+; Entry (init, CF=1): AX = bus number in AH, device/function in AL; the
+; routine preserves every register and returns by RETF, status in CF
+; (0 = success, 1 = error). Called in real mode only, from the RAM copy.
+; The image is never modified (ROM-6).
+;
+; The image is exactly 32 KB (the Initialization Size byte 02h and the PCIR
+; Image Length say so; build.py pads with 00h and fixes the checksum at
+; offset 6, ROM-3), meant to be flashed twice into a 64 KB EEPROM: a board
+; may map either half (ROM-4). The vendor/device IDs stay 0000h/0000h here;
+; build.py writes --vendor/--device into the PCI data structure. A PCI 2.1
+; POST skips an image whose IDs do not match the card (section 6.3.2), so
+; build with the card's real IDs.
+;
+; Beep via PIT channel 2 (ports 43h/42h/61h). The tone waits latch-read PIT
+; channel 0 (counter latch command, the channel is never reprogrammed) and
+; need no interrupt and no BIOS tick: the system BIOS may call the ROM with
+; interrupts off (CONV-6). Assembler: NASM 3.02, -f bin (src/roms/poc/build.py).
+bits 16
+cpu 386
+org 0
+
+; ---------------------------------------------------------------------------
+; Expansion ROM header, PCI 2.1/2.3 section 6.3.3.1 (PC-compatible). The
+; checksum byte at 06h is patched by build.py so the sum of all 32768 image
+; bytes is 0 mod 256. The pointer to the PCI data structure is at 18h-19h
+; (PCI 2.1 moved it from the old 10h); 06h-17h is application data.
+; ---------------------------------------------------------------------------
+        db 0x55, 0xAA           ; 00h: signature
+        db 0x40                 ; 02h: Initialization Size, 512-byte units (32 KB)
+        jmp near init           ; 03h: init entry point (3 bytes, to 06h)
+        db 0                    ; 06h: checksum (patched by build.py)
+        times 17 db 0           ; 07h-17h: reserved (application unique data)
+        dw pcir                 ; 18h: offset of the PCI data structure
+        times 6 db 0            ; 1Ah-1Fh: pad to the DWORD-aligned PCIR
+
+; ---------------------------------------------------------------------------
+; PCI data structure ("PCIR"), PCI 2.1/2.3 section 6.3.1.2: 18h bytes, DWORD
+; aligned. Image length and code type say: one 32 KB x86 image, the last
+; (only) one in the file. The vendor/device IDs must match the card (the POST
+; checks them, section 6.3.2); build.py writes --vendor/--device into +04h/+06h.
+; ---------------------------------------------------------------------------
+pcir:   db "PCIR"               ; 00h: signature
+        dw 0                    ; 04h: vendor ID (build.py --vendor)
+        dw 0                    ; 06h: device ID (build.py --device)
+        dw 0                    ; 08h: reserved (VPD pointer in PCI 2.0)
+        dw 0x18                 ; 0Ah: length of this data structure
+        db 0                    ; 0Ch: revision of this data structure
+        db 0, 0, 0              ; 0Dh: class code (generic: 000000h)
+        dw 0x40                 ; 10h: Image Length, 512-byte units (32 KB)
+        dw 0                    ; 12h: revision level of the code
+        db 0                    ; 14h: Code Type 0 = Intel x86, PC-AT compatible
+        db 0x80                 ; 15h: Indicator: last image
+        dw 0                    ; 16h: reserved
+
+; ---------------------------------------------------------------------------
+; Init entry. CF=1: POST-time initialization; CF=0: the old PCI BIOS
+; run-time call, answered at once. All registers preserved, status in CF.
+; ---------------------------------------------------------------------------
+init:   jnc .ret                ; run-time call: nothing to do
+        pusha
+        push ds
+        push es
+        push cs
+        pop ds                  ; DS = ROM segment, strings are org 0 offsets
+        in al, 0x61              ; remember the speaker gate as found
+        mov [spk], al
+        mov si, hello
+.pr:    lodsb
+        or al, al
+        jz .prd
+        mov ah, 0x0E            ; INT 10h teletype output
+        mov bx, 0x0007          ; page 0, attribute 07h
+        int 0x10
+        jmp .pr
+.prd:   mov si, tones           ; four tones: high, low, high, low
+        mov bp, 4
+.beep:  lodsw                   ; AX = PIT channel 2 divisor
+        call speaker_on
+        mov cx, 5               ; tone: about 275 ms (5 PIT wraps of 54.9 ms)
+        call wait_pit
+        call speaker_off
+        mov cx, 2               ; gap: about 110 ms
+        call wait_pit
+        dec bp
+        jnz .beep
+        mov al, [spk]           ; restore the speaker gate as found
+        out 0x61, al
+        pop es
+        pop ds
+        popa
+.ret:   clc                     ; CF=0: success
+        retf
+
+; ---------------------------------------------------------------------------
+; speaker_on: PIT channel 2 to square wave, gate on.
+; In: AX = divisor (1193182 / Hz). Out: nothing. Kept: BX, CX, SI, BP, DS.
+; ---------------------------------------------------------------------------
+speaker_on:
+        push ax
+        mov bl, al              ; divisor low then high into channel 2
+        out 0x42, al
+        mov al, ah
+        out 0x42, al
+        mov al, 0xB6            ; channel 2, mode 3 (square wave), both bytes
+        out 0x43, al
+        in al, 0x61             ; gate and output on (bits 0 and 1)
+        or al, 3
+        out 0x61, al
+        pop ax
+        ret
+
+; ---------------------------------------------------------------------------
+; speaker_off: PIT channel 2 gate off.
+; In: nothing. Out: nothing. Kept: BX, CX, SI, BP, DS.
+; ---------------------------------------------------------------------------
+speaker_off:
+        push ax
+        in al, 0x61
+        and al, 0xFC
+        out 0x61, al
+        pop ax
+        ret
+
+; ---------------------------------------------------------------------------
+; wait_pit: wait CX wraps of the PIT channel 0 counter, each 54.9 ms
+; (channel 0 runs at 1193182/65536 Hz). The counter is latch-read only
+; (command 00h to port 43h), never reprogrammed, and the wait needs no
+; interrupt and no BIOS tick: the system BIOS may call the ROM with
+; interrupts off (CONV-6). A wrap is the count jumping up as it wraps
+; past zero; channel 0 counts down.
+; In: CX = wraps. Out: nothing. Kept: SI, BP, DS.
+; Clobbers: AX, BX, CX.
+; ---------------------------------------------------------------------------
+wait_pit:
+        call pit_read
+        mov bx, ax              ; baseline count
+.wl:    call pit_read
+        cmp ax, bx              ; jumped up: the counter wrapped past zero
+        jbe .wl
+        mov bx, ax
+        loop .wl
+        ret
+
+; ---------------------------------------------------------------------------
+; pit_read: AX = the current PIT channel 0 count, latch-read.
+; In: nothing. Out: AX = count. Kept: BX, CX, DX, SI, BP, DS.
+; Clobbers: nothing but AX.
+; ---------------------------------------------------------------------------
+pit_read:
+        mov al, 0x00            ; counter latch command, channel 0
+        out 0x43, al
+        in al, 0x40             ; least significant byte first
+        mov ah, al
+        in al, 0x40
+        xchg al, ah             ; AX = MSB in AH, LSB in AL
+        ret
+
+; ---------------------------------------------------------------------------
+; Data
+; ---------------------------------------------------------------------------
+hello:  db "Hello world", 0x0D, 0x0A, 0
+tones:  dw 994, 1989, 994, 1989  ; 1200 Hz, 600 Hz, 1200 Hz, 600 Hz
+spk:    db 0                    ; port 61h as found on entry
