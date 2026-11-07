@@ -33,6 +33,10 @@
 ;   <test name> ... <details>  PASS | FAIL xxxx | WARN xx | INFO
 ;   FAIL/WARN carry a bit mask per test, explained at the routine and in the log header. Detail lines
 ;   show REG=actual(expected), masked to the bits under test. INFO lines report without judging.
+;   DAC checks (the default DAC of every VGA mode, AX=101Bh): a wrong entry is read a second time and
+;   then the BIOS call is made again; only a value wrong on all three reads is a FAIL. Wrong once is
+;   WARN 02 (right on the second read) or WARN 04 (right after the call again), printed as
+;   "DAC#xx=rr,gg,bb exp rr,gg,bb" and the outcome; the 86C775 card had one such byte in some runs.
 ;   Monitor: the test sets line frequencies up to 91 kHz (1280x1024 at 85 Hz, 4F14 refresh test) and
 ;   75 kHz (1600x1200 at 60 Hz), and the DPMS test stops the syncs for a moment. LCDs refuse what they
 ;   cannot show; an old fixed-frequency or low-end CRT can be damaged by a line frequency above its
@@ -233,6 +237,8 @@ start:  cld
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
         PS '  8 refresh  10 memory  20 default DAC (256/EGA/CGA)  40 refresh vs CRTC/PLL math',13,10
+        PS 'VGA warn bits: 1 mode 10h without 8x14 font  2 DAC entry wrong once, right on a 2nd read',13,10
+        PS '  4 DAC entry right after the mode set again (also AX=101B: warn 2/4, fail 1 = wrong 3 times)',13,10
         PS 'Mode xxh 350 = the mode at 350 scan lines (AH=12 BL=30 first).',13,10
         PS 'VESA fail bits: 1 4F01  2 window  4 layout  8 set/4F03  10 refresh  20 memory',13,10
         PS '  40 4F06  80 4F07/4F09  100 CRTC geometry vs 4F01  200 datasheet clock/colour',13,10
@@ -868,9 +874,13 @@ prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131
 ;   8  measured refresh more than 1.5 Hz from the reference (70 Hz, 60 Hz for 11h/12h)
 ;   10 memory test of the mode's video memory failed
 ;   20 default DAC not loaded as IBM does: 256-colour table (13h), CGA palette (04h-06h, 0Dh, 0Eh),
-;      EGA palette (all others, also in 350-line text)
+;      EGA palette (all others, also in 350-line text); the same entry wrong on a second read and
+;      again after the mode set is made a second time (dac_mode)
 ;   40 measured refresh does not match the rate predicted from the CRTC and clock registers
 ; Warn bit 1: mode 10h reports 21 rows / 16 lines in AH=1Bh because the 8x14 font is missing (known).
+; Warn bit 2: a default DAC entry read wrong once, right on the second read (a port read glitch).
+; Warn bit 4: a default DAC entry wrong on two reads, right after the mode set again (a DAC write
+;   that did not land once). Neither is the BIOS's table: it loaded the right value the second time.
 ; The 350-line entries select 350 scan lines with AH=12h BL=30h AL=01h first and go back to 400 after.
 ; Expect PASS for every entry (WARN 01 for mode 10h).
 vga_one:
@@ -893,23 +903,7 @@ vga_one:
         mov ax,[prevesa+si]
         call phex4
 .s2:    call flush
-        cmp byte [pass],2
-        jne .s
-        mov si,[vi]
-        shl si,1
-        mov bx,[prevesa+si]
-        mov ax,0x4F02
-        int 0x10
-.s:     mov si,[ent]
-        test byte [si+1],0x80
-        jz .s400
-        mov ax,0x1201                   ; 350-line variant: alternate select 350 scan lines
-        mov bl,0x30
-        int 0x10
-        mov si,[ent]
-.s400:  movzx ax,byte [si]
-        int 0x10
-        call unlock
+        call vmset
         call tdots
         ; standard registers vs IBM
         mov si,vgalist
@@ -1053,22 +1047,41 @@ vga_one:
         call tend
         ret
 
+; Mode set of the current entry [ent], as vga_one makes it: in pass 2 first the VESA mode of
+; prevesa, for a 350-line entry AH=12h BL=30h AL=01h, then AH=00h, then the S3 unlock. Also the
+; second try of a DAC check (dac_mode). In: [ent], [vi], [pass]. Keeps all registers.
+vmset:  pusha
+        cmp byte [pass],2
+        jne .s
+        mov si,[vi]
+        shl si,1
+        mov bx,[prevesa+si]
+        mov ax,0x4F02
+        int 0x10
+.s:     mov si,[ent]
+        test byte [si+1],0x80
+        jz .s400
+        mov ax,0x1201                   ; 350-line variant: alternate select 350 scan lines
+        mov bl,0x30
+        int 0x10
+        mov si,[ent]
+.s400:  movzx ax,byte [si]
+        int 0x10
+        call unlock
+        popa
+        ret
+
 ; DAC 0-63 after the mode set. [cgapal]=0: EGA 64-colour palette, colour bits 5-0 = r g b R G B,
 ; component = 2Ah * (R, G or B bit 2-0) + 15h * (r, g or b bit 5-3).
 ; [cgapal]=1: CGA palette of the 200-line modes, bits 2-0 = R G B, bit 4 = intensity (+15h on all
 ; three), bits 3 and 5 ignored, and colour 6 is brown (green 15h instead of 2Ah).
-; Expect every entry to match; the first mismatch fails bit 20 and is printed.
+; Builds the 64 expected entries in dacexp, then dac_mode checks them (fail 20, warn 2/4).
 dac_ega:
-        mov di,dacbuf
-        xor al,al
-        mov cx,64
-        call dacread
         xor bx,bx
-        mov si,dacbuf
+        mov di,dacexp
 .l:     mov ax,0x2004                   ; red: 2Ah if bit 2, 15h if bit 5
         call dexp
-        cmp dl,[si]
-        jne .bad
+        mov [di],dl
         mov ax,0x1002                   ; green: bits 1 and 4
         call dexp
         cmp byte [cgapal],1
@@ -1078,27 +1091,219 @@ dac_ega:
         cmp cl,6
         jne .g
         mov dl,0x15                     ; CGA brown
-.g:     cmp dl,[si+1]
-        jne .bad
+.g:     mov [di+1],dl
         mov ax,0x0801                   ; blue: bits 0 and 3
         call dexp
-        cmp dl,[si+2]
-        jne .bad
-        add si,3
+        mov [di+2],dl
+        add di,3
         inc bx
         cmp bx,64
         jb .l
+        mov si,dacexp
+        mov cx,64
+        jmp dac_mode
+
+; Mode 13h: DAC 0-247 must equal IBM's default table (248-255 are 0 in IBM and not compared).
+dac_256:
+        mov si,dac_col
+        mov cx,248
+        ; fall through
+
+; Default DAC of the mode just set against the expected table (vga_one, bit 20 and warn 2/4).
+; In: SI -> expected entries (R, G, B), CX = number of entries from 0. dacconf reads the DAC; a
+; mismatch is read a second time and, if still there, the mode is set again (vmset) and read once
+; more. Only a mismatch on all three reads is a FAIL: then the BIOS loaded a wrong value twice. A
+; byte wrong once (a port read or a DAC write that did not land, seen on the cards once per run at
+; most, docs/765-rom.md) is WARN 2 (right on the second read) or WARN 4 (right after the mode set
+; again). The first mismatch is printed: " DAC#xx=rr,gg,bb exp rr,gg,bb" and the outcome (dacrep);
+; on a FAIL of the EGA/CGA check " not EGA" or " not CGA" follows.
+dac_mode:
+        push bp
+        xor dl,dl
+        mov bp,vmset
+        call dacconf
+        pop bp
+        or al,al
+        jz .r
+        call dacrep
+        cmp al,1
+        jne .n1
+        WARNB 2
         ret
-.bad:   FAILB 0x20
-        PS ' DAC#'
-        mov al,bl
-        call phex2
+.n1:    cmp al,2
+        jne .n2
+        WARNB 4
+        ret
+.n2:    FAILB 0x20
+        mov si,[ent]
+        cmp byte [si],0x13
+        je .r
         cmp byte [cgapal],1
         je .bc
         PS ' not EGA'
         ret
 .bc:    PS ' not CGA'
+.r:     ret
+
+; Compare DAC entries 0 to CX-1 with an expected table, one read through 3C7h/3C9h.
+; In: SI -> expected (R, G, B per entry), CX = entries (at most 256), DL = tolerance per component.
+; Out: CF clear when every component is within DL; CF set: BX = first entry outside, dacbuf holds
+; the read. Keeps SI, CX, DX and DI; changes AX and BX.
+dacchk: push cx
+        push di
+        mov di,dacbuf
+        xor al,al
+        call dacread
+        pop di
+        pop cx
+        push cx
+        imul cx,cx,3
+        xor bx,bx
+.l:     mov al,[dacbuf+bx]
+        sub al,[si+bx]                  ; 6-bit values: the difference fits in a signed byte
+        jns .p
+        neg al
+.p:     cmp al,dl
+        ja .bad
+        inc bx
+        loop .l
+        pop cx
+        clc
         ret
+.bad:   mov ax,bx
+        mov bl,3
+        div bl
+        movzx bx,al
+        pop cx
+        stc
+        ret
+
+; Check the DAC (dacchk) and confirm a mismatch before it counts as the BIOS's: read again, then
+; repeat the BIOS call (BP -> a routine that keeps all registers) and check a third time.
+; In: SI, CX, DL as dacchk, BP. Out: AL = 0 all within DL on the first read, 1 right on the second
+; read, 2 right after the call again, 3 still wrong. AL nonzero: [dacbad] = first read's entry,
+; [dacv1] its R, G, B; for 3 also [dacbad2] and dacbuf = the third read. Keeps SI, CX, DX, BP.
+; /V: one D:DAC record per read (try=n, "ok" or the entry with got= and exp=).
+dacconf:
+        push bx
+        mov al,1
+        call .try
+        jnc .ok0
+        mov [dacbad],bl
+        imul bx,bx,3
+        mov ax,[dacbuf+bx]
+        mov [dacv1],ax
+        mov al,[dacbuf+bx+2]
+        mov [dacv1+2],al
+        mov al,2
+        call .try
+        mov al,1
+        jnc .r
+        call bp
+        mov al,3
+        call .try
+        mov al,2
+        jnc .r
+        mov [dacbad2],bl
+        mov al,3
+        jmp .r
+.ok0:   xor al,al
+.r:     pop bx
+        ret
+.try:   VS 'D:DAC try='                 ; AL = try number -> CF, BX as dacchk
+        call vhex2
+        call dacchk
+        jc .tb
+        VS ' ok'
+        call vnl
+        clc
+        ret
+.tb:    pushf
+        push ax
+        push di
+        VS ' i='
+        mov al,bl
+        call vhex2
+        VS ' got='
+        imul di,bx,3
+        push di
+        add di,dacbuf
+        call .v3
+        VS ' exp='
+        pop di
+        add di,si
+        call .v3
+        call vnl
+        pop di
+        pop ax
+        popf
+        ret
+.v3:    mov al,[di]                     ; DI -> 3 bytes, logged as "rr gg bb"
+        call vhex2
+        VS ' '
+        mov al,[di+1]
+        call vhex2
+        VS ' '
+        mov al,[di+2]
+        jmp vhex2
+
+; Print the outcome of dacconf: " DAC#xx=rr,gg,bb exp rr,gg,bb" for the first read's entry, then
+; AL=1 " ok on 2nd read", AL=2 " ok after the call again", AL=3 " again same" when the third read is
+; wrong at the same entry with the same value, else " again DAC#yy=rr,gg,bb".
+; In: AL (1-3), SI -> expected table, dacconf's results. Keeps all registers.
+dacrep: pusha
+        mov dl,al
+        PS ' DAC#'
+        mov al,[dacbad]
+        call phex2
+        PS '='
+        mov di,dacv1
+        call .p3
+        PS ' exp '
+        movzx di,byte [dacbad]
+        imul di,di,3
+        add di,si
+        call .p3
+        cmp dl,1
+        jne .n1
+        PS ' ok on 2nd read'
+        jmp .r
+.n1:    cmp dl,2
+        jne .n2
+        PS ' ok after the call again'
+        jmp .r
+.n2:    PS ' again '
+        movzx di,byte [dacbad2]
+        imul di,di,3
+        add di,dacbuf
+        mov al,[dacbad2]
+        cmp al,[dacbad]
+        jne .d
+        mov ax,[di]
+        cmp ax,[dacv1]
+        jne .d
+        mov al,[di+2]
+        cmp al,[dacv1+2]
+        jne .d
+        PS 'same'
+        jmp .r
+.d:     PS 'DAC#'
+        mov al,[dacbad2]
+        call phex2
+        PS '='
+        call .p3
+.r:     popa
+        ret
+.p3:    mov al,[di]                     ; DI -> 3 bytes, printed as "rr,gg,bb"
+        call phex2
+        mov al,','
+        call putc
+        mov al,[di+1]
+        call phex2
+        mov al,','
+        call putc
+        mov al,[di+2]
+        jmp phex2
 
 ; expected component for DAC entry BL: AL = bit worth 2Ah, AH = bit worth 15h (EGA); CGA uses bit 4 for 15h
 dexp:   mov dl,0
@@ -1112,31 +1317,6 @@ dexp:   mov dl,0
         jz .3
         add dl,0x15
 .3:     ret
-
-; Mode 13h: DAC 0-247 must equal IBM's default table (248-255 are 0 in IBM and not compared).
-dac_256:
-        mov di,dacbuf
-        xor al,al
-        mov cx,256
-        call dacread
-        mov si,dacbuf
-        mov di,dac_col
-        mov cx,744
-        xor bx,bx
-.l:     mov al,[si+bx]
-        cmp al,[di+bx]
-        jne .bad
-        inc bx
-        loop .l
-        ret
-.bad:   FAILB 0x20
-        PS ' DAC#'
-        mov ax,bx
-        mov cl,3
-        div cl
-        call phex2
-        PS ' wrong'
-        ret
 
 ; Read CX DAC entries from index AL into DI (R, G, B, 6 bit each).
 dacread:                                ; AL = first, CX = count, DI = dest
@@ -3019,7 +3199,9 @@ pxy:    mov si,[ent]                    ; -> CX,DX for point [vi]
 ;   1010/1015, 1012/1017   1 single DAC entry, 2 block read back, 4 hardware readback via 3C7/3C9
 ;   3C6/3C7     1 pixel mask not FFh, 2 status not 3 after a read index, 4 status not 0 after write index
 ;   1013/101A   1 colour page select not read back
-;   101B        1 grey value of an entry more than 1 off (30R+59G+11B)/100 of IBM's default
+;   101B        1 grey value of an entry more than 1 off (30R+59G+11B)/100 of IBM's default, on a
+;                 second read and after mode 13h and AX=101Bh again too (dacconf)
+;               warn 2 such an entry right on the second read, warn 4 right after the call again
 palette_tests:
         mov ax,0x12
         int 0x10
@@ -3192,49 +3374,51 @@ palette_tests:
         mov bx,0x0001
         int 0x10
         call tend
-        mov ax,0x13
-        int 0x10
         TB C_VGA,'AX=101B grey summing vs IBM'
         call tdots
+        mov di,dac_col                  ; expected: the grey of each IBM entry in all three components
+        mov bx,dacexp
+        mov cx,248                      ; entries 0-247 (248-255 are 0 in IBM)
+.gy:    call greyof
+        mov [bx],al
+        mov [bx+1],al
+        mov [bx+2],al
+        add di,3
+        add bx,3
+        loop .gy
+        call grey13
+        mov si,dacexp
+        mov cx,248
+        mov dl,1                        ; each component within 1 of the formula
+        push bp
+        mov bp,grey13
+        call dacconf
+        pop bp
+        or al,al
+        jz .m2
+        call dacrep
+        cmp al,1
+        jne .m0
+        WARNB 2                         ; right on the second read
+        jmp .m2
+.m0:    cmp al,2
+        jne .m1
+        WARNB 4                         ; right after mode 13h and AX=101Bh again
+        jmp .m2
+.m1:    FAILB 1
+.m2:    call tend
+        ret
+
+; Mode 13h (IBM's 256-colour table), then AX=101Bh on all 256 entries: the BIOS call of the
+; 'AX=101B grey summing vs IBM' line, also its second try in dacconf. Keeps all registers.
+grey13: pusha
+        mov ax,0x13
+        int 0x10
         mov ax,0x101B
         xor bx,bx
         mov cx,256
         int 0x10
-        mov di,dacbuf
-        xor al,al
-        mov cx,256
-        call dacread
-        mov si,dacbuf
-        mov di,dac_col
-        mov cx,744                      ; entries 0-247, each component vs grey of the default
-.m:     call greyof
-        sub al,[si]
-        jns .m1
-        neg al
-.m1:    cmp al,1
-        jbe .m2
-        test word [fails],1
-        jnz .m2
-        FAILB 1
-        PS 'DAC#'
-        mov ax,si
-        sub ax,dacbuf
-        push cx
-        mov cl,3
-        div cl
-        pop cx
-        call phex2
-        PS '='
-        mov al,[si]
-        call phex2
-        PS '('
-        call greyof
-        call phex2
-        PS ') '
-.m2:    inc si
-        inc di
-        loop .m
-        call tend
+        popa
         ret
 
 ; IBM grey summing formula for one DAC entry of dac_col.
@@ -7951,6 +8135,9 @@ phz     dw 0
 mlen    dw 0
 tmpb    db 0
 cgapal  db 0                            ; 1 = expect the CGA palette in dac_ega
+dacbad  db 0                            ; dacconf: first read's bad entry
+dacbad2 db 0                            ; dacconf: third read's bad entry
+dacv1   db 0,0,0                        ; dacconf: first read's R, G, B of that entry
 tmpb2   db 0
 tmpw    dw 0
 tmpw2   dw 0
@@ -8042,6 +8229,7 @@ dsbuf   times 64 db 0
 palrd   times 20 db 0
 dacpat  times 48 db 0
 dacbuf  times 768 db 0
+dacexp  times 744 db 0           ; expected DAC entries 0-247 (dac_ega, AX=101B)
 cmpbuf  times 256 db 0
 palbuf  times 1024 db 0
 palbuf2 times 1024 db 0
