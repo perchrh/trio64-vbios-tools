@@ -52,10 +52,14 @@ Tests
                    12 characters, stopping before a byte below 20h); /Q prints only that version.
                    S3COMPAT's ROM line and a /V log (D:ENV ROM=) use that same scan
   mclk             MCLK.COM prints the chip, the ROM version and the CR36 memory type and size
-                   before it changes the clock. /H is the help. /I above the cap changes nothing.
-                   /I 74.9 on a 1-cycle EDO Trio64V2 (cap 75 MHz) runs one step, passes, publishes
-                   the step below it, and restores the POST SR10/SR11. The emulator's RAM does not
-                   go bad as the clock rises, so this does not measure a real maximum
+                   before it changes the clock. /H is the help. /I above the cap changes nothing
+                   and asks nothing. Before the first PLL write it asks once on stderr: N leaves
+                   SR08/SR10/SR11/SR15 as they were (exit 1). With Y, /I 74.9 (cap 75 MHz) runs one
+                   step and recommends none (no tested pass 1 % below it); /I 73.9 runs three
+                   steps and recommends the highest tested pass at least 1 % below the highest;
+                   /P /I 74.5 takes the first PLL pair 0.1 MHz or more above each step. The POST
+                   SR10/SR11 come back. The emulator's RAM does not go bad as the clock rises, so
+                   this does not measure a real maximum
   s3test           S3TEST runs to the end; every check passes except the banked write throughput (no
                    real bus speed); with /V the output is the same (except the Time spent line) and
                    S3TEST.DBG is well formed
@@ -2604,7 +2608,8 @@ def t_romver(c):
 
 
 def t_mclk(c):
-    """MCLK prints the chip, ROM version and CR36 memory before any clock step, and puts the POST clock back."""
+    """MCLK prints the chip, ROM version and CR36 memory before any clock step, asks once for Y before the
+    first PLL write (any other key: no write, exit 1), and puts the POST clock back."""
     com = c.tool('MCLK.COM')
     h = c.machine().run_com(com, '/H', name='MCLK.COM', max_insn=2_000_000)
     check(h.exit == ('exit', 0), 'MCLK /H exit %s' % (h.exit,))
@@ -2626,16 +2631,33 @@ def t_mclk(c):
     check(b'STEP ' not in text, 'a step ran above the cap: %r' % text[:800])
     check((m.r['seq'].get(0x10), m.r['seq'].get(0x11)) == before,
           'SR10/SR11 changed on refusal: %s was %s' % ((m.r['seq'].get(0x10), m.r['seq'].get(0x11)), before))
+    check(b'Press Y' not in bytes(over.stderr), 'asked before a refusal: %r' % bytes(over.stderr)[:400])
+
+    # Any key but Y: the question on stderr, a "Not confirmed" line, no step, no PLL or SR15 write.
+    mn = c.machine(keys=[0x316E])                       # 'n'
+    pll = lambda mm: tuple(mm.r['seq'].get(i) for i in (0x08, 0x10, 0x11, 0x15))
+    beforen = pll(mn)
+    no = mn.run_com(com, '/I 60', name='MCLK.COM', max_insn=20_000_000)
+    ntext = bytes(no.stdout).replace(b'\r\n', b'\n')
+    check(no.exit == ('exit', 1), 'MCLK declined exit %s\n%s' % (no.exit, ntext.decode('latin1', 'replace')[:800]))
+    check(bytes(no.stderr).count(b'Press Y') == 1, 'question on stderr %r' % bytes(no.stderr)[:600])
+    check(b'Press Y' not in ntext, 'question in the log: %r' % ntext[:800])
+    check(b'Not confirmed' in ntext and b'STEP ' not in ntext and b'Restored ' not in ntext,
+          'declined run %r' % ntext[:800])
+    check(pll(mn) == beforen, 'SR08/SR10/SR11/SR15 after a declined run %s, before %s' % (pll(mn), beforen))
 
     # One step, just under a 60 MHz datasheet cap of 75 MHz. The UV+ book is 66.67 MHz,
     # so the same request keeps stepping and is not this test.
     if Machine.chip == 'uvplus':
         raise Skip('Trio64UV+ cap is 83.333 MHz; /I 74.9 is not a single step')
-    m2 = c.machine()
+    m2 = c.machine(keys=[0x1579])                       # 'y'
     post = (m2.r['seq'].get(0x10), m2.r['seq'].get(0x11))
     one = m2.run_com(com, '/I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
     body = bytes(one.stdout).replace(b'\r\n', b'\n')
     check(one.exit == ('exit', 0), 'MCLK /I 74.9 exit %s\n%s' % (one.exit, body.decode('latin1', 'replace')[:1500]))
+    check(bytes(one.stderr).count(b'Press Y') == 1, 'asked %d times' % bytes(one.stderr).count(b'Press Y'))
+    check(body.find(b'Confirmed') >= 0 and body.find(b'Confirmed') < body.find(b'STEP '),
+          'no "Confirmed" line before the first step in %r' % body[:800])
     lines = [ln for ln in body.split(b'\n') if ln]
     mem = next((ln for ln in lines if ln.startswith(b'Memory CR36=')), b'')
     check(b'size ' in mem and b'type ' in mem and b'test ' in mem and b'EDO' in mem, 'memory line %r' % mem)
@@ -2644,37 +2666,67 @@ def t_mclk(c):
     check(any(ln.endswith(b'PASS') for ln in steps), 'no PASS in %r' % steps)
     check(sum(1 for ln in steps if ln.endswith(b'testing')) == 1, 'expected one step, got %r' % steps)
     high = next((ln for ln in lines if ln.startswith(b'Highest ')), b'')
-    pub = next((ln for ln in lines if ln.startswith(b'Published ')), b'')
+    pub = next((ln for ln in lines if ln.startswith(b'Recommended max ')), b'')
 
     def mhz_of(line):
-        return float(line.split()[1])
+        return float(line.split(b' MHz')[0].split()[-1])
 
-    gap = mhz_of(high) - mhz_of(pub)
-    check(high and pub and 0.5 <= gap < 1.2, 'published %r is not one 0.5 MHz step under %r' % (pub, high))
+    # One pass has no tested step 1 % below it: no value rather than an untested clock.
+    check(high and pub.startswith(b'Recommended max none'), 'one pass, recommended %r (highest %r)' % (pub, high))
     rest = next((ln for ln in lines if ln.startswith(b'Restored ')), b'')
     check(('SR10=%02X' % post[0]).encode() in rest and ('SR11=%02X' % post[1]).encode() in rest,
           'restored %r, POST SR10/SR11 %02X %02X' % (rest, post[0], post[1]))
     check((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)) == post,
           'clock left at %s, POST was %s' % ((m2.r['seq'].get(0x10), m2.r['seq'].get(0x11)), post))
 
-    # /P from the same request is also one step: the next legal pair is already over the cap.
-    # Publishing then takes the previous table entry, a small step, not 0.5 MHz down.
-    mp = c.machine()
+    # /P: each step is the first PLL pair (src/tools/mclk/pll.inc, rising order) at least 0.1 MHz
+    # above the one before, so pairs closer than that are skipped (from 74.453: 74.572, then 74.771,
+    # not 74.658). The highest of the three has no tested pass 1 % below it: "none".
+    mp = c.machine(keys=[0x1579])
     postp = (mp.r['seq'].get(0x10), mp.r['seq'].get(0x11))
-    prec = mp.run_com(com, '/P /I 74.9', name='MCLK.COM', max_insn=2_000_000_000)
+    prec = mp.run_com(com, '/P /I 74.5', name='MCLK.COM', max_insn=6_000_000_000)
     pbody = bytes(prec.stdout).replace(b'\r\n', b'\n')
     check(prec.exit == ('exit', 0), 'MCLK /P exit %s\n%s' % (prec.exit, pbody.decode('latin1', 'replace')[:800]))
     plines = [ln for ln in pbody.split(b'\n') if ln]
-    psteps = [ln for ln in plines if ln.startswith(b'STEP ')]
-    check(sum(1 for ln in psteps if ln.endswith(b'testing')) == 1, 'precise steps %r' % psteps)
+    pstart = next((ln for ln in plines if ln.startswith(b'Start ')), b'')
+    check(pstart.endswith(b'step 0.100 MHz or more (/P)'), 'precise start line %r' % pstart)
+    ptested = [round(mhz_of(ln[len(b'STEP '):]) * 1000) for ln in plines if ln.startswith(b'STEP ') and ln.endswith(b'testing')]
+    with open(os.path.join(HERE, '..', 'src', 'tools', 'mclk', 'pll.inc')) as f:
+        table = [int(x) for x in re.findall(r'\bdd\s+(\d+)', f.read())]
+    capl = next((ln for ln in plines if ln.startswith(b'Datasheet ')), b'')
+    cap = round(float(capl.split(b'cap ')[1].split()[0]) * 1000)
+    want = [max(k for k in table if k <= 74500)]
+    while True:
+        nxt = [k for k in table if k >= want[-1] + 100]
+        if not nxt or nxt[0] > cap:
+            break
+        want.append(nxt[0])
+    check(ptested == want, 'precise steps %r, expected %r' % (ptested, want))
     phigh = next(ln for ln in plines if ln.startswith(b'Highest '))
-    ppub = next(ln for ln in plines if ln.startswith(b'Published '))
-    gap = mhz_of(phigh) - mhz_of(ppub)
-    check(0 < gap < 0.25, 'precise published %r is not the previous pair under %r' % (ppub, phigh))
+    ppub = next(ln for ln in plines if ln.startswith(b'Recommended max '))
+    check(ppub.startswith(b'Recommended max none'), 'precise recommended %r (highest %r)' % (ppub, phigh))
     check((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)) == postp,
           'precise left the clock at %s, POST was %s' % ((mp.r['seq'].get(0x10), mp.r['seq'].get(0x11)), postp))
-    c.save('MCLK', one)
-    return 'one step'
+
+    # Three 0.5 MHz steps under the 75 MHz cap: the recommendation is a step that passed, at least
+    # 1 % below the highest pass (kHz x 100 <= highest x 99), and the highest such step.
+    ms = c.machine(keys=[0x1579])
+    sw = ms.run_com(com, '/I 73.9', name='MCLK.COM', max_insn=6_000_000_000)
+    sbody = bytes(sw.stdout).replace(b'\r\n', b'\n')
+    check(sw.exit == ('exit', 0), 'MCLK /I 73.9 exit %s\n%s' % (sw.exit, sbody.decode('latin1', 'replace')[:1500]))
+    slines = [ln for ln in sbody.split(b'\n') if ln]
+    passed = [ln[len(b'STEP '):-len(b' PASS')] for ln in slines if ln.startswith(b'STEP ') and ln.endswith(b' PASS')]
+    shigh = next((ln for ln in slines if ln.startswith(b'Highest ')), b'')
+    srec = next((ln for ln in slines if ln.startswith(b'Recommended max ')), b'')
+    check(len(passed) >= 3, 'expected at least three passing steps, got %r' % passed)
+    khz = lambda t: round(mhz_of(t) * 1000)
+    rec = srec[len(b'Recommended max '):]
+    check(rec in passed, 'recommended %r is not a tested passing step %r' % (srec, passed))
+    check(khz(rec) * 100 <= khz(shigh) * 99, 'recommended %r is less than 1 %% under %r' % (srec, shigh))
+    better = [p for p in passed if khz(rec) < khz(p) and khz(p) * 100 <= khz(shigh) * 99]
+    check(not better, 'recommended %r, but %r also pass 1 %% under %r' % (srec, better, shigh))
+    c.save('MCLK', sw)
+    return 'recommended %s' % rec.split(b' SR10')[0].decode('latin1')
 
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
