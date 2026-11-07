@@ -538,9 +538,10 @@ page (11b).
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
-Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted runners it uses are free;
-changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or `infozip/` do not start
-a run, and a newer commit on the same branch cancels the running one.
+Actions tab, "Run workflow"). Jobs use the `ubuntu-26.04` runner (Ubuntu 26.04 LTS). The repository is
+public, so the GitHub-hosted runners it uses are free; changes that touch only `*.md`, `*.pdf`, `docs/`,
+`datasheets/`, `standards/` or `infozip/` do not start a run, and a newer commit on the same branch
+cancels the running one.
 
 The job "All ROMs (make roms) and the release zip" builds every chip's ROM at its memory clocks, to show
 that they all build, and the release zip (`make dist`). Next to it the tests run
