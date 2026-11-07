@@ -162,9 +162,7 @@ is why `CHIPID /Z` leaves `runall.zip` in place. The name is `runall-<part>.zip`
 `runall-86c775.zip`; a slash in the part becomes a hyphen). If the DOS refuses the long-name create,
 the 8.3 name is `<part>.ZIP` (for example `86C775.ZIP`). With no part, the name stays RUNALL.ZIP.
 After the new archive is written, REPORT deletes a leftover `runall.zip` and the other form of this
-part's name. ZIP.EXE remains for a manual pack (`build/ZIP.EXE`: Zip 3.0, the 16-bit DOS build from
-the FreeDOS 1.3 package, kept in `infozip/` with its licence, which allows passing the program on with
-that licence text). VGALOG stays resident afterwards (`VGALOG /U`
+part's name. VGALOG stays resident afterwards (`VGALOG /U`
 unloads it); while it is loaded, every INT 10h call takes a little longer, which shows only in the timing
 lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
 .DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN
@@ -550,7 +548,7 @@ page (11b).
 
 `.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
 Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted runners it uses are free;
-changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or `infozip/` do not start
+changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/` or `standards/` do not start
 a run, and a newer commit on the same branch cancels the running one. Emulator test jobs (the chip/clock
 matrix and the stock-ROM runs) start only when `src/roms/**` changed, or on a manual run; `make roms`
 and the release zip still run on every CI start.
@@ -598,7 +596,7 @@ tests run by hand.
 
 builds the tools and packs them into `build/trio64-tools-<VERSION>.zip` (VERSION from
 `src/tools/common/version.inc`, now 1.0.0): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
-CHIPID, ROMVER, REPORT, S3REGS32.EXE, RUNALL.BAT, CLEAN.BAT, Info-ZIP's ZIP.EXE and its licence (ZIP-LIC.TXT). CI builds it on
+CHIPID, ROMVER, REPORT, S3REGS32.EXE, RUNALL.BAT and CLEAN.BAT. CI builds it on
 every run and keeps it as the artifact `trio64-tools-<VERSION>` for 90 days; the download is that zip.
 `ROMS=1` adds `trio64/roms/` with every chip's ROM at its memory clocks (`make roms`); the default leaves
 the ROMs out: the patched images carry S3's and Phoenix's code, so they are built from the reference

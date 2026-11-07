@@ -2,8 +2,7 @@
 rem Builds the DOS test tools with NASM 3.02: nasm.exe on the PATH, or the path in NASM,
 rem for example: set NASM=nasm\nasm-3.02\nasm.exe   (a relative path is made absolute)
 rem The output is the Makefile's tools list: the programs (including CHIPID.COM, ROMVER.COM and
-rem REPORT.COM), RUNALL.BAT, CLEAN.BAT and Info-ZIP's ZIP.EXE (a manual pack; RUNALL uses REPORT),
-rem with its licence as ZIP-LIC.TXT.
+rem REPORT.COM), RUNALL.BAT and CLEAN.BAT. RUNALL packs its logs with REPORT.COM.
 rem Sources live under src\tools\. The build stops at the first command that fails (#144).
 if "%NASM%"=="" set NASM=nasm
 if exist "%NASM%" for %%I in ("%NASM%") do set NASM=%%~fI
@@ -34,10 +33,6 @@ if errorlevel 1 goto fail
 copy /y src\tools\runall.bat build\RUNALL.BAT >nul
 if errorlevel 1 goto fail
 copy /y src\tools\clean.bat build\CLEAN.BAT >nul
-if errorlevel 1 goto fail
-copy /y infozip\ZIP.EXE build\ZIP.EXE >nul
-if errorlevel 1 goto fail
-copy /y infozip\LICENSE build\ZIP-LIC.TXT >nul
 if errorlevel 1 goto fail
 echo build: done
 exit /b 0
