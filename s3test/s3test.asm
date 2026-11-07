@@ -51,10 +51,10 @@
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID, the
 ;                    market name and the S3 part number (common/chip.inc chipfind/chippart: the same
-;                    PCI device and 8811 revision bit-6 split Velocity9x uses), so the log shows the
-;                    stepping (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX/GX 86C775/86C785 on the test
-;                    card; 8811 rev 40h -> Trio64V+ 86C765; 8811 rev 00h with CR2E 11h -> Trio64
-;                    86C764X)
+;                    PCI device and 8811 revision bit-6 split Velocity9x uses; on 8901h, CR6F bit 0
+;                    selects Trio64V2/DX 86C775 vs /GX 86C785, V2-ID-1), so the log shows the
+;                    stepping (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX 86C775 on the test card;
+;                    8811 rev 40h -> Trio64V+ 86C765; 8811 rev 00h with CR2E 11h -> Trio64 86C764X)
 ;   MCLK             SR10/SR11 after POST: a valid PLL setting (M, N at least 1, SR10 bit 7 clear, VCO
 ;                    135-270 MHz) at or below the maximum for the chip (the data book's; 70 MHz on the Trio64,
 ;                    T64-MEM-7) and the strapped memory
@@ -427,25 +427,26 @@ t_rom:  mov dx,s_sig
 ; CR2D/CR2E = device ID (89h 01h on the V2), CR2F = revision ID (varies with stepping, datasheet
 ; section 4.1; equals PCI configuration byte 08h), CR30 = chip ID (E1h), then the PCI device and
 ; revision from chipfind and the S3 part number from chippart (86C732 / 86C764X / 86C765 /
-; 86C775/86C785 / 86C767). Prints one line ending in INFO; it is not a test and not counted.
-t_chip: call unlock
-        mov dx,s_chip
+; 86C775 or 86C785 / 86C767). Values come from common/chip.inc (chipfind already ran chipidregs).
+; Prints one line ending in INFO; it is not a test and not counted.
+t_chip: mov dx,s_chip
         call puts
-        mov al,0x2D
-.c:     push ax
-        call rdcr
-        mov al,ah
+        call chipfind                   ; refreshes PCI + chipidregs (CR2D-30, CR6F)
+        mov al,[chipcr2d]
         call phex2
-        pop ax
-        cmp al,0x30
-        je .p
         call sp1
-        inc al
-        jmp .c
-.p:     mov dx,s_pci
+        mov al,[chipcr2e]
+        call phex2
+        call sp1
+        mov al,[chipcr2f]
+        call phex2
+        call sp1
+        mov al,[chipcr30]
+        call phex2
+        mov dx,s_pci
         call puts
-        call chipfind                   ; 5333:8901, 8811 or 8814 (common/chip.inc)
-        jc .np
+        cmp byte [chip],CHIP_NONE
+        je .np
         mov ax,[chipdev]
         call phex4
         mov dx,s_rev
@@ -456,7 +457,7 @@ t_chip: call unlock
         call chipname
         call puts
         call sp1
-        call chippart                   ; S3 part number from the PCI id (and 8811 rev bit 6)
+        call chippart                   ; S3 part; V2 uses CR6F bit 0 for 86C775 vs 86C785
         call puts
         jmp .e
 .np:    mov dx,s_na

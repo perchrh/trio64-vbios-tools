@@ -43,8 +43,9 @@
 ; Run order and expected outcome on the p9 ROM (219 pass, 0 fail, 4 warn on p8 before the 350-line
 ; and palette additions; the four warnings are known stock items)
 ;   1. ROM version string                      INFO
-;      Chip ID (CR2D-CR30, PCI, S3 part)        INFO (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX/GX
-;                                                   86C775/86C785 on the test card)
+;      Chip ID (CR2D-CR30, PCI, S3 part)        INFO (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX
+;                                                   86C775 on the test card; /GX 86C785 when CR6F
+;                                                   bit 0 is set)
 ;   2. POST: MCLK PLL and memory type           PASS (59.96 MHz, VCO in 135-270 MHz, 1-cycle EDO
 ;      limit 60 MHz)
 ;      SR1A bit 4 set at POST (Trio64V2 only)   PASS
@@ -339,24 +340,23 @@ bios_id:
         PS 13,10
         ret
 
-; INFO: chip identification, so a log shows which stepping produced it. CR2D/CR2E = device ID (89h 01h
-; on the 86C775/785), CR2F = revision ID ("varies with stepping", Trio64V2 datasheet section 4.1),
-; CR30 = chip ID (E1h), then the PCI device and revision from chipfind and the S3 part number from
-; chippart (same PCI / 8811 revision bit-6 split as Velocity9x). The test card reads 89 01 06 E1,
-; PCI 8901 rev 06 Trio64V2/DX/GX 86C775/86C785. No pass or fail.
+; INFO: chip identification, so a log shows which stepping produced it. CR2D-CR30 and the S3 part
+; come from common/chip.inc (chipfind / chipidregs / chippart): on 8901h, CR6F bit 0 selects
+; Trio64V2/DX 86C775 vs /GX 86C785 (V2-ID-1; S3's Windows 95 Trio INF lists one PCI 8901 row). The
+; test card reads 89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX 86C775. No pass or fail.
 chip_id:
         TB C_S3,'Chip ID CR2D 2E 2F 30, PCI rev ...... '
-        call unlock
-        RC 0x2D
+        call chipfind                   ; refreshes PCI + chipidregs
+        mov al,[chipcr2d]
         call phex2
         call sp1
-        RC 0x2E
+        mov al,[chipcr2e]
         call phex2
         call sp1
-        RC 0x2F
+        mov al,[chipcr2f]
         call phex2
         call sp1
-        RC 0x30
+        mov al,[chipcr30]
         call phex2
         PS ', PCI '
         cmp byte [chip],CHIP_NONE       ; chipfind: 5333:8901, 8811 or 8814

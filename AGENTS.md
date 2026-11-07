@@ -20,7 +20,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   from the S3 Trio64V+ BIOS 1.03-08N in `reference/64vplus/`, with the same rules: byte assertions, a
   pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VER765`; docs/765-rom.md) and the Trio64 ROM
   (`rompatch/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
-  `reference/trio64/`, the same rules, `VER764`; docs/764-rom.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, S3REGS32 for the Windows 9x desktop),
+  `reference/trio64/`, the same rules, `VER764`; docs/764-rom.md), the DOS test tools (VSHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, CHIPID, S3REGS32 for the Windows 9x desktop),
   the TSR S3ALIAS and their documentation.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a Dell
   2021FP (EDID over DDC2: Windows 98 identifies it with p21). The multiQ LCD (MQ215 B-1, native
