@@ -165,13 +165,16 @@ IN ?= $(REF775)
 	$(PYTHON) emu/refcompare.py --ref "$(REF775)" --rom "$(ROM)"
 
 # PoC PCI option ROM (src/roms/poc, docs/poc-rom.md): a generic card ROM that beeps high-low
-# high-low and prints "Hello world" at POST. One 32 KB image with a valid checksum, written twice
-# for a 64 KB EEPROM (a board may map either half); VENDOR/DEVICE (hex) go into the PCI data
-# structure - a PCI 2.1 POST skips an image whose IDs do not match the card.
-#   make poc-rom OUT=HELLO.ROM [VENDOR=0x8086 DEVICE=0x1229]   (default OUT=build/roms/poc/HELLO64K.ROM)
+# high-low and prints "Hello world" at POST. One 32 KB image with a valid checksum, written REPEATS
+# times to fill the EEPROM (a board may map any 32 KB-aligned half or quarter); VENDOR/DEVICE
+# (hex) go into the PCI data structure - a PCI 2.1 POST skips an image whose IDs do not match
+# the card.
+#   make poc-rom OUT=HELLO.ROM [VENDOR=0x8086 DEVICE=0x1229] [REPEATS=4]   (default OUT=build/roms/poc/HELLO64K.ROM, REPEATS=2)
 POC_OUT ?= build/roms/poc/HELLO64K.ROM
+POC_REPEATS ?= 2
 poc-rom:
-	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
+	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --repeats $(POC_REPEATS) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
+	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --repeats $(REPEATS) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
 
 # Removes build/ (the DOS tools and the ROM images under build/roms/)
 clean:

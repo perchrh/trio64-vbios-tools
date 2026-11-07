@@ -20,16 +20,20 @@ card included, and needs no IRQ, I/O or memory resource of its own.
 ## Build
 
 ```
-make poc-rom                      -> build/roms/poc/HELLO64K.ROM
+make poc-rom                      -> build/roms/poc/HELLO64K.ROM (64 KB)
 make poc-rom OUT=HELLO.ROM VENDOR=0x8086 DEVICE=0x1229
+make poc-rom OUT=HELLO.ROM REPEATS=4 VENDOR=0x10EC DEVICE=0x8139   (128 KB)
 ```
 
 NASM 3.02 assembles [hello.asm](../src/roms/poc/hello.asm) and
 [build.py](../src/roms/poc/build.py) pads the code with 00h to a 32 KB
 image (ROM-3), patches the expansion ROM checksum (offset 06h, the sum of
-all image bytes is 0 mod 256) and writes the 32 KB image twice into one
-64 KB file (ROM-4): a board may map either half of its 64 KB EEPROM, so
-both halves must carry a complete image.
+all image bytes is 0 mod 256) and writes the 32 KB image REPEATS times
+into one output file (ROM-4): a board may map any 32 KB-aligned half or
+quarter of its EEPROM, so every 32 KB block must carry a complete image.
+REPEATS is 2 for a 64 KB part (the default) or 4 for a 128 KB part; the
+usual 32-pin DIP sockets on network cards (3C905B, RTL8139D) decode up to
+128 KB.
 
 **Build with the card's IDs.** A PCI 2.1 POST skips an image whose vendor
 and device IDs do not match the card's configuration space (section 6.3.2),
@@ -50,8 +54,9 @@ when they stay 0000h.
 
 ## Flashing
 
-The 64 KB output file goes into the EEPROM as is. The 32 KB image is
-self-contained in either half.
+The output file goes into the EEPROM as is (64 KB, or 128 KB with
+REPEATS=4). The 32 KB image is self-contained in every 32 KB block of the
+part.
 
 ## What the code relies on
 
