@@ -11,17 +11,31 @@
 ;   datasheet maximum is 60 MHz; the 70 MHz board policy is not used here. A Trio64V2 cap follows
 ;   the strapped memory type (60 MHz for 1-cycle EDO, 66.67 MHz otherwise).
 ;
-;   The published clock is one step below the highest clock that passed, and never below the floor.
-;   Reaching the cap with every step clean still publishes the step under the cap.
+;   The recommended maximum ("Recommended max" line) is always a clock this run tested and passed,
+;   and at least 1 percent below the highest clock that passed: the highest passing step at or
+;   below 99 percent of it (integer kHz, step x 100 <= highest x 99). When no passing step is that
+;   low (one step passed, or the run started too close to the highest) the line says "none"
+;   instead of naming an untested clock: run again with a lower /I. Reaching the cap with every
+;   step clean is handled the same way, from the last step under the cap.
+;
+;   Before the first PLL write MCLK asks once, on stderr: it names the clock range it is about to
+;   program and waits for a key from the BIOS keyboard (INT 16h, so a redirected stdin cannot answer
+;   it; keys typed before the prompt are dropped). Only Y or y starts the sweep; any other key ends
+;   the run with the PLL untouched, a "Not confirmed" line and exit 1. The answer goes into the log.
+;   /H, a bad argument, no chip, no datasheet maximum and a start above the cap end before the
+;   question, also without a PLL write.
 ;
 ; Usage
 ;   MCLK                 0.5 MHz steps from the floor up to the cap
-;   MCLK /P              the smallest PLL steps instead of 0.5 MHz
+;   MCLK /P              finer steps: the next PLL pair at least 0.1 MHz up, instead of 0.5 MHz
+;                        (the table has pairs 46 kHz apart; finer than 0.1 MHz is not needed)
 ;   MCLK /I 52.5         start at 52.5 MHz (a pair at or below the request, not below the floor)
 ;   MCLK /H              this help
+;   Each run asks once for Y before the first clock change (above).
 ;   Esc during a pass stops the sweep and restores the POST clock.
 ;   Exit 0 when at least one step passed and the sweep was not stopped. Exit 1 otherwise
-;   (a later step that fails is the result, not a failed run). Not part of RUNALL: it changes
+;   (a later step that fails is the result, not a failed run; a key other than Y at the
+;   question is exit 1). Not part of RUNALL: it changes
 ;   the memory clock and the memory test is slow on purpose.
 ;
 ; Each step, before the test: a line ending in "testing", flushed, so a hang names that clock.
@@ -39,6 +53,7 @@ cpu 386
 FLOOR_KHZ equ 50113
 BOOK60    equ 60000
 BOOK67    equ 66667
+PSTEP_KHZ equ 100                       ; /P: the smallest step, 0.1 MHz
 
 start:  cld
         push cs
@@ -65,6 +80,8 @@ start:  cld
         je nodata
         call choose_start
         jc toohigh
+        call confirm
+        jc declined
         call video_on
         jc nomode
         call blank
@@ -529,7 +546,9 @@ line_start:
         mov eax,500
         call pmhz
         jmp .e
-.p:     mov si,s_prec
+.p:     mov eax,PSTEP_KHZ
+        call pmhz
+        mov si,s_prec
         call lstr
 .e:     call lend
         ret
@@ -561,6 +580,63 @@ choose_start:
         call lstr
         mov eax,[ireq]
         call pmhz
+        call lend
+        stc
+        ret
+
+; The one question of a run, before the first PLL write. The warning and the prompt go to stderr
+; only (meant for the person at the screen); the answer goes to the log as a line of its own.
+; Keys already in the BIOS keyboard buffer are dropped first, so only a key pressed after the
+; prompt counts. The key is read with INT 16h AH=00h, not from stdin.
+; Out: CF clear when Y or y was pressed, CF set for any other key. Clobbers AX, BX, CX, DX, SI, DI.
+confirm:
+        call lbegin
+        mov si,s_warn1
+        call lstr
+        mov bx,[curi]
+        call entry
+        call pmhz
+        mov si,s_warn2
+        call lstr
+        mov eax,[capk]
+        call pmhz
+        mov si,s_warn3
+        call lstr
+        call lerr
+        push es
+        mov ax,0x40
+        mov es,ax
+        cli
+        mov ax,[es:0x1C]                ; keyboard buffer head = tail: nothing waiting
+        mov [es:0x1A],ax
+        sti
+        pop es
+        xor ah,ah
+        int 0x16
+        mov [answer],al
+        call lbegin
+        mov al,[answer]
+        cmp al,' '
+        jb .e
+        cmp al,0x7E
+        ja .e
+        call lc                         ; echo a printable key after the prompt
+.e:     mov ax,0x0A0D
+        stosw
+        call lerr
+        mov al,[answer]
+        or al,0x20
+        cmp al,'y'
+        jne .no
+        call lbegin
+        mov si,s_yes
+        call lstr
+        call lend
+        clc
+        ret
+.no:    call lbegin
+        mov si,s_no
+        call lstr
         call lend
         stc
         ret
@@ -610,6 +686,8 @@ sweep:  cmp word [banks],0
 .end:   ret
 
 ; Next pair after [curi]. CF when the next request would pass the cap.
+; 0.5 MHz: the highest pair at or below [curk] + 0.5 MHz. /P: the first pair at or above
+; [curk] + 0.1 MHz (the table is in rising order). Keeps ECX.
 next_i: cmp byte [precise],1
         je .p
         mov eax,[curk]
@@ -624,18 +702,25 @@ next_i: cmp byte [precise],1
         mov [curi],bx
         clc
         ret
-.p:     mov bx,[curi]
-        inc bx
+.p:     push ecx
+        mov ecx,[curk]
+        add ecx,PSTEP_KHZ
+        mov bx,[curi]
+.pl:    inc bx
         cmp bx,PLL_N
-        jae .no
+        jae .pno
         push bx
         call entry
         pop bx
+        cmp eax,ecx
+        jb .pl                          ; less than 0.1 MHz up: skip the pair
         cmp eax,[capk]
-        ja .no
+        ja .pno
         mov [curi],bx
+        pop ecx
         clc
         ret
+.pno:   pop ecx
 .no:    stc
         ret
 
@@ -1176,17 +1261,33 @@ summary:
         mov bx,[passi+bx]
         mov si,s_high
         call show_pair
-        cmp word [npass],1
-        jne .two
-        mov bx,[passi]
-        call one_below
-        jmp .pub
-.two:   mov bx,[npass]
-        sub bx,2
+        mov bx,[npass]                  ; highest x 99, the limit for step x 100
+        dec bx
         shl bx,1
         mov bx,[passi+bx]
-.pub:   mov si,s_pub
+        call entry
+        imul eax,eax,99
+        mov [reclim],eax
+        mov cx,[npass]                  ; the passes below the highest, highest first
+        dec cx
+.cand:  jcxz .nrec
+        dec cx
+        mov bx,cx
+        shl bx,1
+        mov bx,[passi+bx]
+        call entry
+        imul eax,eax,100
+        cmp eax,[reclim]
+        ja .cand
+        mov si,s_pub                    ; a tested pass at least 1 percent below the highest
         call show_pair
+        jmp .rest
+.nrec:  call lbegin                     ; no tested pass that low: no value
+        mov si,s_pub
+        call lstr
+        mov si,s_pub1
+        call lstr
+        call lend
         jmp .rest
 .none:  call lbegin
         mov si,s_none
@@ -1208,26 +1309,6 @@ summary:
         mov al,[post11]
         call phex2
         call lend
-        ret
-
-; BX = a passing index -> BX = one step below it, or the floor pair when that would be lower.
-one_below:
-        cmp byte [precise],1
-        je .p
-        push bx
-        call entry
-        sub eax,500
-        pop bx
-        cmp eax,FLOOR_KHZ
-        jb .floor
-        call find_le
-        jc .floor
-        ret
-.p:     or bx,bx
-        jz .floor
-        dec bx
-        ret
-.floor: xor bx,bx
         ret
 
 ; SI = label, BX = table index. Prints the label, the frequency and SR10/SR11.
@@ -1317,6 +1398,7 @@ nodata: call relock
         int 0x21
 
 toohigh:
+declined:
         call relock
         mov ax,0x4C01
         int 0x21
@@ -1402,6 +1484,15 @@ lend:   mov ax,0x0A0D
         mov ah,0x40
         int 0x21
 .r:     pop ds
+        ret
+
+; The line buffer up to DI, as it is (no CR LF added), to stderr only.
+lerr:   mov cx,di
+        sub cx,line
+        mov dx,line
+        mov bx,2
+        mov ah,0x40
+        int 0x21
         ret
 
 phex8:  push eax
@@ -1496,6 +1587,7 @@ clamped db 0
 nobook  db 0
 vid     db 0
 stopped db 0
+answer  db 0
 phase   db 0
 roundn  db 0
 sridx   db 0
@@ -1525,6 +1617,7 @@ errbank dw 0
 erroff  dw 0
 errexp  dd 0
 errgot  dd 0
+reclim  dd 0
 llen    dw 0
 passi   times 256 dw 0
 
@@ -1548,7 +1641,7 @@ s_plus  db ' (+25%)',0
 s_post  db 'POST ',0
 s_start db 'Start ',0
 s_step  db '  step ',0
-s_prec  db 'precise',0
+s_prec  db ' or more (/P)',0
 s_below db 'Requested ',0
 s_bel2  db ' is below the floor',0
 s_over  db 'Start is above the cap: ',0
@@ -1573,13 +1666,22 @@ s_off   db ' off ',0
 s_exp   db ' exp ',0
 s_got   db ' got ',0
 s_high  db 'Highest ',0
-s_pub   db 'Published ',0
+s_pub   db 'Recommended max ',0
+s_pub1  db 'none: no tested step 1% or more below the highest (run again with a lower /I)',0
 s_none  db 'No step passed',0
 s_rest  db 'Restored ',0
 s_nomode db 'Mode 101h was not set; the clock was not changed',0
 s_nomem db 'No video memory to test',0
 s_nochip db 'No Trio64-family chip found',0
 s_nodata db 'No datasheet MCLK maximum for this chip',0
+s_warn1 db 'MCLK changes the memory clock of this card. It programs the MCLK PLL from',13,10,0
+s_warn2 db ' up to ',0
+s_warn3 db ' (the datasheet maximum plus 25 percent). A clock',13,10
+        db 'above what the memory takes can corrupt video memory or hang the machine (then',13,10
+        db 'reset it). The POST clock is put back at the end.',13,10
+        db 'Press Y to continue, any other key to quit: ',0
+s_yes   db 'Confirmed: Y pressed, the clock steps start',0
+s_no    db 'Not confirmed: the clock was not changed',0
 s_4     db '4 MB',0
 s_2     db '2 MB',0
 s_15    db '1.5 MB',0
@@ -1602,14 +1704,16 @@ type64  dw s_res, s_res, s_edo, s_fpm
 s_bad   db 'MCLK ',VERSION,': bad argument. MCLK /H for help.',13,10,'$'
 s_use   db 'MCLK ',VERSION,' - find a stable memory clock',13,10
         db '  MCLK           0.5 MHz steps from the floor (SR10=41 SR11=28, 50.114 MHz)',13,10
-        db '  MCLK /P        smallest PLL steps',13,10
+        db '  MCLK /P        steps of 0.1 MHz or more (the next PLL pair)',13,10
         db '  MCLK /I 52.5   start at 52.5 MHz (not below the floor)',13,10
         db '  MCLK /H        this help',13,10
         db 'Prints the chip, the ROM version, CR36 memory type and size, then',13,10
-        db 'each clock as it is tested. Esc stops the run. The published clock',13,10
-        db 'is one step below the highest that passed, and not below the floor.',13,10
+        db 'each clock as it is tested. Esc stops the run. The recommended max',13,10
+        db 'is the highest tested step that passed at least 1 percent below the',13,10
+        db 'highest that passed (none when no tested step is that low).',13,10
         db 'The cap is the datasheet MCLK maximum plus 25 percent. The POST',13,10
-        db 'clock is restored. Exit 0 when a step passed and Esc was not used.',13,10,'$'
+        db 'clock is restored. Exit 0 when a step passed and Esc was not used.',13,10
+        db 'Asks once for Y before the first clock change; any other key quits.',13,10,'$'
 
 %include "chip.inc"
 %include "romver.inc"
