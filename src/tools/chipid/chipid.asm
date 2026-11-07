@@ -106,10 +106,12 @@ start:  cld
         call puts
         mov dx,s_nl
         call puts
+        call doneio
         mov ax,0x4C00
         int 0x21
 .np:    mov dx,s_na
         call puts
+        call doneio
         mov ax,0x4C01
         int 0x21
 
@@ -126,15 +128,29 @@ start:  cld
         cmp byte [dozip],1
         jne .qok
         call ziprenp                    ; rename runall.zip from the same part string
-.qok:   mov ax,0x4C00
+.qok:   call doneio
+        mov ax,0x4C00
         int 0x21
 .qfail: mov ax,0x4C01
         int 0x21
 
 help:   mov dx,s_use
         call puts
+        call doneio
         mov ax,0x4C00
         int 0x21
+
+; Commit stdout and reset the disk, so CHIPID > chipid.out survives SMARTDRV.
+doneio: push ax
+        push bx
+        mov bx,1
+        mov ah,0x68
+        int 0x21
+        mov ah,0x0D
+        int 0x21
+        pop bx
+        pop ax
+        ret
 
 puts:   push ax                         ; DX -> '$' string to stdout
         mov ah,9

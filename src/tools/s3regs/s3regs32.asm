@@ -10,6 +10,7 @@
 ;
 ; Usage (Windows 95/98/ME console; Windows NT does not allow the port access)
 ;   S3REGS32 [label]         append one snapshot with the label to S3REGS.TXT
+;                            (FlushFileBuffers before the handle is closed)
 ;   S3REGS32 /W n [label]    snapshot, then watch for n seconds (1-3600, every 100 ms), appending one
 ;                            line per changed register: "+<ms> CRxx old->new"; then a closing snapshot
 ;   S3REGS32 /H, /?          parameter list
@@ -252,6 +253,8 @@ fwrite: mov eax,edi
         push dword [hfile]
         call [WriteFile]
         push eax
+        push dword [hfile]
+        call [FlushFileBuffers]
         push dword [hfile]
         call [CloseHandle]
         pop eax
@@ -699,7 +702,7 @@ hn_%1:  dw 0
 %rotate 1
 %endrep
 %endmacro
-        IMPORTS ExitProcess, GetStdHandle, WriteFile, CreateFileA, SetFilePointer, CloseHandle, GetCommandLineA, Sleep, GetTickCount
+        IMPORTS ExitProcess, GetStdHandle, WriteFile, FlushFileBuffers, CreateFileA, SetFilePointer, CloseHandle, GetCommandLineA, Sleep, GetTickCount
 dllname db 'KERNEL32.DLL',0
         align 16
 text_end:
