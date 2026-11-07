@@ -31,7 +31,12 @@
 ;   BIOS programs its own clock again at the next boot. A request below the lowest pair or above
 ;   the cap is refused. A pair above the datasheet maximum is set only after the Y question
 ;   (below). After the write SR10 and SR11 are read back; when they differ the clock found at the
-;   start is put back (exit 1). One result line: "Set: <MHz> SR10=.. SR11=..".
+;   start is put back (exit 1). The run ends with one result line, either
+;     Memory clock set to 57.479 MHz (requested 57.500 MHz, SR10=41 SR11=2E read back): OK
+;   (the pair was written and reads back as written; exit 0), or a line that starts with "ERROR:"
+;   and says why and that the clock was not changed (exit 1): below the lowest pair, above the
+;   cap, the question not answered with Y, no datasheet maximum, or SR10/SR11 read back other
+;   than written (then the clock found at the start is put back).
 ;
 ; /T: test steps
 ;   0.5 MHz steps from the lowest pair up to the cap, or /P for finer steps, or /I to start
@@ -49,9 +54,12 @@
 ;   /T always, and /S above the datasheet maximum, ask once on stderr before the first PLL write:
 ;   it names the clock (/S) or the range (/T) and waits for a key from the BIOS keyboard (INT 16h,
 ;   so a redirected stdin cannot answer it; keys typed before the prompt are dropped). Only Y or y
-;   goes on; any other key ends the run with the PLL untouched, a "Not confirmed" line and exit 1.
+;   goes on; any other key ends the run with the PLL untouched, an "ERROR: Not confirmed" line and exit 1.
 ;   The answer goes into the log. /H, a bad argument, no chip, no datasheet maximum and a request
 ;   out of range end before the question, also without a PLL write.
+;   /Y answers the question with Y, for a run without a person at the keyboard (a batch file): the
+;   question still goes to stderr, followed by "Y (/Y)", no key is read, and the log says
+;   "Confirmed: /Y given" where a pressed Y gives "Confirmed: Y pressed".
 ;
 ; Usage
 ;   MCLK                 report only, changes nothing
@@ -60,8 +68,9 @@
 ;   MCLK /T /P           finer steps: the next PLL pair at least 0.1 MHz up, instead of 0.5 MHz
 ;                        (the table has pairs 46 kHz apart; finer than 0.1 MHz is not needed)
 ;   MCLK /T /I 52.5      start at 52.5 MHz (a pair at or below the request, not below the lowest)
+;   MCLK /S 70 /Y        /Y: yes to every question, no key is read (with /S or /T)
 ;   MCLK /H              the help
-;   /P and /I go only with /T, /S not with /T: otherwise "bad argument".
+;   /P and /I go only with /T, /Y only with /S or /T, /S not with /T: otherwise "bad argument".
 ;   Esc during a test pass stops the sweep and puts the clock found at the start back.
 ;   Exit codes: report 0 (1 when no chip is found). /S 0 when the clock was set, 1 otherwise. /T 0
 ;   when at least one step passed and the sweep was not stopped, 1 otherwise (a later step that
@@ -127,7 +136,8 @@ start:  cld
 
 ; ---------------------------------------------------------------------------
 ; argument tail. Sets [dohelp], [badarg], [doset] with [sreq], [dotest], [precise], [havei] with
-; [ireq]. /P and /I without /T, or /S together with /T, are a bad argument.
+; [ireq], [yesall]. /P and /I without /T, /Y without /S or /T, or /S together with /T, are a bad
+; argument.
 
 parse:  mov si,0x81
 .op:    lodsb
@@ -168,10 +178,19 @@ parse:  mov si,0x81
         mov byte [doset],1
         jmp .op
 .tt:    cmp al,'t'
-        jne .bad
+        jne .yy
         mov byte [dotest],1
         jmp .op
-.chk:   cmp byte [dotest],1             ; the end of the tail: check the combination
+.yy:    cmp al,'y'
+        jne .bad
+        mov byte [yesall],1
+        jmp .op
+.chk:   mov al,[doset]                  ; the end of the tail: check the combination
+        or al,[dotest]
+        jnz .c2
+        cmp byte [yesall],1             ; /Y without /S or /T: nothing to answer
+        je .bad
+.c2:    cmp byte [dotest],1
         je .t
         mov al,[precise]
         or al,[havei]
@@ -648,20 +667,45 @@ confirm:
         call lstr
         call ask
         jc .r
-        call lbegin
         mov si,s_yes
-        call lstr
-        call lend
+        call yesline
         clc
 .r:     ret
+
+; The log line after a Y: "Confirmed: Y pressed" or, with /Y, "Confirmed: /Y given", then the
+; text at SI. Clobbers AX, CX, DX, SI, DI.
+yesline:
+        push si
+        call lbegin
+        mov si,s_conf
+        call lstr
+        mov si,s_ykey
+        cmp byte [yesall],1
+        jne .k
+        mov si,s_yarg
+.k:     call lstr
+        pop si
+        call lstr
+        jmp lend
 
 ; The one question of a run, before the first PLL write. In: the warning and the prompt in the
 ; line buffer up to DI (lbegin, lstr ...); they go to stderr only (meant for the person at the
 ; screen). The answer goes to the log: a "Not confirmed" line here, the caller's line on Y.
 ; Keys already in the BIOS keyboard buffer are dropped first, so only a key pressed after the
 ; prompt counts. The key is read with INT 16h AH=00h, not from stdin.
-; Out: CF clear when Y or y was pressed, CF set for any other key. Clobbers AX, BX, CX, DX, SI, DI.
-ask:    call lerr
+; With /Y ([yesall]) no key is read: "Y (/Y)" follows the prompt on stderr and the answer is Y.
+; Out: CF clear when Y or y was pressed (or /Y given), CF set for any other key. Clobbers AX, BX,
+; CX, DX, SI, DI.
+ask:    cmp byte [yesall],1
+        jne .key
+        mov si,s_yecho                  ; the prompt, then "Y (/Y)" as if typed
+        call lstr
+        mov ax,0x0A0D
+        stosw
+        call lerr
+        clc
+        ret
+.key:   call lerr
         push es
         mov ax,0x40
         mov es,ax
@@ -731,10 +775,8 @@ setclk: cmp byte [nobook],1
         call lstr
         call ask
         jc declined
-        call lbegin
         mov si,s_yes2
-        call lstr
-        call lend
+        call yesline
 .go:    mov bl,[cur10]
         mov bh,[cur11]
         call loadp
@@ -750,12 +792,16 @@ setclk: cmp byte [nobook],1
         mov al,[prv10]
         cmp al,[cur10]
         jne .bad
-        call lbegin                     ; "Set: 57.272 MHz SR10=41 SR11=2E"
-        mov si,s_set
+        call lbegin                     ; "Memory clock set to 57.479 MHz (requested 57.500 MHz,
+        mov si,s_set                    ;  SR10=41 SR11=2E read back): OK"
         call lstr
         mov eax,[curk]
         call pmhz
-        mov si,s_sr
+        mov si,s_setreq
+        call lstr
+        mov eax,[sreq]
+        call pmhz
+        mov si,s_setsr
         call lstr
         mov al,[cur10]
         call phex2
@@ -763,6 +809,8 @@ setclk: cmp byte [nobook],1
         call lstr
         mov al,[cur11]
         call phex2
+        mov si,s_setok
+        call lstr
         call lend
         call lbegin
         mov si,s_set2
@@ -775,8 +823,12 @@ setclk: cmp byte [nobook],1
         mov bh,[post11]
         call loadp
         call settle
-        call lbegin
-        mov si,s_setbad
+        call lbegin                     ; "ERROR: memory clock not set to 57.479 MHz: SR10/SR11
+        mov si,s_setbad                 ;  read back as SR10=.. SR11=..; the clock found ..."
+        call lstr
+        mov eax,[curk]
+        call pmhz
+        mov si,s_setbd1
         call lstr
         mov al,[prv10]
         call phex2
@@ -788,7 +840,9 @@ setclk: cmp byte [nobook],1
         call lstr
         call lend
         jmp .x
-.low:   call lbegin
+.low:   call lbegin                     ; "ERROR: 45.000 MHz is below 50.113 MHz, the lowest ..."
+        mov si,s_err
+        call lstr
         mov eax,[sreq]
         call pmhz
         mov si,s_low
@@ -797,9 +851,13 @@ setclk: cmp byte [nobook],1
         call pmhz
         mov si,s_low2
         call lstr
+        mov si,s_unch
+        call lstr
         call lend
         jmp .x
-.high:  call lbegin
+.high:  call lbegin                     ; "ERROR: 90.000 MHz is above the cap: 75.000 MHz (...)"
+        mov si,s_err
+        call lstr
         mov eax,[sreq]
         call pmhz
         mov si,s_high2
@@ -807,6 +865,8 @@ setclk: cmp byte [nobook],1
         mov eax,[capk]
         call pmhz
         mov si,s_plus
+        call lstr
+        mov si,s_unch
         call lstr
         call lend
 .x:     call relock
@@ -1771,6 +1831,7 @@ precise db 0
 havei   db 0
 doset   db 0
 dotest  db 0
+yesall  db 0                    ; /Y: answer the question with Y, read no key
 clamped db 0
 nobook  db 0
 vid     db 0
@@ -1857,9 +1918,15 @@ s_pub1  db 'none: no tested step 1% or more below the highest (run again with a 
 s_use1  db 'To use it: MCLK /S ',0
 s_none  db 'No step passed',0
 s_rest  db 'Restored ',0
-s_set   db 'Set: ',0
+s_set   db 'Memory clock set to ',0
+s_setreq db ' (requested ',0
+s_setsr db ', SR10=',0
+s_setok db ' read back): OK',0
 s_set2  db 'The BIOS sets its own clock again at the next boot.',0
-s_setbad db 'Not set: SR10/SR11 read back as SR10=',0
+s_err   db 'ERROR: ',0
+s_unch  db '; the clock was not changed',0
+s_setbad db 'ERROR: memory clock not set to ',0
+s_setbd1 db ': SR10/SR11 read back as SR10=',0
 s_setbd2 db '; the clock found at the start was put back',0
 s_low   db ' is below ',0
 s_low2  db ', the lowest clock MCLK sets',0
@@ -1867,7 +1934,7 @@ s_high2 db ' is above the cap: ',0
 s_nomode db 'Mode 101h was not set; the clock was not changed',0
 s_nomem db 'No video memory to test',0
 s_nodata db 'No datasheet MCLK maximum for this chip in MCLK',0
-s_nodat2 db '/S and /T need the datasheet maximum; the clock was not changed',0
+s_nodat2 db 'ERROR: /S and /T need the datasheet maximum; the clock was not changed',0
 s_warn1 db 'MCLK /T changes the memory clock of this card. It programs the MCLK PLL from',13,10,0
 s_warn2 db ' up to ',0
 s_warn3 db ' (the datasheet maximum plus 25 percent).',13,10
@@ -1878,9 +1945,13 @@ s_sw2   db ', above the datasheet maximum',13,10
 s_sw3   db '.',13,10,0
 s_risk  db 'A clock above what the memory takes can corrupt video memory or hang the',13,10
         db 'machine (then reset it). Press Y to continue, any other key to quit: ',0
-s_yes   db 'Confirmed: Y pressed, the clock steps start',0
-s_yes2  db 'Confirmed: Y pressed, the clock is set',0
-s_no    db 'Not confirmed: the clock was not changed',0
+s_conf  db 'Confirmed: ',0
+s_ykey  db 'Y pressed',0
+s_yarg  db '/Y given',0
+s_yecho db 'Y (/Y)',0
+s_yes   db ', the clock steps start',0
+s_yes2  db 0
+s_no    db 'ERROR: Not confirmed: the clock was not changed',0
 s_4     db '4 MB',0
 s_2     db '2 MB',0
 s_15    db '1.5 MB',0
@@ -1909,6 +1980,7 @@ s_use   db 'MCLK ',VERSION,' - show, set or test the memory clock (MCLK)',13,10
         db '                  datasheet maximum + 25%, and recommend a clock',13,10
         db '  MCLK /T /P      test in steps of 0.1 MHz or more',13,10
         db '  MCLK /T /I 55   start the test at 55 MHz',13,10
+        db '  MCLK /S 70 /Y   /Y answers yes to every question (no key is read)',13,10
         db '  MCLK /H         this help',13,10
         db 13,10
         db '/S asks for Y above the datasheet maximum, /T always. The BIOS sets its own',13,10

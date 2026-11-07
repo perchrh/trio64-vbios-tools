@@ -6,7 +6,7 @@ Trio64 (S3 86C764X) video BIOS from. The clean ROM is written from scratch, with
 specify the whole behaviour, the standard VGA functions included. SeaVGABIOS (LGPLv3, branch
 claude/slim-vgabios of /home/user/seabios_fork) is a comparison implementation only: its vgasrc/ may
 be read for facts, never as a base. Read first, in /home/user/trio64-vbios-tools: [AGENTS.md](../../AGENTS.md), [docs/clean-room.md](../clean-room.md),
-[docs/seavgabios-trio64.md](../seavgabios-trio64.md) (the earlier plan; your part is one of its items 1-6), [docs/chip-rules.md](../chip-rules.md) (data
+(its section "The parts of the clean ROM": your part is one of items 1-6), [docs/chip-rules.md](../chip-rules.md) (data
 book rules with IDs), [docs/bios-rules.md](../bios-rules.md) (standard function rules, the format to follow).
 
 ## Rules (hard)

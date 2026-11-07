@@ -60,7 +60,7 @@ Written 1 November 2026.
 | GR05 / AR10 | 40h / 41h (IBM 13h) | 00h / 01h in the 800, 1024 and 1280 modes | as 1.5-07 | with CR3A bit 4 = 1 both work (T32/64 9.3) |
 | CR60 in 112h | FFh | 1Ch (N = 28) | 1Ch | Phoenix's table |
 | CR67 bit 0 in 107h | 0 | 1 (11h) in its interlaced entry | 0 (10h) | MQ-13 |
-| CR58 | bit 4 = 0 (banked), size bits as POST | 03h (4 MB window size with 2 MB, bit 4 = 0) | 10h (the booster: linear addressing on with a 64 KB window at A0000h) | the booster is optional later ([`docs/seavgabios-trio64.md`](../seavgabios-trio64.md)); Phoenix's size 11b exceeds 2 MB (VGADOC: must not) |
+| CR58 | bit 4 = 0 (banked), size bits as POST | 03h (4 MB window size with 2 MB, bit 4 = 0) | 10h (the booster: linear addressing on with a 64 KB window at A0000h) | the booster is optional later ([`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM"); Phoenix's size 11b exceeds 2 MB (VGADOC: must not) |
 | SR15 after POST | bit 0 = 0 (MODE-121) | 03h: bit 0 (MCLK load) left 1 after POST, 02h after a VESA mode set | the same | T64-PLL-1 says bit 0 must be cleared after loading |
 | DCLK load path | immediate (SR15 bit 5 1 then 0) | delayed: SR15 written 00h then 02h (bit 1) after SR12/SR13 | the same | both allowed (T32/64 9.2); the spec prefers the immediate one |
 | FIFO M | 101h: M = 31 (MODE-136). Other modes are not given an M by that row | Phoenix's table (31 in most 8 bpp modes, 19 in 113h/114h, 26 in 107h, ...) | old formula at 2 and 4 MB; at 1 MB Phoenix's 1 MB table lowered by the 112-byte formula | 101h's M = 31 matches Phoenix's usual 8 bpp value on 2 MB. The old formula is not the clean rule |
@@ -80,7 +80,8 @@ SR12, SR13 and SR15 write happens with SR01 bit 5 = 1, as MODE-138 and MODE-140 
 - **1 MB FIFO M (CR54 bits 7-3), old formula (D = 56) against p3:** 100h 16 / 31, 101h 16 / 21, 103h 8 / 14,
   105h 4 / 6, 110h-111h 6 / 6, 113h-114h 2 / 3 (at 54.9 MHz). p3 is above the derived value in 100h,
   101h, 103h, 105h and 113h/114h. Those derived numbers are not MODE-136. For 101h, MODE-136 sets M = 31
-  at 59.96 MHz on 1 MB too, because the 30-byte drain fits the 64-byte FIFO. No 1 MB card has been run.
+  at the default 50.11 MHz on 1 MB too, because the 36-byte drain (30 bytes at 59.96 MHz) fits the
+  64-byte FIFO. No 1 MB card has been run.
 - **4 MB:** p3 gives the same registers as with 2 MB (only the 4F01 page counts differ). The 1.5-07 run
   at 4 MB covered 100h-10Eh and agreed with its 2 MB values there.
 

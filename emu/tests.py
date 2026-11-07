@@ -57,9 +57,12 @@ Tests
                    clock and the datasheet range (50.113 MHz to the MEM-1/V2-MEM-1 maximum) and
                    changes nothing. /H is the help; /P or /I without /T, /S with /T, /S without a
                    value are bad arguments. /S 57.5 sets the pair at or below 57.5 MHz without a
-                   question; mode sets keep it on our 2.04.07 ROM and the next report shows it.
-                   /S 45 and /S 90 are refused without a write; /S 70 asks once: N writes nothing,
-                   Y sets it. /T /I 90 (above the cap) changes nothing and asks nothing. Before
+                   question and ends with "Memory clock set to <MHz> (requested 57.500 MHz, SR10=..
+                   SR11=.. read back): OK"; mode sets keep it on our 2.04.07 ROM and the next report
+                   shows it. /S 45 and /S 90 are refused without a write, with an "ERROR: ... the
+                   clock was not changed" line; /S 70 asks once: N writes nothing ("ERROR: Not
+                   confirmed"), Y sets it (the OK line); /S 70 /Y sets it without reading a key
+                   ("Confirmed: /Y given"), and /Y without /S or /T is a bad argument. /T /I 90 (above the cap) changes nothing and asks nothing. Before
                    the first PLL write /T asks once on stderr: N leaves SR08/SR10/SR11/SR15 as they
                    were (exit 1). With Y, /T /I 74.9 (cap 75 MHz) runs one step and recommends none
                    (no tested pass 1 % below it); /T /I 73.9 runs three steps and recommends the
@@ -970,7 +973,7 @@ def t_t64_patches(c):
     # the display FIFO M (CR54 bits 7-3, #75), from the bandwidth: 112 of the FIFO's 128 bytes drain in
     # t = 112 x MCLK / (DCLK x bytes per pixel) MCLKs, two entry cycles and an access take 23 and each
     # access 6 (p3, #82; p2 counted 5), so M = (t - 23) / 6 at most (README "Trio64 ROM"). Every packed mode keeps M at or below it (the ROM
-    # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 MB 103h, 105h and 114h have
+    # only lowers Phoenix's values); at the default MCLK (54.9 MHz) with 2 or 4 MB 103h, 105h and 114h have
     # it exactly, since Phoenix's own values there are higher (with 1 MB, a 32-bit memory bus, Phoenix's own
     # values are lower than the formula, which counts the 64-bit bus, and stay). The MCLK from the SR10/SR11
     # the POST loads.
@@ -1357,7 +1360,7 @@ def vgalog_info(c, m, blk, what, tail=bytes(8)):
     ids = chip_ids()
     cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
     if Machine.chip in ('trio64', 'trio32'):
-        cr36 |= 0x08
+        cr36 |= 0x0C if Machine.vram == 4 else 0x08
     v = re.search(rb'Vers\S*\s+([^\s(]{1,15})', c.rom[:0x100])
     want = bytes(ids) + bytes([cr36, c.rom[2], m.r['seq'].get(0x10, 0), m.r['seq'].get(0x11, 0)]) + \
         (v.group(1) if v else b'').ljust(16, b'\0') + tail
@@ -2635,7 +2638,7 @@ def t_mclk(c):
     helptext = bytes(h.stdout)
     check(all(sw in helptext for sw in (b'/S', b'/T', b'/P', b'/I')), 'MCLK /H text %r' % helptext[:300])
 
-    for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X'):
+    for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X', '/Y'):
         bad = c.machine().run_com(com, tail, name='MCLK.COM', max_insn=1_000_000)
         check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
               'bad %r %s %r' % (tail, bad.exit, bytes(bad.stdout)[:200]))
@@ -2660,7 +2663,8 @@ def t_mclk(c):
     check(CHIPS[Machine.chip]['name'].encode() in il[1], 'chip line %r on the %s model' % (il[1], Machine.chip))
     vram = Machine.vram
     want_mem = ('%d MB' % vram).encode()
-    check(il[2].split(b':', 1)[1].strip().startswith(want_mem + b' ') and b'EDO' in il[2],
+    want_type = b'fast page' if Machine.chip == 'trio64' and vram == 4 else b'EDO'   # 4 MB Trio64: fast page
+    check(il[2].split(b':', 1)[1].strip().startswith(want_mem + b' ') and want_type in il[2],
           'memory line %r, %d MB' % (il[2], vram))
     post = clk(mi)
     pk = 14318 * ((post[1] & 0x7F) + 2) // ((post[0] & 0x1F) + 2) >> ((post[0] >> 5) & 3)
@@ -2681,8 +2685,9 @@ def t_mclk(c):
     check(s1.exit == ('exit', 0), 'MCLK /S 57.5 exit %s %r' % (s1.exit, sl))
     check(b'Press Y' not in bytes(s1.stderr), '/S 57.5 asked: %r' % bytes(s1.stderr)[:300])
     check(clk(ms) == pair[k], '/S 57.5 left SR10/SR11 %s, expected %s (%d kHz)' % (clk(ms), pair[k], k))
-    check(('Set: %d.%03d MHz SR10=%02X SR11=%02X' % (k // 1000, k % 1000, pair[k][0], pair[k][1])).encode() in sl,
-          '/S 57.5 lines %r' % sl)
+    okline = lambda kk, req: ('Memory clock set to %d.%03d MHz (requested %s MHz, SR10=%02X SR11=%02X read back): OK'
+                              % (kk // 1000, kk % 1000, req, pair[kk][0], pair[kk][1])).encode()
+    check(okline(k, '57.500') in sl and not any(ln.startswith(b'ERROR') for ln in sl), '/S 57.5 lines %r' % sl)
     check(ms.r['seq'].get(0x08) == beforei[0], '/S left SR08 %s, found %s' % (ms.r['seq'].get(0x08), beforei[0]))
     if c.ours:
         for mode in (0x0003, 0x0013):
@@ -2698,7 +2703,9 @@ def t_mclk(c):
         mo = c.machine()
         bo = pll(mo)
         ro = mo.run_com(com, tail, name='MCLK.COM', max_insn=20_000_000)
-        check(ro.exit == ('exit', 1) and any(word in ln for ln in lines_of(ro)), '%s %s %r' % (tail, ro.exit, lines_of(ro)))
+        check(ro.exit == ('exit', 1) and any(ln.startswith(b'ERROR: ') and word in ln and
+                                             ln.endswith(b'the clock was not changed') for ln in lines_of(ro)),
+              '%s %s %r' % (tail, ro.exit, lines_of(ro)))
         check(pll(mo) == bo and b'Press Y' not in bytes(ro.stderr), '%s wrote %s or asked' % (tail, pll(mo)))
 
     # /S above the datasheet maximum (below every cap): asks once; N writes nothing, Y sets it.
@@ -2706,14 +2713,24 @@ def t_mclk(c):
     mn = c.machine(keys=[0x316E])                       # 'n'
     bn = pll(mn)
     rn = mn.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
-    check(rn.exit == ('exit', 1) and b'Not confirmed' in bytes(rn.stdout) and bytes(rn.stderr).count(b'Press Y') == 1,
+    check(rn.exit == ('exit', 1) and b'ERROR: Not confirmed' in bytes(rn.stdout) and bytes(rn.stderr).count(b'Press Y') == 1,
           '/S 70 declined %s %r' % (rn.exit, lines_of(rn)))
     check(pll(mn) == bn, '/S 70 declined wrote %s, before %s' % (pll(mn), bn))
     my = c.machine(keys=[0x1579])                       # 'y'
     ry = my.run_com(com, '/S 70', name='MCLK.COM', max_insn=20_000_000)
     yl = lines_of(ry)
-    check(ry.exit == ('exit', 0) and b'Confirmed: Y pressed, the clock is set' in yl, '/S 70 %s %r' % (ry.exit, yl))
+    check(ry.exit == ('exit', 0) and b'Confirmed: Y pressed' in yl and okline(k70, '70.000') in yl,
+          '/S 70 %s %r' % (ry.exit, yl))
     check(clk(my) == pair[k70], '/S 70 left %s, expected %s' % (clk(my), pair[k70]))
+    # /Y: yes to the question without a key (an empty keyboard: a read would not return); the question
+    # and "Y (/Y)" still go to stderr, the log says "Confirmed: /Y given"
+    ma = c.machine(keys=[])
+    ra = ma.run_com(com, '/S 70 /Y', name='MCLK.COM', max_insn=20_000_000)
+    al = lines_of(ra)
+    check(ra.exit == ('exit', 0) and b'Confirmed: /Y given' in al and okline(k70, '70.000') in al and
+          b'Y (/Y)' in bytes(ra.stderr) and bytes(ra.stderr).count(b'Press Y') == 1,
+          '/S 70 /Y %s %r %r' % (ra.exit, al, bytes(ra.stderr)[-200:]))
+    check(clk(ma) == pair[k70], '/S 70 /Y left %s, expected %s' % (clk(ma), pair[k70]))
 
     m = c.machine()
     before = (m.r['seq'].get(0x10), m.r['seq'].get(0x11))
@@ -2988,15 +3005,14 @@ def main():
                          'PCI device and the PLL post divider follow it')
     ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
                     help='video memory size in MB (CR36 bits 7-5 after POST, and the size of Machine.vram): '
-                         '2 (the card, default), 4 (the Trio64V2 and Trio64V+ maximum; not the Trio32, whose '
-                         'maximum is 2 MB, nor the Trio64, of which no 4 MB card was built) '
+                         '2 (the card, default), 4 (the maximum of every Trio64-family chip but the Trio32; on '
+                         'the Trio64 a run by hand only, as no 4 MB Trio64 card was built and make emu-test and '
+                         'CI stop at 2 MB there) '
                          'or 1 (the smallest configuration of every chip); seen through the banked A0000 '
                          'window (no LFB)')
     a = ap.parse_args()
     if CHIP_CODES[a.chip] == 'trio32' and a.vram == 4:
         ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')
-    if CHIP_CODES[a.chip] == 'trio64' and a.vram == 4:
-        ap.error('--vram 4: no Trio64 card was built with 4 MB (they stop at 2 MB), so the tests stop there too')
     Machine.vram = a.vram
     Machine.chip = CHIP_CODES[a.chip]
     Machine.cr2f = CHIP_CR2F.get(a.chip)
