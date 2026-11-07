@@ -58,6 +58,10 @@
 ;                    selects Trio64V2/DX 86C775 vs /GX 86C785, V2-ID-1), so the log shows the
 ;                    stepping (89 01 06 E1, PCI 8901 rev 06 Trio64V2/DX 86C775 on the test card;
 ;                    8811 rev 40h -> Trio64V+ 86C765; 8811 rev 00h with CR2E 11h -> Trio64 86C764X)
+;   Chip variant     INFO, not counted: CR2F and the Trio32/Trio64 variant S3's Windows 95 driver
+;                    names by it (Trio64: 20h 86C764GSpnp, 30h NEC, 03h UMC, 12h TSMC, the 86C764X;
+;                    any other value the plain 86C764, the earlier 764P), so a log shows which 764 a
+;                    card has; "no variant codes for this chip" on the others (06h on the test card)
 ;   MCLK             SR10/SR11 after POST: a valid PLL setting (M, N at least 1, SR10 bit 7 clear, VCO
 ;                    135-270 MHz) at or below the maximum for the chip (the data book's; 70 MHz on the Trio64,
 ;                    T64-MEM-7) and the strapped memory
@@ -215,6 +219,7 @@ start:  cld
         mov byte [rkind],RK_OTHER
 .k3:    call t_rom
         call t_chip
+        call t_chipv
         call t_post
         mov si,modelist
         cmp byte [rkind],RK_VP
@@ -462,6 +467,31 @@ t_chip: mov dx,s_chip
 .np:    mov dx,s_na
         call puts
 .e:     mov al,2
+        call ccount
+        mov dx,s_info
+        call puts
+        ret
+
+; ---------------- chip variant by CR2F (INFO) ----------------
+; CR2F (as chipfind read it) and the Trio32/Trio64 variant it codes (chipvar, src/tools/common/chip.inc):
+; S3's Windows 95 driver 2.41.07 names the 86C764X parts by their maker (20h GS, 30h NEC, 03h UMC, 12h
+; TSMC, "86C764..pnp") and calls any other value the plain 86C764; the 86C764 (764P) and 86C764X take
+; different MCLK ranges (README "Chip codes"), and the PCI revision (00h on both) does not tell them apart. On the
+; Trio32 22h is the 86C732GSpnp. Other chips: "no variant codes for this chip". *Derived* from a
+; driver, not a data book, so INFO only: not a test and not counted. docs/764-rom.md "Chip variants by
+; CR2F".
+t_chipv:
+        mov dx,s_chipv
+        call puts
+        mov al,[chipcr2f]
+        call phex2
+        mov al,'h'
+        call putc
+        call sp1
+        mov al,[chipcr2f]
+        call chipvar
+        call puts
+        mov al,2
         call ccount
         mov dx,s_info
         call puts
@@ -2645,6 +2675,7 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
 
 ; /V debug log (shared with VSHOW and S3COMPAT)
 %include "vdebug.inc"
+%define CHIPVAR                         ; chipvar: the Chip variant line
 %include "chip.inc"
 
 ; Modes tested by t_mode: mode, expected refresh in tenths of Hz, check flags, horizontal
@@ -2724,6 +2755,7 @@ s_sigc  db 'ROM  ROM version (/C: any ROM) ................ $'
 s_nover db '(no version string)$'
 s_cks   db 'ROM  ROM checksum (C000:0000-7FFF) = $'
 s_chip  db 'S3   Chip ID CR2D 2E 2F 30, PCI rev ...... $'
+s_chipv db 'S3   Chip variant by CR2F ...... $'
 s_pci   db ', PCI $'
 s_rev   db ' rev $'
 s_na    db 'n/a$'

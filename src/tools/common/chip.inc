@@ -17,11 +17,19 @@
 ; chipname   DX -> the '$' string with the chip's market name ([chip]). On CHIP_T64V2, CR6F bit 0
 ;            selects Trio64V2/DX vs Trio64V2/GX.
 ; chippart   DX -> the '$' string with the S3 part number for [chip] (README "Chip codes"): 86C732,
-;            86C764X (PCI cannot tell the earlier 86C764-P), 86C765, 86C775 or 86C785 (CR6F bit 0),
+;            86C764X (PCI cannot tell the earlier 86C764-P; CR2F can, chipvar), 86C765, 86C775 or 86C785 (CR6F bit 0),
 ;            86C767, 86C365 (Trio3D), 86C362/86C368 (Trio3D/2X). S3's Windows 95 Trio INF (w9524107)
 ;            lists one Have Disk row for PCI 8901 ("Trio64V2"); DX vs GX is not a PCI revision there.
 ;            S3 Win9x 2.61.06 (9x26106) INF: PCI 8904 = Trio3D; S3 NT 5.30.05 (53005) INF: PCI 8A13
 ;            = Trio3D/2X.
+; chipvar    In: AL = CR2F (for example [chipcr2f] after chipfind). Out: DX -> the '$'
+;            name of the Trio32/Trio64 variant that CR2F codes, by S3's Windows 95 driver 2.41.07
+;            (S3_2.DRV, its chip name table; docs/764-rom.md "Chip variants by CR2F"): Trio64 20h GS,
+;            30h NEC, 03h UMC, 12h TSMC, each "86C764..pnp", the 86C764X; any other value the plain
+;            86C764 (the earlier 764P, or a code the driver does not know); Trio32 22h 86C732GSpnp,
+;            else 86C732. On the other chips the driver names no variants. *Derived*: a driver, not a
+;            data book; the line that shows it is INFO only. Keeps every register except DX and flags.
+;            Assembled only when the tool defines CHIPVAR before the include.
 ;
 ; Limits per chip (kHz), rule IDs from docs/chip-rules.md:
 ;   [vcomin]   DCLK PLL VCO minimum below which a VCO in the datasheet range is a WARN: 135 MHz on every
@@ -205,6 +213,55 @@ chippart:
         mov dx,[chipparts+bx]
 .e:     pop bx
         ret
+
+%ifdef CHIPVAR                          ; only the tools that show the variant (S3TEST) carry it
+chipvar:
+        push si
+        push ax
+        mov si,cv_t64
+        cmp byte [chip],CHIP_T64
+        je .l
+        mov si,cv_t32
+        cmp byte [chip],CHIP_T32
+        je .l
+        mov dx,s_cvnone
+        jmp .x
+.l:     mov ah,al
+.n:     lodsb                           ; table: code, then the name offset; FFh ends it, then the default
+        cmp al,0xFF
+        je .d
+        cmp al,ah
+        je .d
+        add si,2
+        jmp .n
+.d:     mov dx,[si]
+.x:     pop ax
+        pop si
+        ret
+
+cv_t64      db 0x20
+            dw s_cv64gs
+            db 0x30
+            dw s_cv64nec
+            db 0x03
+            dw s_cv64umc
+            db 0x12
+            dw s_cv64tsmc
+            db 0xFF
+            dw s_cv64
+cv_t32      db 0x22
+            dw s_cv32gs
+            db 0xFF
+            dw s_cv32
+s_cv64gs    db '86C764GSpnp (764X)$'
+s_cv64nec   db '86C764NECpnp (764X)$'
+s_cv64umc   db '86C764UMCpnp (764X)$'
+s_cv64tsmc  db '86C764TSMCpnp (764X)$'
+s_cv64      db '86C764, no pnp code (764P or unknown)$'
+s_cv32gs    db '86C732GSpnp$'
+s_cv32      db '86C732, no pnp code$'
+s_cvnone    db 'no variant codes for this chip$'
+%endif
 
 chipdevs    dw 0x8901, 0x8A13, 0x8904, 0x8811, 0x8814, 0
 chipnames   dw s_chipnone, s_chipt32, s_chipt64, s_chipt64vp, s_chipt64v2dx, s_chipt64uvp, \

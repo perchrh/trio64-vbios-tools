@@ -80,10 +80,16 @@ number; the documentation also uses the market names.
 | 785 | Trio64V2/GX | 86C785 | 5333:8901 | `775-rom` (the same ROM: S3's 2.04.07 is the "86C775/86C785 Video BIOS"; the clock option has an `sgram` entry for the GX) | `775` | as 775 |
 | 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775`, `SIZE775` |
 | 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh or 5xh, bit 6 set) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
-| 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
-| 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
+| 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 (CR2F 20h, 30h, 03h or 12h) | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
+| 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 (another CR2F) | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
 | 767 | Trio64UV+ | 86C767 | 5333:8814 | none (no ROM of ours) | `767` | |
 | 732 | Trio32 | 86C732 | 5333:8811 (CR2E 10h) | none (no ROM of ours) | `732` | |
+
+The PCI revision (00h) does not tell the 764X from the 764P, but CR2F does: S3's Windows 95 driver
+2.41.07 names the 764X parts by their maker (20h GS, 30h NEC, 03h UMC, 12h TSMC, "86C764..pnp") and
+any other value the plain 86C764 ([docs/764-rom.md](docs/764-rom.md) "Chip variants by CR2F"). S3TEST
+shows it on its INFO line "Chip variant by CR2F"; the DSP-3364P reads 20h, a GS part as its marking
+says. The emulator's Trio64 model reports 00h for both codes.
 
 The emulator's test tags follow the codes too: `765` and `764` mark the tests that run on our Trio64V+ and
 Trio64 ROMs (`765_patches`, `764_patches`), and `775_writes` is the Trio64V2-only test.
@@ -100,7 +106,7 @@ is for the Windows 9x desktop.
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
-| S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
+| S3TEST.COM | Regression test for the ROM patches (signature, chip and its CR2F variant, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) renames `runall.zip` to `runall-<part>.zip` from `chipid.out` when the DOS can rename to a long name. Windows 98 DOS can create a long name and cannot rename an existing file to one, so `/Z` changes nothing there; RUNALL uses REPORT | `CHIPID`, `CHIPID /Q` |
 | ROMVER.COM | Prints the video ROM version S3TEST's signature line reads, using the same scan (`src/tools/common/romver.inc`): "Version " in C000:0000-00FF, then at most 12 characters. `/Q` (`-q`) prints only that version | `ROMVER`, `ROMVER /Q` |
 | REPORT.COM | Packs the RUNALL logs into one stored ZIP (method 0, no compression) and creates it as `runall-<part>.zip` (a slash in the part becomes a hyphen). If that create is refused, the name is `<part>.ZIP` (86C775.ZIP). No part: `RUNALL.ZIP` | `REPORT` |

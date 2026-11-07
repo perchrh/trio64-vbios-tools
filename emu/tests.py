@@ -1036,6 +1036,14 @@ def t_s3test(c):
     check(len(results) >= want, 'only %d result lines' % len(results))
     bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    # the Chip variant line: CR2F and the name S3's Windows 95 driver gives it (common/chip.inc chipvar);
+    # the models report CR2F 00h on the Trio32/Trio64, so the plain 86C764 and 86C732
+    var = [l for _, l in tl if l.startswith('Chip variant by CR2F')]
+    rev = CHIPS[Machine.chip]['ids'][2]
+    name = {'trio64': '86C764, no pnp code', 'trio32': '86C732, no pnp code'}.get(Machine.chip,
+                                                                                 'no variant codes for this chip')
+    check(len(var) == 1 and var[0].rstrip().endswith('INFO') and ('%02Xh %s' % (rev, name)) in var[0],
+          'S3TEST Chip variant line: %s, expected %02Xh %s ... INFO' % (var, rev, name))
     if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
         r0 = c.machine().run_com(com, '/S')
