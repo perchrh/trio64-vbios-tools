@@ -32,8 +32,9 @@
 ;   /C  any ROM: the test set of a chip without a ROM of ours (the version found is INFO, then only the
 ;       tests that need none), on every chip. For a stock BIOS or a clean ROM on a Trio64V2, Trio64V+
 ;       or Trio64, whose signature and patches are not ours (#143).
-;   /V  debug log in S3TEST.DBG (src/tools/common/vdebug.inc): every INT 10h call (except during the throughput
-;       benchmark), the result line, a register dump after every test and the raw retrace counts.
+;   /V  debug log in S3TEST.DBG (src/tools/common/vdebug.inc): the NASM version that assembled
+;       this tool, every INT 10h call (except during the throughput benchmark), the result line,
+;       a register dump after every test and the raw retrace counts.
 ;       The normal output is the same with or without /V.
 ;   Output is buffered while the video modes switch and written to stdout at the end.
 ;   Exit code 0 = every test passed, 1 = at least one failed.

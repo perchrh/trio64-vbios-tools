@@ -610,8 +610,9 @@ VSHOW, S3TEST and S3COMPAT take `/V`. It writes a second file, `VSHOW.DBG`, `S3T
 card, so problems can be found and fixed from a log instead of guessed at. The normal output is the
 same with or without /V. The debug file contains:
 
-- the environment: CPU, DOS version, memory, interrupt vectors, system BIOS date, the video ROM header
-  and checksum, the BIOS data area and the PCI configuration of the display controller
+- the environment: the NASM version that assembled the tool (`D:ENV NASM=`, the first line), CPU,
+  DOS version, memory, interrupt vectors, system BIOS date, the video ROM header and checksum, the
+  BIOS data area and the PCI configuration of the display controller
 - every INT 10h call the tool makes (and nested calls the BIOS makes itself) with all registers in and
   out and the duration in PIT counts
 - a register dump (SR, GR, CR00-18, CR30-6F, CR80-9F, AR, DAC 0-15, video BIOS data) after every test or

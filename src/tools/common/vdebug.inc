@@ -10,6 +10,7 @@
 ;   that hung.
 ;
 ; Line format (one record per line, fields separated by spaces, all numbers hex unless noted)
+;   D:ENV NASM=version                NASM that assembled this tool (__NASM_VER__), first line
 ;   D:ENV ...                         environment, once at the start
 ;   D:PCI ...                         PCI configuration of the display controller
 ;   D:HEX tag oooo: xx xx ...          16 bytes of a memory block (tag says which block)
@@ -414,6 +415,13 @@ vdone:  cmp byte [cs:vflag],1
 venv:   pushad
         push ds
         push es
+        ; The assembler version is a string in the binary (__NASM_VER__), not read from the machine.
+%ifnstr __NASM_VER__
+ %error __NASM_VER__ is not a string (need NASM 2.14 or later)
+%endif
+        call vstr
+        db 'D:ENV NASM=',__NASM_VER__,0
+        call vnl
         ; CPU: 386 if the AC flag cannot be toggled, 486 if ID cannot, else CPUID
         VS 'D:ENV CPU='
         pushfd

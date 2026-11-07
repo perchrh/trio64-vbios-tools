@@ -12,7 +12,8 @@
 ;   S3COMPAT /H (or /?) prints the parameters and the monitor note below.
 ;   /S  silent: no start notice and monitor warning on stderr, no key press (for batch runs).
 ;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VSHOW)
-;   /V  debug log in S3COMPAT.DBG (src/tools/common/vdebug.inc): every INT 10h call with registers and duration,
+;   /V  debug log in S3COMPAT.DBG (src/tools/common/vdebug.inc): the NASM version that assembled this
+;       tool, every INT 10h call with registers and duration,
 ;       a register dump and the result line after every test, 4F00/4F01/AH=1Bh blocks, per-frame
 ;       timer counts, memory mismatches. The normal log is the same with or without /V. Needs 64 KB
 ;       more memory and runs longer (the debug file is committed before every mode set).
