@@ -33,22 +33,23 @@ ifdef VER764
 DEFS += -DVER764="'$(VER764)'"
 endif
 
-# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM and the batch files into build/
+# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM, REPORT.COM and the batch files into build/
 # make all: tools and every chip's ROM at its memory clocks (make roms)
 # make clean: removes build/ (tools and ROM images)
 TOOLS = build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
-        build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/RUNALL.BAT build/CLEAN.BAT \
-        build/ZIP.EXE
+        build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/REPORT.COM \
+        build/RUNALL.BAT build/CLEAN.BAT build/ZIP.EXE
 all: tools roms
 tools: $(TOOLS)
 
 # runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D, then
-# RUNALL.ZIP with Info-ZIP's zip (DOS line ends); clean.bat deletes what a run leaves behind
+# REPORT.COM (stored ZIP, created under the part name; DOS line ends). ZIP.EXE stays for a manual pack.
+# clean.bat deletes what a run leaves behind
 build/RUNALL.BAT: $(TOOLS_SRC)/runall.bat | build
 	cp $< $@
 
-# Info-ZIP Zip 3.0, the 16-bit real-mode DOS build (ZIP16.EXE of the FreeDOS 1.3 package), for RUNALL.BAT;
-# its licence is infozip/LICENSE
+# Info-ZIP Zip 3.0, the 16-bit real-mode DOS build (ZIP16.EXE of the FreeDOS 1.3 package), for a manual
+# pack. RUNALL uses REPORT.COM. Its licence is infozip/LICENSE
 build/ZIP.EXE: infozip/ZIP.EXE | build
 	cp $< $@
 
@@ -85,6 +86,9 @@ build/S3REGS.COM: $(TOOLS_SRC)/s3regs/s3regs.asm $(COMMON)/version.inc $(COMMON)
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
 
 build/CHIPID.COM: $(TOOLS_SRC)/chipid/chipid.asm $(COMMON)/version.inc $(COMMON)/chip.inc | build
+	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
+
+build/REPORT.COM: $(TOOLS_SRC)/report/report.asm $(COMMON)/version.inc $(COMMON)/chip.inc | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
 
 # Win32 console program for Windows 9x; the PE header is written in the source (no linker)

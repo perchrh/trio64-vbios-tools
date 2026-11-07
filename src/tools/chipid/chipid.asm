@@ -10,10 +10,12 @@
 ; Usage
 ;   CHIPID           one line to stdout
 ;   CHIPID /Q, -q    S3 part only (86C775, ...), no title; empty and exit 1 when none found
-;   CHIPID /Z, -z    on MS-DOS 7.0+ (LFN): rename runall.zip to runall-<part>.zip using the part
-;                    string in chipid.out (from a prior CHIPID /Q redirect); '/' becomes '-',
-;                    letters lowercased. No-op when DOS is older, the file is empty, or rename
-;                    fails. Exit 0.
+;   CHIPID /Z, -z    rename runall.zip to runall-<part>.zip using the part string in chipid.out
+;                    (from a prior CHIPID /Q redirect); '/' becomes '-', letters lowercased.
+;                    Windows 98 DOS can create a long name and cannot rename an existing file to
+;                    one, so this call changes nothing there (INT 21h AX=7156h). RUNALL uses
+;                    REPORT, which creates the archive under the long name. No-op when the rename
+;                    is refused, the file is empty, or DOS has no long-name rename. Exit 0.
 ;   CHIPID /H, /?    this help
 ;   Exit code 0 when a Trio64-family PCI device was found, 1 when not (without /Q, CR2D-CR30 and
 ;   CR6F are still printed when the ports answer). /Z alone always exits 0.
@@ -304,7 +306,8 @@ s_nl    db 13,10,'$'
 s_use   db 'CHIPID ',VERSION,' - name the Trio64-family chip from PCI',13,10
         db '  CHIPID       print CR2D-CR30, CR6F, PCI device/rev, name and S3 part',13,10
         db '  CHIPID /Q    S3 part only (86C775, ...); -q is the same',13,10
-        db '  CHIPID /Z    DOS 7+: rename runall.zip to runall-<part>.zip from chipid.out',13,10
+        db '  CHIPID /Z    rename runall.zip to runall-<part>.zip when the DOS can',13,10
+        db '               rename to a long name (Windows 98 DOS cannot; RUNALL uses REPORT)',13,10
         db '  CHIPID /H    this help',13,10
         db 'Exit 0 when a listed PCI 5333 device is found, 1 otherwise.',13,10
         db '8901: CR6F bit 0 clear = Trio64V2/DX 86C775, set = /GX 86C785.',13,10
