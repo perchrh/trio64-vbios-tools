@@ -1769,6 +1769,8 @@ def t_s3regs(c):
     r32 = m.run_pe32(exe, 'S3REGS32.EXE test label')
     check(r32.exit == ('exit', 0), 'S3REGS32 ended with %s' % (r32.exit,))
     win = r32.files['S3REGS.TXT'].decode('latin1').split('\r\n')
+    check('S3REGS.TXT' in r.synced and 'S3REGS.TXT' in r32.synced, 'S3REGS.TXT closed without a commit: '
+          'DOS (AH=68h or AH=0Dh) %s, Win32 (FlushFileBuffers) %s' % ('S3REGS.TXT' in r.synced, 'S3REGS.TXT' in r32.synced))
     after = (m.r['si'], m.r['gi'], m.r['ci'], m.r['crtc'].get(0x38), m.r['crtc'].get(0x39), m.r['seq'].get(8))
     check(before == after, 'indexes or locks changed: %s -> %s' % (before, after))
     check(dos[0].startswith('S3REGS ') and dos[0].endswith('[test label] DOS') and win[0].endswith('[test label] Win32'),

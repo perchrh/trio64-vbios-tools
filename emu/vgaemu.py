@@ -984,9 +984,10 @@ class Machine:
     def run_pe32(self, exe, cmdline, sleep_hook=None, max_insn=200_000_000):
         """Run a 32-bit Windows console program (PE, no relocations, KERNEL32 imports only) in a flat 32-bit
         CPU of its own whose IN/OUT go to this machine's VGA/S3 and PCI model, as on the Windows 9x
-        desktop. Supported imports: ExitProcess, GetStdHandle, WriteFile, CreateFileA, SetFilePointer,
-        CloseHandle, GetCommandLineA, Sleep (advances GetTickCount; sleep_hook(ms_total) runs first),
-        GetTickCount. Returns a ComResult: stdout, files written, exit ('exit', code)."""
+        desktop. Supported imports: ExitProcess, GetStdHandle, WriteFile, FlushFileBuffers (marks the file
+        synced, as a DOS commit does), CreateFileA, SetFilePointer, CloseHandle, GetCommandLineA, Sleep
+        (advances GetTickCount; sleep_hook(ms_total) runs first), GetTickCount. Returns a ComResult:
+        stdout, files written, synced, exit ('exit', code)."""
         from unicorn import UC_MODE_32
         from unicorn.x86_const import (UC_X86_REG_ESP, UC_X86_REG_EAX, UC_X86_REG_EIP, UC_X86_REG_EDX,
                                        UC_X86_REG_ECX)
@@ -1073,9 +1074,14 @@ class Machine:
                     c.stderr.extend(data)
                 else:
                     c.files[st['h'][a[0]]].extend(data)
+                    c.synced.discard(st['h'][a[0]])
                 if a[3]:
                     uc.mem_write(a[3], struct.pack('<I', a[2]))
                 ret(esp, 5, 1)
+            elif fn == 'FlushFileBuffers':           # the Win32 commit: the file counts as on disk (synced)
+                if a[0] in st['h']:
+                    c.synced.add(st['h'][a[0]])
+                ret(esp, 1, 1 if a[0] in st['h'] else 0)
             elif fn == 'CloseHandle':
                 st['h'].pop(a[0], None)
                 ret(esp, 1, 1)
