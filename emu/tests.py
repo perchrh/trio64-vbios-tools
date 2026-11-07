@@ -71,6 +71,10 @@ Tests
                    memory, palettes, AH=01h-1Ch, AH=13h, CGA scroll, graphics XOR, AX=1120h-1124h, the
                    video save pointer table), only the known 8x14 font warnings (mode 10h, AX=1130h
                    BH=2, AX=1122h); with /V the output is the same and S3COMPAT.DBG is well formed
+  s3compat_dac_retry S3COMPAT's DAC checks with one DAC access corrupted by the model (vgaemu dac_fault):
+                   AX=101Bh entry 39h read wrong once WARN 02, its write lost once WARN 04 (right after
+                   the call again), lost every time FAIL 0001 ("again same"); mode 13h entry 68h lost
+                   once WARN 04; no other line reports a DAC entry, /V has the D:DAC records
   s3compat_vbe     S3COMPAT's extra VBE function tests alone (4F00 capabilities vs 4F08, 4F04 per state mask,
                    invalid subfunctions and undefined functions refused, 4F0A table layout, 4F10 DPMS
                    states and SR0D sync control, 4F14 S3 OEM functions with the refresh rates measured):
@@ -1231,6 +1235,44 @@ def t_s3compat_vga(c):
         dl = check_dbg(r0.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         check(sum(1 for l in dl if l.startswith('D:TEST')) >= len(tests), 'fewer D:TEST records than tests')
     return '%d tests' % len(tests)
+
+
+def t_s3compat_dac_retry(c):
+    """S3COMPAT's DAC checks confirm a mismatch before failing (dacconf): the model corrupts one DAC
+    access (vgaemu dac_fault) and the line must give WARN 02 (a read wrong once), WARN 04 (a write lost
+    once, right after the BIOS call again) or FAIL (lost every time). Cases: the AX=101Bh grey of
+    entry 39h (25h, red 27h before; the 86C775 p25 card log had DAC#39=27(25)) and mode 13h entry 68h
+    blue (1Ch) in pass 1."""
+    with tempfile.TemporaryDirectory() as tmp:
+        com = build_s3compat_vga(tmp)
+    g = 'AX=101B grey summing vs IBM'
+    cases = [  # fault, line, result, detail
+        (dict(op='r', entry=0x39, comp=0, value=0x25, xor=2, count=1), g, 'WARN 02',
+         'DAC#39=27,25,25 exp 25,25,25 ok on 2nd read'),
+        (dict(op='w', entry=0x39, comp=0, value=0x25, count=1), g, 'WARN 04',
+         'DAC#39=27,25,25 exp 25,25,25 ok after the call again'),
+        (dict(op='w', entry=0x39, comp=0, value=0x25, count=None), g, 'FAIL 0001',
+         'DAC#39=27,25,25 exp 25,25,25 again same'),
+        (dict(op='w', entry=0x68, comp=2, value=0x1C, count=1), 'Mode 13h ', 'WARN 04',
+         'DAC#68=00,00,'),
+    ]
+    for i, (fault, name, res, det) in enumerate(cases):
+        m = c.machine()
+        m.dac_fault = dict(fault)
+        r = m.run_com(com, '/V')
+        c.save('S3CDAC%d' % (i + 1), r)
+        check(r.exit and r.exit[0] == 'exit', 'S3COMPAT did not end: %s' % (r.exit,))
+        tests = [l for _, l in tagged(r.stdout.decode('latin1'), 'S3COMPAT')]
+        hit = [l for l in tests if l.startswith(name)]
+        check(hit, 'no line %r' % name)
+        l = hit[0].rstrip()
+        check(l.endswith('  ' + res) and det in l, '%s: %r, expected %s with %r' % (fault, l, res, det))
+        others = [t.strip() for t in tests if t is not hit[0] and ('DAC#' in t)]
+        check(not others, 'other lines report the fault: %s' % others)
+        dl = check_dbg(r.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
+        tries = [d for d in dl if d.startswith('D:DAC try=') and 'ok' not in d]
+        check(tries, '%s: no D:DAC record of the mismatch' % fault)
+    return '%d cases' % len(cases)
 
 
 # S3COMPAT lines that need the LFB (INT 15h AH=87h), which the model does not have; banked and planar
@@ -2637,7 +2679,7 @@ def t_mclk(c):
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -2655,7 +2697,7 @@ TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'mclk': 'tools s3 card', 'vshow': 'vbe tools card vram',
-    's3compat_vga': 'cga ega vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
+    's3compat_vga': 'cga ega vga card', 's3compat_dac_retry': 'vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch 765 764 emu',

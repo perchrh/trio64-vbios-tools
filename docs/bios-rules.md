@@ -59,7 +59,8 @@ field a VGA BIOS owns, and the tables it publishes through 0040:00A8h. Terms use
 The S3COMPAT lines named below also run in the emulator (emu t_s3compat_vga). 'Mode nnh' means the
 S3COMPAT lines "Mode nnh" of the VGA mode pass (modes 00h-06h, 0Dh, 0Eh, 10h-13h at 400/480 lines and
 00h-03h at 350 lines, each run twice: from a clean state and right after a VESA mode); their fail bits
-are 1 registers vs IBM, 2 BIOS data/AH=0Fh/AH=1Bh, 8 refresh, 10 memory, 20 default DAC. Modes 07h and
+are 1 registers vs IBM, 2 BIOS data/AH=0Fh/AH=1Bh, 8 refresh, 10 memory, 20 default DAC (wrong on a
+second read and after the mode set again; wrong once only is warn 2 or 4). Modes 07h and
 0Fh have no IBM table in the project; emu t_mono covers them. `make 775-ref-compare` compares the ROM with
 the unpatched reference BIOS in modes 00h-07h and 0Dh-10h at 200, 350 and 400 lines, with and without
 the clear; it finds regressions, it does not prove IBM behaviour.
@@ -717,7 +718,7 @@ Undocumented in IBM's references, but in RBIL and VGADOC and used by programs.
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
 | B101Bh-1 | BX = first entry, CX = number of entries: red, green and blue of each entry BX to BX+CX-1 are replaced by one grey value G. Other entries and all registers are not changed | Ferraro 11.11.7; RBIL INT 10/AX=101Bh | must | S3COMPAT 'AX=101B grey summing vs IBM' (all 256 entries of the mode 13h table) |
-| B101B-2 | G = 0.30 x red + 0.59 x green + 0.11 x blue of the entry's 6-bit values, within 1 of (30 R + 59 G + 11 B + 50) / 100; G is 0-63, and an entry that is already grey keeps its value (the weights sum to 1) | Ferraro 11.11.7 (Equation 11.1), 11.13.6 (Equation 11.6); IBM (VGATEST) | must | S3COMPAT 'AX=101B grey summing vs IBM' fail 1 (every entry within 1 of the formula applied to IBM's default table) |
+| B101B-2 | G = 0.30 x red + 0.59 x green + 0.11 x blue of the entry's 6-bit values, within 1 of (30 R + 59 G + 11 B + 50) / 100; G is 0-63, and an entry that is already grey keeps its value (the weights sum to 1) | Ferraro 11.11.7 (Equation 11.1), 11.13.6 (Equation 11.6); IBM (VGATEST) | must | S3COMPAT 'AX=101B grey summing vs IBM' fail 1 (every entry within 1 of the formula applied to IBM's default table; wrong once only: warn 2/4) |
 | B101B-3 | The range rules of B1012-2 apply (up to 256 entries from any start; past FFh, CX = 0, CX > 256 not defined) | Ferraro 11.11.7 ("any number of Color Registers, up to the maximum of 256 ... beginning at any Color Register index") | note | not checked |
 
 ### Open questions

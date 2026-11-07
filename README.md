@@ -339,6 +339,20 @@ and AH=1Ah-1Ch VGA). The emulator tests check that every result line has a categ
 have the right one, and that the summary counts the lines. Logs from before this change have no
 category column: compare from the sixth column.
 
+S3COMPAT's DAC checks (the default DAC of every VGA mode, fail bit 20, and AX=101Bh, fail bit 1)
+confirm a wrong entry before they fail: they read the DAC a second time, then make the BIOS call
+again (the mode set, or mode 13h and AX=101Bh) and read it a third time. A FAIL means the value was
+wrong all three times, so the BIOS loaded it wrong twice. Wrong once is WARN 02 (right on the second
+read: a port read glitch) or WARN 04 (right after the call again: a DAC write that did not land), as
+the rule "a FAIL must mean the BIOS is wrong" asks. Why: the 86C775 card with 2.04.07-p25 failed
+`AX=101B grey summing vs IBM` with `DAC#39=27(25)` and `Mode 13h after 0120` at entry 68h in one run,
+values the BIOS code cannot produce (its grey of entry 39h is 25h, and pass 1 matched the whole
+mode 13h table), and the Trio64V+ card had the same one-byte miss at entry 7Eh once
+([docs/765-rom.md](docs/765-rom.md)). The line prints the first read's entry, its value and the
+expected one (`DAC#39=27,25,25 exp 25,25,25`) and the outcome (`ok on 2nd read`, `ok after the call
+again`, `again same` or the third read's wrong entry); /V adds a `D:DAC` record per read. Repeated
+WARN 02 or 04 points at DAC port timing on that machine, not at the BIOS.
+
 A test or step that the chip, its ROM, the memory size or an option leaves out is not silent: S3TEST
 and S3COMPAT print it with its name, `SKIP:` and the reason, and count these lines in the summary
 (`Skipped: N`). They are not results, so the PASS/FAIL counts and the summary by category leave them
@@ -634,6 +648,7 @@ same with or without /V. The debug file contains:
   shown mode, with the normal result line copied next to it
 - the 4F00, 4F01 and AH=1Bh blocks as hex, per-frame timer counts of every refresh measurement and the
   first memory mismatches with address, expected and read value
+- S3COMPAT: every read of a DAC check (`D:DAC try=n`, see below) with the first wrong entry's values
 
 The file is committed before every mode set and VBE call (except 4F05), so after a freeze its last
 lines show the call that hung. The INT 10h hook passes the 32-bit registers through unchanged. Expect a debug file of 1-2 MB for S3COMPAT and a longer run.

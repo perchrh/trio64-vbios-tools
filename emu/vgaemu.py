@@ -185,6 +185,11 @@ class Machine:
         self.r['crtc'][0x59] = 0xE0
         self.r['crtc'][0x5A] = 0x00
         self.dac = [[0, 0, 0] for _ in range(256)]
+        # Fault injection for the tests of S3COMPAT's DAC retry (t_s3compat_dac_retry): None, or a dict
+        # op 'r' (a 3C9h read returns value ^ xor) or 'w' (a 3C9h write is dropped, the entry keeps its
+        # old component), entry, comp (0-2), value (the value read or written that triggers it) and
+        # count (times it acts; None = every time). Real cards showed one wrong DAC byte once per run.
+        self.dac_fault = None
         self.keys = list(keys or [])
         self.com = None                                 # ComResult while a .COM runs
         self.handles = {}
@@ -262,6 +267,18 @@ class Machine:
         i = self.r['ci']
         return i & 0x7F if Machine.chip in ('trio64', 'trio32') else i
 
+    def _dac_hit(self, op, entry, comp, value):
+        """True when [dac_fault] acts on this DAC access (and counts it down)."""
+        f = self.dac_fault
+        if not f or f['op'] != op or (f['entry'], f['comp'], f['value']) != (entry, comp, value):
+            return False
+        if f['count'] is not None:
+            if f['count'] <= 0:
+                return False
+            f['count'] -= 1
+        f['hits'] = f.get('hits', 0) + 1
+        return True
+
     def _in(self, uc, port, size, ud):
         r = self.r
         self.t += 3                                     # about one ISA I/O cycle
@@ -300,6 +317,8 @@ class Machine:
             return (r['st'] & 0x01) | (0x08 if self._retrace() else 0)
         if port == 0x3C9:
             v = self.dac[r['dac_r']][r['dac_rc']]
+            if self._dac_hit('r', r['dac_r'], r['dac_rc'], v):
+                v ^= self.dac_fault['xor']
             r['dac_rc'] += 1
             if r['dac_rc'] == 3:
                 r['dac_rc'] = 0
@@ -391,7 +410,8 @@ class Machine:
                 r['dac_st'] = 3
                 r['dac_rc'] = 0
             elif p == 0x3C9:
-                self.dac[r['dac_w']][r['dac_c']] = v & 0x3F
+                if not self._dac_hit('w', r['dac_w'], r['dac_c'], v & 0x3F):
+                    self.dac[r['dac_w']][r['dac_c']] = v & 0x3F
                 r['dac_c'] += 1
                 if r['dac_c'] == 3:
                     r['dac_c'] = 0

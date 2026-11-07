@@ -23,6 +23,8 @@
 ;   D:REG MISC= FEAT=, SR00:, GR00:, CRxx:, AR00:, DAC:, BDA49:, BDA84:   register dump
 ;   D:FRM n=  c c c ...               PIT counts per frame of a refresh measurement (decimal)
 ;   D:MEM a= exp= got=                a memory mismatch (address, expected, read)
+;   D:DAC try=n ok | i= got= exp=     S3COMPAT DAC check, read n (1, 2, or 3 after the BIOS call
+;                                     again): all entries right, or the first wrong entry with its R G B
 ;   D:END lost=                       end of the log; lost = bytes dropped because the buffer was full
 ;
 ; Tool contract
