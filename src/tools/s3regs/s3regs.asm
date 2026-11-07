@@ -10,6 +10,7 @@
 ; Usage
 ;   S3REGS [label]       append one snapshot with the label (up to 60 characters) to S3REGS.TXT
 ;   S3REGS /H, /?, /HELP  parameter list
+;   The snapshot is committed (INT 21h AH=68h) and the disk reset (AH=0Dh) before S3REGS exits.
 ;   Useful places: plain DOS with our ROM; after "Restart in MS-DOS mode" or exiting Windows (what the
 ;   Windows driver left); in a full-screen and a windowed DOS box (Windows may show virtual values
 ;   there, the driver traps the VGA and S3 ports of DOS boxes). Exit code 0 = written, 1 = error.
@@ -76,7 +77,11 @@ start:  cld
         mov ah,0x40
         int 0x21
         jc ferr
+        mov ah,0x68                     ; commit S3REGS.TXT
+        int 0x21
         mov ah,0x3E
+        int 0x21
+        mov ah,0x0D                     ; SMARTDRV
         int 0x21
         mov dx,s_ok
         mov ah,9

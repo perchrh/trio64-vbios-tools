@@ -1642,7 +1642,14 @@ v4f01:  pushf                           ; dump the 4F01 block at mi
         pop si
         popf
         ret
-vexit:  call vdone                      ; every exit: close the /V log (AX = exit code)
+vexit:  push ax                         ; AX = exit code
+        mov bx,1
+        mov ah,0x68                     ; commit a redirected log
+        int 0x21
+        call vdone                      ; close the /V log
+        mov ah,0x0D                     ; SMARTDRV: the log and VSHOW.DBG
+        int 0x21
+        pop ax
         int 0x21
 
 ; /V debug log (shared with S3TEST and S3COMPAT)

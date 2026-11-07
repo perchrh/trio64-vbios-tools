@@ -301,8 +301,10 @@ start:  cld
         PS ' s',13,10
         mov byte [tofile],1             ; console: buffer is printed now, in text mode
         call restore_screen             ; before the console write, so the summary lands below the old screen
-        call flush
+        call flush                      ; AH=68h on the log when stdout is a file
         call vdone
+        mov ah,0x0D                     ; SMARTDRV: the log and S3COMPAT.DBG
+        int 0x21
         mov ax,0x4C00
         cmp word [nfail],0
         je .x

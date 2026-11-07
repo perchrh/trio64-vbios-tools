@@ -36,7 +36,9 @@
 ;       this tool (D:ENV NASM=), the ROM version (D:ENV ROM=), every INT 10h call (except during the throughput
 ;       benchmark), the result line, a register dump after every test and the raw retrace counts.
 ;       The normal output is the same with or without /V.
-;   Output is buffered while the video modes switch and written to stdout at the end.
+;   Output is buffered while the video modes switch and written to stdout at the end, then
+;   committed (INT 21h AH=68h). After the /V log is closed the disk is reset (AH=0Dh), so a
+;   redirected log and S3TEST.DBG survive SMARTDRV.
 ;   Exit code 0 = every test passed, 1 = at least one failed.
 ;   Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at 60 Hz is
 ;   64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be damaged by
@@ -323,7 +325,12 @@ start:  cld
         mov bx,1
         mov ah,0x40
         int 0x21
+        mov bx,1
+        mov ah,0x68                     ; commit the redirected log
+        int 0x21
         call vdone
+        mov ah,0x0D                     ; SMARTDRV: the log and S3TEST.DBG
+        int 0x21
         mov ax,0x4C00
         cmp word [nfail],0
         je .ex

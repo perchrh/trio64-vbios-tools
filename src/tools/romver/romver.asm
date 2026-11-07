@@ -59,19 +59,34 @@ start:  cld
 .nl:    mov dx,s_nl
         mov ah,9
         int 0x21
+        call doneio
         mov ax,0x4C00
         int 0x21
 .no:    mov dx,s_none
         mov ah,9
         int 0x21
+        call doneio
         mov ax,0x4C01
         int 0x21
 
 help:   mov dx,s_use
         mov ah,9
         int 0x21
+        call doneio
         mov ax,0x4C00
         int 0x21
+
+; Commit stdout and reset the disk, so a redirected ROMVER listing survives SMARTDRV.
+doneio: push ax
+        push bx
+        mov bx,1
+        mov ah,0x68
+        int 0x21
+        mov ah,0x0D
+        int 0x21
+        pop bx
+        pop ax
+        ret
 
 quiet   db 0
 s_title db 'ROMVER ',VERSION,13,10,'$'
