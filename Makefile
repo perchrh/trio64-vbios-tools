@@ -38,19 +38,14 @@ endif
 # make clean: removes build/ (tools and ROM images)
 TOOLS = build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
         build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/REPORT.COM \
-        build/RUNALL.BAT build/CLEAN.BAT build/ZIP.EXE
+        build/RUNALL.BAT build/CLEAN.BAT
 all: tools roms
 tools: $(TOOLS)
 
 # runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D, then
-# REPORT.COM (stored ZIP, created under the part name; DOS line ends). ZIP.EXE stays for a manual pack.
+# REPORT.COM (stored ZIP, created under the part name; DOS line ends).
 # clean.bat deletes what a run leaves behind
 build/RUNALL.BAT: $(TOOLS_SRC)/runall.bat | build
-	cp $< $@
-
-# Info-ZIP Zip 3.0, the 16-bit real-mode DOS build (ZIP16.EXE of the FreeDOS 1.3 package), for a manual
-# pack. RUNALL uses REPORT.COM. Its licence is infozip/LICENSE
-build/ZIP.EXE: infozip/ZIP.EXE | build
 	cp $< $@
 
 build/CLEAN.BAT: $(TOOLS_SRC)/clean.bat | build
@@ -271,9 +266,8 @@ test-all: tools roms
 	echo "test-all: every image passed (logs in emu/all/)"
 
 # The release zip, build/trio64-tools-<VERSION>.zip (VERSION from src/tools/common/version.inc, or VERSION=...):
-# trio64/tools/ with the tools and Info-ZIP's licence (ZIP-LIC.TXT, which its licence asks to pass on
-# with ZIP.EXE). With ROMS=1 also trio64/roms/, every chip's ROM at its memory clocks (make roms); the
-# default leaves them out (README "Release zip").
+# trio64/tools/ with the tools. With ROMS=1 also trio64/roms/, every chip's ROM at its memory clocks
+# (make roms); the default leaves them out (README "Release zip").
 #   make dist [ROMS=1]
 DISTVER = $(or $(VERSION),$(shell sed -n "s/^%define VERSION '\(.*\)'.*/\1/p" $(COMMON)/version.inc))
 DISTZIP = build/trio64-tools-$(DISTVER).zip
@@ -281,7 +275,6 @@ dist: tools $(if $(ROMS),roms)
 	rm -rf build/dist $(DISTZIP)
 	mkdir -p build/dist/trio64/tools
 	cp $(TOOLS) build/dist/trio64/tools/
-	cp infozip/LICENSE build/dist/trio64/tools/ZIP-LIC.TXT
 	$(if $(ROMS),cp -R build/roms build/dist/trio64/roms)
 	$(PYTHON) -m zipfile -c $(DISTZIP) build/dist/trio64
 	@$(PYTHON) -m zipfile -l $(DISTZIP)

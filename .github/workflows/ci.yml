@@ -31,9 +31,9 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', '**.pdf', 'docs/**', 'datasheets/**', 'standards/**', 'infozip/**']
+    paths-ignore: ['**.md', '**.pdf', 'docs/**', 'datasheets/**', 'standards/**']
   pull_request:
-    paths-ignore: ['**.md', '**.pdf', 'docs/**', 'datasheets/**', 'standards/**', 'infozip/**']
+    paths-ignore: ['**.md', '**.pdf', 'docs/**', 'datasheets/**', 'standards/**']
   workflow_dispatch:
 
 permissions:
