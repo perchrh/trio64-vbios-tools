@@ -1,13 +1,11 @@
 ; chip.inc - which Trio64-family chip the card has, and that chip's limits (VSHOW, S3TEST, S3COMPAT,
 ; S3REGS, CHIPID). Include it once, in the code part of a tool; it needs no other include.
 ;
-; chipfind   finds the card through the PCI BIOS (INT 1Ah AX=B102h, vendor 5333h): device 8901h is the
-;            Trio64V2/DX/GX; device 8814h the Trio64UV+ (Trio64UV+ datasheet section 4.1: CR2E = 14h);
-;            device 8811h is the Trio32 or Trio64 (Trio32/Trio64 datasheet: hardwired to 8811 for
-;            both; CR2E = 10h Trio32, 11h Trio64) or, with revision bit 6 set (4xh), the Trio64V+
-;            (Trio64V+ datasheet: CR2E = 11h, CR2F = 4xh; same rule Velocity9x uses to name
-;            86C765 vs 86C764 on that device id). On a find it also runs chipidregs. docs/chip-rules.md
-;            T64-ID-1, VP-ID-1, UV-ID-1, V2-ID-1.
+; chipfind   finds the card through the PCI BIOS (INT 1Ah AX=B102h, vendor 5333h):
+;            8901h Trio64V2/DX/GX; 8A13h Trio3D/2X (S3 NT 5.30.05 INF DEV_8A13); 8904h Trio3D
+;            (S3 Win9x 4.10.01.2204-2.61.06 INF DEV_8904 "S3 Inc. Trio3D"; 86C365); 8814h Trio64UV+;
+;            8811h Trio32/Trio64 (CR2E 10h/11h) or Trio64V+ when revision bit 6 is set (4xh).
+;            On a find it also runs chipidregs. docs/chip-rules.md T64-ID-1, VP-ID-1, UV-ID-1, V2-ID-1.
 ;            Out: CF=1 when none of them is found ([chip] = CHIP_NONE); else CF=0 and [chip] = CHIP_*,
 ;            [chipbx] = the PCI bus/device/function (BX of the PCI BIOS), [chipdev], [chiprev],
 ;            [chipcr2d]-[chipcr30] and the limits below. Keeps every register except flags.
@@ -19,9 +17,10 @@
 ;            selects Trio64V2/DX vs Trio64V2/GX.
 ; chippart   DX -> the '$' string with the S3 part number for [chip] (README "Chip codes"): 86C732,
 ;            86C764X (PCI cannot tell the earlier 86C764-P), 86C765, 86C775 or 86C785 (CR6F bit 0),
-;            86C767. Same PCI-revision split Velocity9x uses for Adapter= on 8811h (bit 6 set ->
-;            86C765). S3's Windows 95 Trio INF (w9524107, 4.10.01.2108-2.41.07) lists one Have Disk
-;            row for PCI 8901 ("Trio64V2"); DX vs GX is not a PCI revision there.
+;            86C767, 86C365 (Trio3D), 86C362/86C368 (Trio3D/2X). S3's Windows 95 Trio INF (w9524107)
+;            lists one Have Disk row for PCI 8901 ("Trio64V2"); DX vs GX is not a PCI revision there.
+;            S3 Win9x 2.61.06 (9x26106) INF: PCI 8904 = Trio3D; S3 NT 5.30.05 (53005) INF: PCI 8A13
+;            = Trio3D/2X.
 ;
 ; Limits per chip (kHz), rule IDs from docs/chip-rules.md:
 ;   [vcomin]   DCLK PLL VCO minimum below which a VCO in the datasheet range is a WARN: 135 MHz on every
@@ -54,6 +53,8 @@ CHIP_T64    equ 2
 CHIP_T64VP  equ 3
 CHIP_T64V2  equ 4
 CHIP_T64UVP equ 5
+CHIP_T3D    equ 6                       ; Trio3D, PCI 8904h
+CHIP_T3D2X  equ 7                       ; Trio3D/2X, PCI 8A13h
 
 chipfind:
         pushad
@@ -81,6 +82,12 @@ chipfind:
         call chipidregs                 ; CR2D-CR30 (also CR2E for the 8811 Trio32/Trio64 split)
         mov al,CHIP_T64V2
         cmp word [chipdev],0x8901
+        je .set
+        mov al,CHIP_T3D2X               ; 8A13h: S3 NT 5.30.05 INF "Trio3D/2X"
+        cmp word [chipdev],0x8A13
+        je .set
+        mov al,CHIP_T3D                 ; 8904h: S3 Win9x 2.61.06 INF "S3 Inc. Trio3D"
+        cmp word [chipdev],0x8904
         je .set
         mov al,CHIP_T64UVP
         cmp word [chipdev],0x8814
@@ -198,9 +205,11 @@ chippart:
 .e:     pop bx
         ret
 
-chipdevs    dw 0x8901, 0x8811, 0x8814, 0
-chipnames   dw s_chipnone, s_chipt32, s_chipt64, s_chipt64vp, s_chipt64v2dx, s_chipt64uvp
-chipparts   dw s_partnone, s_part732, s_part764x, s_part765, s_part775, s_part767
+chipdevs    dw 0x8901, 0x8A13, 0x8904, 0x8811, 0x8814, 0
+chipnames   dw s_chipnone, s_chipt32, s_chipt64, s_chipt64vp, s_chipt64v2dx, s_chipt64uvp, \
+               s_chipt3d, s_chipt3d2x
+chipparts   dw s_partnone, s_part732, s_part764x, s_part765, s_part775, s_part767, \
+               s_part365, s_part362
 s_chipnone  db 'no Trio64-family chip found$'
 s_chipt32   db 'Trio32$'
 s_chipt64   db 'Trio64$'
@@ -208,6 +217,8 @@ s_chipt64vp db 'Trio64V+$'
 s_chipt64v2dx db 'Trio64V2/DX$'           ; CR6F bit 0 clear (V2-ID-1)
 s_chipt64v2gx db 'Trio64V2/GX$'           ; CR6F bit 0 set
 s_chipt64uvp db 'Trio64UV+$'
+s_chipt3d   db 'Trio3D$'                  ; PCI 8904h
+s_chipt3d2x db 'Trio3D/2X$'               ; PCI 8A13h (53005 INF)
 s_partnone  db '$'
 s_part732   db '86C732$'
 s_part764x  db '86C764X$'                  ; PCI 8811 with rev bit 6 clear; 86C764-P is the same ID
@@ -215,9 +226,12 @@ s_part765   db '86C765$'                  ; PCI 8811 with rev bit 6 set (VP-ID-1
 s_part775   db '86C775$'                  ; PCI 8901, CR6F bit 0 clear
 s_part785   db '86C785$'                  ; PCI 8901, CR6F bit 0 set
 s_part767   db '86C767$'
+s_part365   db '86C365$'                  ; Trio3D
+s_part362   db '86C362/86C368$'           ; Trio3D/2X (README)
 
 ; vcomin, vcomax, dsingle, ddouble, dpack24, d32 (dd, kHz), r3bit (db), vcodsmin, mvcomax, dstream,
-; mclkmax (dd, kHz): one row per chip, CHIP_T32 first
+; mclkmax (dd, kHz): one row per chip, CHIP_T32 first. Trio3D / Trio3D/2X: no row in chip-rules yet;
+; MCLK up to 100 MHz so a stock 75 MHz POST is not a false FAIL (docs/764-rom.md MCLK table).
 chiplims:
         dd 135000, 270000, 80000, 135000, 75000, 50000      ; Trio32
         db 0
@@ -235,6 +249,12 @@ CHIPLIM equ $-chiplims
         dd 135000, 270000, 80000, 135000, 75000, 50000      ; Trio64UV+
         db 0
         dd 135000, 270000, 80000, 66667
+        dd 135000, 340000, 95000, 170000, 75000, 50000      ; Trio3D
+        db 0
+        dd 135000, 270000, 80000, 100000
+        dd 135000, 340000, 95000, 170000, 75000, 50000      ; Trio3D/2X
+        db 0
+        dd 135000, 270000, 80000, 100000
 
 chip    db CHIP_NONE
 chiprev db 0

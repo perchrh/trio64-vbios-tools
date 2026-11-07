@@ -2,12 +2,10 @@
 ;
 ; Purpose
 ;   Prints the same identification S3TEST's Chip ID INFO line uses: CR2D CR2E CR2F CR30, the PCI
-;   device and revision, the market name and the S3 part number (86C732, 86C764X, 86C765, 86C775,
-;   86C785, 86C767). The classification is common/chip.inc (chipfind, chipidregs, chipname,
-;   chippart): PCI vendor 5333h, devices 8901h / 8811h / 8814h; on 8811h revision bit 6 for the
-;   Trio64V+ then CR2E for Trio32 vs Trio64 (Velocity9x); on 8901h CR6F bit 0 for Trio64V2/DX
-;   86C775 vs /GX 86C785 (V2-ID-1). S3's Windows 95 Trio INF lists one Have Disk row for 8901.
-;   Changes nothing.
+;   device and revision, the market name and the S3 part number. Classification is common/chip.inc
+;   (chipfind, chipidregs, chipname, chippart): 8901h (V2; CR6F bit 0 = DX/GX), 8A13h Trio3D/2X
+;   (S3 NT 5.30.05 INF), 8904h Trio3D (S3 Win9x 2.61.06 INF; 86C365), 8814h UV+, 8811h (rev bit 6
+;   = V+; else CR2E = Trio32/Trio64). Changes nothing.
 ;
 ; Usage
 ;   CHIPID           one line to stdout
@@ -136,8 +134,9 @@ s_nl    db 13,10,'$'
 s_use   db 'CHIPID ',VERSION,' - name the Trio64-family chip from PCI',13,10
         db '  CHIPID       print CR2D-CR30, CR6F, PCI device/rev, name and S3 part',13,10
         db '  CHIPID /H    this help',13,10
-        db 'Exit 0 when PCI 5333:8901/8811/8814 is found, 1 otherwise.',13,10
+        db 'Exit 0 when a listed PCI 5333 device is found, 1 otherwise.',13,10
         db '8901: CR6F bit 0 clear = Trio64V2/DX 86C775, set = /GX 86C785.',13,10
+        db '8A13 = Trio3D/2X 86C362/86C368; 8904 = Trio3D 86C365.',13,10
         db 'Uses common/chip.inc (chipfind / chipidregs / chippart).',13,10,'$'
 
 %include "chip.inc"

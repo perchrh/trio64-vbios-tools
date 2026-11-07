@@ -427,7 +427,8 @@ t_rom:  mov dx,s_sig
 ; CR2D/CR2E = device ID (89h 01h on the V2), CR2F = revision ID (varies with stepping, datasheet
 ; section 4.1; equals PCI configuration byte 08h), CR30 = chip ID (E1h), then the PCI device and
 ; revision from chipfind and the S3 part number from chippart (86C732 / 86C764X / 86C765 /
-; 86C775 or 86C785 / 86C767). Values come from common/chip.inc (chipfind already ran chipidregs).
+; 86C775 or 86C785 / 86C767 / 86C365 / 86C362/86C368). Values come from common/chip.inc
+; (chipfind already ran chipidregs).
 ; Prints one line ending in INFO; it is not a test and not counted.
 t_chip: mov dx,s_chip
         call puts
