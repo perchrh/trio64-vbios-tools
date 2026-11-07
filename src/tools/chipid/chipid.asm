@@ -5,7 +5,8 @@
 ;   device and revision, the market name and the S3 part number. Classification is src/tools/common/chip.inc
 ;   (chipfind, chipidregs, chipname, chippart): 8901h (V2; CR6F bit 0 = DX/GX), 8A13h Trio3D/2X
 ;   (S3 NT 5.30.05 INF), 8904h Trio3D (S3 Win9x 2.61.06 INF; 86C365), 8814h UV+, 8811h (rev bit 6
-;   = V+; else CR2E = Trio32/Trio64). Changes nothing.
+;   = V+; else CR2E = Trio32/Trio64; a Trio64 is the 86C764X with CR2F 20h, 30h, 03h or 12h, else the
+;   86C764-P, T64-ID-2). Changes nothing.
 ;
 ; Usage
 ;   CHIPID           one line to stdout

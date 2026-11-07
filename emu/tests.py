@@ -155,7 +155,7 @@ Tests
 import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES, budget_msg  # noqa: E402
+from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES, CHIP_CR2F, chip_ids, budget_msg  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -1041,6 +1041,19 @@ def t_s3test(c):
     check(len(results) >= want, 'only %d result lines' % len(results))
     bad = [l.strip() for l in results if l.rstrip().endswith('FAIL') and not l.startswith(S3TEST_MODEL_LIMITS)]
     check(not bad, '%d checks not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    # the Chip variant line: CR2F and the name S3's Windows 95 driver gives it (common/chip.inc chipvar);
+    # the 764X model reports CR2F 20h (86C764GSpnp, the DSP-3364P), the 764P model 00h, the Trio32 00h
+    var = [l for _, l in tl if l.startswith('Chip variant by CR2F')]
+    rev = chip_ids()[2]
+    name = {('trio64', 0x20): '86C764GSpnp (764X)', ('trio64', 0x00): '86C764, no pnp code (764P',
+            ('trio32', 0x00): '86C732, no pnp code'}.get((Machine.chip, rev), 'no variant codes for this chip')
+    # and the part on the Chip ID line (chippart): 86C764X for a pnp code, 86C764-P for any other
+    part = {'trio64': '86C764X' if rev in (0x20, 0x30, 0x03, 0x12) else '86C764-P'}.get(Machine.chip)
+    cid = [l for _, l in tl if l.startswith('Chip ID')]
+    check(part is None or (len(cid) == 1 and cid[0].rstrip().endswith(part + '  INFO')),
+          'S3TEST Chip ID line: %s, expected the part %s' % (cid, part))
+    check(len(var) == 1 and var[0].rstrip().endswith('INFO') and ('%02Xh %s' % (rev, name)) in var[0],
+          'S3TEST Chip variant line: %s, expected %02Xh %s ... INFO' % (var, rev, name))
     if v:
         check_dbg(r1.files.get('S3TEST.DBG'), 'S3TEST.DBG')
         r0 = c.machine().run_com(com, '/S')
@@ -1277,7 +1290,7 @@ def vgalog_info(c, m, blk, what, tail=bytes(8)):
     """The chip and ROM block VGALOG writes (32 bytes): CR2D-CR30 and CR36 as the model's chip reports
     them, the ROM size byte, SR10/SR11 as the POST left them, and the word after "Vers" in the ROM's
     first 256 bytes; +24 the /W window function count and routine (tail), 0 without /W."""
-    ids = CHIPS[Machine.chip]['ids'][:4]
+    ids = chip_ids()
     cr36 = {1: 0xD2, 2: 0x92, 4: 0x12}[Machine.vram]
     if Machine.chip in ('trio64', 'trio32'):
         cr36 |= 0x0C if Machine.vram == 4 else 0x08
@@ -1761,6 +1774,8 @@ def t_s3regs(c):
     r32 = m.run_pe32(exe, 'S3REGS32.EXE test label')
     check(r32.exit == ('exit', 0), 'S3REGS32 ended with %s' % (r32.exit,))
     win = r32.files['S3REGS.TXT'].decode('latin1').split('\r\n')
+    check('S3REGS.TXT' in r.synced and 'S3REGS.TXT' in r32.synced, 'S3REGS.TXT closed without a commit: '
+          'DOS (AH=68h or AH=0Dh) %s, Win32 (FlushFileBuffers) %s' % ('S3REGS.TXT' in r.synced, 'S3REGS.TXT' in r32.synced))
     after = (m.r['si'], m.r['gi'], m.r['ci'], m.r['crtc'].get(0x38), m.r['crtc'].get(0x39), m.r['seq'].get(8))
     check(before == after, 'indexes or locks changed: %s -> %s' % (before, after))
     check(dos[0].startswith('S3REGS ') and dos[0].endswith('[test label] DOS') and win[0].endswith('[test label] Win32'),
@@ -2794,6 +2809,7 @@ def main():
         ap.error('--vram 4: the Trio32 takes at most 2 MB (CR36 bits 7-5 = 000b is reserved on it)')
     Machine.vram = a.vram
     Machine.chip = CHIP_CODES[a.chip]
+    Machine.cr2f = CHIP_CR2F.get(a.chip)
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
     if a.list:
         for n, _ in TESTS:

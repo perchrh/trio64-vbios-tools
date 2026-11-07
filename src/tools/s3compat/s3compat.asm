@@ -226,7 +226,7 @@ start:  cld
         call chipname
         call psd
         PS ' '
-        call chippart                   ; S3 part number (86C764X, 86C765, ...)
+        call chippart                   ; S3 part number (86C764X or 86C764-P by CR2F, 86C765, ...)
         call psd
         PS 13,10
         PS 'Category column: MDA CGA EGA VGA (IBM BIOS standards), VBE (VESA), S3 (chip).',13,10

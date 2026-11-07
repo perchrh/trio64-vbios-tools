@@ -19,7 +19,7 @@ and the FIFO bit on purpose. Exit code 1 when any call differs; the differences 
 import argparse
 import os, sys, random, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vgaemu import Machine, CHIP_CODES
+from vgaemu import Machine, CHIP_CODES, CHIP_CR2F
 from unicorn.x86_const import *
 ap = argparse.ArgumentParser(description=__doc__.split('\n')[1])
 ap.add_argument('--ref', required=True, help='the unpatched base: S3 reference BIOS 2.04.07, or 1.03-08 with --chip 765 (32 KB)')
@@ -30,6 +30,7 @@ ap.add_argument('--chip', choices=sorted(CHIP_CODES), default='775',
                 help='the chip the model is, by its S3 part number (vgaemu.CHIP_CODES, default 775)')
 a = ap.parse_args()
 Machine.chip = CHIP_CODES[a.chip]
+Machine.cr2f = CHIP_CR2F.get(a.chip)
 ref=open(a.ref,'rb').read(); rom=open(a.rom,'rb').read()
 up=open(a.upper,'rb').read()[0x8000:] if a.upper else ref[:0x8000] if rom[0x8000:0x10000]==rom[:0x8000] else bytes(0x8000)
 A=Machine(ref[:0x8000]+up); A.post(); B=Machine(rom); B.post()

@@ -137,7 +137,14 @@ now derived from the DRAM data sheet), MQ-5 and its worked example, and the 55 M
 in part A were corrected: read these three places as new. Later on 2 November 2026 part B's source note
 was changed from DMT rev. 0.7 to rev. 10 (the revision at hand; its timings of this part were checked
 against the specification's table and agree), and MQ-16 (the DMT border of 640x480) was added; the oracle
-file's "DMT has no border" was corrected.
+file's "DMT has no border" was corrected. On 6 November 2026 [`docs/chip-rules.md`](../chip-rules.md) gained
+VP-SYS-1, VP-MEM-3 to VP-MEM-6, MEM-2, the section "Monitor communication (DDC)" (T64-DDC-1, VP-DDC-1)
+and one datasheet error (MM81EC bit numbers): data book text only, no `[Leak review: ...]` note; what
+the reference BIOSes do with these registers went to [`docs/765-rom.md`](../765-rom.md) and
+[`docs/764-rom.md`](../764-rom.md). On 7 November 2026 T64-ID-2 (the Trio32/Trio64 parts by CR2F) and
+AV-ID-1 (the Aurora64V+ device ID) were added, *derived* from S3's Windows 95 driver 2.41.07, each
+with a `[Leak review: ...]` note; the driver's table itself is in [`docs/764-rom.md`](../764-rom.md)
+"Chip variants by CR2F".
 
 ### The searches, run by the author as a pre-check (counts of lines, not findings)
 

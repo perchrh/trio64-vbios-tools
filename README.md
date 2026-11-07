@@ -79,11 +79,20 @@ number; the documentation also uses the market names.
 | --- | --- | --- | --- | --- | --- | --- |
 | 785 | Trio64V2/GX | 86C785 | 5333:8901 | `775-rom` (the same ROM: S3's 2.04.07 is the "86C775/86C785 Video BIOS"; the clock option has an `sgram` entry for the GX) | `775` | as 775 |
 | 775 | Trio64V2/DX | 86C775 | 5333:8901 | `775-rom`, `775-rom-test`, `775-ref-compare` | `775` | `VER775`, `REF775`, `SIZE775` |
-| 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
-| 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
-| 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
+| 765 | Trio64V+ | 86C765 | 5333:8811 (revision 4xh or 5xh, bit 6 set) | `765-rom`, `765-rom-test`, `765-ref-compare` | `765` | `VER765`, `REF765`, `SIZE765` |
+| 764X | Trio64 PnP (MCLK 55-70 MHz) | 86C764X | 5333:8811 (CR2F 20h, 30h, 03h or 12h) | `764x-rom`, `764-rom-test`, `764-ref-compare` | `764x` (or `764`) | `VER764`, `REF764`, `SIZE764` |
+| 764P | Trio64 (MCLK 50-60 MHz) | 86C764-P | 5333:8811 (another CR2F) | `764p-rom` (tests as 764X) | `764p` (or `764`) | as 764X |
 | 767 | Trio64UV+ | 86C767 | 5333:8814 | none (no ROM of ours) | `767` | |
 | 732 | Trio32 | 86C732 | 5333:8811 (CR2E 10h) | none (no ROM of ours) | `732` | |
+
+The PCI revision (00h) does not tell the 764X from the 764P, but CR2F does: S3's Windows 95 driver
+2.41.07 names the 764X parts by their maker (20h GS, 30h NEC, 03h UMC, 12h TSMC, "86C764..pnp") and
+any other value the plain 86C764 ([docs/764-rom.md](docs/764-rom.md) "Chip variants by CR2F"). The
+tools follow it (`chippart` in `src/tools/common/chip.inc`, T64-ID-2): the S3 part on the Chip ID lines of
+S3TEST and S3COMPAT, `CHIPID /Q` and the REPORT archive name is 86C764X for those four codes and
+86C764-P for any other (`runall-86c764-p.zip`), and S3TEST's INFO line "Chip variant by CR2F" names the
+maker. The DSP-3364P reads 20h, a GS part as its marking says. The emulator's `764x` (and `764`) model
+reports CR2F 20h, its `764p` model 00h; the PCI revision is 00h on both.
 
 The emulator's test tags follow the codes too: `765` and `764` mark the tests that run on our Trio64V+ and
 Trio64 ROMs (`765_patches`, `764_patches`), and `775_writes` is the Trio64V2-only test.
@@ -100,11 +109,11 @@ is for the Windows 9x desktop.
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
-| S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
+| S3TEST.COM | Regression test for the ROM patches (signature, chip and its CR2F variant, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X or 86C764-P by CR2F, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) renames `runall.zip` to `runall-<part>.zip` from `chipid.out` when the DOS can rename to a long name. Windows 98 DOS can create a long name and cannot rename an existing file to one, so `/Z` changes nothing there; RUNALL uses REPORT | `CHIPID`, `CHIPID /Q` |
 | ROMVER.COM | Prints the video ROM version S3TEST's signature line reads, using the same scan (`src/tools/common/romver.inc`): "Version " in C000:0000-00FF, then at most 12 characters. `/Q` (`-q`) prints only that version | `ROMVER`, `ROMVER /Q` |
 | MCLK.COM | Finds a stable memory clock on the card. Prints the chip, the ROM version, the CR36 memory type and size, then each clock as it is tested. Steps of 0.5 MHz from the floor pair SR10=41h SR11=28h (50.114 MHz), or `/P` for the smallest PLL steps, or `/I 52.5` to start higher. The cap is the datasheet MCLK maximum plus 25 percent. The published clock is one step below the highest that passed, and not below the floor. The POST clock is restored. Not part of RUNALL | `MCLK`, `MCLK /P`, `MCLK /I 52.5` |
-| REPORT.COM | Packs the RUNALL logs into one stored ZIP (method 0, no compression) and creates it as `runall-<part>.zip` (a slash in the part becomes a hyphen). If that create is refused, the name is `<part>.ZIP` (86C775.ZIP). No part: `RUNALL.ZIP` | `REPORT` |
+| REPORT.COM | Packs the RUNALL logs into one stored ZIP (method 0, no compression) and creates it as `runall-<part>.zip` (a slash in the part becomes a hyphen). If that create is refused, the name is `<part>.ZIP` (86C775.ZIP; 86C764-P gives 86C764.ZIP). No part: `RUNALL.ZIP` | `REPORT` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. `/P` is `/T` that also traces the program itself after each of its 4F02h calls (its port accesses, with those of the BIOS calls it makes), until 12288 new events, its next mode set or an instruction that would switch to protected mode; it shows how a program changes the bank or programs the DAC and CRTC through the ports, and the program runs much slower until the trace ends by itself. `/W` is `/M` with a window function hook: the WinFuncPtr a 4F01h call returns points to VGALOG, which logs the program's far calls through it (the first 64 as records, all counted) and jumps on to the BIOS's routine, so a log shows whether a program changes the bank with the window function, with INT 10h 4F05h or with its own port writes. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`, `VGALOG /P`, `VGALOG /W`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `src/tools/vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
@@ -242,8 +251,8 @@ S3COMPAT all run there.
 
 ### Chip models and stock BIOSes
 
-`--chip` (`775`, `765`, `767`, `764`, `732`; "Chip codes") makes the model that chip: its PCI device ID and
-revision, CR2D-CR2F, the PCI subsystem ID (Trio64V2 only) and the width of the PLL post divider R (3
+`--chip` (`775`, `765`, `767`, `764`, `764x`, `764p`, `732`; "Chip codes") makes the model that chip: its PCI device ID and
+revision, CR2D-CR2F (on the Trio64 CR2F 20h for `764x` and `764`, 00h for `764p`, T64-ID-2), the PCI subsystem ID (Trio64V2 only) and the width of the PLL post divider R (3
 bits on the Trio64V2 only) and the memory type strapped in CR36 bits 3-2 (EDO, 10b, on the Trio64
 and Trio32, fast page on the Trio64 with 4 MB; `--vram 4` is refused for the Trio32). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
 system memory (UMA), which neither the tools nor the model know about, so only its register rules are

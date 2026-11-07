@@ -4,7 +4,8 @@
 ; chipfind   finds the card through the PCI BIOS (INT 1Ah AX=B102h, vendor 5333h):
 ;            8901h Trio64V2/DX/GX; 8A13h Trio3D/2X (S3 NT 5.30.05 INF DEV_8A13); 8904h Trio3D
 ;            (S3 Win9x 4.10.01.2204-2.61.06 INF DEV_8904 "S3 Inc. Trio3D"; 86C365); 8814h Trio64UV+;
-;            8811h Trio32/Trio64 (CR2E 10h/11h) or Trio64V+ when revision bit 6 is set (4xh).
+;            8811h Trio32/Trio64 (CR2E 10h/11h) or Trio64V+ when revision bit 6 is set
+;            (4xh in the data book; later steppings 5xh, also bit 6).
 ;            On a find it also runs chipidregs. docs/chip-rules.md T64-ID-1, VP-ID-1, UV-ID-1, V2-ID-1.
 ;            Out: CF=1 when none of them is found ([chip] = CHIP_NONE); else CF=0 and [chip] = CHIP_*,
 ;            [chipbx] = the PCI bus/device/function (BX of the PCI BIOS), [chipdev], [chiprev],
@@ -16,11 +17,21 @@
 ; chipname   DX -> the '$' string with the chip's market name ([chip]). On CHIP_T64V2, CR6F bit 0
 ;            selects Trio64V2/DX vs Trio64V2/GX.
 ; chippart   DX -> the '$' string with the S3 part number for [chip] (README "Chip codes"): 86C732,
-;            86C764X (PCI cannot tell the earlier 86C764-P), 86C765, 86C775 or 86C785 (CR6F bit 0),
+;            86C764X or 86C764-P (the PCI revision is 00h on both: by CR2F as S3's Windows 95 driver
+;            2.41.07 does, 20h, 30h, 03h or 12h the 86C764X ("86C764..pnp"), any other value the
+;            86C764-P, T64-ID-2; chipvar names the maker), 86C765, 86C775 or 86C785 (CR6F bit 0),
 ;            86C767, 86C365 (Trio3D), 86C362/86C368 (Trio3D/2X). S3's Windows 95 Trio INF (w9524107)
 ;            lists one Have Disk row for PCI 8901 ("Trio64V2"); DX vs GX is not a PCI revision there.
 ;            S3 Win9x 2.61.06 (9x26106) INF: PCI 8904 = Trio3D; S3 NT 5.30.05 (53005) INF: PCI 8A13
 ;            = Trio3D/2X.
+; chipvar    In: AL = CR2F (for example [chipcr2f] after chipfind). Out: DX -> the '$'
+;            name of the Trio32/Trio64 variant that CR2F codes, by S3's Windows 95 driver 2.41.07
+;            (S3_2.DRV, its chip name table; docs/764-rom.md "Chip variants by CR2F"): Trio64 20h GS,
+;            30h NEC, 03h UMC, 12h TSMC, each "86C764..pnp", the 86C764X; any other value the plain
+;            86C764 (the earlier 764P, or a code the driver does not know); Trio32 22h 86C732GSpnp,
+;            else 86C732. On the other chips the driver names no variants. *Derived*: a driver, not a
+;            data book; the line that shows it is INFO only. Keeps every register except DX and flags.
+;            Assembled only when the tool defines CHIPVAR before the include.
 ;
 ; Limits per chip (kHz), rule IDs from docs/chip-rules.md:
 ;   [vcomin]   DCLK PLL VCO minimum below which a VCO in the datasheet range is a WARN: 135 MHz on every
@@ -92,7 +103,7 @@ chipfind:
         mov al,CHIP_T64UVP
         cmp word [chipdev],0x8814
         je .set
-        mov al,CHIP_T64VP               ; 8811: revision 4xh is the Trio64V+
+        mov al,CHIP_T64VP               ; 8811: revision bit 6 (4xh, 5xh) is the Trio64V+
         test byte [chiprev],0x40
         jnz .set
         mov al,CHIP_T32                 ; else CR2E: 10h Trio32, 11h Trio64
@@ -199,11 +210,74 @@ chippart:
         jz .e
         mov dx,s_part785
         jmp .e
-.t:     movzx bx,byte [chip]
+.t:     cmp byte [chip],CHIP_T64        ; Trio64: the pnp codes in CR2F are the 86C764X (T64-ID-2)
+        jne .t2
+        mov dx,s_part764x
+        mov bl,[chipcr2f]
+        cmp bl,0x20
+        je .e
+        cmp bl,0x30
+        je .e
+        cmp bl,0x03
+        je .e
+        cmp bl,0x12
+        je .e
+        mov dx,s_part764p
+        jmp .e
+.t2:    movzx bx,byte [chip]
         shl bx,1
         mov dx,[chipparts+bx]
 .e:     pop bx
         ret
+
+%ifdef CHIPVAR                          ; only the tools that show the variant (S3TEST) carry it
+chipvar:
+        push si
+        push ax
+        mov si,cv_t64
+        cmp byte [chip],CHIP_T64
+        je .l
+        mov si,cv_t32
+        cmp byte [chip],CHIP_T32
+        je .l
+        mov dx,s_cvnone
+        jmp .x
+.l:     mov ah,al
+.n:     lodsb                           ; table: code, then the name offset; FFh ends it, then the default
+        cmp al,0xFF
+        je .d
+        cmp al,ah
+        je .d
+        add si,2
+        jmp .n
+.d:     mov dx,[si]
+.x:     pop ax
+        pop si
+        ret
+
+cv_t64      db 0x20
+            dw s_cv64gs
+            db 0x30
+            dw s_cv64nec
+            db 0x03
+            dw s_cv64umc
+            db 0x12
+            dw s_cv64tsmc
+            db 0xFF
+            dw s_cv64
+cv_t32      db 0x22
+            dw s_cv32gs
+            db 0xFF
+            dw s_cv32
+s_cv64gs    db '86C764GSpnp (764X)$'
+s_cv64nec   db '86C764NECpnp (764X)$'
+s_cv64umc   db '86C764UMCpnp (764X)$'
+s_cv64tsmc  db '86C764TSMCpnp (764X)$'
+s_cv64      db '86C764, no pnp code (764P or unknown)$'
+s_cv32gs    db '86C732GSpnp$'
+s_cv32      db '86C732, no pnp code$'
+s_cvnone    db 'no variant codes for this chip$'
+%endif
 
 chipdevs    dw 0x8901, 0x8A13, 0x8904, 0x8811, 0x8814, 0
 chipnames   dw s_chipnone, s_chipt32, s_chipt64, s_chipt64vp, s_chipt64v2dx, s_chipt64uvp, \
@@ -221,7 +295,8 @@ s_chipt3d   db 'Trio3D$'                  ; PCI 8904h
 s_chipt3d2x db 'Trio3D/2X$'               ; PCI 8A13h (53005 INF)
 s_partnone  db '$'
 s_part732   db '86C732$'
-s_part764x  db '86C764X$'                  ; PCI 8811 with rev bit 6 clear; 86C764-P is the same ID
+s_part764x  db '86C764X$'                  ; PCI 8811, rev bit 6 clear, CR2F 20h/30h/03h/12h (T64-ID-2)
+s_part764p  db '86C764-P$'                 ; PCI 8811, rev bit 6 clear, any other CR2F
 s_part765   db '86C765$'                  ; PCI 8811 with rev bit 6 set (VP-ID-1)
 s_part775   db '86C775$'                  ; PCI 8901, CR6F bit 0 clear
 s_part785   db '86C785$'                  ; PCI 8901, CR6F bit 0 set
