@@ -28,7 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.dirname(HERE)
-sys.path.insert(0, os.path.join(SRC, 'rompatch'))
+sys.path.insert(0, os.path.join(SRC, 'src', 'roms'))
 
 NASM = os.environ.get('NASM', 'nasm')       # --nasm: the assembler, also passed to tests.py
 ORDER = ('post,rom_patches,vga_registers,vga_palettes,mono,errors,display_switch,stores,s3compat_vga,s3compat_vbe,windows,vgalog,'

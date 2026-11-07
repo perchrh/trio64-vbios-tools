@@ -88,10 +88,10 @@ number; the documentation also uses the market names.
 The emulator's test tags follow the codes too: `765` and `764` mark the tests that run on our Trio64V+ and
 Trio64 ROMs (`765_patches`, `764_patches`), and `775_writes` is the Trio64V2-only test.
 
-The three ROMs share the patcher library (`rompatch/s3patch.py`), the version file
-(`common/version.inc`), the tools and the emulator.
+The three ROMs share the patcher library (`src/roms/s3patch.py`), the version file
+(`src/tools/common/version.inc`), the tools and the emulator.
 
-The patched ROM images are not in this repository: `rompatch/` holds the changes to the reference
+The patched ROM images are not in this repository: `src/roms/` holds the changes to the reference
 BIOSes and the patchers that build the images from them. 
 
 All tools need a 386 or later and run in plain DOS (no EMM386 needed), except S3REGS32.EXE, which
@@ -100,10 +100,10 @@ is for the Windows 9x desktop.
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
-| S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
-| CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) on MS-DOS 7.0+ renames `runall.zip` to `runall-<part>.zip` from a prior `/Q` redirect (`chipid.out`) | `CHIPID`, `CHIPID /Q` |
+| S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
+| CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) on MS-DOS 7.0+ renames `runall.zip` to `runall-<part>.zip` from a prior `/Q` redirect (`chipid.out`) | `CHIPID`, `CHIPID /Q` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
-| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. `/P` is `/T` that also traces the program itself after each of its 4F02h calls (its port accesses, with those of the BIOS calls it makes), until 12288 new events, its next mode set or an instruction that would switch to protected mode; it shows how a program changes the bank or programs the DAC and CRTC through the ports, and the program runs much slower until the trace ends by itself. `/W` is `/M` with a window function hook: the WinFuncPtr a 4F01h call returns points to VGALOG, which logs the program's far calls through it (the first 64 as records, all counted) and jumps on to the BIOS's routine, so a log shows whether a program changes the bank with the window function, with INT 10h 4F05h or with its own port writes. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`, `VGALOG /P`, `VGALOG /W`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `vgalog/vgalog.asm` |
+| VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. `/P` is `/T` that also traces the program itself after each of its 4F02h calls (its port accesses, with those of the BIOS calls it makes), until 12288 new events, its next mode set or an instruction that would switch to protected mode; it shows how a program changes the bank or programs the DAC and CRTC through the ports, and the program runs much slower until the trace ends by itself. `/W` is `/M` with a window function hook: the WinFuncPtr a 4F01h call returns points to VGALOG, which logs the program's far calls through it (the first 64 as records, all counted) and jumps on to the BIOS's routine, so a log shows whether a program changes the bank with the window function, with INT 10h 4F05h or with its own port writes. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`, `VGALOG /P`, `VGALOG /W`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `src/tools/vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
 | S3REGS32.EXE | The same snapshot from the Windows 9x desktop (Win32 console program), and `/W n` logs every register change for n seconds | `S3REGS32 label`, `S3REGS32 /W 60 label` |
 | S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions (also AH=13h, CGA scroll, graphics XOR, fonts, the video save pointer table), every VESA mode, the VBE functions (also 4F04 masks, 4F0A, 4F10, 4F14, 4F15), datasheet rules, VRAM | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
@@ -119,15 +119,18 @@ above its range, so do not run these tools with one. The `/H` help of each tool 
 `VSHOW /I` shows it once on the screen before the mode list.
 
 All tools share one version number, and S3TEST checks for one ROM level per chip; all are set in
-`common/version.inc` (`VERSION`; `VER775`, `VER765`, `VER764`) and can be overridden for a build, for
+`src/tools/common/version.inc` (`VERSION`; `VER775`, `VER765`, `VER764`) and can be overridden for a build, for
 example `make clean && make VERSION=0.9 VER775=2.04.07-p18`.
 
 ## Building
 
 NASM 3.02 (the ROM build needs exactly 3.02, see docs/775-rom.md, "The build"):
 
-    make            # or make tools: Linux, macOS, WSL
-    build.bat       # DOS or Windows with nasm.exe on the PATH
+    make            # tools and every chip's ROM (make tools && make roms)
+    make tools      # the DOS tools into build/ (including CHIPID.COM)
+    make roms       # every chip's ROM at its memory clocks into build/roms/
+    make clean      # removes build/ (tools and ROM images)
+    build.bat       # DOS or Windows with nasm.exe on the PATH (tools only)
     make dist       # the release zip, build/trio64-tools-<VERSION>.zip ("Release zip")
 
 A NASM that is not on the PATH is given with `NASM`, for example a copy in the working tree (the
@@ -161,8 +164,8 @@ unloads it); while it is loaded, every INT 10h call takes a little longer, which
 lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
 .DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN
 in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only
-start it with a monitor that takes 91 kHz or refuses it (an LCD). `common/` holds the /V debug log code
-the test tools share.
+start it with a monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V
+debug log code the test tools share.
 
 RUNALL.BAT works the same on a card with its stock BIOS, and the logs then describe that BIOS and card:
 S3TEST fails its ROM signature (the line shows the version found) and the tests of our changes where
@@ -239,7 +242,7 @@ revision, CR2D-CR2F, the PCI subsystem ID (Trio64V2 only) and the width of the P
 bits on the Trio64V2 only) and the memory type strapped in CR36 bits 3-2 (EDO, 10b, on the Trio64
 and Trio32, fast page on the Trio64 with 4 MB; `--vram 4` is refused for the Trio32). The Trio64UV+ (86C767, device 8814h) is found by the tools too; it shares
 system memory (UMA), which neither the tools nor the model know about, so only its register rules are
-judged. The tools find the chip themselves (`common/chip.inc`) and judge the clocks by that chip's datasheet limits.
+judged. The tools find the chip themselves (`src/tools/common/chip.inc`) and judge the clocks by that chip's datasheet limits.
 With a ROM that is not our patched BIOS (no `2.04.07-pN` sign-on) the tests tagged `patch` (version,
 rom_patches, stores, s3test, s3alias) are skipped, and the others take their expected values from the
 standards or from the registers the BIOS set, not from our BIOS:
@@ -252,7 +255,7 @@ the failures it keeps from 1.03-08 (below) pass with a note (`VPLUS_BASE` in `em
 Trio64 ROM (`1.5-07-pN`, section "Trio64 ROM") likewise with the tag `764`, `764_patches` and
 `T64_BASE`.
 
-S3TEST picks its test set by the chip it finds (`common/chip.inc`), before the first test. On a
+S3TEST picks its test set by the chip it finds (`src/tools/common/chip.inc`), before the first test. On a
 Trio64V2 it checks our 2.04.07 ROM (VER775), on a Trio64V+ our 1.03-08 ROM (VER765: the booster
 without the CR6D base, no pedestal, refresh default, LFB, 4F06 BL=3 or 512x384 lines, its own mode
 list), on a Trio64 our Phoenix 1.5-07 ROM (VER764: as on the Trio64V+, with its own mode list), and
@@ -381,7 +384,7 @@ candidate (`docs/clean-room.md`).
 
 ## Trio64V2/DX ROM
 
-`rompatch/` holds the code the ROM carries and `s3patch.py`, which applies the current change set
+`src/roms/` holds the code the ROM carries and `s3patch.py`, which applies the current change set
 (level p24) to the S3 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin`, with byte assertions at
 every patch site, the SHA-256 of the input's code outside the OEM area (CODE_SHA, 0100h-7FFDh) and the
 SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
@@ -399,7 +402,7 @@ the patcher tests in its section "The build".
 
 ## Trio64V+ ROM
 
-`rompatch/vplus/` builds 1.03-08N-pN from the S3 Trio64V+ BIOS 1.03-08N (86C765, VBE 1.2) in
+`src/roms/vplus/` builds 1.03-08N-pN from the S3 Trio64V+ BIOS 1.03-08N (86C765, VBE 1.2) in
 `reference/64vplus/1_03_08n.bin`: backports of the Trio64V2 ROM's speed patches and fixes, and fixes of
 1.03-08's own faults, each with its issue in [docs/765-changes.md](docs/765-changes.md). The build, what
 does not apply to the Trio64V+ and the per-call costs: [docs/765-rom.md](docs/765-rom.md).
@@ -413,7 +416,7 @@ Square brackets in these lines mark options: type `SIZE765=32`, not `[SIZE765=32
 
 `s3vpatch.py` works as `s3patch.py`: byte assertions at every patch site (the shared speed patches use
 the same signatures and the same .asm files, assembled with the 1.03-08 addresses of
-`rompatch/vplus/bios.inc`), the checksum, and the SHA-256 of the build that passed the emulator tests.
+`src/roms/vplus/bios.inc`), the checksum, and the SHA-256 of the build that passed the emulator tests.
 `test_s3vpatch.py` checks that build, the checksum, that every changed byte belongs to a patch, and
 the refusals (an already patched image, changed patch sites, a wrong checksum, the Trio64V2 2.04.07).
 In the emulator tests the ROM runs on the Trio64V+ model (`CHIP=765`): `765_patches` checks its
@@ -427,11 +430,11 @@ Hercules card: 1.03-08N-p5"). The picture of 10Dh-10Fh in VSHOW is still for a c
 
 ## Trio64 ROM
 
-`rompatch/trio64/` builds 1.5-07-pN for the Trio64 (86C764) from the Phoenix S3 Trio64 BIOS 1.5-07 in
+`src/roms/trio64/` builds 1.5-07-pN for the Trio64 (86C764) from the Phoenix S3 Trio64 BIOS 1.5-07 in
 `reference/trio64/1_5_07.bin` (the CP764 build), the reference BIOS S3 gave the card makers for the
 Trio64, as far as the 14 Trio64 images at hand show (no S3-built one among them). Its changes, each with
 its issue: [docs/764-changes.md](docs/764-changes.md) (backports of the Trio64V2 ROM's speed patches and
-fixes, no interlaced timings, S3's font layout from public domain sources (`rompatch/fonts`), the display FIFO M from the memory bandwidth). The build, the
+fixes, no interlaced timings, S3's font layout from public domain sources (`src/roms/fonts`), the display FIFO M from the memory bandwidth). The build, the
 space map, what 1.5-07 still gets wrong and the base candidates: [docs/764-rom.md](docs/764-rom.md). The
 ROM is for the **S3 86C764X** (Trio64 PnP, rated for a 70 MHz MCLK); for the earlier 86C764-P use
 `make 764p-rom` (50-60 MHz).
@@ -459,7 +462,7 @@ the fonts look right ([docs/764-rom.md](docs/764-rom.md), "On the card: 1.5-07-p
 ## MCLK build option
 
 Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>/` (the level from
-`common/version.inc`) with 8.3 names for a DOS disk (chip code, M, clock):
+`src/tools/common/version.inc`) with 8.3 names for a DOS disk (chip code, M, clock):
 
     make roms [CLOCKS_775="50 55 60"] [CLOCKS_765=...] [CLOCKS_764X="55 60 70"] [CLOCKS_764P=...]
 
@@ -543,10 +546,16 @@ page (11b).
 `.github/workflows/ci.yml` runs on GitHub Actions for pushes to main, pull requests and by hand (the
 Actions tab, "Run workflow"). The repository is public, so the GitHub-hosted runners it uses are free;
 changes that touch only `*.md`, `*.pdf`, `docs/`, `datasheets/`, `standards/` or `infozip/` do not start
-a run, and a newer commit on the same branch cancels the running one.
+a run, and a newer commit on the same branch cancels the running one. Emulator test jobs (the chip/clock
+matrix and the stock-ROM runs) start only when `src/roms/**` changed, or on a manual run; `make roms`
+and the release zip still run on every CI start.
+
+Tool and ROM sources live under `src/tools/` and `src/roms/`. `make` builds both; `make tools` and
+`make roms` build one or the other; `make clean` removes `build/` (tools and ROM images). CHIPID.COM is
+part of the tools list and of the release zip.
 
 The job "All ROMs (make roms) and the release zip" builds every chip's ROM at its memory clocks, to show
-that they all build, and the release zip (`make dist`). Next to it the tests run
+that they all build, and the release zip (`make dist`). When `src/roms/**` changed, the tests also run
 as parallel jobs on the slowest and the fastest memory clock of each chip; each job builds the one image it
 tests (`make 775-rom MCLK=50` and so on). Each job tests its image with 2 MB of
 video memory, then runs the tests tagged `vram` (the ones whose result depends on the memory size) with
@@ -583,7 +592,7 @@ tests run by hand.
     make dist [ROMS=1]
 
 builds the tools and packs them into `build/trio64-tools-<VERSION>.zip` (VERSION from
-`common/version.inc`, now 1.0.0): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
+`src/tools/common/version.inc`, now 1.0.0): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
 CHIPID, S3REGS32.EXE, RUNALL.BAT, CLEAN.BAT, Info-ZIP's ZIP.EXE and its licence (ZIP-LIC.TXT). CI builds it on
 every run and keeps it as the artifact `trio64-tools-<VERSION>` for 90 days; the download is that zip.
 `ROMS=1` adds `trio64/roms/` with every chip's ROM at its memory clocks (`make roms`); the default leaves
@@ -612,7 +621,7 @@ same with or without /V. The debug file contains:
 
 The file is committed before every mode set and VBE call (except 4F05), so after a freeze its last
 lines show the call that hung. The INT 10h hook passes the 32-bit registers through unchanged. Expect a debug file of 1-2 MB for S3COMPAT and a longer run.
-The line format is described at the top of `common/vdebug.inc`.
+The line format is described at the top of `src/tools/common/vdebug.inc`.
 
 ## Windows 9x driver test
 

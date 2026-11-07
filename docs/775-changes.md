@@ -1,6 +1,6 @@
 # Trio64V2/DX ROM (775): fixes and improvements
 
-What 2.04.07-pN (the level in [`common/version.inc`](../common/version.inc), now p24) changes against the S3 reference BIOS
+What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p24) changes against the S3 reference BIOS
 2.04.07, each with the issue that has the details: what was wrong or missing, the cause, the effect
 and how it is tested. The build, the byte-level changes, what was borrowed, not taken or omitted, and
 what is left are in [`docs/775-rom.md`](775-rom.md); the speed measured on the card is in README "Speed". The Trio64V+
@@ -156,5 +156,5 @@ Fixes
   the next mode set and lost. The mode set hook now restores the base first and clears CR6D after it,
   then forgets the mark. The emulator test `rom_patches` runs the booster with base 01000000h.
 - **No monitor sense at POST** (p23, [#134](https://github.com/perchrh/trio64-vbios-tools/issues/134)): POST no longer senses the monitor (black, blue and green on screen, 3C2h bit 4 after each), as S3's Trio64V+ BIOS 1.03-08N does not. A display that does not load the outputs as a CRT does (an LCD, a scaler, a VGA-to-HDMI converter) could read as monochrome and get grey-scale summing. Only the call of the sense (1984h, call 127Dh) becomes `xor bx,bx`, the colour result. The rest of the routine at 195Bh still runs, because it also writes SR1A bit 5 (the blank pedestal, from 00D1h), which nothing else in POST writes. That is why the configuration bit for it (00C4h bit 1) is not used. A real monochrome VGA monitor no longer gets grey-scale summing at POST (INT 10h AX=1200h BL=33h still switches it on).
-- **Fonts from public domain sources** (p24, [#141](https://github.com/perchrh/trio64-vbios-tools/issues/141)): the 8x8, the 8x16 and the 9x16 alternate table are written by `s3patch.py` from [`rompatch/fonts`](../rompatch/fonts/), built from Joseph Gil's public domain font collection (FNTCOL16, unmodified files and his notice in that folder). They are byte for byte the tables 2.04.07 carries, so nothing on the screen changes; the patcher refuses a base whose tables differ. 2.04.07 has no 8x14 font, and the ROM has no room for one.
+- **Fonts from public domain sources** (p24, [#141](https://github.com/perchrh/trio64-vbios-tools/issues/141)): the 8x8, the 8x16 and the 9x16 alternate table are written by `s3patch.py` from [`src/roms/fonts`](../src/roms/fonts/), built from Joseph Gil's public domain font collection (FNTCOL16, unmodified files and his notice in that folder). They are byte for byte the tables 2.04.07 carries, so nothing on the screen changes; the patcher refuses a base whose tables differ. 2.04.07 has no 8x14 font, and the ROM has no room for one.
 - **The card's POST flags** (0xD1 = 05h) and CR80 POST value (00h) ([#63](https://github.com/perchrh/trio64-vbios-tools/issues/63)).
