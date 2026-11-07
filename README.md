@@ -101,7 +101,7 @@ is for the Windows 9x desktop.
 | --- | --- | --- |
 | VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes | `VSHOW /H` for the parameter list |
 | S3TEST.COM | Regression test for the ROM patches (signature, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
-| CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368) | `CHIPID` |
+| CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) on MS-DOS 7.0+ renames `runall.zip` to `runall-<part>.zip` from a prior `/Q` redirect (`chipid.out`) | `CHIPID`, `CHIPID /Q` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. `/P` is `/T` that also traces the program itself after each of its 4F02h calls (its port accesses, with those of the BIOS calls it makes), until 12288 new events, its next mode set or an instruction that would switch to protected mode; it shows how a program changes the bank or programs the DAC and CRTC through the ports, and the program runs much slower until the trace ends by itself. `/W` is `/M` with a window function hook: the WinFuncPtr a 4F01h call returns points to VGALOG, which logs the program's far calls through it (the first 64 as records, all counted) and jumps on to the BIOS's routine, so a log shows whether a program changes the bank with the window function, with INT 10h 4F05h or with its own port writes. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`, `VGALOG /P`, `VGALOG /W`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `src/tools/vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
@@ -152,17 +152,20 @@ with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.T
 1024 INT 10h calls with `VGALOG /D`, and beeps (`echo` of Ctrl-G) when done. It leaves S3TEST.LOG,
 S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. It then copies
 C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root, when they
-exist) as S3REGSR.TXT and VGALOGR.BIN, deletes an old RUNALL.ZIP (Info-ZIP updates an existing archive and
-stops at one it cannot read: "missing end signature"), and packs the logs, the .DBG files and these four
-files into a new RUNALL.ZIP (a file that is missing is a warning only) with Info-ZIP's
+exist) as S3REGSR.TXT and VGALOGR.BIN, deletes an old RUNALL.ZIP or `runall-*.zip` (Info-ZIP updates an
+existing archive and stops at one it cannot read: "missing end signature"), and packs the logs, the .DBG
+files and these four files into a new RUNALL.ZIP (a file that is missing is a warning only) with Info-ZIP's
 `zip` (`build/ZIP.EXE`: Zip 3.0, the 16-bit DOS build from the FreeDOS 1.3 package, kept in `infozip/`
-with its licence, which allows passing the program on with that licence text). VGALOG stays
-resident afterwards (`VGALOG /U` unloads it); while it is loaded, every INT 10h call takes a little
-longer, which shows only in the timing lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves
-behind before the next one: the .DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and
-VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only start it with a
-monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V debug log code the test tools
-share.
+with its licence, which allows passing the program on with that licence text). On MS-DOS 7.0 or later
+(long file names), it then runs `CHIPID -q` and `CHIPID -z` so the archive is renamed to
+`runall-<part>.zip` from that part string (for example `runall-86c775.zip`; a slash in the part becomes
+a hyphen). On older DOS the short name RUNALL.ZIP stays. VGALOG stays resident afterwards (`VGALOG /U`
+unloads it); while it is loaded, every INT 10h call takes a little longer, which shows only in the timing
+lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
+.DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN
+in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only
+start it with a monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V
+debug log code the test tools share.
 
 RUNALL.BAT works the same on a card with its stock BIOS, and the logs then describe that BIOS and card:
 S3TEST fails its ROM signature (the line shows the version found) and the tests of our changes where

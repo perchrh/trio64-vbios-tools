@@ -9,6 +9,10 @@ vgalog /D
 if exist c:\s3regs.txt copy c:\s3regs.txt s3regsr.txt
 if exist c:\vgalog.bin copy c:\vgalog.bin vgalogr.bin
 if exist runall.zip del runall.zip
+for %%f in (runall-*.zip) do del "%%f"
 zip runall.zip *.log *.dbg s3regs.txt vgalog.bin s3regsr.txt vgalogr.bin
+chipid -q > chipid.out
+chipid -z
+if exist chipid.out del chipid.out
 
 echo 
