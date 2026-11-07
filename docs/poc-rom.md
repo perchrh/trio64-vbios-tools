@@ -4,8 +4,14 @@ A generic PCI option ROM for a conventional PCI card, built to the PCI 2.1
 expansion ROM rules (the project's rules [ROM-1 to ROM-4 and ROM-6 in
 spec-a-post.md](cleanroom/spec-a-post.md), from PCI Local Bus Specification
 2.1/2.3 section 6.3, extract
-[pci-2.3-section-6.3.md](cleanroom/primary-extracts/pci-2.3-section-6.3.md)):
-at POST the BIOS maps the ROM, copies the image to RAM and far-calls the
+[pci-2.3-section-6.3.md](cleanroom/primary-extracts/pci-2.3-section-6.3.md)).
+
+The PoC intentionally contains no VGA code: no mode set, no INT 10h hook,
+no register of any card. Its only purpose is to prove that we can build a
+generic PCI option ROM - a valid image that the system BIOS maps, copies,
+calls and keeps - before any real device support goes into one.
+
+At POST the BIOS maps the ROM, copies the image to RAM and far-calls the
 entry point at offset 3, and the code
 
 - prints `Hello world` on the INT 10h teletype output, then
