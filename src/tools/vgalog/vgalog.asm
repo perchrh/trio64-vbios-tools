@@ -66,7 +66,7 @@
 ;   +4  CR36 (memory size and type, as strapped)    +5  ROM size in 512-byte blocks (C000:0002)
 ;   +6  SR10, +7 SR11 (the memory clock PLL the POST set)
 ;   +8  the ROM version: the word after "Version" or "Vers." in C000:0000-00FFh (for our ROMs
-;       "2.04.07-p21", "1.03-08N-p4", "1.5-07-p2"), up to 15 characters, zero-padded
+;       the -pN level of VER775/VER765/VER764), up to 15 characters, zero-padded
 ;   +24 dd the far calls through the hooked window function (/W; 0 otherwise), at /D
 ;   +28 dd the BIOS's window function (offset, segment) that /W hooked, at /D (0 when none was hooked)
 ;
