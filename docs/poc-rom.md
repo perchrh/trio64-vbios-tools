@@ -37,15 +37,16 @@ memory resource of its own.
 ## Build
 
 ```
-make poc-rom                      -> build/roms/poc/HELLO64K.ROM (64 KB)
+make poc-rom                      -> build/roms/poc/HELLO64K.ROM (POC_PAD=64, the default)
+make poc-rom POC_PAD=128           -> build/roms/poc/HELLO128K.ROM (128 KB)
 make poc-rom VENDOR=0x10B7 DEVICE=0x9055                  (3C905B-TX, 64 KB)
-make poc-rom OUT=HELLO.ROM POC_REPEATS=4 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
+make poc-rom OUT=HELLO.ROM POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
 ```
 
 The 3C905B-TX line above is the verified example: the card reports vendor
 10B7h, device 9055h (subsystem 9055h:10B7h, revision 24h, none of which the
 image uses), its 32-pin DIP socket decodes up to 128 KB, and the build writes
-the 32 KB image twice into the 64 KB part. The subsystem ID and the chip
+the 32 KB image once and pads the 64 KB part with FFh. The subsystem ID and the chip
 revision do not go into the image: a PCI 2.1 POST matches only the
 vendor/device IDs.
 
@@ -56,8 +57,8 @@ all image bytes is 0 mod 256) and writes the image once at offset 0,
 padding the rest of the part with FFh (ROM-4). A system BIOS that scans the
 whole ROM window for 55h AAh then finds exactly one image and calls its
 init once; repeating the image instead made such a BIOS run both copies
-and beep twice (measured before the change). REPEATS is the part size in
-32 KB units: 2 for a 64 KB part (the default), 4 for a 128 KB part, 1 for a
+and beep twice (measured before the change). PAD is the file size in
+KB: 64 for a 64 KB part (the default), 128 for a 128 KB part, 32 for a
 32 KB part; the usual 32-pin DIP sockets on network cards (3C905B,
 RTL8139D) decode up to 128 KB.
 
@@ -84,7 +85,7 @@ DOS, or the BIOS' own PCI device listing at POST.
 ## Flashing
 
 The output file goes into the EEPROM as is (64 KB, or 128 KB with
-REPEATS=4): the 32 KB image at offset 0, FFh after it. A board that maps
+POC_PAD=128): the 32 KB image at offset 0, FFh after it. A board that maps
 the upper half of the part sees no ROM there - the image is meant to sit
 at the base of the mapped window.
 
@@ -99,9 +100,9 @@ to the far call, 13 INT 10h teletype calls (`Hello world` plus CR/LF), the
 divisors 03E2h/07C5h/03E2h/07C5h (1200/600/1200/600 Hz) programmed into PIT
 channel 2, four speaker-gate on/off pairs at port 61h, the image sum still
 00h after POST, and a second init call returning at once with no new tones
-(the done flag at 0040:00FFh; the same holds when a second copy of a
-REPEATS=2 image is shadowed and called, which `poc_test.py` also checks via
-a manual far call). The control word 0xB6 is written to port 43h before
+(the done flag at 0040:00FFh; the same holds when a second copy of the
+image is shadowed and called, which `poc_test.py` also checks via a manual
+far call). The control word 0xB6 is written to port 43h before
 each count, the order the 8254 requires. The experiment is what found the
 subtleties above: the emulator calls with CF=0 (the CF test had to go), and
 its constant clock advance makes the latched count return to exactly the

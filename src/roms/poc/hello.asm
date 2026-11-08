@@ -15,9 +15,10 @@
 ; so the work runs on the first call whatever CF says.
 ;
 ; The work runs once per machine, not once per image copy: a 64 KB part
-; carries the 32 KB image twice (REPEATS=2) and a BIOS that scans the ROM
-; window for 55h AAh (or calls the entry twice, the old PCI BIOS CF=0
-; convention) would otherwise run every copy and beep again. The done flag
+; carries the 32 KB image once plus FFh padding (PAD=64) and a BIOS that
+; scans the ROM window for 55h AAh (or calls the entry twice, the old PCI
+; BIOS CF=0 convention) would otherwise run every copy and beep again. The
+; done flag
 ; therefore lives in the BIOS data area at 0040:00FFh (the inter-application
 ; communication area), which all shadow copies of the image share. The
 ; image itself is never written: the port 61h value is kept on the stack,
@@ -76,8 +77,8 @@ pcir:   db "PCIR"               ; 00h: signature
 ; Init entry. The work runs on the first call, whatever CF says (not every
 ; BIOS sets CF=1 for the init call). The done flag is 0040:00FFh in the BIOS
 ; data area, shared by every shadow copy of every image in the part, so a
-; second call - or a second copy of a REPEATS=2 image that a BIOS scanning
-; the ROM window also found - returns at once. All registers preserved,
+; second call - or a second copy of the image that a BIOS scanning the ROM
+; window also found - returns at once. All registers preserved,
 ; status in CF. The image is never written (ROM-6): the port 61h value is
 ; kept on the stack, not in a data byte inside the image.
 ; ---------------------------------------------------------------------------
