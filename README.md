@@ -506,15 +506,13 @@ padded with FFh, so a BIOS scanning the ROM window finds one image and runs it o
 is `POC_PAD` in KB and names the default output (`OUT` overrides): 64 KB -> `build/roms/poc/HELLO64K.ROM`,
 128 KB -> `HELLO128K.ROM`; `POC_OFFSET` (KB) places the image at that offset instead of 0. A PCI 2.1 POST
 skips an image whose vendor/device IDs do not match the card, so pass the card's real IDs with
-`VENDOR`/`DEVICE` (hex, from `lspci -nn` or the like). Flash a file no larger than the part: a bigger
-file wraps around and its last 32 KB ends up on the part (on the 3C905B-TX a 128 KB file with the
-image at offset 0 left the 32 KB EEPROM blank; `POC_PAD=128 POC_OFFSET=96` puts the image in the last
-32 KB, which survives that wraparound and a board that maps the upper block).
+`VENDOR`/`DEVICE` (hex, from `lspci -nn` or the like). The image sits in the first 32 KB; keep the
+file no larger than the part (a bigger file wraps around when flashed and overwrites the image), and
+use `POC_OFFSET` only for a board that maps the upper block of its decode window.
 Details, flashing and the emulator run: [docs/poc-rom.md](docs/poc-rom.md).
 
     make poc-rom VENDOR=0x10B7 DEVICE=0x9055   (3C905B-TX; 64 KB)
     make poc-rom POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D; 128 KB)
-    make poc-rom POC_PAD=128 POC_OFFSET=96 VENDOR=0x10B7 DEVICE=0x9055   (3C905B-TX; image in the last 32 KB)
     make poc-rom OUT=HELLO.ROM POC_PAD=32 VENDOR=0x8086 DEVICE=0x1229   (Intel 82557, 32 KB)
     python3 emu/poc_test.py [ROM image, default build/roms/poc/HELLO64K.ROM]
 

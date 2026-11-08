@@ -91,16 +91,21 @@ POC_PAD=128): the 32 KB image at offset 0, FFh after it. A board that maps
 the upper half of the part sees no ROM there - the image is meant to sit
 at the base of the mapped window.
 
-**Match the file to the part.** Flashing a file larger than the part wraps
-around and the file's LAST 32 KB block ends up on the part (measured on the
-3C905B-TX: a 128 KB file with the image only at offset 0 left the 32 KB
-EEPROM all FFh and no option ROM registered; a 128 KB file with the image
-four times worked, because its last block is the image). So flash a 32 KB
-file (`POC_PAD=32`) into a 32 KB part, or build `POC_PAD=128 POC_OFFSET=96`
-to put the single image in the last 32 KB block, which also lands at the
-top of a 128 KB window for a board that maps the upper block. Do not
-repeat the image instead: a BIOS that scans the whole ROM window runs
-every copy.
+**The image goes in the first 32 KB** of the file, and the file should not
+be larger than the part: a file larger than the part wraps around when
+flashed and its last blocks overwrite the image. A board that maps the
+upper block of its decode window instead of the base is the exception
+(the ExpertColor DSP-3364P Trio64 does this, [#78](https://github.com/perchrh/trio64-vbios-tools/issues/78));
+for such a board build `POC_OFFSET` so the image lands in the block the
+board maps. Do not repeat the image instead: a BIOS that scans the whole
+ROM window runs every copy.
+
+The 3C905B-TX (W27C010, 128 KB) first looked like a mapping problem: a
+128 KB file with the image at offset 0 printed and beeped nothing, while
+an older ROM with the image four times worked. The real cause was the
+done flag, read at 0000:00FFh (INT 3Fh's vector byte, nonzero on a real
+machine) instead of 0040:00FFh, so the init returned at once - the image
+at offset 0 works on that card (measured, November 2026).
 
 ## In the emulator
 

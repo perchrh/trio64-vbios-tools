@@ -172,8 +172,6 @@ IN ?= $(REF775)
 # a PCI 2.1 POST skips an image whose IDs do not match the card.
 #   make poc-rom VENDOR=0x10B7 DEVICE=0x9055   (3C905B-TX; default POC_PAD=64, OUT=build/roms/poc/HELLO64K.ROM)
 #   make poc-rom POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D; default OUT=build/roms/poc/HELLO128K.ROM)
-#   make poc-rom POC_PAD=128 POC_OFFSET=96 VENDOR=0x10B7 DEVICE=0x9055   (image in the last 32 KB: survives a
-#   128 KB file flashed into a 32 KB EEPROM, which wraps around and keeps the file's last 32 KB)
 POC_OUT ?= $(if $(OUT),$(OUT),build/roms/poc/HELLO$(POC_PAD)K.ROM)
 POC_PAD ?= 64
 POC_OFFSET ?= 0
