@@ -10,7 +10,7 @@ NASM ?= nasm
 NASMBIN := $(if $(findstring /,$(NASM)),$(abspath $(NASM)),$(NASM))
 NASMVER := $(shell "$(NASMBIN)" -v 2>/dev/null)
 ifeq ($(findstring version 3.02,$(NASMVER)),)
-$(warning $(NASMBIN): $(if $(NASMVER),$(NASMVER),not found); the project uses NASM 3.02 (make NASM=path/to/nasm))
+$(warning $(NASMBIN): $(if $(NASMVER),$(NASMVER),not found); the ROM targets need exactly NASM 3.02 and fail or produce a wrong image with another version: build 3.02 and pass its path, for example make poc-rom NASM=nasm/nasm-3.02/nasm)
 endif
 
 TOOLS_SRC = src/tools
@@ -166,15 +166,17 @@ IN ?= $(REF775)
 
 # PoC PCI option ROM (src/roms/poc, docs/poc-rom.md): a generic card ROM that beeps high-low
 # high-low and prints "Hello world" at POST. One 32 KB image with a valid checksum at offset 0,
-# the rest of the part padded with FFh (POC_REPEATS = the part size in 32 KB units), so a BIOS
-# scanning the ROM window finds one image; VENDOR/DEVICE (hex) go into the PCI data structure -
+# the rest of the part padded with FFh (POC_PAD = the file size in KB, POC_OFFSET = the
+# image's offset in KB), so a BIOS scanning the ROM window finds one image; VENDOR/DEVICE (hex)
+# go into the PCI data structure -
 # a PCI 2.1 POST skips an image whose IDs do not match the card.
-#   make poc-rom VENDOR=0x10B7 DEVICE=0x9055   (3C905B-TX; default OUT=build/roms/poc/HELLO64K.ROM, POC_REPEATS=2)
-#   make poc-rom OUT=HELLO.ROM POC_REPEATS=4 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
-POC_OUT ?= build/roms/poc/HELLO64K.ROM
-POC_REPEATS ?= 2
+#   make poc-rom VENDOR=0x10B7 DEVICE=0x9055   (3C905B-TX; default POC_PAD=64, OUT=build/roms/poc/HELLO64K.ROM)
+#   make poc-rom POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D; default OUT=build/roms/poc/HELLO128K.ROM)
+POC_OUT ?= $(if $(OUT),$(OUT),build/roms/poc/HELLO$(POC_PAD)K.ROM)
+POC_PAD ?= 64
+POC_OFFSET ?= 0
 poc-rom:
-	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --repeats $(POC_REPEATS) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
+	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --pad $(POC_PAD) --offset $(POC_OFFSET) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
 
 # Removes build/ (the DOS tools and the ROM images under build/roms/)
 clean:

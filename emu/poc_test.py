@@ -82,8 +82,16 @@ def main() -> None:
     assert sum(m.mem(0xC0000, 0x8000)) & 0xFF == 0, "the image sum changed (ROM-6)"
     print("image sum after POST: 00h (the image is not written, ROM-6)")
 
+    # the done flag must be at 0040:00FFh (linear 4FFh), the BIOS data area's
+    # inter-application area - not at 0000:00FFh (linear FFh), the top byte of
+    # INT 3Fh's vector in the IVT, which is nonzero on a real machine and made
+    # the init return before printing or beeping (measured on the 3C905B-TX)
+    assert m.mem(0x4FF, 1)[0] == 1, "the done flag is not set at 0040:00FFh"
+    assert m.mem(0xFF, 1)[0] == 0, "the init wrote the done flag into the IVT at 0000:00FFh"
+    print("done flag after POST: 0040:00FFh = 01h (the IVT untouched)")
+
     # a second init call (the old PCI BIOS CF=0 run-time call, or a second copy
-    # of a REPEATS=2 image that a scanning BIOS also found) must not beep again
+    # of the image that a scanning BIOS also found) must not beep again
     import struct
     m.mu.mem_write(0x7D00, b"\x9A\x03\x00" + struct.pack("<H", vec[0]) + b"\xF4")
     from unicorn.x86_const import (UC_X86_REG_CS, UC_X86_REG_SS, UC_X86_REG_SP,

@@ -1,11 +1,14 @@
-; Open PCI option ROM: a POST-time "hello world" for any conventional PCI card
+; Open PCI option ROM: a POST-time identity banner for any conventional PCI card
 ; (PCI 2.1 and later; the image follows the expansion ROM header and PCI data
 ; structure of PCI Local Bus Specification 2.1/2.3, section 6.3, and the
 ; project's option ROM rules ROM-1 to ROM-4, docs/cleanroom/spec-a-post.md).
 ; The BIOS maps the ROM, copies the image to RAM, far-calls the entry point
-; at offset 3 and the code prints "Hello world" on the INT 10h teletype and
+; at offset 3 and the code prints its identity banner on the INT 10h teletype
+; (the name and version, then the card's vendor:device IDs read from the PCI
+; data structure, like a VGA BIOS printing its signoff) and
 ; beeps high-low high-low (four tones: 1200 Hz, 600 Hz, 1200 Hz, 600 Hz) on
-; the PC speaker, then returns with CF=0.
+; the PC speaker, holds the text for about 1 s more (the string is up for
+; about 2.5 s in all) and returns with CF=0.
 ;
 ; Entry (init): AX = bus number in AH, device/function in AL; the routine
 ; preserves every register and returns by RETF, status in CF (0 = success,
@@ -15,9 +18,10 @@
 ; so the work runs on the first call whatever CF says.
 ;
 ; The work runs once per machine, not once per image copy: a 64 KB part
-; carries the 32 KB image twice (REPEATS=2) and a BIOS that scans the ROM
-; window for 55h AAh (or calls the entry twice, the old PCI BIOS CF=0
-; convention) would otherwise run every copy and beep again. The done flag
+; carries the 32 KB image once plus FFh padding (PAD=64) and a BIOS that
+; scans the ROM window for 55h AAh (or calls the entry twice, the old PCI
+; BIOS CF=0 convention) would otherwise run every copy and beep again. The
+; done flag
 ; therefore lives in the BIOS data area at 0040:00FFh (the inter-application
 ; communication area), which all shadow copies of the image share. The
 ; image itself is never written: the port 61h value is kept on the stack,
@@ -76,8 +80,8 @@ pcir:   db "PCIR"               ; 00h: signature
 ; Init entry. The work runs on the first call, whatever CF says (not every
 ; BIOS sets CF=1 for the init call). The done flag is 0040:00FFh in the BIOS
 ; data area, shared by every shadow copy of every image in the part, so a
-; second call - or a second copy of a REPEATS=2 image that a BIOS scanning
-; the ROM window also found - returns at once. All registers preserved,
+; second call - or a second copy of the image that a BIOS scanning the ROM
+; window also found - returns at once. All registers preserved,
 ; status in CF. The image is never written (ROM-6): the port 61h value is
 ; kept on the stack, not in a data byte inside the image.
 ; ---------------------------------------------------------------------------
@@ -87,24 +91,28 @@ init:   pusha
         push cs
         pop ds                  ; DS = ROM segment, strings are org 0 offsets
         push ds
-        xor ax, ax
-        mov ds, ax              ; DS = 0: the BIOS data area
-        mov al, [0x00FF]        ; the done flag (inter-application area)
+        mov ax, 0x0040
+        mov ds, ax              ; DS = 0040h: the BIOS data area
+        mov al, [0x00FF]        ; the done flag (inter-application area, 0040:00FFh)
         mov byte [0x00FF], 1
         pop ds
         or al, al
         jnz .ret                ; already ran on this machine
         in al, 0x61             ; remember the speaker gate as found
         push ax                 ; on the stack, not in the image
-        mov si, hello
-.pr:    lodsb
-        or al, al
-        jz .prd
-        mov ah, 0x0E            ; INT 10h teletype output
-        mov bx, 0x0007          ; page 0, attribute 07h
-        int 0x10
-        jmp .pr
-.prd:   mov si, tones           ; four tones: high, low, high, low
+        mov si, banner
+        call puts
+        mov si, card            ; "Card "
+        call puts
+        mov ax, [pcir+4]        ; the vendor ID the image was built for
+        call puthex
+        mov al, ':'
+        call putc
+        mov ax, [pcir+6]        ; the device ID
+        call puthex
+        mov si, crlf
+        call puts
+        mov si, tones           ; four tones: high, low, high, low
         mov bp, 4
 .beep:  lodsw                   ; AX = PIT channel 2 divisor
         call speaker_on
@@ -117,6 +125,9 @@ init:   pusha
         jnz .beep
         pop ax                  ; the speaker gate as found
         out 0x61, al
+        mov cx, 18              ; hold the text on screen: about 1 s (18 PIT
+        call wait_pit           ; wraps of 54.9 ms), after the about 1.5 s of
+                                ; beeps: readable, and no more than 1.5 s added
 .ret:   pop es
         pop ds
         popa
@@ -194,5 +205,48 @@ pit_read:
 ; ---------------------------------------------------------------------------
 ; Data
 ; ---------------------------------------------------------------------------
-hello:  db "Hello world", 0x0D, 0x0A, 0
+banner: db "PoC PCI option ROM 1.0", 0x0D, 0x0A, 0
+card:   db "Card ", 0
+crlf:   db 0x0D, 0x0A, 0
 tones:  dw 994, 1989, 994, 1989  ; 1200 Hz, 600 Hz, 1200 Hz, 600 Hz
+
+; ---------------------------------------------------------------------------
+; puts: print the 0-terminated string at DS:SI on the INT 10h teletype.
+; In: SI. Out: nothing. Kept: BX, CX, BP, DS. Clobbers: AX, SI.
+; ---------------------------------------------------------------------------
+puts:   lodsb
+        or al, al
+        jz .d
+        mov ah, 0x0E            ; teletype output
+        mov bx, 0x0007          ; page 0, attribute 07h
+        int 0x10
+        jmp puts
+.d:     ret
+
+; ---------------------------------------------------------------------------
+; putc: print AL on the INT 10h teletype.
+; In: AL. Out: nothing. Kept: BX, CX, BP, DS. Clobbers: AH.
+; ---------------------------------------------------------------------------
+putc:   mov ah, 0x0E
+        mov bx, 0x0007
+        int 0x10
+        ret
+
+; ---------------------------------------------------------------------------
+; puthex: print AX as four hex digits on the INT 10h teletype.
+; In: AX. Out: nothing. Kept: BX, BP, DS. Clobbers: AX, CX.
+; ---------------------------------------------------------------------------
+puthex: mov cx, 4
+.h:     rol ax, 4
+        push ax
+        and al, 0x0F
+        add al, '0'
+        cmp al, '9'
+        jbe .o
+        add al, 'A'-'9'-1       ; 0Ah-0Fh: 'A'-'F'
+.o:     mov ah, 0x0E
+        mov bx, 0x0007
+        int 0x10
+        pop ax
+        loop .h
+        ret

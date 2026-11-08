@@ -497,6 +497,26 @@ tools ([#72](https://github.com/perchrh/trio64-vbios-tools/issues/72), [#73](htt
 26 PASS, 0 FAIL; S3COMPAT 135 PASS, 0 FAIL, 1 WARN (AH=12h BL=20h); Windows, video playback and
 the fonts look right ([docs/764-rom.md](docs/764-rom.md), "On the card: 1.5-07-p5").
 
+## PoC option ROM
+
+`src/roms/poc/` builds a generic PCI option ROM for any conventional PCI card (PCI 2.1 and later):
+at POST it prints its identity banner ("PoC PCI option ROM 1.0" and the card's vendor:device
+IDs, read from its own PCIR) on INT 10h and beeps high-low high-low (1200/600 Hz) on the PC
+speaker, holds the text for about 1 s more and returns CF=0. One 32 KB image with a valid checksum at offset 0, the rest of the part
+padded with FFh, so a BIOS scanning the ROM window finds one image and runs it once. The file size
+is `POC_PAD` in KB and names the default output (`OUT` overrides): 64 KB -> `build/roms/poc/HELLO64K.ROM`,
+128 KB -> `HELLO128K.ROM`; `POC_OFFSET` (KB) places the image at that offset instead of 0. A PCI 2.1 POST
+skips an image whose vendor/device IDs do not match the card, so pass the card's real IDs with
+`VENDOR`/`DEVICE` (hex, from `lspci -nn` or the like). The image sits in the first 32 KB; keep the
+file no larger than the part (a bigger file wraps around when flashed and overwrites the image), and
+use `POC_OFFSET` only for a board that maps the upper block of its decode window.
+Details, flashing and the emulator run: [docs/poc-rom.md](docs/poc-rom.md).
+
+    make clean poc-rom VENDOR=0x10B7 DEVICE=0x9055 NASM=nasm/nasm-3.02/nasm   (3C905B-TX; 64 KB)
+    make poc-rom POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D; 128 KB)
+    make poc-rom OUT=HELLO.ROM POC_PAD=32 VENDOR=0x8086 DEVICE=0x1229   (Intel 82557, 32 KB)
+    python3 emu/poc_test.py [ROM image, default build/roms/poc/HELLO64K.ROM]
+
 ## MCLK build option
 
 Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>/` (the level from

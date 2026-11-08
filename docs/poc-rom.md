@@ -14,7 +14,10 @@ calls and keeps - before any real device support goes into one.
 At POST the BIOS maps the ROM, copies the image to RAM and far-calls the
 entry point at offset 3, and the code
 
-- prints `Hello world` on the INT 10h teletype output, then
+- prints its identity banner on the INT 10h teletype output - `PoC PCI option
+  ROM 1.0`, then `Card VVVV:DDDD` with the vendor:device IDs read from the
+  image's own PCI data structure (the IDs build.py wrote), like a VGA BIOS
+  printing its signoff - then
 - beeps high-low high-low on the PC speaker (1200 Hz, 600 Hz, 1200 Hz,
   600 Hz, each about 275 ms with a 110 ms gap),
 
@@ -37,15 +40,17 @@ memory resource of its own.
 ## Build
 
 ```
-make poc-rom                      -> build/roms/poc/HELLO64K.ROM (64 KB)
+make poc-rom                      -> build/roms/poc/HELLO64K.ROM (POC_PAD=64, the default)
+make poc-rom POC_PAD=128           -> build/roms/poc/HELLO128K.ROM (128 KB)
+make poc-rom POC_PAD=128 POC_OFFSET=96 -> build/roms/poc/HELLO128K.ROM (image in the last 32 KB)
 make poc-rom VENDOR=0x10B7 DEVICE=0x9055                  (3C905B-TX, 64 KB)
-make poc-rom OUT=HELLO.ROM POC_REPEATS=4 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
+make poc-rom OUT=HELLO.ROM POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
 ```
 
 The 3C905B-TX line above is the verified example: the card reports vendor
 10B7h, device 9055h (subsystem 9055h:10B7h, revision 24h, none of which the
 image uses), its 32-pin DIP socket decodes up to 128 KB, and the build writes
-the 32 KB image twice into the 64 KB part. The subsystem ID and the chip
+the 32 KB image once and pads the 64 KB part with FFh. The subsystem ID and the chip
 revision do not go into the image: a PCI 2.1 POST matches only the
 vendor/device IDs.
 
@@ -56,10 +61,11 @@ all image bytes is 0 mod 256) and writes the image once at offset 0,
 padding the rest of the part with FFh (ROM-4). A system BIOS that scans the
 whole ROM window for 55h AAh then finds exactly one image and calls its
 init once; repeating the image instead made such a BIOS run both copies
-and beep twice (measured before the change). REPEATS is the part size in
-32 KB units: 2 for a 64 KB part (the default), 4 for a 128 KB part, 1 for a
+and beep twice (measured before the change). PAD is the file size in
+KB: 64 for a 64 KB part (the default), 128 for a 128 KB part, 32 for a
 32 KB part; the usual 32-pin DIP sockets on network cards (3C905B,
-RTL8139D) decode up to 128 KB.
+RTL8139D) decode up to 128 KB. OFFSET (KB, a multiple of 32) places the
+image at that offset instead of 0, with FFh before it.
 
 **Build with the card's IDs.** A PCI 2.1 POST skips an image whose vendor
 and device IDs do not match the card's configuration space (section 6.3.2),
@@ -84,9 +90,25 @@ DOS, or the BIOS' own PCI device listing at POST.
 ## Flashing
 
 The output file goes into the EEPROM as is (64 KB, or 128 KB with
-REPEATS=4): the 32 KB image at offset 0, FFh after it. A board that maps
+POC_PAD=128): the 32 KB image at offset 0, FFh after it. A board that maps
 the upper half of the part sees no ROM there - the image is meant to sit
 at the base of the mapped window.
+
+**The image goes in the first 32 KB** of the file, and the file should not
+be larger than the part: a file larger than the part wraps around when
+flashed and its last blocks overwrite the image. A board that maps the
+upper block of its decode window instead of the base is the exception
+(the ExpertColor DSP-3364P Trio64 does this, [#78](https://github.com/perchrh/trio64-vbios-tools/issues/78));
+for such a board build `POC_OFFSET` so the image lands in the block the
+board maps. Do not repeat the image instead: a BIOS that scans the whole
+ROM window runs every copy.
+
+The 3C905B-TX (W27C010, 128 KB) first looked like a mapping problem: a
+128 KB file with the image at offset 0 printed and beeped nothing, while
+an older ROM with the image four times worked. The real cause was the
+done flag, read at 0000:00FFh (INT 3Fh's vector byte, nonzero on a real
+machine) instead of 0040:00FFh, so the init returned at once - the image
+at offset 0 works on that card (measured, November 2026).
 
 ## In the emulator
 
@@ -95,13 +117,16 @@ at the base of the mapped window.
 loads the image at C0000 and `post()` far-calls C000:0003 like a system BIOS
 (with CF clear). The PoC has no VGA code, so INT 10h stays the emulator's
 IRET stub and nothing appears on a screen; the run shows the ROM returning
-to the far call, 13 INT 10h teletype calls (`Hello world` plus CR/LF), the
+to the far call, 39 INT 10h teletype calls (the banner, `Card ` and the
+vendor:device IDs, plus CR/LF), a hold
+of about 1 s (18 PIT wraps) after the about 1.5 s of beeps, so the text
+stays up for about 2.5 s in all, the
 divisors 03E2h/07C5h/03E2h/07C5h (1200/600/1200/600 Hz) programmed into PIT
 channel 2, four speaker-gate on/off pairs at port 61h, the image sum still
 00h after POST, and a second init call returning at once with no new tones
-(the done flag at 0040:00FFh; the same holds when a second copy of a
-REPEATS=2 image is shadowed and called, which `poc_test.py` also checks via
-a manual far call). The control word 0xB6 is written to port 43h before
+(the done flag at 0040:00FFh; the same holds when a second copy of the
+image is shadowed and called, which `poc_test.py` also checks via a manual
+far call). The control word 0xB6 is written to port 43h before
 each count, the order the 8254 requires. The experiment is what found the
 subtleties above: the emulator calls with CF=0 (the CF test had to go), and
 its constant clock advance makes the latched count return to exactly the

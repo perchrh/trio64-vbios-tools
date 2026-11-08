@@ -8,15 +8,20 @@ PCI data structure, and writes the 32 KB image once at offset 0, padding the
 rest of the part with FFh (ROM-4). A system BIOS that scans the whole ROM
 window for 55h AAh then finds exactly one image and calls its init once -
 repeating the image would make such a BIOS run both copies and beep twice.
-64 KB (--repeats 2, the default) or 128 KB (--repeats 4) parts are the usual
-sockets; --repeats 1 is a 32 KB part with no padding.
+64 KB (--pad 64, the default) or 128 KB (--pad 128) parts are the usual
+sockets; --pad 32 is a 32 KB part with no padding. The image goes in the
+first 32 KB; --offset KB places it at another 32 KB boundary instead, with
+FFh before it, for a board that maps the upper block of its decode window
+(the default file is then still --pad KB large, so keep it no larger than
+the part: a file larger than the part wraps around when flashed and its
+last blocks overwrite the image).
 
 A PCI 2.1 POST skips an image whose vendor/device IDs do not match the
 card (PCI 2.3 section 6.3.2), so pass the card's real IDs.
 
 Usage: build.py --nasm PATH -o OUT [--vendor 0x8086] [--device 0x1229]
-                [--repeats 2]
-Out: a 32 KB x REPEATS file: the image, then FFh padding, one valid checksum.
+                [--pad 64] [--offset 0]
+Out: a --pad KB file: the image, then FFh padding, one valid checksum.
 """
 from __future__ import annotations
 from typing import NoReturn
@@ -29,7 +34,7 @@ import tempfile
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hello.asm")
 IMAGE_SIZE = 32 * 1024
-REPEATS = 2
+PAD_KB = 64
 
 
 def die(msg: str) -> NoReturn:
@@ -42,12 +47,22 @@ def main() -> None:
     ap.add_argument("-o", "--out", required=True, help="output file (64 KB)")
     ap.add_argument("--vendor", help="vendor ID to write (hex, e.g. 0x8086)")
     ap.add_argument("--device", help="device ID to write (hex, e.g. 0x1229)")
-    ap.add_argument("--repeats", type=int, default=REPEATS,
-                    help="size of the part in 32 KB units: 2 for a 64 KB EEPROM"
-                         " (default), 4 for a 128 KB EEPROM, 1 for a 32 KB part")
+    ap.add_argument("--pad", type=int, default=PAD_KB,
+                    help="pad the image with FFh to this file size in KB: 64 for a"
+                         " 64 KB EEPROM (the default), 128 for a 128 KB EEPROM,"
+                         " 32 for a 32 KB part with no padding")
+    ap.add_argument("--offset", type=int, default=0,
+                    help="place the image at this offset in KB (a multiple of 32),"
+                         " FFh before it; e.g. --pad 128 --offset 96 puts it in the"
+                         " last 32 KB, which survives flashing a 128 KB file into a"
+                         " 32 KB EEPROM (wraparound)")
     args = ap.parse_args()
-    if args.repeats < 1 or (args.repeats & (args.repeats - 1)):
-        die("--repeats must be a power of two (1, 2, 4)")
+    if args.pad < IMAGE_SIZE // 1024 or args.pad % (IMAGE_SIZE // 1024):
+        die("--pad must be a multiple of %d KB (32, 64, 128, ...)"
+            % (IMAGE_SIZE // 1024))
+    if args.offset % (IMAGE_SIZE // 1024) or not 0 <= args.offset <= args.pad - IMAGE_SIZE // 1024:
+        die("--offset must be a multiple of %d KB between 0 and --pad minus %d KB"
+            % (IMAGE_SIZE // 1024, IMAGE_SIZE // 1024))
 
     with tempfile.TemporaryDirectory() as td:
         binfile = os.path.join(td, "hello.bin")
@@ -75,7 +90,8 @@ def main() -> None:
     if (sum(rom) & 0xFF) != 0:
         die("checksum patch failed")
 
-    out = bytes(rom) + b"\xFF" * (IMAGE_SIZE * args.repeats - IMAGE_SIZE)
+    out = (b"\xFF" * (args.offset * 1024) + bytes(rom)
+           + b"\xFF" * (args.pad * 1024 - args.offset * 1024 - IMAGE_SIZE))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "wb") as f:
         n = f.write(out)
@@ -86,8 +102,9 @@ def main() -> None:
         print("build.py: warning: vendor/device IDs are 0000h/0000h; a PCI 2.1\n"
               "POST skips an image whose IDs do not match the card (section\n"
               "6.3.2): build with --vendor and --device", file=sys.stderr)
-    print("build.py: %s, %d KB, one %d KB image plus FFh padding, checksum %02Xh"
-          % (args.out, len(out) // 1024, IMAGE_SIZE // 1024, rom[6]))
+    print("build.py: %s, %d KB, one %d KB image at %02Xh0000h plus FFh padding,"
+          " checksum %02Xh" % (args.out, len(out) // 1024, IMAGE_SIZE // 1024,
+                              args.offset, rom[6]))
 
 
 def pcir(rom: bytearray) -> int:
