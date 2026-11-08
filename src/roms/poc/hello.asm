@@ -88,9 +88,9 @@ init:   pusha
         push cs
         pop ds                  ; DS = ROM segment, strings are org 0 offsets
         push ds
-        xor ax, ax
-        mov ds, ax              ; DS = 0: the BIOS data area
-        mov al, [0x00FF]        ; the done flag (inter-application area)
+        mov ax, 0x0040
+        mov ds, ax              ; DS = 0040h: the BIOS data area
+        mov al, [0x00FF]        ; the done flag (inter-application area, 0040:00FFh)
         mov byte [0x00FF], 1
         pop ds
         or al, al
