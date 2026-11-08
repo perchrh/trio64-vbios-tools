@@ -511,7 +511,7 @@ file no larger than the part (a bigger file wraps around when flashed and overwr
 use `POC_OFFSET` only for a board that maps the upper block of its decode window.
 Details, flashing and the emulator run: [docs/poc-rom.md](docs/poc-rom.md).
 
-    make poc-rom VENDOR=0x10B7 DEVICE=0x9055   (3C905B-TX; 64 KB)
+    make clean poc-rom VENDOR=0x10B7 DEVICE=0x9055 NASM=nasm/nasm-3.02/nasm   (3C905B-TX; 64 KB)
     make poc-rom POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D; 128 KB)
     make poc-rom OUT=HELLO.ROM POC_PAD=32 VENDOR=0x8086 DEVICE=0x1229   (Intel 82557, 32 KB)
     python3 emu/poc_test.py [ROM image, default build/roms/poc/HELLO64K.ROM]
