@@ -180,7 +180,9 @@ of the review of 2 November and are in its record.
   ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md), ID-INF); POST-6 no longer says how a
   driver tells the two Trio64 parts apart, and the T64-ID-2 and AV-ID-1 notes record the decision.
   Owner decision M-SENSE: milestones 1-4 do not support monochrome output and POST performs no monitor
-  sense; POST-42 records it, and the sense becomes milestone 5 (FreeDOS moves to milestone 6).
+  sense; POST-42 records it, and the sense becomes milestone 5 (FreeDOS moves to milestone 6). Ralf
+  Brown's Interrupt List, release 61, is in the repository (`standards/rbil-all/`, added on `main`),
+  and the "May read" list names it, so the RBIL citations of the rules can be checked in-repo.
 
 ### The searches, run by the author as a pre-check (counts of lines, not findings)
 
@@ -218,6 +220,7 @@ say so in the record, and the review is done again by another session.
 | [`docs/764-rom.md`](../764-rom.md), [`docs/765-rom.md`](../765-rom.md), [`docs/775-rom.md`](../775-rom.md), except the section "Cross-check with riplin's annotated disassembly" of [`docs/764-rom.md`](../764-rom.md) | measurements of the reference ROMs and the cards. One sentence of [`docs/764-rom.md`](../764-rom.md) outside that section, on memory sizing, names a routine and its offset from riplin's disassembly; reading it is not a breach, but it is no source for a finding |
 | The emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py) and [`emu/similarity.py`](../../emu/similarity.py) (step 6) to read and run; [`emu/tests.py`](../../emu/tests.py) to run, not to read | to run a reference ROM and observe it; the test file's comments describe our patches from the inside (see below) |
 | The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
+| Ralf Brown's Interrupt List, release 61, [`standards/rbil-all/`](../../standards/rbil-all/) (unmodified, with its notice in `INTERRUP.1ST`); the BIOS data area entries are in `MEMORY.LST` (tables M0024-M0027) | the first guide for INT 10h and the BIOS data area (readings.md row 9): the reviewer can check the RBIL citations of [`docs/bios-rules.md`](../bios-rules.md) (BDA-1, BDA-14 to BDA-17, B00-12 and others) against it |
 | [`datasheets/dram/V53C16256H-1.PDF`](../../datasheets/dram/V53C16256H-1.PDF) and [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md) | POST-41 and MODE-130 DRAM premises (independent review A-3 / B-1) |
 | [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md), and VESA DMT from its public copy [VESA-DMT-1.13.pdf](https://glenwing.github.io/docs/VESA-DMT-1.13.pdf) (a later revision, named in the repository-root README, "VESA standards") | part B 101h timing and border (MQ-16). The PDF was removed from the repository (9963092); the extract links to that public copy |
 | [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | part A ROM header / PCI data structure / INIT (ROM-1..6, POST-1) |

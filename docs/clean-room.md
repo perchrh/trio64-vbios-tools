@@ -73,8 +73,14 @@ ROM header, the start-up call and the VGA palette snoop), and DMT 1.0 Rev. 10 as
 the pages the leak review needs are under
 [`docs/cleanroom/primary-extracts/`](cleanroom/primary-extracts/).
 
-Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, Ralf Brown's
-Interrupt List, IBM's "Personal System/2 and Personal Computer BIOS Interface Technical Reference"
+Ralf Brown's Interrupt List (release 61) is in the repository since 8 November 2026
+([`standards/rbil-all/`](../standards/rbil-all/)): its notice permits use and redistribution in any way,
+including format conversion, with Ralf Brown's name and addresses, the contributor credits and the
+release information preserved, and waives the credit requirement for excerpts under 2000 lines. Not
+public domain, but its terms allow posting; the notice is in [`INTERRUP.1ST`](../standards/rbil-all/INTERRUP.1ST).
+
+Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, IBM's
+"Personal System/2 and Personal Computer BIOS Interface Technical Reference"
 (April 1987: the INT 10h functions at first hand), the PCI BIOS Specification 2.1, GTF 1.1 and
 Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised
 in VBE 2.0 and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are

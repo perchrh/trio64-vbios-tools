@@ -52,5 +52,8 @@ attached; that case is a project decision for milestone 5.
   Control States" (page 3-9) without bit definitions, and 0040:0089h as "Reserved".
   The bit detail the project uses comes from RBIL and VGADOC (bios-rules BDA-14,
   BDA-16), which rank below this book but are the only public sources stating the
-  bits.
+  bits. RBIL is in the repository since 8 November 2026:
+  [`standards/rbil-all/MEMORY.LST`](../../../standards/rbil-all/MEMORY.LST), tables
+  M0024 (0040:0087h, bit 1 "mono monitor"), M0025/M0026 (0040:0088h) and M0027
+  (0040:0089h, bit 2 "mono display", bit 1 "gray scale summing enabled").
 - The behaviour with no display attached: nothing in the book; a project decision.
