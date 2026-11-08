@@ -14,7 +14,10 @@ calls and keeps - before any real device support goes into one.
 At POST the BIOS maps the ROM, copies the image to RAM and far-calls the
 entry point at offset 3, and the code
 
-- prints `Hello world` on the INT 10h teletype output, then
+- prints its identity banner on the INT 10h teletype output - `PoC PCI option
+  ROM 1.0`, then `Card VVVV:DDDD` with the vendor:device IDs read from the
+  image's own PCI data structure (the IDs build.py wrote), like a VGA BIOS
+  printing its signoff - then
 - beeps high-low high-low on the PC speaker (1200 Hz, 600 Hz, 1200 Hz,
   600 Hz, each about 275 ms with a 110 ms gap),
 
@@ -114,7 +117,8 @@ at offset 0 works on that card (measured, November 2026).
 loads the image at C0000 and `post()` far-calls C000:0003 like a system BIOS
 (with CF clear). The PoC has no VGA code, so INT 10h stays the emulator's
 IRET stub and nothing appears on a screen; the run shows the ROM returning
-to the far call, 13 INT 10h teletype calls (`Hello world` plus CR/LF), a hold
+to the far call, 39 INT 10h teletype calls (the banner, `Card ` and the
+vendor:device IDs, plus CR/LF), a hold
 of about 1 s (18 PIT wraps) after the about 1.5 s of beeps, so the text
 stays up for about 2.5 s in all, the
 divisors 03E2h/07C5h/03E2h/07C5h (1200/600/1200/600 Hz) programmed into PIT

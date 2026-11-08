@@ -1,9 +1,11 @@
-; Open PCI option ROM: a POST-time "hello world" for any conventional PCI card
+; Open PCI option ROM: a POST-time identity banner for any conventional PCI card
 ; (PCI 2.1 and later; the image follows the expansion ROM header and PCI data
 ; structure of PCI Local Bus Specification 2.1/2.3, section 6.3, and the
 ; project's option ROM rules ROM-1 to ROM-4, docs/cleanroom/spec-a-post.md).
 ; The BIOS maps the ROM, copies the image to RAM, far-calls the entry point
-; at offset 3 and the code prints "Hello world" on the INT 10h teletype and
+; at offset 3 and the code prints its identity banner on the INT 10h teletype
+; (the name and version, then the card's vendor:device IDs read from the PCI
+; data structure, like a VGA BIOS printing its signoff) and
 ; beeps high-low high-low (four tones: 1200 Hz, 600 Hz, 1200 Hz, 600 Hz) on
 ; the PC speaker, holds the text for about 1 s more (the string is up for
 ; about 2.5 s in all) and returns with CF=0.
@@ -98,15 +100,19 @@ init:   pusha
         jnz .ret                ; already ran on this machine
         in al, 0x61             ; remember the speaker gate as found
         push ax                 ; on the stack, not in the image
-        mov si, hello
-.pr:    lodsb
-        or al, al
-        jz .prd
-        mov ah, 0x0E            ; INT 10h teletype output
-        mov bx, 0x0007          ; page 0, attribute 07h
-        int 0x10
-        jmp .pr
-.prd:   mov si, tones           ; four tones: high, low, high, low
+        mov si, banner
+        call puts
+        mov si, card            ; "Card "
+        call puts
+        mov ax, [pcir+4]        ; the vendor ID the image was built for
+        call puthex
+        mov al, ':'
+        call putc
+        mov ax, [pcir+6]        ; the device ID
+        call puthex
+        mov si, crlf
+        call puts
+        mov si, tones           ; four tones: high, low, high, low
         mov bp, 4
 .beep:  lodsw                   ; AX = PIT channel 2 divisor
         call speaker_on
@@ -199,5 +205,48 @@ pit_read:
 ; ---------------------------------------------------------------------------
 ; Data
 ; ---------------------------------------------------------------------------
-hello:  db "Hello world", 0x0D, 0x0A, 0
+banner: db "PoC PCI option ROM 1.0", 0x0D, 0x0A, 0
+card:   db "Card ", 0
+crlf:   db 0x0D, 0x0A, 0
 tones:  dw 994, 1989, 994, 1989  ; 1200 Hz, 600 Hz, 1200 Hz, 600 Hz
+
+; ---------------------------------------------------------------------------
+; puts: print the 0-terminated string at DS:SI on the INT 10h teletype.
+; In: SI. Out: nothing. Kept: BX, CX, BP, DS. Clobbers: AX, SI.
+; ---------------------------------------------------------------------------
+puts:   lodsb
+        or al, al
+        jz .d
+        mov ah, 0x0E            ; teletype output
+        mov bx, 0x0007          ; page 0, attribute 07h
+        int 0x10
+        jmp puts
+.d:     ret
+
+; ---------------------------------------------------------------------------
+; putc: print AL on the INT 10h teletype.
+; In: AL. Out: nothing. Kept: BX, CX, BP, DS. Clobbers: AH.
+; ---------------------------------------------------------------------------
+putc:   mov ah, 0x0E
+        mov bx, 0x0007
+        int 0x10
+        ret
+
+; ---------------------------------------------------------------------------
+; puthex: print AX as four hex digits on the INT 10h teletype.
+; In: AX. Out: nothing. Kept: BX, BP, DS. Clobbers: AX, CX.
+; ---------------------------------------------------------------------------
+puthex: mov cx, 4
+.h:     rol ax, 4
+        push ax
+        and al, 0x0F
+        add al, '0'
+        cmp al, '9'
+        jbe .o
+        add al, 'A'-'9'-1       ; 0Ah-0Fh: 'A'-'F'
+.o:     mov ah, 0x0E
+        mov bx, 0x0007
+        int 0x10
+        pop ax
+        loop .h
+        ret
