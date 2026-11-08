@@ -82,7 +82,10 @@ public domain, but its terms allow posting; the notice is in [`INTERRUP.1ST`](..
 Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, IBM's
 "Personal System/2 and Personal Computer BIOS Interface Technical Reference"
 (April 1987: the INT 10h functions at first hand), the PCI BIOS Specification 2.1, GTF 1.1 and
-Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised
+Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards" (a copyrighted book, not posted
+here; a readable copy is at the Internet Archive:
+[archive.org/details/programmersguidetotheegavgaandsupervgacardsbyrichardf.ferraro19943rdedition](https://archive.org/details/programmersguidetotheegavgaandsupervgacardsbyrichardf.ferraro19943rdedition)).
+VBE/PM 1.0 (4F10h) is summarised
 in VBE 2.0 and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are
 restated in VBE 1.2 and 2.0, so none of them is needed on its own. E-DDC 1.2 (2007) describes DDC2B;
 it drops DDC1, for which DDC 1.0 or 2.0 is still missing; hardwarebook.info's "VGA (VESA DDC)" page
