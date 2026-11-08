@@ -9,11 +9,12 @@ rest of the part with FFh (ROM-4). A system BIOS that scans the whole ROM
 window for 55h AAh then finds exactly one image and calls its init once -
 repeating the image would make such a BIOS run both copies and beep twice.
 64 KB (--pad 64, the default) or 128 KB (--pad 128) parts are the usual
-sockets; --pad 32 is a 32 KB part with no padding. --offset KB places the
-image at that offset instead of 0, with FFh before it: a 128 KB file flashed
-into a 32 KB EEPROM wraps around and leaves the file's LAST 32 KB on the
-part, so build --pad 128 --offset 96 for that (the image also then sits at
-the top of a 128 KB window, for a board that maps the upper block).
+sockets; --pad 32 is a 32 KB part with no padding. The image goes in the
+first 32 KB; --offset KB places it at another 32 KB boundary instead, with
+FFh before it, for a board that maps the upper block of its decode window
+(the default file is then still --pad KB large, so keep it no larger than
+the part: a file larger than the part wraps around when flashed and its
+last blocks overwrite the image).
 
 A PCI 2.1 POST skips an image whose vendor/device IDs do not match the
 card (PCI 2.3 section 6.3.2), so pass the card's real IDs.
