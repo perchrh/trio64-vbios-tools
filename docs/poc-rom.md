@@ -39,6 +39,7 @@ memory resource of its own.
 ```
 make poc-rom                      -> build/roms/poc/HELLO64K.ROM (POC_PAD=64, the default)
 make poc-rom POC_PAD=128           -> build/roms/poc/HELLO128K.ROM (128 KB)
+make poc-rom POC_PAD=128 POC_OFFSET=96 -> build/roms/poc/HELLO128K.ROM (image in the last 32 KB)
 make poc-rom VENDOR=0x10B7 DEVICE=0x9055                  (3C905B-TX, 64 KB)
 make poc-rom OUT=HELLO.ROM POC_PAD=128 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
 ```
@@ -60,7 +61,8 @@ init once; repeating the image instead made such a BIOS run both copies
 and beep twice (measured before the change). PAD is the file size in
 KB: 64 for a 64 KB part (the default), 128 for a 128 KB part, 32 for a
 32 KB part; the usual 32-pin DIP sockets on network cards (3C905B,
-RTL8139D) decode up to 128 KB.
+RTL8139D) decode up to 128 KB. OFFSET (KB, a multiple of 32) places the
+image at that offset instead of 0, with FFh before it.
 
 **Build with the card's IDs.** A PCI 2.1 POST skips an image whose vendor
 and device IDs do not match the card's configuration space (section 6.3.2),
@@ -88,6 +90,17 @@ The output file goes into the EEPROM as is (64 KB, or 128 KB with
 POC_PAD=128): the 32 KB image at offset 0, FFh after it. A board that maps
 the upper half of the part sees no ROM there - the image is meant to sit
 at the base of the mapped window.
+
+**Match the file to the part.** Flashing a file larger than the part wraps
+around and the file's LAST 32 KB block ends up on the part (measured on the
+3C905B-TX: a 128 KB file with the image only at offset 0 left the 32 KB
+EEPROM all FFh and no option ROM registered; a 128 KB file with the image
+four times worked, because its last block is the image). So flash a 32 KB
+file (`POC_PAD=32`) into a 32 KB part, or build `POC_PAD=128 POC_OFFSET=96`
+to put the single image in the last 32 KB block, which also lands at the
+top of a 128 KB window for a board that maps the upper block. Do not
+repeat the image instead: a BIOS that scans the whole ROM window runs
+every copy.
 
 ## In the emulator
 
