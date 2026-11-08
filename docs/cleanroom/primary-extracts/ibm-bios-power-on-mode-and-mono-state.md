@@ -16,7 +16,9 @@ Verbatim, for Personal System/2 products except Model 30:
 
 So the power-on mode is chosen by the type of display attached: mode 03h on a colour
 display, mode 07h on a monochrome display. The book states nothing for no display
-attached; that case is a project decision for milestone 5.
+attached; that case was a project decision for milestone 5 and is now decided (8 November
+2026, decision M5-NODISP in [`../decisions-milestones-1-4.md`](../decisions-milestones-1-4.md)):
+no monitor detected means behave exactly as on a colour monitor.
 
 ## The monochrome state is software-visible
 
@@ -57,4 +59,5 @@ attached; that case is a project decision for milestone 5.
   [`standards/rbil-all/MEMORY.LST`](../../../standards/rbil-all/MEMORY.LST), tables
   M0024 (0040:0087h, bit 1 "mono monitor"), M0025/M0026 (0040:0088h) and M0027
   (0040:0089h, bit 2 "mono display", bit 1 "gray scale summing enabled").
-- The behaviour with no display attached: nothing in the book; a project decision.
+- The behaviour with no display attached: nothing in the book; decided as M5-NODISP (8
+  November 2026): behave exactly as on a colour monitor.
