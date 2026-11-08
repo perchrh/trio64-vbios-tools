@@ -69,8 +69,17 @@
 ;                        (the table has pairs 46 kHz apart; finer than 0.1 MHz is not needed)
 ;   MCLK /T /I 52.5      start at 52.5 MHz (a pair at or below the request, not below the lowest)
 ;   MCLK /S 70 /Y        /Y: yes to every question, no key is read (with /S or /T)
+;   MCLK /S 59.96 /A 1   /A 0|1: also set or clear SRA bit 7 (the 2-MCLK write cycles, spec-a Q5 of
+;                        #200) for the run. With /S the bit is left set for what follows (the
+;                        S3COMPAT VRAM test at that clock); with /T finish puts it back as found
+;   MCLK /T /D 5         /D ms: wait this long after each PLL load before the memory is touched
+;                        (the PLL settling time, spec-a Q6 of #200), timed with PIT channel 2,
+;                        instead of the default two BIOS ticks. 0 = no wait at all; at most 3000.
+;                        A sweep per delay (0, 1, 2, 5, ...) shows how long the memory takes to
+;                        become reliable
 ;   MCLK /H              the help
-;   /P and /I go only with /T, /Y only with /S or /T, /S not with /T: otherwise "bad argument".
+;   /P and /I go only with /T, /Y, /A and /D only with /S or /T, /S not with /T: otherwise "bad
+;   argument".
 ;   Esc during a test pass stops the sweep and puts the clock found at the start back.
 ;   Exit codes: report 0 (1 when no chip is found). /S 0 when the clock was set, 1 otherwise. /T 0
 ;   when at least one step passed and the sweep was not stopped, 1 otherwise (a later step that
@@ -115,7 +124,17 @@ start:  cld
         call vbe_size
         call choose_book
         call header
-        cmp byte [doset],1
+        cmp byte [haved],1              ; /D: the settle delay, logged once
+        jne .h1
+        call lbegin
+        mov si,s_dly
+        call lstr
+        movzx eax,word [dlyms]
+        call pdec
+        mov si,s_dly2
+        call lstr
+        call lend
+.h1:    cmp byte [doset],1
         je setclk
         cmp byte [dotest],1
         je .test
@@ -131,6 +150,7 @@ start:  cld
         call video_on
         jc nomode
         call blank
+        call sra_set                    ; /A: SRA bit 7 for the sweep, restored by finish
         call sweep
         jmp finish
 
@@ -182,13 +202,39 @@ parse:  mov si,0x81
         mov byte [dotest],1
         jmp .op
 .yy:    cmp al,'y'
-        jne .bad
+        jne .aa
         mov byte [yesall],1
         jmp .op
+.aa:    cmp al,'a'
+        jne .dd
+        call skipsp
+        lodsb
+        cmp al,'0'
+        je .a0
+        cmp al,'1'
+        je .a1
+        jmp .bad
+.a0:    mov byte [sraval],0
+        jmp .a2
+.a1:    mov byte [sraval],1
+.a2:    mov byte [havea],1
+        jmp .op
+.dd:    cmp al,'d'
+        jne .ii2
+        call skipsp
+        call parsems
+        jc .bad
+        mov byte [haved],1
+        jmp .op
+.ii2:   jmp .bad
 .chk:   mov al,[doset]                  ; the end of the tail: check the combination
         or al,[dotest]
         jnz .c2
         cmp byte [yesall],1             ; /Y without /S or /T: nothing to answer
+        je .bad
+        cmp byte [havea],1             ; /A or /D without /S or /T
+        je .bad
+        cmp byte [haved],1
         je .bad
 .c2:    cmp byte [dotest],1
         je .t
@@ -264,6 +310,34 @@ parsemhz:
 .bad:   stc
         ret
 
+; "5" or "250" (1-4 digits) -> [dlyms] ms, at most 3000. CF on a bad token.
+parsems:
+        xor ebx,ebx
+        xor cx,cx
+.n:     lodsb
+        cmp al,'0'
+        jb .e
+        cmp al,'9'
+        ja .e
+        imul ebx,ebx,10
+        sub al,'0'
+        movzx eax,al
+        add ebx,eax
+        inc cx
+        cmp ebx,30000                   ; a runaway tail, caught below at 3000
+        ja .bad
+        jmp .n
+.e:     dec si                          ; the byte that ended the number
+        or cl,cl                        ; /D 0 is allowed: no wait at all
+        jz .bad
+        cmp ebx,3000
+        ja .bad
+        mov [dlyms],bx
+        clc
+        ret
+.bad:   stc
+        ret
+
 ; ---------------------------------------------------------------------------
 ; identity, memory, clocks. Nothing here changes the PLL.
 
@@ -284,6 +358,9 @@ read_clocks:
         call rdsr
         mov [sr08],al
         call unlocksr
+        mov al,0x0A
+        call rdsr
+        mov [sra0],al
         mov al,0x10
         call rdsr
         mov [post10],al
@@ -777,7 +854,8 @@ setclk: cmp byte [nobook],1
         jc declined
         mov si,s_yes2
         call yesline
-.go:    mov bl,[cur10]
+.go:    call sra_set                    ; /A: SRA bit 7 before the PLL load, left set
+        mov bl,[cur10]
         mov bh,[cur11]
         call loadp
         call settle
@@ -1035,7 +1113,15 @@ rdsr:   mov dx,0x3C4
 
 ; Two BIOS ticks. Reading 0040:006C is enough: on a machine the byte changes every tick,
 ; and the emulator advances its tick when that byte is read.
-settle: push ax
+; /D: [dlyms] ms timed with PIT channel 2 in mode 0 instead (the PLL settling time, spec-a Q6 of
+; #200); /D 0 waits not at all.
+settle: cmp byte [haved],1
+        jne .old
+        cmp word [dlyms],0
+        jne .d
+        ret
+.d:     jmp dly_ms
+.old:   push ax
         push es
         mov ax,0x40
         mov es,ax
@@ -1049,6 +1135,84 @@ settle: push ax
         je .w
         mov al,[es:0x6C]
         ret
+
+; [dlyms] ms, timed with PIT channel 2 in mode 0 (gate on, the speaker line off): OUT2 (port 61h
+; bit 5) goes high when the count ran out. Keeps AX and DX.
+dly_ms: push ax
+        push dx
+        in al,0x61
+        mov ah,al
+        or al,1                        ; the gate on
+        and al,0xFD                    ; the speaker line off
+        out 0x61,al
+        mov al,0xB0                    ; ch2, mode 0, lo/hi
+        out 0x43,al
+        mov ax,[dlyms]
+        movzx eax,ax
+        imul eax,eax,1193              ; 1.193182 MHz * ms
+        out 0x42,al
+        mov al,ah
+        out 0x42,al
+.w:     in al,0x61
+        test al,0x20                   ; OUT2: the count ran out
+        jz .w
+        mov al,ah
+        out 0x61,al                    ; port 61h back as found
+        pop dx
+        pop ax
+        ret
+
+; /A: SRA bit 7 (the 2-MCLK write cycles, spec-a Q5 of #200) as asked, and a log line. With /S the
+; bit stays set for what follows (the S3COMPAT VRAM test at that clock); with /T finish puts it back
+; (sra_restore). SR08 is unlocked here and relock/finish restore it.
+sra_set:
+        cmp byte [havea],1
+        jne .x
+        push ax
+        push dx
+        call unlocksr
+        mov dx,0x3C4
+        mov al,0x0A
+        out dx,al
+        inc dx
+        in al,dx
+        and al,0x7F
+        cmp byte [sraval],0
+        je .w
+        or al,0x80
+.w:     out dx,al
+        pop dx
+        pop ax
+        call lbegin
+        mov si,s_sra
+        call lstr
+        mov al,[sraval]
+        add al,'0'
+        call lc
+        mov si,s_sral
+        cmp byte [dotest],1
+        jne .p
+        mov si,s_srar
+.p:     call lstr
+        call lend
+.x:     ret
+
+; SRA bit 7 back as found (the /T sweep only; /S leaves it set).
+sra_restore:
+        cmp byte [havea],1
+        jne .x
+        push ax
+        push dx
+        call unlocksr
+        mov dx,0x3C4
+        mov al,0x0A
+        out dx,al
+        inc dx
+        mov al,[sra0]
+        out dx,al
+        pop dx
+        pop ax
+.x:     ret
 
 ; BL = SR10, BH = SR11 -> EAX kHz. f = (14318 * (M+2) / (N+2)) >> R.
 pll_khz:
@@ -1461,6 +1625,7 @@ finish: mov bl,[post10]
         mov bh,[post11]
         call loadp
         call settle
+        call sra_restore                ; /A: SRA bit 7 back as found
         cmp byte [vid],1
         jne .idx
         mov ax,0x0003
@@ -1829,6 +1994,10 @@ dohelp  db 0
 badarg  db 0
 precise db 0
 havei   db 0
+havea   db 0                    ; /A given
+sraval  db 0                    ; /A: the SRA bit 7 value asked for
+haved   db 0                    ; /D given
+dlyms   dw 0                    ; /D: the settle delay in ms
 doset   db 0
 dotest  db 0
 yesall  db 0                    ; /Y: answer the question with Y, read no key
@@ -1841,6 +2010,7 @@ phase   db 0
 roundn  db 0
 sridx   db 0
 sr08    db 0
+sra0    db 0                    ; SR0A as found
 post10  db 0
 post11  db 0
 post15  db 0
@@ -1923,6 +2093,11 @@ s_setreq db ' (requested ',0
 s_setsr db ', SR10=',0
 s_setok db ' read back): OK',0
 s_set2  db 'The BIOS sets its own clock again at the next boot.',0
+s_sra   db 'SRA bit 7 (2-MCLK writes) set to ',0
+s_sral  db ', left set',0
+s_srar  db ', restored at the end',0
+s_dly   db 'Settle delay after each PLL load (PIT ch2): ',0
+s_dly2  db ' ms (/D)',0
 s_err   db 'ERROR: ',0
 s_unch  db '; the clock was not changed',0
 s_setbad db 'ERROR: memory clock not set to ',0
@@ -1981,6 +2156,10 @@ s_use   db 'MCLK ',VERSION,' - show, set or test the memory clock (MCLK)',13,10
         db '  MCLK /T /P      test in steps of 0.1 MHz or more',13,10
         db '  MCLK /T /I 55   start the test at 55 MHz',13,10
         db '  MCLK /S 70 /Y   /Y answers yes to every question (no key is read)',13,10
+        db '  MCLK /S 59.96 /A 1   also set SRA bit 7 (2-MCLK writes) and leave it set;',13,10
+        db '                  /A 0 clears it; with /T it is restored at the end',13,10
+        db '  MCLK /T /D 5    wait 5 ms after each PLL load before testing (the settling',13,10
+        db '                  time; 0 = none, at most 3000), instead of the two-tick wait',13,10
         db '  MCLK /H         this help',13,10
         db 13,10
         db '/S asks for Y above the datasheet maximum, /T always. The BIOS sets its own',13,10

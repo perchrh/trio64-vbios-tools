@@ -2647,7 +2647,8 @@ def t_mclk(c):
     helptext = bytes(h.stdout)
     check(all(sw in helptext for sw in (b'/S', b'/T', b'/P', b'/I')), 'MCLK /H text %r' % helptext[:300])
 
-    for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X', '/Y'):
+    for tail in ('/I', '/P', '/I 55', '/S', '/S 55 /T', '/T /S 55', '/X', '/Y',
+                 '/A 1', '/D 5', '/A 2', '/D 9999', '/S 55 /A'):
         bad = c.machine().run_com(com, tail, name='MCLK.COM', max_insn=1_000_000)
         check(bad.exit == ('exit', 1) and b'bad argument' in bytes(bad.stdout),
               'bad %r %s %r' % (tail, bad.exit, bytes(bad.stdout)[:200]))
@@ -2706,6 +2707,25 @@ def t_mclk(c):
         check(clk(ms) == pair[k], 'a mode set changed the /S clock to %s' % (clk(ms),))
     again = lines_of(ms.run_com(com, '', name='MCLK.COM', max_insn=20_000_000))
     check(('Memory clock: %d.%03d MHz' % (k // 1000, k % 1000)).encode() in again, 'report after /S %r' % again)
+
+    # /A 0|1: SRA bit 7 (the 2-MCLK write cycles, spec-a Q5 of #200) set or cleared with the clock and
+    # left set for what follows; /D: the settle delay line (spec-a Q6).
+    ma1 = c.machine()
+    ra1 = ma1.run_com(com, '/S 57.5 /A 1', name='MCLK.COM', max_insn=20_000_000)
+    check(ra1.exit == ('exit', 0) and b'SRA bit 7 (2-MCLK writes) set to 1, left set' in bytes(ra1.stdout),
+          'MCLK /S /A 1 %s %r' % (ra1.exit, lines_of(ra1)))
+    check(ma1.r['seq'].get(0x0A) is not None and ma1.r['seq'].get(0x0A) & 0x80,
+          '/S /A 1 left SR0A %s' % (ma1.r['seq'].get(0x0A),))
+    ma0 = c.machine()
+    ra0 = ma0.run_com(com, '/S 57.5 /A 0', name='MCLK.COM', max_insn=20_000_000)
+    check(ra0.exit == ('exit', 0) and b'SRA bit 7 (2-MCLK writes) set to 0, left set' in bytes(ra0.stdout),
+          'MCLK /S /A 0 %s %r' % (ra0.exit, lines_of(ra0)))
+    check(ma0.r['seq'].get(0x0A) is not None and not ma0.r['seq'].get(0x0A) & 0x80,
+          '/S /A 0 left SR0A %s' % (ma0.r['seq'].get(0x0A),))
+    md = c.machine()
+    rd = md.run_com(com, '/S 57.5 /D 5 /Y', name='MCLK.COM', max_insn=20_000_000)
+    check(rd.exit == ('exit', 0) and b'Settle delay after each PLL load (PIT ch2): 5 ms (/D)' in bytes(rd.stdout),
+          'MCLK /S /D 5 %s %r' % (rd.exit, lines_of(rd)))
 
     # /S out of range: refused, nothing written, no question.
     for tail, word in (('/S 45', b'is below'), ('/S 90', b'above the cap')):
