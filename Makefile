@@ -10,7 +10,7 @@ NASM ?= nasm
 NASMBIN := $(if $(findstring /,$(NASM)),$(abspath $(NASM)),$(NASM))
 NASMVER := $(shell "$(NASMBIN)" -v 2>/dev/null)
 ifeq ($(findstring version 3.02,$(NASMVER)),)
-$(warning $(NASMBIN): $(if $(NASMVER),$(NASMVER),not found); the project uses NASM 3.02 (make NASM=path/to/nasm))
+$(warning $(NASMBIN): $(if $(NASMVER),$(NASMVER),not found); the ROM targets need exactly NASM 3.02 and fail or produce a wrong image with another version: build 3.02 and pass its path, for example make poc-rom NASM=nasm/nasm-3.02/nasm)
 endif
 
 TOOLS_SRC = src/tools
