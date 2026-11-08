@@ -14,9 +14,11 @@ What is emulated
     with every port access and every read of the BIOS tick. The PIT channels count from it, the tick
     at 0040:006C counts channel 0 periods, and the vertical retrace bit of 3DAh follows the frame period that
     the programmed CRTC and clock registers give. So refresh rates the tools measure here equal the
-    rate the registers define, and call durations are plausible, but not real.
-    Every write to A0000-BFFFF also takes one count, so loops that write video memory until a tick
-    passes come to an end.
+    rate the registers define, and call durations are plausible, but not real: the emulation runs as
+    fast as the host allows, there is no real-time pacing. Every planar write to A0000-AFFFF takes
+    one count; in the packed modes the window is plain shadow RAM (the access hooks are off there,
+    see _vhooks) and its writes are charged in bulk when the page leaves the screen (_remap), as a
+    dword-clear of the 64 KB page, so loops that write video memory until a tick passes come to an end.
   - A small DOS (INT 21h) for .COM and .EXE programs (MZ header with relocations, run_exe): console and
     file output, create/close, IOCTL, InDOS, get/set vector, version, PSP (51h/62h), memory blocks
     (48h-4Ah, with MCBs in front of the environment and the program; 49h and the exit free a block, 31h
@@ -53,6 +55,7 @@ Usage (see tests.py for complete examples)
   r = m.run_com(open('build/S3TEST.COM','rb').read(), '/V')
   print(r.stdout.decode('latin1'), r.files.get('S3TEST.DBG'))
 """
+import copy
 import struct
 import sys
 try:
@@ -197,8 +200,10 @@ class Machine:
         mu.hook_add(UC_HOOK_INSN, self._in, None, 1, 0, UC_X86_INS_IN)
         mu.hook_add(UC_HOOK_INSN, self._out, None, 1, 0, UC_X86_INS_OUT)
         mu.hook_add(UC_HOOK_MEM_READ, self._tread, None, 0x46C, 0x46D)
-        mu.hook_add(UC_HOOK_MEM_WRITE, self._vwrite, None, 0xA0000, 0xBFFFF)
-        mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
+        # the A0000-BFFFF access hooks exist only while the window is planar (_vhooks); it starts
+        # packed, where the shadow RAM at A0000 is plain memory and a hook per access would only
+        # cost time
+        self.h_vw = self.h_vr = None
         self.vram = bytearray(Machine.vram << 20)     # the card's video memory (see the module docstring)
         self.win = ('packed', 0)                        # what A0000-AFFFF shows now: (kind, page base)
         self.ge_cmds = 0                                # graphics engine commands written to 9AE8h
@@ -208,6 +213,8 @@ class Machine:
         # list of (reg, index, value, old value, SR01, in vertical retrace, CR39), reg 'SR' or 'CR'
         self.wlog = None
         self.latch = [0, 0, 0, 0]
+        self._wcfg_cache = None                         # decoded GC/SR state of _vwrite, None when stale
+        self._frame_cache = None                        # frame() of _retrace, None when registers changed
 
     # ------------------------------------------------------------------ ports
     # ------------------------------------------------------------------ virtual clock
@@ -248,8 +255,13 @@ class Machine:
         return hz, pix, max(1000, round(1193182 / hz)), vtot
 
     def _retrace(self):
-        """Vertical retrace bit from the virtual clock: on for about 3 lines at the start of each frame."""
-        hz, pix, period, vtot = self.frame()
+        """Vertical retrace bit from the virtual clock: on for about 3 lines at the start of each frame.
+        The frame timing is cached until a VGA register write (see _out): polling loops read 3DAh
+        thousands of times without the registers changing."""
+        f = self._frame_cache
+        if f is None:
+            f = self._frame_cache = self.frame()
+        period, vtot = f[2], f[3]
         return (self.t % period) < max(60, period * 3 // max(vtot, 1))
 
     def _pit_count(self, ch):
@@ -368,6 +380,7 @@ class Machine:
             self.bee8.add((val >> 4) & 0xF)
 
         def w8(p, v):
+            self._frame_cache = None                    # a VGA register write: retrace timing may change
             if p in (0x3B4, 0x3B5, 0x3BA) and r['misc'] & 1:
                 return                                  # colour I/O: the mono ports are not decoded
             if p in (0x3D4, 0x3D5, 0x3DA) and not r['misc'] & 1:
@@ -383,6 +396,7 @@ class Machine:
             if p == 0x3C4: r['si'] = v
             elif p == 0x3C5:
                 r['seq'][r['si']] = v
+                self._wcfg_cache = None
                 if r['si'] == 4:
                     self._remap()
             elif p in (0x3D4, 0x3B4): r['ci'] = v
@@ -393,6 +407,7 @@ class Machine:
             elif p == 0x3CE: r['gi'] = v
             elif p == 0x3CF:
                 r['gc'][r['gi']] = v
+                self._wcfg_cache = None
                 if r['gi'] == 6:
                     self._remap()
             elif p == 0x3C0:
@@ -482,12 +497,27 @@ class Machine:
             base %= n
             self.vram[base:base + 0x10000] = data[:n - base]
 
+    def _vhooks(self, on):
+        """The A0000-BFFFF access hooks, on only while the window is planar. In a packed window the
+        shadow RAM at A0000 is plain memory, so the hooks would only add a Python call per access
+        (and one virtual-clock count per write); in an off window the FFh fill of _remap already
+        makes reads return FFh."""
+        if on and self.h_vw is None:
+            self.h_vw = self.mu.hook_add(UC_HOOK_MEM_WRITE, self._vwrite, None, 0xA0000, 0xBFFFF)
+            self.h_vr = self.mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
+        elif not on and self.h_vw is not None:
+            self.mu.hook_del(self.h_vw)
+            self.mu.hook_del(self.h_vr)
+            self.h_vw = self.h_vr = None
+
     def _remap(self):
         """After a register write that can move the window: keep the old page, show the new one."""
         k = self._wkey()
         if k == self.win:
             return
-        self.sync()
+        if self.win[0] == 'packed':
+            self.t += 0x4000        # the packed page on screen was written through: charge its writes
+        self.sync()                 # in bulk, as a dword-clear of the page (the hooks are off, _vhooks)
         kind, base = k
         if kind == 'packed':
             n = len(self.vram)
@@ -496,6 +526,7 @@ class Machine:
         elif kind == 'off':
             self.mu.mem_write(0xA0000, b'\xff' * 0x10000)
         self.win = k
+        self._vhooks(kind == 'planar')
 
     @property
     def planes(self):
@@ -512,17 +543,38 @@ class Machine:
             self.win = ('none', 0)
             self._remap()
 
+    def _wcfg(self):
+        """The decoded graphics-controller/sequencer state the planar writes use, cached until a GC or
+        SR register is written (see _out): (write mode, bit mask, set/reset enable, set/reset value,
+        map mask, rotate count, rotate function)."""
+        c = self._wcfg_cache
+        if c is None:
+            gc, sr = self.r['gc'], self.r['seq']
+            g3 = gc.get(3, 0)
+            c = self._wcfg_cache = (gc.get(5, 0) & 3, gc.get(8, 0xFF), gc.get(1, 0), gc.get(0, 0),
+                                    sr.get(2, 0x0F), g3 & 7, (g3 >> 3) & 3)
+        return c
+
     def _vwrite(self, uc, acc, addr, size, val, ud):
         self.t += 1                                     # video memory writes take time too
         if addr >= 0xB0000 or self.win[0] != 'planar':
             return
-        gc, sr = self.r['gc'], self.r['seq']
-        mode = gc.get(5, 0) & 3
-        mask, sr_en, sr_val = gc.get(8, 0xFF), gc.get(1, 0), gc.get(0, 0)
-        mapmask = sr.get(2, 0x0F)
-        rot, fn = gc.get(3, 0) & 7, (gc.get(3, 0) >> 3) & 3     # GR03: rotate count, function (0 replace,
+        mode, mask, sr_en, sr_val, mapmask, rot, fn = self._wcfg()
         base, psize, vm = self.win[1], len(self.vram) // 4, self.vram
-        for k in range(size):                                   # 1 AND, 2 OR, 3 XOR with the latch)
+        if mode == 0 and fn == 0 and rot == 0 and mask == 0xFF and not sr_en:
+            # the common case (the mode set clears, plane writes): every mapped plane gets the CPU byte
+            for k in range(size):
+                o = 4 * ((base + ((addr + k) & 0xFFFF)) % psize)
+                cpu = (val >> (8 * k)) & 0xFF
+                if mapmask == 0x0F:
+                    vm[o:o + 4] = bytes((cpu,) * 4)
+                else:
+                    for p in range(4):
+                        if mapmask & (1 << p):
+                            vm[o + p] = cpu
+            return
+        latch = self.latch
+        for k in range(size):
             off = (base + ((addr + k) & 0xFFFF)) % psize
             cpu = (val >> (8 * k)) & 0xFF
             if rot:
@@ -531,7 +583,7 @@ class Machine:
                 if not mapmask & (1 << p):
                     continue
                 if mode == 1:
-                    d = self.latch[p]
+                    d = latch[p]
                 else:
                     if mode == 2:
                         d = 0xFF if cpu & (1 << p) else 0
@@ -540,12 +592,12 @@ class Machine:
                     else:
                         d = cpu
                     if fn == 1:
-                        d &= self.latch[p]
+                        d &= latch[p]
                     elif fn == 2:
-                        d |= self.latch[p]
+                        d |= latch[p]
                     elif fn == 3:
-                        d ^= self.latch[p]
-                    d = (d & mask) | (self.latch[p] & ~mask & 0xFF)
+                        d ^= latch[p]
+                    d = (d & mask) | (latch[p] & ~mask & 0xFF)
                 vm[4 * off + p] = d
 
     def _vread(self, uc, acc, addr, size, val, ud):
@@ -823,9 +875,63 @@ class Machine:
                                budget_msg('the ROM initialisation (call far C000:0003)', limit,
                                           'Machine.post_limit', where))
         off, seg = struct.unpack('<HH', self.mu.mem_read(0x40, 4))
+        self.post_entry = (seg, off)
         if Machine.noop or Machine.calls is not None:
             self._noop_hook(seg * 16 + off)
         return seg, off
+
+    # ------------------------------------------------------------------ POST snapshots
+    # SNAP_REGS: everything post() leaves in the CPU. tests.py runs POST once per process and starts
+    # every machine from the snapshot (Ctx.machine), instead of running the ROM initialisation again
+    # for each one.
+    SNAP_REGS = [UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX, UC_X86_REG_DX, UC_X86_REG_SI, UC_X86_REG_DI,
+                 UC_X86_REG_BP, UC_X86_REG_SP, UC_X86_REG_CS, UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_SS,
+                 UC_X86_REG_EFLAGS, UC_X86_REG_EIP]
+
+    def post_snapshot(self):
+        """Everything a test can see after post(): RAM, the CPU registers, the register model and
+        vram. load_post_snapshot() puts it into a fresh Machine without running POST again."""
+        return {
+            'mem': bytes(self.mu.mem_read(0, 0x110000)),
+            'regs': {r: self.mu.reg_read(r) for r in self.SNAP_REGS},
+            'vram': bytes(self.vram),
+            'r': copy.deepcopy(self.r),
+            'pit': copy.deepcopy(self.pit),
+            'dac': copy.deepcopy(self.dac),
+            't': self.t,
+            'tick_base': self.tick_base,
+            'win': self.win,
+            'latch': list(self.latch),
+            'ge_cmds': self.ge_cmds,
+            'bee8': set(self.bee8),
+            'ge_first': self.ge_first,
+            'entry': getattr(self, 'post_entry', None),
+        }
+
+    def load_post_snapshot(self, s):
+        """Start this fresh Machine from a post_snapshot() taken after post(); returns the INT 10h
+        entry (segment, offset). The per-run state (keys, dac_fault, com, handles, wlog) stays as
+        __init__ left it."""
+        mu = self.mu
+        mu.mem_write(0, s['mem'])
+        for r, v in s['regs'].items():
+            mu.reg_write(r, v)
+        self.vram[:] = s['vram']
+        self.r = copy.deepcopy(s['r'])
+        self.pit = copy.deepcopy(s['pit'])
+        self.dac = copy.deepcopy(s['dac'])
+        self.t = s['t']
+        self.tick_base = s['tick_base']
+        self.win = s['win']
+        self._vhooks(self.win[0] == 'planar')
+        self.latch = list(s['latch'])
+        self.ge_cmds = s['ge_cmds']
+        self.bee8 = set(s['bee8'])
+        self.ge_first = s['ge_first']
+        self.post_entry = s['entry']
+        self._wcfg_cache = None
+        self._frame_cache = None
+        return s['entry']
 
     # mutation testing: INT 10h calls that match one of these register patterns (dicts of 'ah', 'al',
     # 'ax', 'bh', 'bl', 'bx', 'dl' -> value) return at the ROM's entry as if the function did nothing (an

@@ -161,7 +161,8 @@ Tests
   --vram 1|2|4     the video memory size in MB (CR36 and Machine.vram: 2 the card, 4 the chip maximum,
                    1 the smallest). The BIOS finds the size at POST; the model answers with the size given
                    here and keeps that many megabytes behind the banked A0000 window (no LFB)
-  -j N             run N tests at a time in separate processes (make emu-test uses every CPU)
+  -j N             run N tests at a time in separate processes (make emu-test uses every CPU); each
+                   process runs POST once and starts every machine from a snapshot of it (POST_CACHE)
   --tests a,b      run these tests in this order; -x stops at the first failure
   --noop SPEC      mutation test: INT 10h calls matching SPEC return unchanged (emu/mutants.py)
   --profile FILE   per test: the INT 10h calls and the ROM bytes it executes or reads (emu/mutants.py)
@@ -244,6 +245,15 @@ def cga(i):
 
 
 # ---------------------------------------------------------------- helpers
+# One POST snapshot per process, keyed by (chip, memory size, ROM): Ctx.machine starts every Machine
+# from it instead of running the ROM initialisation again (Machine.post_snapshot/load_post_snapshot).
+# Off when coverage, a profile, a call list or a noop mutation is recorded (POST_CACHE_OFF): those
+# must see POST run in the machine under test. With -j, main() primes the cache before the worker
+# processes are forked, so they inherit it.
+POST_CACHE = {}
+POST_CACHE_OFF = False
+
+
 class Ctx:
     def __init__(self, rom, build, verbose, logs):
         self.rom = open(rom, 'rb').read()
@@ -271,8 +281,19 @@ class Ctx:
                 f.write(bytes(data))
 
     def machine(self, keys=None):
+        if POST_CACHE_OFF:
+            m = Machine(self.rom, keys)
+            m.post()
+            return m
+        key = (Machine.chip, Machine.vram, self.rom)
+        snap = POST_CACHE.get(key)
+        if snap is None:
+            m = Machine(self.rom, keys)
+            m.post()
+            POST_CACHE[key] = snap = m.post_snapshot()
+            return m
         m = Machine(self.rom, keys)
-        seg, off = m.post()
+        m.load_post_snapshot(snap)
         return m
 
     def tool(self, name):
@@ -2869,8 +2890,8 @@ TAGS = {
 
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
-DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 's3test_any': 60, 'windows': 60,
-            'stores': 55, 's3compat_vga': 45}
+DURATION = {'s3compat_full': 300, 's3compat_vbe': 70, 'vshow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
+            's3test_any': 10, 'stores': 5}
 
 
 # Our Trio64V+ ROM keeps these failures of its base 1.03-08, outside the backport (docs/765-rom.md,
@@ -2964,7 +2985,7 @@ def run_parallel(c, tests, a):
 
 
 def main():
-    global NASM
+    global NASM, POST_CACHE_OFF
     ap = argparse.ArgumentParser(description='emulator tests for the Trio64V2 VBIOS tools')
     ap.add_argument('--rom', required=True, help='64 KB VBIOS image')
     ap.add_argument('--build', default=os.path.join(SRC, 'build'), help='folder with the built .COM files')
@@ -3046,6 +3067,7 @@ def main():
         Machine.__init__ = init_cov
     NASM = os.path.abspath(a.nasm) if os.sep in a.nasm or '/' in a.nasm else a.nasm
     c = Ctx(a.rom, a.build, a.v, a.logs)
+    POST_CACHE_OFF = bool(a.coverage or a.profile or a.calls or a.noop)
     failed = 0
     tests = TESTS
     if a.tests:
@@ -3065,6 +3087,8 @@ def main():
               + ' (--stock runs them)')
 
     if a.j > 1 and not (a.coverage or a.profile or a.calls):
+        if not POST_CACHE_OFF:
+            c.machine()                     # prime the POST cache; the forked workers inherit it
         failed = run_parallel(c, tests, a)
         print('%d failed; tool output and /V debug logs in %s' % (failed, a.logs))
         sys.exit(1 if failed else 0)
