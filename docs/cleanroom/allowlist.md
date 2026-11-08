@@ -38,6 +38,17 @@ counts and cross as such; the dirty-side run material does not cross.
 
 ### Public sources cleared to cross
 
+- The **VGATEST distribution** — PCTECHline's VGATEST, mirrored on the SimTel CD-ROM as
+  [VGATEST2.ZIP](http://cd.textfiles.com/simtel/simtel/DISK2/DISC1/VGA/VGATEST2.ZIP)
+  (also at The Programmer's Corner:
+  [pcorner.com/list/GRAPHUTI/VGATEST.ZIP](https://www.pcorner.com/list/GRAPHUTI/VGATEST.ZIP/)) —
+  is allowlisted material (owner decision, 8 November 2026). It contains the IBM reference
+  tables (CRTC.COL, GENERAL.COL, DSTATE.COL, DAC.COL and the .MON variants), the READ.ME
+  and the test executables; the article is "The VGA Compatibility Test", Ed McNierney and
+  Kent Quirk, PC Tech Journal, November 1988, p. 48 (issue text at
+  [pcjs.org](https://www.pcjs.org/documents/magazines/pctj/)). The shipped tables verified
+  the citations that name them (see the VGATEST-PUB decision); the table files cross as
+  public exhibits with the bios-rules citations that depend on them.
 - IBM, "Personal System/2 and Personal Computer BIOS Interface Technical Reference",
   April 1987 — allowlisted by the owner on 8 November 2026. A scanned copy is at the
   Internet Archive:
