@@ -19,7 +19,9 @@ to implement from:
     EDIT loads, edits and saves a file without significant glitches. (3) Superscape 3D Bench 1.0c runs
     under MS-DOS without significant glitches. (4) Chris's 3D Benchmark runs under MS-DOS in 320x200
     and 640x480 VESA without significant glitches: the first milestone that needs parts B and C, for
-    its one VESA mode. Milestone 5, tentative: FreeDOS boots ([`freedos-1.4.md`](freedos-1.4.md)). The rest of
+    its one VESA mode. Milestone 5: the monitor sense (decided 8 November 2026: no sense in
+    milestones 1-4, POST always colour, M-SENSE). Milestone 6, tentative: FreeDOS boots
+    ([`freedos-1.4.md`](freedos-1.4.md)). The rest of
     parts B and C is for later milestones;
   - the scope of the leak review: a clean-room implementation of milestones 1-4
     ([`LEAK-REVIEW.md`](LEAK-REVIEW.md) "Scope of this review").
@@ -70,8 +72,8 @@ to implement from:
 | [`spec-b-modeset.md`](spec-b-modeset.md) | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
 | [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
 | [`milestone-calls.md`](milestone-calls.md) | its contract part goes across after the leak review | the INT 10h calls of milestones 2 (EDIT), 3 and 4, recorded on a card |
-| [`freedos-1.4.md`](freedos-1.4.md) | goes across with milestone 5 | what FreeDOS 1.4 asks of the video BIOS (milestone 5, tentative), from its sources |
-| [`freedos-reports.md`](freedos-reports.md) | goes across with milestone 5 | drafts of the MORE and MODE defect reports to FreeDOS |
+| [`freedos-1.4.md`](freedos-1.4.md) | goes across with milestone 6 | what FreeDOS 1.4 asks of the video BIOS (milestone 6, tentative), from its sources |
+| [`freedos-reports.md`](freedos-reports.md) | goes across with milestone 6 | drafts of the MORE and MODE defect reports to FreeDOS |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | dirty only | the outside feasibility review of 2 November 2026: its findings, our checks and where each went |
 | [`oracle-a-post.md`](oracle-a-post.md), [`oracle-b-modeset.md`](oracle-b-modeset.md), [`oracle-c-vbe.md`](oracle-c-vbe.md) | dirty only | what the reference ROMs do in the emulator and on the card, compared with the specification; the expected values for checking the clean ROM, never handed over |
 
@@ -148,7 +150,7 @@ owner-required `28e7c00`). Reviewers: eligible non-author sessions for parts A/B
 and the milestone contract. Root remains disqualified as a substantive reviewer.
 
 **No current file or rule ID is cleared to cross.** Keep/rewrite/cut decisions are not clearance while
-any return remains. FreeDOS files are deferred with milestone 5. Full per-file reports and inventories
+any return remains. FreeDOS files are deferred with milestone 6. Full per-file reports and inventories
 stay on the dirty side (issue [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145) attachments
 and the MediaFire evidence zip of 2 November 2026); this section is the protocol-required README record.
 
@@ -160,8 +162,8 @@ and the MediaFire evidence zip of 2 November 2026); this section is the protocol
 | 2026-11-02 | [`../chip-rules.md`](../chip-rules.md) | rules_review | RETURNED; 24 included IDs, 44 cut; 23 eligible after edits, T64-MEM-7 returned |
 | 2026-11-02 | [`../bios-rules.md`](../bios-rules.md) | rules_review | RETURNED; eight rows and one question remain; B00-22 exact rewrite resolved |
 | 2026-11-02 | [`milestone-calls.md`](milestone-calls.md) | freedos_review | RETURNED; The contract only; The run cut |
-| 2026-11-02 | [`freedos-1.4.md`](freedos-1.4.md) | scope record only | DEFERRED to milestone 5; not passed |
-| 2026-11-02 | [`freedos-reports.md`](freedos-reports.md) | scope record only | DEFERRED to milestone 5; not passed |
+| 2026-11-02 | [`freedos-1.4.md`](freedos-1.4.md) | scope record only | DEFERRED to milestone 6 (milestone 5 at the time); not passed |
+| 2026-11-02 | [`freedos-reports.md`](freedos-reports.md) | scope record only | DEFERRED to milestone 6 (milestone 5 at the time); not passed |
 
 Main outstanding issues at that pin (still the working list until a re-review of changed files):
 rating/source gaps and POST-41 premise in A; FIFO and refresh premises in B; 100h capability policy and

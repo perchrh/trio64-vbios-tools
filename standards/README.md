@@ -25,3 +25,19 @@ under VGADOC's name.
 
 Left out: the other vendors' chips, the monitor list, external clock and RAMDAC chips, and the
 WHATVGA programs. The `phatcode.exe` that came in the downloaded archive is not part of VGADOC.
+
+## rbil-all/
+
+Ralf Brown's Interrupt List, release 61 (16 July 2000), copied unmodified. Not public domain:
+its notice (in `INTERRUP.1ST`, kept intact) permits use and redistribution in any way, including
+conversion to another format, provided Ralf Brown's name and addresses, the contributor credits
+and the release information are preserved; the credit requirement is waived for excerpts
+totaling less than 2000 lines, and corrections are asked to go to the maintainer rather than be
+distributed as modified lists. Programs contributed by others in the distribution keep their
+authors' rights.
+
+Of use here: `MEMORY.LST` (the BIOS data area, tables M0024-M0027, cited by
+[`docs/bios-rules.md`](../docs/bios-rules.md) BDA-1, BDA-14 to BDA-17), `INTERRUP.A`
+(INT 10h, including AH=12h BL=30h-35h), `GLOSSARY.LST`, `BIBLIO.LST`. The reading order is
+[`docs/cleanroom/readings.md`](../docs/cleanroom/readings.md) row 9; the list outranks VGADOC and
+is outranked only by the standards and data books.

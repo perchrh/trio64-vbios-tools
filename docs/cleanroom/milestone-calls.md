@@ -80,7 +80,7 @@ What follows for the clean ROM:
 - **Banking:** no INT 10h 4F05h and no WinFuncPtr far call were observed during drawing (`VGALOG /W`).
   The program banks through CR35 from protected mode (program observation; details in The run). After
   4F02h 101h the clean ROM must leave CR6A=00h, CR51 bits 3-2=0, and a CR31 mapping where bits 0 and 3
-  select 64 KB pages (spec C). 4F01h window fields and WinFuncPtr must still be truthful.
+  select 64 KB pages (spec C, VBE-44 and VBE-53). 4F01h window fields and WinFuncPtr must still be truthful.
 - **AH=0Fh after 101h:** AL = 40h. AH=00h with AL = 40h sets banked 101h again (Q0F).
 - No BIOS palette call was logged; absence of a port trace does not prove direct DAC writes.
 

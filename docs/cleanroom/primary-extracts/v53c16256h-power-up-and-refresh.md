@@ -1,7 +1,7 @@
 # V53C16256H: refresh and power-on (extract)
 
 Source: Mosel Vitelic V53C16256H, 256K x 16 Fast Page Mode CMOS DRAM, Rev. 2.3, June 1998,
-[`datasheets/V53C16256H-1.PDF`](../../../datasheets/V53C16256H-1.PDF). The DSP-3364P fits this part
+[`datasheets/dram/V53C16256H-1.PDF`](../../../datasheets/dram/V53C16256H-1.PDF). The DSP-3364P fits this part
 (outside review of 2 November 2026; POST-41, MODE-130).
 
 ASCII paraphrase of the cited pages for the leak reviewer. Prefer the PDF on any conflict.

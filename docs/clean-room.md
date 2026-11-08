@@ -73,8 +73,14 @@ ROM header, the start-up call and the VGA palette snoop), and DMT 1.0 Rev. 10 as
 the pages the leak review needs are under
 [`docs/cleanroom/primary-extracts/`](cleanroom/primary-extracts/).
 
-Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, Ralf Brown's
-Interrupt List, IBM's "Personal System/2 and Personal Computer BIOS Interface Technical Reference"
+Ralf Brown's Interrupt List (release 61) is in the repository since 8 November 2026
+([`standards/rbil-all/`](../standards/rbil-all/)): its notice permits use and redistribution in any way,
+including format conversion, with Ralf Brown's name and addresses, the contributor credits and the
+release information preserved, and waives the credit requirement for excerpts under 2000 lines. Not
+public domain, but its terms allow posting; the notice is in [`INTERRUP.1ST`](../standards/rbil-all/INTERRUP.1ST).
+
+Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, IBM's
+"Personal System/2 and Personal Computer BIOS Interface Technical Reference"
 (April 1987: the INT 10h functions at first hand), the PCI BIOS Specification 2.1, GTF 1.1 and
 Ferraro's "Programmer's Guide to the EGA, VGA and Super VGA Cards". VBE/PM 1.0 (4F10h) is summarised
 in VBE 2.0 and 3.0, VBE/DDC (4F15h) is described in VBE 3.0, and VBE 1.1 and the Mode 6Ah standard are
@@ -187,7 +193,7 @@ where the two differ; that section is kept as the record of how the decision was
   integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
   1.01.04 are not on theretroweb yet.
-- **Scope: four milestones, and a tentative fifth** (decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); this answers the review's F5). All are judged on the DSP-3364P, in order:
+- **Scope: four milestones, then the monitor sense, and a tentative FreeDOS milestone** (the first four decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), answering the review's F5; the monitor sense inserted as milestone 5 on 8 November 2026). All are judged on the DSP-3364P, in order:
   1. **Milestone 1: the card posts.** The system BIOS finds and runs the ROM, and the monitor shows a
      picture with readable text. Some graphical glitches are allowed. Nothing after POST is required.
   2. **Milestone 2: MS-DOS 6.22 and EDIT.** MS-DOS 6.22 boots on the card; the MS-DOS EDIT program
@@ -197,7 +203,17 @@ where the two differ; that section is kept as the record of how the decision was
      significant graphical glitches.
   4. **Milestone 4: Chris's 3D Benchmark.** Under MS-DOS, the benchmark loads and runs without
      significant graphical glitches in both its 320x200 mode and its 640x480 VESA mode.
-  5. **Milestone 5 (tentative): FreeDOS.** FreeDOS boots on the card
+  5. **Milestone 5: the monitor sense.** POST detects the display (colour, monochrome or none)
+     through the data book's SENSE mechanism (T32/64 8.4, STATUS_0 bit 4) and behaves accordingly;
+     monochrome output becomes supported. Decided 8 November 2026: until this milestone the clean ROM
+     performs no sense and always behaves as on a colour monitor
+     ([`docs/cleanroom/decisions-milestones-1-4.md`](cleanroom/decisions-milestones-1-4.md) M-SENSE, part A POST-42).
+     The S3 sense procedure is extracted at
+     [`docs/cleanroom/primary-extracts/vision964-sense-input-utilization.md`](cleanroom/primary-extracts/vision964-sense-input-utilization.md),
+     the IBM power-on and monochrome-state contract at
+     [`docs/cleanroom/primary-extracts/ibm-bios-power-on-mode-and-mono-state.md`](cleanroom/primary-extracts/ibm-bios-power-on-mode-and-mono-state.md);
+     still open for it: the DAC drive values and the behaviour with no display attached.
+  6. **Milestone 6 (tentative): FreeDOS.** FreeDOS boots on the card
      ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
 
   Milestone 3 needs only standard VGA: mode 13h and the DAC block load AX=1012h. Milestone 4 is the
