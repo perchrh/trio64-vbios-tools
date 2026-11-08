@@ -38,5 +38,7 @@ Kept for milestone 5, the monitor sense (decisions M-SENSE).
   termination stays below the threshold, an unloaded output rises above it.
 - It does **not** state what the BIOS then sets (the BIOS data area flags, the
   power-on mode, grey summing, any beep) nor the DAC values used to drive the
-  outputs. Those come from the IBM reference material the owner provides for
-  milestone 5.
+  outputs. The power-on mode by display type and the software-visible monochrome
+  and grey-summing state are extracted at
+  [`ibm-bios-power-on-mode-and-mono-state.md`](ibm-bios-power-on-mode-and-mono-state.md);
+  the DAC drive values and the no-display behaviour remain open for milestone 5.

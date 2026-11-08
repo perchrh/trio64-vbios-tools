@@ -289,6 +289,8 @@ that one file, not the rest of `src/roms/`.
 - Not to review now: the monitor sense decision of our ROMs (#134, #139) and the font change (#141)
   touched no file that crosses. The monitor sense at POST is decided for milestones 1-4: no sense,
   POST always behaves as on a colour monitor (POST-42, decisions M-SENSE, 8 November 2026). The sense
-  itself is milestone 5; the S3 sense procedure is extracted at
+  itself is milestone 5; its sources are extracted (the S3 sense procedure at
   [`primary-extracts/vision964-sense-input-utilization.md`](primary-extracts/vision964-sense-input-utilization.md),
-  the IBM reference material comes from the owner later, and its rules get their own review then.
+  the IBM power-on and monochrome-state contract at
+  [`primary-extracts/ibm-bios-power-on-mode-and-mono-state.md`](primary-extracts/ibm-bios-power-on-mode-and-mono-state.md)),
+  and its rules get their own review then.
