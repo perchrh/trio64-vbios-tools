@@ -202,7 +202,10 @@ where the two differ; that section is kept as the record of how the decision was
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
   1.01.04 are not on theretroweb yet.
 - **Scope: four milestones, then the monitor sense, a tentative FreeDOS milestone, and a DDC idea** (the
-  first four decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), answering the review's F5; the monitor sense inserted as milestone 5 on 8 November 2026; the DDC milestone 7 added 8 November 2026, [#117](https://github.com/perchrh/trio64-vbios-tools/issues/117)). All are judged on the DSP-3364P, in order:
+  first four decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), answering the review's F5; the monitor sense inserted as milestone 5 on 8 November 2026; the DDC milestone 7 added 8 November 2026, [#117](https://github.com/perchrh/trio64-vbios-tools/issues/117)). All are judged on the DSP-3364P,
+  in a host from an Intel Pentium 75 to an AMD K6-400 (the project's target machines, recorded
+  8 November 2026; performance reasoning for the ROMs assumes that range, not the 80486 of the
+  README's VIDSPEED run), in order:
   1. **Milestone 1: the card posts.** The computer is powered on cold, and the colour monitor shows a
      picture: the system BIOS's POST text, legible (every character line readable as text, no
      garbling, missing rows or unreadable distortion). Some graphical glitches are allowed. Nothing
@@ -229,7 +232,10 @@ where the two differ; that section is kept as the record of how the decision was
      ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
   7. **Milestone 7 (idea): DDC (VBE 4F15h) with interrupts on.** The clean ROM's 4F15h (VBE/DDC 1.0)
      keeps interrupts enabled for the whole call, so the BIOS tick stays correct and a UART without a
-     FIFO loses no bytes while Windows 9x or a monitor tool reads the EDID. The DDC lines sit behind
+     FIFO loses no bytes while Windows 9x or a monitor tool reads the EDID. This is wanted on every
+     chip and ROM of ours (Trio64 764, Trio64V+ 765, Trio64V2 775), not only the 775 the issue
+     reports: each of their DDC paths keeps the memory-mapped window and interrupts off for the
+     whole call today. The DDC lines sit behind
      memory-mapped I/O (the serial port register in the upper part of the A0000h window, CR53 bit 4;
      the window cannot stay open with interrupts on, because a handler that draws there would write the
      graphics engine's registers), so the behaviour is: interrupts and the memory-mapped window are
@@ -238,8 +244,8 @@ where the two differ; that section is kept as the record of how the decision was
      delays (the DDC2B bit-time waits) run with interrupts on and the window closed. Each access then
      keeps interrupts off for a few microseconds only. The clean ROM starts this way: it is the
      behaviour proposed for [#117](https://github.com/perchrh/trio64-vbios-tools/issues/117), recorded
-     here instead of as a 775 ROM patch (the patched 775 ROM keeps its current whole-call behaviour;
-     the issue stays open as its record). Emulator test: every DDC register access happens with
+     here instead of a patch to any of our ROMs (the patched 764, 765 and 775 ROMs keep their current
+     whole-call behaviour; the issue stays open as their record). Emulator test: every DDC register access happens with
      interrupts off and CR53 bit 4 set; interrupts are on in the delays; CR53 and the interrupt flag
      are as before the call after it. On the card: Windows 98 still identifies the monitor over
      DDC2B, and the 4F15 results are unchanged.
@@ -252,7 +258,7 @@ where the two differ; that section is kept as the record of how the decision was
   VESA modes, 132 columns and 50 lines, other games and Windows; those documents are kept for later
   milestones. One idea is recorded for later still, outside every milestone so far
   ([#115](https://github.com/perchrh/trio64-vbios-tools/issues/115)): converter-friendly modes next to
-  the VESA ones — 1280x720 at 60 Hz (720p), 1920x1080 interlaced at 60 fields per second (1080i) and
+  the VESA ones, on every chip and ROM of ours (Trio64 764, Trio64V+ 765, Trio64V2 775) — 1280x720 at 60 Hz (720p), 1920x1080 interlaced at 60 fields per second (1080i) and
   320x240 at 15.7 kHz (240p), CEA-861 timings a converter or upscaler takes without scaling, at 8 and
   16 bpp (VESA defines no mode number for them, so they need OEM numbers); it waits until a display or
   converter is at hand to test against.

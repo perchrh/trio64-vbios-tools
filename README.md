@@ -39,6 +39,11 @@ What the three ROMs make faster than their reference BIOSes, on every chip:
   default build is no faster there than the reference; a faster clock for the card's memory is a build
   option (`make roms`, "MCLK build option"). p9 to p25 of the Trio64V2 ROM ran 59.96 MHz.
 
+The project's target machines are hosts from an Intel Pentium 75 to an AMD K6-400 (recorded
+8 November 2026); performance reasoning and expectations for the ROMs assume that range. The
+VIDSPEED run below was measured on an 80486, a slower host than the target range, so its absolute
+numbers are conservative for it.
+
 VIDSPEED in plain DOS on the Trio64V2 card (80486, 31 October 2026), once with the card's stock BIOS
 2.04.11 and once with 2.04.07-p21. p22 changed only the DDC delay and where the booster keeps
 the saved base, nothing these numbers measure. The values are bytes per millisecond written with 32-bit stores
