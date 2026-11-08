@@ -165,11 +165,12 @@ IN ?= $(REF775)
 	$(PYTHON) emu/refcompare.py --ref "$(REF775)" --rom "$(ROM)"
 
 # PoC PCI option ROM (src/roms/poc, docs/poc-rom.md): a generic card ROM that beeps high-low
-# high-low and prints "Hello world" at POST. One 32 KB image with a valid checksum, written REPEATS
-# times to fill the EEPROM (a board may map any 32 KB-aligned half or quarter); VENDOR/DEVICE
-# (hex) go into the PCI data structure - a PCI 2.1 POST skips an image whose IDs do not match
-# the card.
-#   make poc-rom OUT=HELLO.ROM [VENDOR=0x8086 DEVICE=0x1229] [REPEATS=4]   (default OUT=build/roms/poc/HELLO64K.ROM, REPEATS=2)
+# high-low and prints "Hello world" at POST. One 32 KB image with a valid checksum at offset 0,
+# the rest of the part padded with FFh (POC_REPEATS = the part size in 32 KB units), so a BIOS
+# scanning the ROM window finds one image; VENDOR/DEVICE (hex) go into the PCI data structure -
+# a PCI 2.1 POST skips an image whose IDs do not match the card.
+#   make poc-rom VENDOR=0x10B7 DEVICE=0x9055   (3C905B-TX; default OUT=build/roms/poc/HELLO64K.ROM, POC_REPEATS=2)
+#   make poc-rom OUT=HELLO.ROM POC_REPEATS=4 VENDOR=0x10EC DEVICE=0x8139   (RTL8139D, 128 KB)
 POC_OUT ?= build/roms/poc/HELLO64K.ROM
 POC_REPEATS ?= 2
 poc-rom:

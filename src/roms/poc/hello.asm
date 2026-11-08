@@ -12,11 +12,16 @@
 ; 1 = error). Called in real mode only, from the RAM copy. The entry does
 ; not test CF: not every system BIOS calls with CF=1 (the emulator starts
 ; a ROM with CF=0, and so do BIOSes without the old PCI BIOS double call),
-; so the work runs on the first call whatever CF says. The application-unique
-; byte at 07h is a done flag, so a BIOS that calls twice (CF=1 init, CF=0
-; run-time, the old PCI BIOS convention) gets the work exactly once. Setting
-; the flag changes the RAM copy, so the checksum byte at 06h is adjusted
-; with it and the image sum stays 00h (ROM-6).
+; so the work runs on the first call whatever CF says.
+;
+; The work runs once per machine, not once per image copy: a 64 KB part
+; carries the 32 KB image twice (REPEATS=2) and a BIOS that scans the ROM
+; window for 55h AAh (or calls the entry twice, the old PCI BIOS CF=0
+; convention) would otherwise run every copy and beep again. The done flag
+; therefore lives in the BIOS data area at 0040:00FFh (the inter-application
+; communication area), which all shadow copies of the image share. The
+; image itself is never written: the port 61h value is kept on the stack,
+; and the image sum stays 00h (ROM-6).
 ;
 ; The image is exactly 32 KB (the Initialization Size byte 02h and the PCIR
 ; Image Length say so; build.py pads with 00h and fixes the checksum at
@@ -44,8 +49,7 @@ org 0
         db 0x40                 ; 02h: Initialization Size, 512-byte units (32 KB)
         jmp near init           ; 03h: init entry point (3 bytes, to 06h)
         db 0                    ; 06h: checksum (patched by build.py)
-        db 0                    ; 07h: done flag (application unique data)
-        times 16 db 0           ; 08h-17h: reserved (application unique data)
+        times 17 db 0           ; 07h-17h: reserved (application unique data)
         dw pcir                 ; 18h: offset of the PCI data structure
         times 6 db 0            ; 1Ah-1Fh: pad to the DWORD-aligned PCIR
 
@@ -70,21 +74,28 @@ pcir:   db "PCIR"               ; 00h: signature
 
 ; ---------------------------------------------------------------------------
 ; Init entry. The work runs on the first call, whatever CF says (not every
-; BIOS sets CF=1 for the init call); the done flag at 07h keeps a second
-; call (the old PCI BIOS CF=0 run-time call) from repeating it. All
-; registers preserved, status in CF.
+; BIOS sets CF=1 for the init call). The done flag is 0040:00FFh in the BIOS
+; data area, shared by every shadow copy of every image in the part, so a
+; second call - or a second copy of a REPEATS=2 image that a BIOS scanning
+; the ROM window also found - returns at once. All registers preserved,
+; status in CF. The image is never written (ROM-6): the port 61h value is
+; kept on the stack, not in a data byte inside the image.
 ; ---------------------------------------------------------------------------
 init:   pusha
         push ds
         push es
         push cs
         pop ds                  ; DS = ROM segment, strings are org 0 offsets
-        cmp byte [0x07], 0      ; already run (this RAM copy)?
-        jne .ret
-        mov byte [0x07], 1     ; mark it done; the RAM copy is writable in INIT
-        dec byte [0x06]        ; keep the image checksum 00h (ROM-6)
-        in al, 0x61              ; remember the speaker gate as found
-        mov [spk], al
+        push ds
+        xor ax, ax
+        mov ds, ax              ; DS = 0: the BIOS data area
+        mov al, [0x00FF]        ; the done flag (inter-application area)
+        mov byte [0x00FF], 1
+        pop ds
+        or al, al
+        jnz .ret                ; already ran on this machine
+        in al, 0x61             ; remember the speaker gate as found
+        push ax                 ; on the stack, not in the image
         mov si, hello
 .pr:    lodsb
         or al, al
@@ -104,7 +115,7 @@ init:   pusha
         call wait_pit
         dec bp
         jnz .beep
-        mov al, [spk]           ; restore the speaker gate as found
+        pop ax                  ; the speaker gate as found
         out 0x61, al
 .ret:   pop es
         pop ds
@@ -115,19 +126,23 @@ init:   pusha
 ; ---------------------------------------------------------------------------
 ; speaker_on: PIT channel 2 to square wave, gate on.
 ; In: AX = divisor (1193182 / Hz). Out: nothing. Kept: BX, CX, SI, BP, DS.
+; The control word goes to port 43h first: it selects channel 2, mode 3 and
+; the low-then-high byte order (and resets the byte pointer), so the count
+; bytes that follow land in channel 2. Writing the count first would depend
+; on channel 2's byte order as the BIOS left it, which is undefined when the
+; BIOS never programmed channel 2.
 ; ---------------------------------------------------------------------------
 speaker_on:
         push ax
-        mov bl, al              ; divisor low then high into channel 2
-        out 0x42, al
-        mov al, ah
-        out 0x42, al
         mov al, 0xB6            ; channel 2, mode 3 (square wave), both bytes
         out 0x43, al
+        pop ax
+        out 0x42, al            ; count low
+        mov al, ah
+        out 0x42, al            ; count high
         in al, 0x61             ; gate and output on (bits 0 and 1)
         or al, 3
         out 0x61, al
-        pop ax
         ret
 
 ; ---------------------------------------------------------------------------
@@ -181,4 +196,3 @@ pit_read:
 ; ---------------------------------------------------------------------------
 hello:  db "Hello world", 0x0D, 0x0A, 0
 tones:  dw 994, 1989, 994, 1989  ; 1200 Hz, 600 Hz, 1200 Hz, 600 Hz
-spk:    db 0                    ; port 61h as found on entry
