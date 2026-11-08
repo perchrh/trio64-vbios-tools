@@ -35,9 +35,9 @@ Use these when the standard is silent or hard to apply.
 
 | Order | Source | Sits under |
 | --- | --- | --- |
-| 9 | Ralf Brown's Interrupt List, release 61 (16 July 2000), in [`standards/rbil-all/`](../../standards/rbil-all/) (the BIOS data area in `MEMORY.LST`, tables M0024-M0027; the notice in `INTERRUP.1ST`) | The first guide for INT 10h and the BIOS data area |
-| 10 | Ferraro, "Programmer's Guide to the EGA, VGA, and Super VGA Cards", 3rd edition | The same VGA behaviour, where the Interrupt List is silent. Table 9.23 documents the bytes `IBM` at `C000:001E` |
-| 11 | VGADOC 4b, the nine files in [`standards/thoegersen/`](../../standards/thoegersen/) | VBE, the VGA registers, and the S3 book. It has errors; the standard wins. `VESA.TXT` records 4F10h as 00h On, 01h Standby, 02h Suspend, 04h Off |
+| 9 | Ralf Brown's Interrupt List, release 61 (16 July 2000), in [`standards/rbil-all/`](../../standards/rbil-all/) (the BIOS data area in `MEMORY.LST`, tables M0024-M0027; the notice in `INTERRUP.1ST`); official source: [www.cs.cmu.edu/~ralf/files.html](https://www.cs.cmu.edu/~ralf/files.html) | The first guide for INT 10h and the BIOS data area |
+| 10 | Ferraro, "Programmer's Guide to the EGA, VGA, and Super VGA Cards", 3rd edition (1994, ISBN 0-201-62490-7); a readable copy is at the Internet Archive: [archive.org/details/programmersguidetotheegavgaandsupervgacardsbyrichardf.ferraro19943rdedition](https://archive.org/details/programmersguidetotheegavgaandsupervgacardsbyrichardf.ferraro19943rdedition) | The same VGA behaviour, where the Interrupt List is silent. Table 9.23 documents the bytes `IBM` at `C000:001E` |
+| 11 | [Finn Thøgersen's VGADOC](https://web.archive.org/web/20081217030257/http://home.worldonline.dk/finth/), 4b, the nine files in [`standards/thoegersen/`](../../standards/thoegersen/) | VBE, the VGA registers, and the S3 book. It has errors; the standard wins. `VESA.TXT` records 4F10h as 00h On, 01h Standby, 02h Suspend, 04h Off |
 | 12 | VBE 1.0 (VS891001) and Brad Haakenson, "Examining the VESA VBE 2.0 Specification" (July 1995) | How VBE 1.2 and 2.0 relate. They sit under the VBE 2.0 text, which is row 5 |
 
 ## 3. Secondary explanations

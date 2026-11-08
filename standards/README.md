@@ -6,8 +6,11 @@ the copies. VGADOC sits under the VESA standards and under Ralf Brown's Interrup
 
 ## thoegersen/
 
-Nine files from VGADOC 4b by Finn Thoegersen (1991-95), copied unmodified (CRLF line endings, kept
-by `.gitattributes`). Its licence, README.1ST, is included unmodified as it requires: the
+Nine files from VGADOC 4b by Finn Thøgersen (1991-95), copied unmodified (CRLF line endings, kept
+by `.gitattributes`). The author's original site:
+[Finn Thøgersen's VGADOC](https://web.archive.org/web/20081217030257/http://home.worldonline.dk/finth/)
+(archived at the Wayback Machine).
+Its licence, README.1ST, is included unmodified as it requires: the
 information may be used in any project, the collection or a subset may be redistributed free of
 charge with README.1ST, and the source must be credited. It is a subset, so it is not distributed
 under VGADOC's name.
@@ -28,7 +31,8 @@ WHATVGA programs. The `phatcode.exe` that came in the downloaded archive is not 
 
 ## rbil-all/
 
-Ralf Brown's Interrupt List, release 61 (16 July 2000), copied unmodified. Not public domain:
+Ralf Brown's Interrupt List, release 61 (16 July 2000), copied unmodified. The official source and
+new releases: [www.cs.cmu.edu/~ralf/files.html](https://www.cs.cmu.edu/~ralf/files.html). Not public domain:
 its notice (in `INTERRUP.1ST`, kept intact) permits use and redistribution in any way, including
 conversion to another format, provided Ralf Brown's name and addresses, the contributor credits
 and the release information are preserved; the credit requirement is waived for excerpts
