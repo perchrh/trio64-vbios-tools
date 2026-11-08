@@ -41,4 +41,8 @@ Kept for milestone 5, the monitor sense (decisions M-SENSE).
   outputs. The power-on mode by display type and the software-visible monochrome
   and grey-summing state are extracted at
   [`ibm-bios-power-on-mode-and-mono-state.md`](ibm-bios-power-on-mode-and-mono-state.md);
-  the DAC drive values and the no-display behaviour remain open for milestone 5.
+  the DAC drive values and the no-display behaviour were open for milestone 5 and are now
+  decided (8 November 2026, decisions M5-DAC and M5-NODISP in
+  [`../decisions-milestones-1-4.md`](../decisions-milestones-1-4.md)): drive the selected
+  primary at full scale (63 on the driven channel, 0 on the others), and no monitor detected
+  means behave exactly as on a colour monitor.
