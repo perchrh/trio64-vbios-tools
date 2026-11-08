@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""s3patch.py - build the current ROM (2.04.07-p22) from the S3 Trio64V2/DX reference BIOS 2.04.07.
+"""s3patch.py - build the current ROM (the level of VER775 in src/tools/common/version.inc) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 src/roms/s3patch.py REF2047.BIN -o S3V2P22.BIN [--size 64|32] [--no-vco-fix]
+    python3 src/roms/s3patch.py REF2047.BIN -o S3V2P27.BIN [--size 64|32] [--no-vco-fix]
                                 [--mclk MHZ [--memtype edo1|fpm|sgram]] [--nasm nasm] [-q]
-    make 775-rom IN=REF2047.BIN OUT=S3V2P22.BIN [MCLK=55 [MEMTYPE=edo1]]
+    make 775-rom IN=REF2047.BIN OUT=S3V2P27.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -60,7 +60,7 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
          most 66.67 MHz (V2-MEM-1); without it 50.11 MHz for every type (the data patches). A --mclk
          build of the reference image is built a second time without --mclk, that build is checked
          against the pinned SHA-256, and the two may differ only in the MCLK entry and the checksum
-  sign-on "2.04.07-p22", checksum byte 7FFF
+  sign-on "2.04.07-pN" (VER775), checksum byte 7FFF
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
@@ -93,7 +93,7 @@ REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    
 # check the patch sites only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = '64f716e96fb3e8dd0fbdcf5de41df732b95852d373b0ade541d522026a5442a2'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = '51af8a86862ae86915be616eb6e1648b90fd2d9b6368346c434ba4d70e3d2768'  # 2.04.07-p26 (NASM 3.02), emulator tests passed;
+RESULT_SHA = 'e11d0f95692a6acdba2123f430300ead86c3dd9f7261fe69c38395040009ed68'  # 2.04.07-p27 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
@@ -102,7 +102,7 @@ RESULT_SHA = '51af8a86862ae86915be616eb6e1648b90fd2d9b6368346c434ba4d70e3d2768' 
 BLOCK_SHA = {
     'wincheck.asm': 'd885136ca6b113c3', 'p19.asm': 'b778a484de923cb0',
     'ddcwait.asm': 'c8494a1b6d4144f2', 'hooks.asm': '6624d8c9856b8c48',
-    'p12ext.asm': '727b07f64377de59', 'crtc240.asm': 'c82f2ec50dacb61d',
+    'p12ext.asm': '1df9337ba8c170a5', 'crtc240.asm': 'c82f2ec50dacb61d',
     'vbe4f06.asm': 'bdd213f1622291bb', 'clear32.asm': '28a181904074b700',
     'p13df.asm': '7e785b4ba99b8749', 'p13fill.asm': 'a81b8264916f413c',
     'p13move.asm': 'a9696e8fdb426c67', 'p13bfill.asm': '973ba6c5bf3d0cff',

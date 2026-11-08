@@ -6,6 +6,8 @@ org 0x7CFB
 %include "bios.inc"
 
 ; ---- INT 10h entry (jumped to after STI/CLD): fast VBE 4F05 BH=0 (set window) ----
+;      The CRTC port comes from GETCRTC (MISC bit 0), not a hardcoded 3D4h: in the mono modes the
+;      CRTC answers at 3B4h and 3D4h writes are not decoded there (p27).
 int10x: cmp ax,0x4F05
         je .v5
         cmp ah,0x0E             ; the instruction the jump replaced
@@ -17,7 +19,8 @@ int10x: cmp ax,0x4F05
         push dx
         push bx
         mov bx,dx               ; BX = bank (64 KB units)
-        mov dx,0x3D4
+        call GETCRTC            ; DX = 3B4h/3D4h by MISC bit 0: in a mono mode the CRTC is at 3B4h,
+                                ; and writes to 3D4h would not be decoded there (p27)
         mov ax,0x4838           ; unlock CR40-FF (the BIOS leaves them unlocked, a program may not)
         out dx,ax
         mov ax,0xA539
@@ -33,7 +36,8 @@ int10x: cmp ax,0x4F05
         jnz .lin
         jmp short .nl
 .off:   call L_bon              ; LA off: the first bank switch of a banked mode turns the booster on (p16)
-.nl:    mov dl,0xC4             ; SR04 bit 3 = 0: planar (4 bpp), bank x 4, kept at 0040:04FE
+.nl:    push dx                 ; keep the CRTC port across the sequencer access
+        mov dx,0x3C4            ; SR04 bit 3 = 0: planar (4 bpp), bank x 4, kept at 0040:04FE
         in al,dx
         mov ah,al               ; AH = SR index, put back below
         mov al,0x04
@@ -50,8 +54,8 @@ int10x: cmp ax,0x4F05
         mov ds,[cs:SEG_BDA]
         mov [0x4FE],bx
         pop ds
-.c4:    mov dl,0xD4             ; CR6A = bank
-        mov al,0x6A
+.c4:    pop dx                  ; CRTC port (3B4h in a mono mode)
+        mov al,0x6A             ; CR6A = bank
         mov ah,bl
         out dx,ax
         pop bx

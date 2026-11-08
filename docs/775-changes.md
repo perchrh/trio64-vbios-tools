@@ -1,6 +1,6 @@
 # Trio64V2/DX ROM (775): fixes and improvements
 
-What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p26) changes against the S3 reference BIOS
+What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p27) changes against the S3 reference BIOS
 2.04.07, each with the issue that has the details: what was wrong or missing, the cause, the effect
 and how it is tested. The build, the byte-level changes, what was borrowed, not taken or omitted, and
 what is left are in [`docs/775-rom.md`](775-rom.md); the speed measured on the card is in README "Speed". The Trio64V+
@@ -16,6 +16,7 @@ and Trio64 ROMs carry backports of many of these ([`docs/765-changes.md`](765-ch
 | DCLK VCO in 170-340 MHz (XFree86 range) | fix | p14 | [#57](https://github.com/perchrh/trio64-vbios-tools/issues/57) |
 | Memory clock 59.96 MHz (p9-p25) | speed | before p9 | [#58](https://github.com/perchrh/trio64-vbios-tools/issues/58) |
 | Memory clock 50.11 MHz in every entry by default (owner's decision; 59.96 MHz with `MCLK=60`) | default | p26 | none (not a fault) |
+| Fast 4F05 set window picks the CRTC port with GETCRTC (MISC bit 0) instead of a hardcoded 3D4h, so it also works in the mono modes (3B4h), where 3D4h writes are not decoded | fix | p27 | none |
 | MCLK build option, `make roms` | speed | p16 and later | [#112](https://github.com/perchrh/trio64-vbios-tools/issues/112) |
 | Banked VESA booster (with the Windows check, the base kept in CR6D) | speed | p7, p17, p18, p22 | [#47](https://github.com/perchrh/trio64-vbios-tools/issues/47) |
 | Fast 4F05 set window | speed | p12 | [#59](https://github.com/perchrh/trio64-vbios-tools/issues/59) |

@@ -49,8 +49,8 @@
 ;
 ; Tests and expected outcomes (each line ends in PASS or FAIL)
 ;   ROM signature    the first 256 bytes of C000 contain 'Version ' followed by VER775 (now
-;                    "2.04.07-p21") on a Trio64V2, VER765 ("1.03-08N-p4") on a Trio64V+, VER764
-;                    ("1.5-07-p2") on a Trio64; the version found is printed, also for other BIOS versions
+;                    of VER775) on a Trio64V2, VER765 on a Trio64V+, VER764 on a Trio64; the version
+;                    found is printed, also for other BIOS versions
 ;   ROM checksum     bytes C000:0000-7FFF add up to 00
 ;   Chip ID          INFO, not counted: CR2D CR2E CR2F CR30, the PCI device and revision ID, the
 ;                    market name and the S3 part number (src/tools/common/chip.inc chipfind/chippart: the same
@@ -346,7 +346,7 @@ start:  cld
 
 ; ---------------- ROM identity ----------------
 ; Expect: 'Version ' and the version of our ROM for the chip within C000:0000-00FF (Trio64V2: VER775, now
-; "2.04.07-p21"; Trio64V+: VER765, now "1.03-08N-p4"), and an 8-bit checksum of 00 over the lower 32 KB
+; the level of VER775); Trio64V+: VER765), and an 8-bit checksum of 00 over the lower 32 KB
 ; (the half the VGA BIOS runs from). The scan is romfind (src/tools/common/romver.inc): ROMVER prints
 ; it, S3COMPAT's ROM line prints it, and /V records it as D:ENV ROM=. On another chip there is no ROM
 ; of ours: the version found is an INFO line, not counted.
