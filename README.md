@@ -501,7 +501,7 @@ the fonts look right ([docs/764-rom.md](docs/764-rom.md), "On the card: 1.5-07-p
 
 `src/roms/poc/` builds a generic PCI option ROM for any conventional PCI card (PCI 2.1 and later):
 at POST it prints "Hello world" on INT 10h and beeps high-low high-low (1200/600 Hz) on the PC
-speaker, then returns CF=0. One 32 KB image with a valid checksum at offset 0, the rest of the part
+speaker, holds the text for about 2 s and returns CF=0. One 32 KB image with a valid checksum at offset 0, the rest of the part
 padded with FFh, so a BIOS scanning the ROM window finds one image and runs it once. The file size
 is `POC_PAD` in KB and names the default output (`OUT` overrides): 64 KB -> `build/roms/poc/HELLO64K.ROM`,
 128 KB -> `HELLO128K.ROM`; `POC_OFFSET` (KB) places the image at that offset instead of 0. A PCI 2.1 POST

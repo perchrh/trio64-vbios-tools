@@ -114,7 +114,8 @@ at offset 0 works on that card (measured, November 2026).
 loads the image at C0000 and `post()` far-calls C000:0003 like a system BIOS
 (with CF clear). The PoC has no VGA code, so INT 10h stays the emulator's
 IRET stub and nothing appears on a screen; the run shows the ROM returning
-to the far call, 13 INT 10h teletype calls (`Hello world` plus CR/LF), the
+to the far call, 13 INT 10h teletype calls (`Hello world` plus CR/LF), a hold
+of about 2 s (36 PIT wraps) so the text can be read before POST goes on, the
 divisors 03E2h/07C5h/03E2h/07C5h (1200/600/1200/600 Hz) programmed into PIT
 channel 2, four speaker-gate on/off pairs at port 61h, the image sum still
 00h after POST, and a second init call returning at once with no new tones
