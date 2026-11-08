@@ -187,7 +187,7 @@ where the two differ; that section is kept as the record of how the decision was
   integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
   1.01.04 are not on theretroweb yet.
-- **Scope: four milestones, and a tentative fifth** (decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145); this answers the review's F5). All are judged on the DSP-3364P, in order:
+- **Scope: four milestones, then the monitor sense, and a tentative FreeDOS milestone** (the first four decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), answering the review's F5; the monitor sense inserted as milestone 5 on 8 November 2026). All are judged on the DSP-3364P, in order:
   1. **Milestone 1: the card posts.** The system BIOS finds and runs the ROM, and the monitor shows a
      picture with readable text. Some graphical glitches are allowed. Nothing after POST is required.
   2. **Milestone 2: MS-DOS 6.22 and EDIT.** MS-DOS 6.22 boots on the card; the MS-DOS EDIT program
@@ -197,7 +197,13 @@ where the two differ; that section is kept as the record of how the decision was
      significant graphical glitches.
   4. **Milestone 4: Chris's 3D Benchmark.** Under MS-DOS, the benchmark loads and runs without
      significant graphical glitches in both its 320x200 mode and its 640x480 VESA mode.
-  5. **Milestone 5 (tentative): FreeDOS.** FreeDOS boots on the card
+  5. **Milestone 5: the monitor sense.** POST detects the display (colour, monochrome or none)
+     through the data book's SENSE mechanism (T32/64 8.4, STATUS_0 bit 4) and behaves accordingly;
+     monochrome output becomes supported. Decided 8 November 2026: until this milestone the clean ROM
+     performs no sense and always behaves as on a colour monitor
+     ([`docs/cleanroom/decisions-milestones-1-4.md`](cleanroom/decisions-milestones-1-4.md) M-SENSE, part A POST-42).
+     The owner provides the IBM reference material for it later.
+  6. **Milestone 6 (tentative): FreeDOS.** FreeDOS boots on the card
      ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
 
   Milestone 3 needs only standard VGA: mode 13h and the DAC block load AX=1012h. Milestone 4 is the

@@ -1,6 +1,6 @@
 # FreeDOS 1.4: what it asks of the video BIOS
 
-The compatibility target of the clean ROM's milestone 5, tentative since 2 November 2026 ([`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"). From a reading of the
+The compatibility target of the clean ROM's milestone 6, tentative since 2 November 2026 ([`docs/clean-room.md`](../clean-room.md) "Decisions of 2 November 2026"). From a reading of the
 FreeDOS 1.4 sources (GitLab group FreeDOS, tag `FreeDOS-v1.4` where it exists; the installer FDI and its
 language scripts from their default branches; EDIT's console code from its `unstable` branch, since the
 1.4 tag lacks it), 1 November 2026. Nothing was built or run. The sources are GPL, BSD or MIT: their
