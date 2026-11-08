@@ -89,12 +89,12 @@ are separate parts of this specification; where a rule here depends on them it s
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
 | POST-14 | Memory type: CR36 bits 3-2 come from the board strapping: 10b EDO, 11b fast page; 00b and 01b are reserved on the Trio64. POST reads them and never writes them; every CR36 write is a read-modify-write that keeps bits 4-0 | T64-MEM-5; T32/64 5.1 table 5-2, CR36; project rule ([AGENTS.md](../../AGENTS.md): the ROM never writes CR36 bits 3-2) | must | S3TEST 'S3 CR36 memory type (strapping)' (INFO) |
-| POST-15 | Memory size: POST finds the size by test at every POST and writes its code to CR36 bits 7-5: 110b 1 MB, 100b 2 MB, 000b 4 MB. The strapped value of bits 7-5 is not trusted: the data book says boards for an S3 BIOS need not strap PD7-5 because "the S3 BIOS determines this value directly and writes it to CR36 bits 7-5 after reset". Candidates, largest first: 4 MB only when CR36 bit 2 = 1 (fast page) and CR2E = 11h (Trio64); then 2 MB; then 1 MB. If no candidate holds, 1 MB is written | T32/64 5.1 ("the S3 BIOS determines this value directly"), CR36, 7.1; T64-MEM-3, T64-MEM-5 | must | not checked: the model returns the strapped size whatever is written to CR36 and does not model missing memory; a model whose video memory ends at the fitted size (reads beyond it float, the bus width follows CR36) would check it. Indirectly: VBE 4F00 TotalMemory (part C) under `make emu-test` with `--vram 1, 2, 4` |
+| POST-15 | Memory size: POST finds the size by test at every POST and writes its code to CR36 bits 7-5: 110b 1 MB, 100b 2 MB, 000b 4 MB. The strapped value of bits 7-5 is not trusted: the data book says boards for an S3 BIOS need not strap PD7-5 because "the S3 BIOS determines this value directly and writes it to CR36 bits 7-5 after reset". Candidates, largest first: 4 MB only when CR36 bit 2 = 1 (fast page) and CR2E = 11h (Trio64); then 2 MB; then 1 MB. If no candidate holds, POST writes the 1 MB code and continues: an explicit project fallback, not a verified-capacity claim (decision A-5b of 8 November 2026); mode 03h text needs 256 KB, and VBE 4F00 TotalMemory then reports what the fallback encoded | T32/64 5.1 ("the S3 BIOS determines this value directly"), CR36, 7.1; T64-MEM-3, T64-MEM-5 | must | not checked: the model returns the strapped size whatever is written to CR36 and does not model missing memory; a model whose video memory ends at the fitted size (reads beyond it float, the bus width follows CR36) would check it. Indirectly: VBE 4F00 TotalMemory (part C) under `make emu-test` with `--vram 1, 2, 4` |
 | POST-16 | A candidate holds when, with its code in CR36 bits 7-5 (which also sets the memory bus width: 32 bits for 1 MB, 64 bits for 2 and 4 MB, T32/64 7.1), distinct test patterns written to the last 64 KB page of the candidate size and to the first page read back unchanged, and the write to the last page did not change the first (no wrap). Each pattern covers at least 8 consecutive bytes, so both 32-bit halves of the 64-bit memory word are tested. The pages can be reached through the 64 KB window at A0000h with Enhanced mode memory mapping (CR31 bit 3 = 1) and the 64 KB page number in CR6A bits 5-0 (CR31 bit 0 = 1); after the test CR31 and CR6A are back to their POST values (POST-36) and the video memory content is undefined until the mode set of POST-34 clears it | T32/64 7.1, 13.1, CR31 bits 0 and 3, CR6A | should | not checked (as POST-15) |
 | POST-17 | 4 MB test: SRA bit 6 = 1 (pin 50 = RAS1, selecting the upper 2 MB) before the 4 MB candidate is tested, and back to 0 before the 2 MB candidate if 4 MB does not hold: on a 2 MB board pin 50 drives the output enable of the second megabyte (OE1 with EDO; with fast page and SRA bit 6 = 0 a copy of OE0). With EDO (CR36 bit 2 = 0) SRA bit 6 is never set (no function there, and 4 MB is fast page only). After POST: SRA bit 6 = 1 exactly when 4 MB was found | T64-MEM-3; T32/64 7.1, SRA bit 6, figures 7-2 and 7-3 | must | not checked (as POST-15) |
 | POST-18 | CR68 (strapped: CAS/OE stretch bits 1-0, RAS low time bit 2, RAS precharge bit 3, monitor information bits 6-4, memory data bus size bit 7) and CR37 (strapped) are never written. The memory timing of the board is the strapping's | T32/64 5.1 table 5-2, CR37, CR68; project design choice ([`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM", item 1: the strapped timings left alone) | must | not checked: an emulator write log over POST and every call (no write to CR37 or CR68) |
 | POST-19 | The size found is reported to software only through VBE 4F00 TotalMemory (number of 64 KB blocks; part C) and CR36 bits 7-5. The BIOS data area keeps the VGA value: 0040:0087h bits 6-5 = 11b (256 KB, BDA-14), and AH=12h BL=10h returns BL = 03h (B12.10-2). No public source defines an S3 field in the BIOS data area for the size | BDA-14, B12.10-2; VBE 1.2 (4F00 TotalMemory); T32/64 CR36 | must | S3COMPAT 'AH=12 BL=10 EGA info'; part C's 4F00 check |
-| POST-41 | DRAM power-up: before video memory is relied on after a cold start (the memory test of POST-16 and any write that must read back), satisfy the fitted DRAM's documented power-up delay and minimum qualifying RAS-cycle requirements. For the DSP-3364P's V53C16256H that is an initial pause of at least 200 ms after VCC, then at least eight initialization cycles that each contain a RAS clock (any combination of RAS-containing cycles). The system BIOS normally runs far longer than 200 ms before it calls the option ROM; the eight RAS-containing cycles are still the ROM's to ensure before the first pattern of POST-16 is written. Identify the controller conditions that make the chosen sequence produce RAS cycles on the Trio64. Initialization accesses are not memory-test results. Do not treat eight arbitrary CPU reads of the aperture as proved sufficient without that identification | V53C16256H Power-On (PDF page 17; [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md)); [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) | must | not checked: the emulator does not model DRAM initialisation; on the card, a cold boot with the clean ROM followed by S3COMPAT's VRAM test |
+| POST-41 | DRAM power-up: before video memory is relied on after a cold start (the memory test of POST-16 and any write that must read back), satisfy the fitted DRAM's documented power-up delay and minimum qualifying RAS-cycle requirements. For the DSP-3364P's V53C16256H that is an initial pause of at least 200 µs after VCC, then at least eight initialization cycles that each contain a RAS clock (any combination of RAS-containing cycles). The ROM must establish that the power-up pause has elapsed before relying on DRAM. At least eight RAS-containing initialization cycles are also required after a period without clocks longer than the refresh interval. The ROM's chosen qualifying sequence (project choice, decision A-1 of 8 November 2026): at least eight ordinary video-memory accesses through the aperture (any mix of reads and writes) before the first write whose result is relied on; the Trio64 generates a RAS clock on each such memory cycle (T32/64 section 7 memory-cycle description). Identify the controller conditions that make the chosen sequence produce RAS cycles on the Trio64. Initialization accesses are not memory-test results. Do not treat eight arbitrary CPU reads of the aperture as proved sufficient without that identification | V53C16256H Power-On (PDF page 17; [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md)); [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) | must | not checked: the emulator does not model DRAM initialisation; on the card, a cold boot with the clean ROM followed by S3COMPAT's VRAM test |
 | POST-42 | POST performs no monitor sense (M-SENSE): the SENSE mechanism of the data book (the RAMDAC analog comparators drive the internal SENSE signal active low when any AR, AG or AB output exceeds 330 mV +/- 20%; read at STATUS_0 (3C2h) bit 4, Monitor Sense Status; the book says the information "can be used to detect the existence and type of monitor") is not used, and monochrome output is not supported in milestones 1-4. POST behaves as on a colour monitor: the power-on mode is 03h (POST-34), 0040:0089h bit 2 (monochrome display) = 0 and bit 1 (grey summing) = 0 (BDA-16), 0040:0087h bit 1 (mono monitor) = 0 (BDA-14). A program can still turn grey summing on for its own mode sets (AH=12h BL=33h, B00-12). The sense itself is milestone 5 | project design choice ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) M-SENSE); T32/64 8.4, section 14 STATUS_0 (the mechanism, permissive); bios-rules BDA-14, BDA-16, B00-12 | must | emu t_post (0040:0089h bits 2 and 1 and 0040:0087h bit 1 after POST) |
 | POST-20 | SRA bits 5-0 after POST: bit 5 = 0 (PD bus tri-stated when idle, the power-on value, "reduces power consumption"), bits 4-0 = 0 (no secondary memory controller). SRA bit 7 (2-MCLK CPU writes) is open question 5; SR15 bit 7 = 0 (POST-25) | T32/64 SRA, 7.5 | should | not checked |
 
@@ -207,54 +207,55 @@ must produce for mode 03h from the data book, and POST must at least not leave a
 
 ## Open questions
 
-1. **Other chips with 5333:8811.** On a Trio32 (CR2E = 10h) or a Trio64V+ (CR2F bit 6 = 1), should
+1. **[Deferred by scope - other chips]** **Other chips with 5333:8811.** On a Trio32 (CR2E = 10h) or a Trio64V+ (CR2F bit 6 = 1), should
    POST refuse the S3 functions (VGA only), run with that chip's limits (Trio32: 2 MB, 60 MHz MCLK, no
    4 MB candidate; Trio64V+: its own register set), or run as on a Trio64? The data books allow one
    BIOS for the Trio32 and Trio64 ("This allows the same BIOS to be used with either chip"), but this
    ROM is tested on a Trio64 only.
-2. **VL-Bus strapping.** CR36 bits 1-0 = 01b: no PCI BAR; T32/64 6.2 puts the linear base in CR59-5A
+2. **[Deferred by scope - VL-Bus]** **VL-Bus strapping.** CR36 bits 1-0 = 01b: no PCI BAR; T32/64 6.2 puts the linear base in CR59-5A
    alone. Out of scope for a PCI card ROM; should POST then leave CR59/CR5A untouched and offer no
    linear base?
-3. **Setup port after a warm boot.** If a program left CR65 bit 2 = 1, the wake-up port is 3C3h, not
+3. **[Open observation - card/bench]** **Setup port after a warm boot.** If a program left CR65 bit 2 = 1, the wake-up port is 3C3h, not
    46E8h, but CR65 can only be read after the unlock, which needs the chip awake. Does a warm boot
    reset CR65 (the data book defines only the power-on reset), and should POST also write the
    wake-up sequence to 3C3h? On a PCI system with another VGA card, 46E8h and 3C3h writes may reach
    that card too.
-4. **Default MCLK of the build.** Answered by the owner on 7 November 2026: 50.11 MHz (POST-23; on
+4. **[Answered - 7 November 2026: 50.11 MHz]** **Default MCLK of the build.** Answered by the owner on 7 November 2026: 50.11 MHz (POST-23; on
    1 November 2026 it was 59.96 MHz, the data book's 60 MHz, MEM-1). 59.96 MHz and 69.80 MHz (the
    card's stock clock, T64-MEM-7) stay available through the build input. The display FIFO M of part B
    follows the MCLK POST loads (#75, #82; MODE-136 for mode 101h).
-5. **SRA bit 7 (2-MCLK CPU writes).** The data book says it "improves performance for systems using
+5. **[Open observation - card/bench]** **SRA bit 7 (2-MCLK CPU writes).** The data book says it "improves performance for systems using
    an MCLK less than 57 MHz" and asks for SR15 bit 7 between 55 and 57 MHz with linear addressing. Is
    it allowed above 57 MHz (59.96 or 69.8 MHz through the build input; the default 50.11 MHz is below
    55 MHz), or must it be 0 there? Needs a VRAM test on the card at each clock.
-6. **PLL settling time.** How long after an MCLK load (SR15 bit 0 or bit 5) may video memory be
+6. **[Open observation - card/bench]** **PLL settling time.** How long after an MCLK load (SR15 bit 0 or bit 5) may video memory be
    accessed? The data book gives none. A card test: load, then run S3COMPAT's VRAM test at once.
-7. **SR18 bit 6 (LUT write cycle).** Power-on 0 (2 DCLKs per palette write). Does a 1-DCLK cycle
+7. **[Open observation - card/bench]** **SR18 bit 6 (LUT write cycle).** Power-on 0 (2 DCLKs per palette write). Does a 1-DCLK cycle
    matter for any program (fast palette loads), and is it safe at the VGA clocks? No data book
    guidance.
-8. **Refresh in the VGA modes (CR3A bits 2-0).** With CR3A bit 2 = 0 the VGA's CR11 bit 6 sets 3 or
+8. **[Answered - 8 November 2026, decision B-3: keep IBM's default, CR3A bit 2 = 0, CR11 bit 6 = 0, 3 cycles per line; see MODE-147]** **Refresh in the VGA modes (CR3A bits 2-0).** With CR3A bit 2 = 0 the VGA's CR11 bit 6 sets 3 or
    5 refresh cycles per line; with bit 2 = 1, CR3A bits 1-0 set the count (the data book's 1024x768
    example uses 1 per line). The data book gives no requirement; the DRAMs need their refresh period
    (cycles per line x line rate >= rows / refresh period of the parts fitted). Which setting at POST
    and in the VGA modes?
-9. **CR5C (General Output Port).** Its bits are "user definable" and drive an external latch whose
+9. **[Open observation - card/bench (board input)]** **CR5C (General Output Port).** Its bits are "user definable" and drive an external latch whose
    wiring is the board maker's (on S3's design the DDC lines; the card's GOP wiring is still open). Which value must POST write on the DSP-3364P, or should it not
    write CR5C at all? A card configuration input ([`docs/clean-room.md`](../clean-room.md) item 7); the value must come
    from the board, measured or documented.
-10. **Sign-on on the screen.** Should POST print the sign-on string (many VGA BIOSes do; no standard
+10. **[Project choice]** **Sign-on on the screen.** Should POST print the sign-on string (many VGA BIOSes do; no standard
     requires it), and wait for the monitor? SeaVGABIOS's slim build prints nothing.
-11. **4F10 and 4F15 not supported.** S3's Windows 9x driver calls both at start. Does it accept "not
+11. **[Answered by the scope - 4F10/4F15 unsupported in milestones 1-4; the Windows 98 card test is deferred]** **4F10 and 4F15 not supported.** S3's Windows 9x driver calls both at start. Does it accept "not
     supported" answers (and then work without DPMS and DDC), or does it fail? A card test with the
     clean ROM under Windows 98.
-12. **Programs that rely on the S3 registers staying unlocked.** A ROM that leaves the lock as found
+12. **[Open observation - card/bench (survey)]** **Programs that rely on the S3 registers staying unlocked.** A ROM that leaves the lock as found
     (CONV-8) breaks a program that sets an S3 or VESA mode and then writes S3 registers without the
     unlock of T32/64 11.2.1. Is any such program known (games with their own S3 code, S3's own
     utilities)? A survey with VGALOG and S3REGS before and after such programs.
-13. **"IBM" at offset 1Eh.** Which programs check it, and which public source documents it?
-14. **Memory test patterns.** Is there a data book or DRAM reason to prefer particular patterns (for
+13. **[Open observation - survey of public sources]** **"IBM" at offset 1Eh.** Which programs check it, and which public source documents it?
+14. **[Project choice, informed by data book behaviour]** **Memory test patterns.** Is there a data book or DRAM reason to prefer particular patterns (for
     example 55h/AAh and their complements) or to test more than one location per page, given the
     page-mode and bus-width behaviour of 1 MB boards strapped for a 64-bit bus?
+Classified 8 November 2026 (owner sweep): every question below is labelled [Answered], [Project choice], [Open decision (owner)] or [Open observation - card/bench], or [Deferred by scope]. None blocks the clean side: it may write correct code with each question so labelled.
 
 ## Sources disagree, gaps
 

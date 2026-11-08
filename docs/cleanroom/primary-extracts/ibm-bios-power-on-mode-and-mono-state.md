@@ -2,7 +2,8 @@
 
 Source: IBM "Personal System/2 and Personal Computer BIOS Interface Technical Reference",
 April 1987, the owner's copy (readings.md row 8; an epub text conversion provided by the
-owner on 8 November 2026, lightly OCR-corrected here). Not in the repository. Kept for
+owner on 8 November 2026, lightly OCR-corrected here). A scanned copy is at the Internet
+Archive: [archive.org/details/bitsavers_ibmpcps2PSTechnicalReferenceApr87_5816663](https://archive.org/details/bitsavers_ibmpcps2PSTechnicalReferenceApr87_5816663). Not in the repository. Kept for
 milestone 5, the monitor sense (decisions M-SENSE): it states the power-on contract and
 the software-visible monochrome state that a sense result feeds.
 

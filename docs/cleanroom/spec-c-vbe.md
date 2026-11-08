@@ -294,7 +294,7 @@ Trio64 BIOSes examined there offers 4F14h.
 
 ## Open questions
 
-1. VESA text modes 108h-10Ch (80x60, 132x25/43/50/60): VBE 1.2 defines them and a Trio64 BIOS may offer
+1. **[Answered - required by the FreeDOS milestone-6 target]** VESA text modes 108h-10Ch (80x60, 132x25/43/50/60): VBE 1.2 defines them and a Trio64 BIOS may offer
    them (the S3 132-column modes). The first version's scope ([`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM", scope of the first version) names
    the packed modes only. Are 109h and 10Ah wanted (CRTC from the 132-column VGA timing, 9-dot or
    8-dot cells, B800h window, 4F01h memory model 00h with WinGranularity/WinSize 32 KB)? Which
@@ -305,56 +305,57 @@ Trio64 BIOSes examined there offers 4F14h.
    Decided by the FreeDOS 1.4 target (1 November 2026): the text modes MODE reaches are required,
    109h-10Ch and 108h ([`docs/cleanroom/freedos-1.4.md`](freedos-1.4.md) FD-14, FD-15, and the open question there on
    the number 0449h holds in them).
-2. 320x200 direct colour 10Dh-10Fh: VBE 1.2 modes that need a double-scanned 70 Hz timing with a
+2. **[Deferred by scope - later milestones]** 320x200 direct colour 10Dh-10Fh: VBE 1.2 modes that need a double-scanned 70 Hz timing with a
    12.59 MHz pixel clock, below the lowest PLL output (135 MHz / 8 = 16.9 MHz, PLL-1, PLL-2), so only
    with the dot clock halved from 25.175 MHz (SR01 bit 3) in an enhanced mode, which the data book does
    not describe ([`spec-b-modeset.md`](spec-b-modeset.md) MODE-102 and MQ-9 leave them out). Wanted, if the card shows the
    halved clock works?
-3. OEM string wording (VBE-23): the project's own text. Does any driver or program match the OEM string
+3. **[Open observation - survey of drivers/programs]** OEM string wording (VBE-23): the project's own text. Does any driver or program match the OEM string
    (for example on "S3" or "Trio64") to pick its Trio64 code path? If one does, the string must contain
    that word; the README's Windows 9x driver findings say nothing about it.
-4. NumberOfImagePages in the planar modes (VBE-34): this specification counts M / 4 bytes per plane
+4. **[Open observation - card/bench (VSHOW)]** NumberOfImagePages in the planar modes (VBE-34): this specification counts M / 4 bytes per plane
    (102h: 3, 7, 16 pages with 1, 2, 4 MB). Can the Trio64's planar modes reach video memory above
    256 KB per plane through CR6A (VBE-52) and the display start (VBE-64)? Check on the card with
    VSHOW in 102h after 4F05h DX = 4 and 4F07h past 256 KB per plane; until then a BIOS may report the
    pages of 256 KB per plane (3 in 102h, 1 in 104h).
-5. 4F02h with BH = 0 and BL bit 7 set (0083h, 00E9h): AH=00h semantics (mode BL & 7Fh without the
+5. **[Project choice - this specification refuses]** 4F02h with BH = 0 and BL bit 7 set (0083h, 00E9h): AH=00h semantics (mode BL & 7Fh without the
    clear) or a refusal? Haakenson reports that some 1.2 programs used bit 7 as the no-clear flag.
-6. 4F02h with bit 14 set (4101h, C101h): reserved in 1.2 and refused here (VBE-41). Windows 98's
+6. **[Open observation - card/bench (VGALOG under Windows 98)]** 4F02h with bit 14 set (4101h, C101h): reserved in 1.2 and refused here (VBE-41). Windows 98's
    driver brought DOS boxes back with 4F02h C101h on the Trio64V2's VBE 2.0 BIOS (README); does it do
    so on a VBE 1.2 BIOS, where 4F01h offers no linear buffer? A VGALOG /M log of Windows 98 on the
    Trio64 card with this ROM decides it.
-7. 4F05h-4F07h in the standard modes 00h-13h (VBE-6): VBE 1.2 says 4F06h and 4F07h "are also valid in
+7. **[Project choice - this specification refuses]** 4F05h-4F07h in the standard modes 00h-13h (VBE-6): VBE 1.2 says 4F06h and 4F07h "are also valid in
    text modes", which may mean VESA text modes only. Refuse (this specification) or support them on
    the VGA registers (SeaVGABIOS does, through its stdvga line length and display start)? With
    support, the text mode units: 4F06h CX in pixels = columns x character width; 4F07h DX in pixel
    lines = rows x character height (the start address counts characters).
-8. 4F04h with CX = 0 (no class): 004Fh with BX = 0 (or the size of a header only), or 014Fh? VBE 1.2 does
+8. **[Project choice]** 4F04h with CX = 0 (no class): 004Fh with BX = 0 (or the size of a header only), or 014Fh? VBE 1.2 does
    not say.
-9. The window function cannot report an error (VBE 1.2 far call): with DX out of range, does it leave
+9. **[Project choice - this specification leaves CR6A unchanged]** The window function cannot report an error (VBE 1.2 far call): with DX out of range, does it leave
    CR6A as it is, or take DX modulo the memory? This specification leaves CR6A unchanged.
-10. 4F07h pixel step: the attribute controller's horizontal pixel panning (AR13) could give a one-pixel
+10. **[Open observation - card/bench]** 4F07h pixel step: the attribute controller's horizontal pixel panning (AR13) could give a one-pixel
     step at 8 and 15/16 bpp in the enhanced modes; does it act there on the Trio64 (the data book
     describes AR13 only for VGA modes)? If yes, should 4F07h use it (VBE 1.2 does not ask for it)?
-11. 4F07h start near the end of memory: refuse when the displayed page (YResolution lines) does not fit
+11. **[Open observation - card/bench]** 4F07h start near the end of memory: refuse when the displayed page (YResolution lines) does not fit
     between the start and the end of memory (as VBE 2.0 4.10 advises, "does not allow for a full
     page"), or accept as long as the start itself is inside memory? S3COMPAT's '4F07 start' sets
     y = 3000 in 101h (1.92 MB) and expects success also on 1 MB cards; refusing full pages beyond
     memory would need that test changed for 1 MB. Does the Trio64 wrap the display address at the end
     of memory?
-12. 4F07h BL = 80h (VBE 2.0: set during vertical retrace): refuse on this 1.2 BIOS (VBE-68), or accept as
+12. **[Project choice - this specification refuses (VBE-68)]** 4F07h BL = 80h (VBE 2.0: set during vertical retrace): refuse on this 1.2 BIOS (VBE-68), or accept as
     BL = 00h with a wait for the retrace, for 2.0 programs that do not check the version?
-13. The S3 numbers of the listed modes other than 101h and 103h (S3M-5), and of S3's 2xxh VESA-range
+13. **[Deferred by scope - later milestones; the leak review decides whether observed numbers cross]** The S3 numbers of the listed modes other than 101h and 103h (S3M-5), and of S3's 2xxh VESA-range
     numbers used by S3 drivers: S3's Windows 9x driver set 207h (1152x864x8) through 4F02h on the
     Trio64V2 (README "Windows 9x driver test"). Which numbers, which resolutions, and is 1152x864 at
     60 Hz (GTF, not in DMT 1.0) wanted? The reference's numbering is in the oracle file; the leak review
     decides whether it may cross the wall as observed behaviour (as the 4F14h rules do).
-14. 4F14h query version (OEM-2): the S3 2.04 BIOSes return 0010h (2.04.07) or 0411h (2.04.11). Which
+14. **[Deferred by scope - OEM functions are outside milestones 1-4]** 4F14h query version (OEM-2): the S3 2.04 BIOSes return 0010h (2.04.07) or 0411h (2.04.11). Which
     version should a Trio64 BIOS report so that a program that checks it accepts the functions, and is
     CX = 0003h a count or a mask of the BL values?
-15. Should 4F02h refuse a listed mode whose picture fits but whose pixel clock at the selected refresh
+15. **[Deferred - arises only with higher refresh rates, later milestones]** Should 4F02h refuse a listed mode whose picture fits but whose pixel clock at the selected refresh
     (OEM-3) exceeds CLK-1? With only 60 Hz entries (item 2) every listed mode fits CLK-1; the question
     arises with higher rates.
+Classified 8 November 2026 (owner sweep): every question below is labelled [Answered], [Project choice], [Open decision (owner)] or [Open observation - card/bench], or [Deferred by scope]. None blocks the clean side: it may write correct code with each question so labelled.
 
 ## Sources disagree
 

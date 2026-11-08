@@ -18,7 +18,7 @@ So the part needs 512 RAS-containing refresh cycles in every 8 ms window.
 
 > Power-On
 >
-> After application of the VCC supply, an initial pause of 200 ms is required followed by a
+> After application of the VCC supply, an initial pause of 200 µs is required followed by a
 > minimum of 8 initialization cycles (any combination of cycles containing a RAS clock). Eight
 > initialization cycles are required after extended periods of bias without clocks (greater than
 > the Refresh Interval).
@@ -30,7 +30,9 @@ So the part needs 512 RAS-containing refresh cycles in every 8 ms window.
 
 Notes for the specification:
 
-- The pause is **200 ms**, not 200 us (POST-41 previously said us; corrected from this page).
+- The printed sheet says **200 µs**; its text layer (OCR) reads `200 ms`. The µs reading is
+  the primary one (verified on the rendered page in the second-pass leak review of 7 November
+  2026); POST-41 and an earlier version of this note repeated the OCR's 200 ms in error.
 - The eight cycles must be RAS-containing initialization cycles. The sheet does not say that eight
   CPU reads of the VGA aperture are enough by themselves; the clean ROM must state which controller
   accesses produce qualifying RAS cycles on the Trio64.
