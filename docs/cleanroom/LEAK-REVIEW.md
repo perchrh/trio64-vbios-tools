@@ -131,7 +131,7 @@ clean side's copy; the record names the rule IDs that crossed. [`freedos-1.4.md`
 | [`spec-a-post.md`](spec-a-post.md) | specification | second full review; returned on 2 November; rewritten on 5 November (#168), POST-6 changed on 7 November |
 | [`spec-b-modeset.md`](spec-b-modeset.md) | specification | second review of the VGA return and 101h; MODE-136 (the FIFO M of 101h), MODE-137, MODE-148, MODE-103, MQ-11 and MQ-12 are new since the pin; the 25.175 MHz PLL pair (step 3) |
 | [`spec-c-vbe.md`](spec-c-vbe.md) | specification | second review of 4F00h, 4F01h (100h, 101h), 4F02h (101h), 4F05h and its far entry, and the general rules; VBE-45 (AH=0Fh after 101h returns 40h) and the CR35 units note are new since the pin; 4F14h and the S3 mode numbers stay out of scope |
-| [`docs/chip-rules.md`](../chip-rules.md) | the clean side's copy | the IDs the parts cite; the four `[Leak review: ...]` notes of the first pass are gone (#168), two new ones at T64-ID-2 and AV-ID-1 (step 5); T64-MEM-7 was returned |
+| [`docs/chip-rules.md`](../chip-rules.md) | the clean side's copy | the IDs the parts cite; the four `[Leak review: ...]` notes of the first pass are gone (#168), two new ones at T64-ID-2 and AV-ID-1 (step 5), decided dirty-side only on 8 November 2026 (decisions ID-INF); T64-MEM-7 was returned |
 | [`docs/bios-rules.md`](../bios-rules.md) | public-source rules | the returned rows B00-5, B09-11, B10-1, B11-1, B12-1, B1A-1, B1C-8, TAB-9 and question 17, rewritten on 5 November (#168) |
 | [`milestone-calls.md`](milestone-calls.md) | requirements | only its part "The contract" crosses; since the pin it holds EDIT's calls (milestone 2), the benchmark's bank switching through CR35 and the milestone 2 boot policy (#168), none of them reviewed yet; "The run" names our ROMs and what they answered |
 | [`freedos-1.4.md`](freedos-1.4.md) | requirements | not in this review (milestone 5). Its section "Our ROMs against these" measures our patched ROMs by level (1.5-07-p3, 1.03-08-p1, 2.04.07-p22): dirty-side material, to cut from the clean side's copy or keep with a reason (step 5) |
@@ -173,6 +173,12 @@ of the review of 2 November and are in its record.
   [`docs/bios-rules.md`](../bios-rules.md) (TAB-9) and [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md)
   moved under `src/` (#174, 7729a0e). [`docs/bios-rules.md`](../bios-rules.md): the legend of S3COMPAT's
   default DAC check (1afbea1), a tool name only.
+- **8 November 2026.** The DMT extract points to the standard's public copy (the PDF was removed in
+  9963092); S3M-2 cites the README tool-table row instead of the S3ALIAS header; the contract cites
+  spec C's VBE-44 and VBE-53; TAB-9 and the decision "Fonts" no longer link into `src/roms/fonts/`.
+  Owner decision: identification facts taken from S3 driver INFs stay dirty-side only
+  ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md), ID-INF); POST-6 no longer says how a
+  driver tells the two Trio64 parts apart, and the T64-ID-2 and AV-ID-1 notes record the decision.
 
 ### The searches, run by the author as a pre-check (counts of lines, not findings)
 
@@ -248,11 +254,13 @@ that one file, not the rest of `src/roms/`.
   as a public chip rating; the bios-rules rows B00-5, B09-11, B10-1, B11-1, B12-1, B1A-1, B1C-8, TAB-9 and
   question 17; the Source columns of the milestone contract and its 100h and AH=0Fh wording. Record each
   as settled or still returned.
-- [`docs/chip-rules.md`](../chip-rules.md): T64-ID-2 and AV-ID-1 carry `[Leak review: ...]` notes;
-  POST-6 cites T64-ID-2, and VP-ID-1, which POST-6 also cites, now rests the revisions 5xh partly on S3's
-  driver INF without a note. A driver's identification table is neither data book nor black-box
-  observation of a BIOS: decide under steps 2 and 5 whether the clean side needs it (POST-6 says the ROM
-  does not need to tell the two Trio64 parts apart).
+- [`docs/chip-rules.md`](../chip-rules.md): T64-ID-2 and AV-ID-1 carry `[Leak review: ...]` notes, and
+  VP-ID-1 rests the revisions 5xh partly on S3's driver INF. Owner decision of 8 November 2026
+  ([`decisions-milestones-1-4.md`](decisions-milestones-1-4.md), ID-INF): identification facts taken
+  from S3 driver INFs are dirty-side only, the clean side needs none of them. T64-ID-2, AV-ID-1,
+  T3D-ID-1, T3D2X-ID-1 and the INF parts of VP-ID-1 and V2-ID-1 are cut from the crossing copy; POST-6
+  no longer carries the driver tell-apart. The reviewer judges the data-book and card-record parts of
+  VP-ID-1 as usual.
 - Parts A, B and C linked to the SeaVGABIOS plan file, which the reviewer could not read. Since
   7 November 2026 that file is removed and the links point to [`docs/clean-room.md`](../clean-room.md) "The parts of the
   clean ROM" (items 1-6 and the scope of the first version, written as project design choices) instead.
