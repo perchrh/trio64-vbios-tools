@@ -35,7 +35,7 @@ are separate parts of this specification; where a rule here depends on them it s
   5 November 2026). The subsection numbers cited (6.3.1.1, 6.3.1.2, 6.3.3.1) are the same in
   revision 2.1, which the rules first cited. V53C16256H: Mosel Vitelic V53C16256H data sheet,
   Rev. 2.3, June 1998, the DRAM of the card
-  ([`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF); extract
+  ([`datasheets/dram/V53C16256H-1.PDF`](../../datasheets/dram/V53C16256H-1.PDF); extract
   [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md)).
   VGADOC: Finn Thoegersen's VGADOC 4b,
   [`standards/thoegersen/`](../../standards/thoegersen/) (PCI.TXT, S3.TXT). VBE 1.2: the VESA BIOS
@@ -308,5 +308,5 @@ the engine can be checked there only as register writes, not as effects.
 PCI 2.3 section 6.3 (ROM-1, ROM-2, ROM-5, ROM-6, POST-1) is in
 [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) with extract
 [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md). The V53C16256H
-sheet (POST-41, MODE-130) is in [`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF).
+sheet (POST-41, MODE-130) is in [`datasheets/dram/V53C16256H-1.PDF`](../../datasheets/dram/V53C16256H-1.PDF).
 VGADOC PCI.TXT still covers the PCI BIOS calls and the configuration header, not the ROM format.

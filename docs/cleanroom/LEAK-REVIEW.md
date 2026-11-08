@@ -218,7 +218,7 @@ say so in the record, and the review is done again by another session.
 | [`docs/764-rom.md`](../764-rom.md), [`docs/765-rom.md`](../765-rom.md), [`docs/775-rom.md`](../775-rom.md), except the section "Cross-check with riplin's annotated disassembly" of [`docs/764-rom.md`](../764-rom.md) | measurements of the reference ROMs and the cards. One sentence of [`docs/764-rom.md`](../764-rom.md) outside that section, on memory sizing, names a routine and its offset from riplin's disassembly; reading it is not a breach, but it is no source for a finding |
 | The emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py) and [`emu/similarity.py`](../../emu/similarity.py) (step 6) to read and run; [`emu/tests.py`](../../emu/tests.py) to run, not to read | to run a reference ROM and observe it; the test file's comments describe our patches from the inside (see below) |
 | The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
-| [`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF) and [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md) | POST-41 and MODE-130 DRAM premises (independent review A-3 / B-1) |
+| [`datasheets/dram/V53C16256H-1.PDF`](../../datasheets/dram/V53C16256H-1.PDF) and [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md) | POST-41 and MODE-130 DRAM premises (independent review A-3 / B-1) |
 | [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md), and VESA DMT from its public copy [VESA-DMT-1.13.pdf](https://glenwing.github.io/docs/VESA-DMT-1.13.pdf) (a later revision, named in the repository-root README, "VESA standards") | part B 101h timing and border (MQ-16). The PDF was removed from the repository (9963092); the extract links to that public copy |
 | [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | part A ROM header / PCI data structure / INIT (ROM-1..6, POST-1) |
 | [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) and [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md) | part C status / failure, AH=0Fh reinit advice, ModeAttributes D0 |
@@ -289,4 +289,6 @@ that one file, not the rest of `src/roms/`.
 - Not to review now: the monitor sense decision of our ROMs (#134, #139) and the font change (#141)
   touched no file that crosses. The monitor sense at POST is decided for milestones 1-4: no sense,
   POST always behaves as on a colour monitor (POST-42, decisions M-SENSE, 8 November 2026). The sense
-  itself is milestone 5; its sources come from the owner later, and its rules get their own review then.
+  itself is milestone 5; the S3 sense procedure is extracted at
+  [`primary-extracts/vision964-sense-input-utilization.md`](primary-extracts/vision964-sense-input-utilization.md),
+  the IBM reference material comes from the owner later, and its rules get their own review then.

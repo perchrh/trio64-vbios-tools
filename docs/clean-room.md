@@ -202,7 +202,8 @@ where the two differ; that section is kept as the record of how the decision was
      monochrome output becomes supported. Decided 8 November 2026: until this milestone the clean ROM
      performs no sense and always behaves as on a colour monitor
      ([`docs/cleanroom/decisions-milestones-1-4.md`](cleanroom/decisions-milestones-1-4.md) M-SENSE, part A POST-42).
-     The owner provides the IBM reference material for it later.
+     The owner provides the IBM reference material for it later. The S3 sense procedure is already
+     extracted: [`docs/cleanroom/primary-extracts/vision964-sense-input-utilization.md`](cleanroom/primary-extracts/vision964-sense-input-utilization.md).
   6. **Milestone 6 (tentative): FreeDOS.** FreeDOS boots on the card
      ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
 
