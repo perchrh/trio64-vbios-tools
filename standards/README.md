@@ -28,7 +28,8 @@ WHATVGA programs. The `phatcode.exe` that came in the downloaded archive is not 
 
 ## rbil-all/
 
-Ralf Brown's Interrupt List, release 61 (16 July 2000), copied unmodified. Not public domain:
+Ralf Brown's Interrupt List, release 61 (16 July 2000), copied unmodified. The official source and
+new releases: [www.cs.cmu.edu/~ralf/files.html](https://www.cs.cmu.edu/~ralf/files.html). Not public domain:
 its notice (in `INTERRUP.1ST`, kept intact) permits use and redistribution in any way, including
 conversion to another format, provided Ralf Brown's name and addresses, the contributor credits
 and the release information are preserved; the credit requirement is waived for excerpts
