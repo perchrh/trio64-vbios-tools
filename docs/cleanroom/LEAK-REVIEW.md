@@ -211,7 +211,7 @@ say so in the record, and the review is done again by another session.
 | The emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py) and [`emu/similarity.py`](../../emu/similarity.py) (step 6) to read and run; [`emu/tests.py`](../../emu/tests.py) to run, not to read | to run a reference ROM and observe it; the test file's comments describe our patches from the inside (see below) |
 | The data sheets and public references in [`datasheets/`](../../datasheets/) and named in [`docs/bios-rules.md`](../bios-rules.md) | the public sources a statement may rest on |
 | [`datasheets/V53C16256H-1.PDF`](../../datasheets/V53C16256H-1.PDF) and [`primary-extracts/v53c16256h-power-up-and-refresh.md`](primary-extracts/v53c16256h-power-up-and-refresh.md) | POST-41 and MODE-130 DRAM premises (independent review A-3 / B-1) |
-| [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md), and VESA DMT 1.0 Rev. 10 from its public copy (named in the repository-root README, "VESA standards") | part B 101h timing and border (MQ-16). The PDF was removed from the repository (9963092); the extract's link to `standards/vesa/` no longer resolves |
+| [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md), and VESA DMT from its public copy [VESA-DMT-1.13.pdf](https://glenwing.github.io/docs/VESA-DMT-1.13.pdf) (a later revision, named in the repository-root README, "VESA standards") | part B 101h timing and border (MQ-16). The PDF was removed from the repository (9963092); the extract links to that public copy |
 | [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | part A ROM header / PCI data structure / INIT (ROM-1..6, POST-1) |
 | [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) and [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md) | part C status / failure, AH=0Fh reinit advice, ModeAttributes D0 |
 | [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) | owner decisions that close Q100, Q0F, MCLK, FIFO, POST-41, ROM-8/9 |
@@ -227,7 +227,7 @@ say so in the record, and the review is done again by another session.
 | The Phoenix VGA BIOS source material (an `SRC/phx` folder or similar, wherever found) | a vendor's source: the review compares with the ROMs' observed bytes and behaviour, not with anyone's source |
 | riplin's annotated disassembly ([hag](https://github.com/riplin/hag) `research/s3/bios/86c764x.asm`), and the section of [`docs/764-rom.md`](../764-rom.md) that cites it | the same: an expression of the Phoenix code, with names for its routines |
 | Any other VGA BIOS source code (SeaVGABIOS, the BIOS source [`docs/bios-rules.md`](../bios-rules.md) mentions, others) | the same; and a reviewer who has read it cannot tell what a file under review took from it |
-| Our patch code and patchers: [`src/roms/`](../../src/roms/) (its `bios.inc` files map routines of the reference ROMs), except `src/roms/fonts/README.md` (step 6), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour. TAB-9 and the decision "Fonts" link to `src/roms/fonts/`: do not follow those links |
+| Our patch code and patchers: [`src/roms/`](../../src/roms/) (its `bios.inc` files map routines of the reference ROMs), except `src/roms/fonts/README.md` (step 6), and the change logs [`docs/764-changes.md`](../764-changes.md), [`docs/765-changes.md`](../765-changes.md), [`docs/775-changes.md`](../775-changes.md) | they describe the reference code from the inside, with its addresses, and carry routine names from riplin's disassembly (`VESADDCReadVDIF` in `s3tpatch.py`, for one); not needed to compare behaviour |
 | [`BRIEF.md`](BRIEF.md) | the clean implementer's brief, not dirty material, but the reviewer has no use for it and must not write to the clean side |
 | [`src/tools/s3alias/`](../../src/tools/s3alias/) (S3ALIAS's source, its header included) | our TSR's code; the owner does not allow it for the review. The README's tool table row is enough for the mode numbers (49h to 59h, 4Bh to 5Ah) |
 
@@ -261,9 +261,9 @@ that one file, not the rest of `src/roms/`.
   7 November 2026): POST-22, POST-23 and open question 4 of part A, MODE-136 and MQ-11 of part B, and
   the MCLK and FIFO rows of [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md).
 - [`spec-c-vbe.md`](spec-c-vbe.md) S3M-2 quotes the S3ALIAS header ("sets 640x480x256 with INT 10h AH=00 mode 49h ...")
-  and cites it as "README"; the quote is not in README.md, and the reviewer may not read
+  and cited it as "README"; the quote is not in README.md, and the reviewer may not read
   [`src/tools/s3alias/`](../../src/tools/s3alias/). Deferred with the S3 mode numbers (outside milestones
-  1-4); the citation is to be fixed before that later review.
+  1-4); the citation now rests on the README tool-table row for S3ALIAS.COM, which the reviewer may read.
 - [`spec-c-vbe.md`](spec-c-vbe.md) 4F14h (OEM-1 to OEM-7) and the S3 mode numbering: observed behaviour of S3's
   BIOSes, kept for compatibility (step 5); outside the scope of milestones 1-4 and cut from the clean
   side's copy. Dirty-side next step: Trio64V2/DX driver `VGALOG` call logs, then OEM / `AX=4F14h`
@@ -273,8 +273,8 @@ that one file, not the rest of `src/roms/`.
 - [`milestone-calls.md`](milestone-calls.md): "The run" now also holds the benchmark's bank routine, read
   from the program's own disassembly (a DJGPP program, not a BIOS), and a port trace of our 1.5-07-p5;
   it stays on the dirty side. What the contract takes from it (CR6A = 00h, CR51 bits 3-2 = 0, CR31 bits
-  0 and 3 with 64 KB pages in CR35 after 4F02h 101h) is in the contract, which cites "spec C" without
-  rule IDs (VBE-44 and VBE-53 hold these rules); its Source column is a return of the first pass.
+  0 and 3 with 64 KB pages in CR35 after 4F02h 101h) is in the contract, which now cites spec C's rule
+  IDs VBE-44 and VBE-53; its Source column is a return of the first pass.
 - [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md): deferred with milestone 5.
 - Not to review now: the monitor sense decision of our ROMs (#134, #139) and the font change (#141)
   touched no file that crosses; the specifications say nothing yet on the monitor sense at POST
