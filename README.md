@@ -892,7 +892,9 @@ names in brackets, as of 2 November 2026); the links are public copies.
   that extension and for the other display material it publishes; what its 1996 DPMS client states is
   in [docs/clean-room.md](docs/clean-room.md) ("The X11 project").
 - DDC on the VGA connector: [hardwarebook.info, "VGA (VESA DDC)"](https://www.hardwarebook.info/VGA_(VESA_DDC)),
-  the pins (12 SDA, 15 SCL, 9 +5 V) for the DDC2 work on the Trio64 board; and Joe Miseli (Sun
+  the pins (12 SDA, 15 SCL, 9 +5 V) for the DDC2 work on the Trio64 board; EIZO, FlexScan F67/FX-D7
+  T68/TX-D7 User's Manual (1999), whose D-Sub pin assignment confirms DDC2B on pins 12 (Data) and
+  15 (Clock) with no pin 9 on a period CRT; and Joe Miseli (Sun
   Microsystems), [EDID, Display Technology and VESA](https://www.x.org/wiki/Events/XDC2007/Notes/Xorg_2007-EDID-JMiseli.pdf)
   (Xorg Developer's Conference, 8 February 2007; `Xorg_2007-EDID-JMiseli.pdf`), the history of EDID,
   E-EDID, DDC and E-DDC.
