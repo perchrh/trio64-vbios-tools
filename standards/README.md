@@ -7,7 +7,9 @@ the copies. VGADOC sits under the VESA standards and under Ralf Brown's Interrup
 ## thoegersen/
 
 Nine files from VGADOC 4b by Finn Thoegersen (1991-95), copied unmodified (CRLF line endings, kept
-by `.gitattributes`). Its licence, README.1ST, is included unmodified as it requires: the
+by `.gitattributes`). The author's original site, archived:
+[web.archive.org/web/20081217030257/http://home.worldonline.dk/finth/](https://web.archive.org/web/20081217030257/http://home.worldonline.dk/finth/).
+Its licence, README.1ST, is included unmodified as it requires: the
 information may be used in any project, the collection or a subset may be redistributed free of
 charge with README.1ST, and the source must be credited. It is a subset, so it is not distributed
 under VGADOC's name.
