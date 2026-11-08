@@ -5,8 +5,8 @@
 ; The BIOS maps the ROM, copies the image to RAM, far-calls the entry point
 ; at offset 3 and the code prints "Hello world" on the INT 10h teletype and
 ; beeps high-low high-low (four tones: 1200 Hz, 600 Hz, 1200 Hz, 600 Hz) on
-; the PC speaker, holds the text for about 2 s (readable before POST goes on)
-; and returns with CF=0.
+; the PC speaker, holds the text for about 1 s more (the string is up for
+; about 2.5 s in all) and returns with CF=0.
 ;
 ; Entry (init): AX = bus number in AH, device/function in AL; the routine
 ; preserves every register and returns by RETF, status in CF (0 = success,
@@ -119,8 +119,9 @@ init:   pusha
         jnz .beep
         pop ax                  ; the speaker gate as found
         out 0x61, al
-        mov cx, 36              ; hold the text on screen: about 2 s (36 PIT
-        call wait_pit           ; wraps of 54.9 ms), readable before POST goes on
+        mov cx, 18              ; hold the text on screen: about 1 s (18 PIT
+        call wait_pit           ; wraps of 54.9 ms), after the about 1.5 s of
+                                ; beeps: readable, and no more than 1.5 s added
 .ret:   pop es
         pop ds
         popa
