@@ -23,7 +23,11 @@ to implement from:
     and 640x480 VESA without significant glitches: the first milestone that needs parts B and C, for
     its one VESA mode. Milestone 5: the monitor sense (decided 8 November 2026: no sense in
     milestones 1-4, POST always colour, M-SENSE). Milestone 6, tentative: FreeDOS boots
-    ([`freedos-1.4.md`](freedos-1.4.md)). The rest of
+    ([`freedos-1.4.md`](freedos-1.4.md)). Milestone 7, an idea (added 8 November 2026, [#117](https://github.com/perchrh/trio64-vbios-tools/issues/117)):
+    DDC (VBE 4F15h) with interrupts enabled for the whole call, memory-mapped I/O and interrupts off
+    only around each DDC register access — the clean ROM starts this way instead of patching the 775
+    ROM. The converter-friendly modes of [#115](https://github.com/perchrh/trio64-vbios-tools/issues/115)
+    (720p, 1080i, 240p) are an idea for later still, outside every milestone so far. The rest of
     parts B and C is for later milestones;
   - the scope of the leak review: a clean-room implementation of milestones 1-4
     ([`LEAK-REVIEW.md`](LEAK-REVIEW.md) "Scope of this review").
