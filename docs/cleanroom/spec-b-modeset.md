@@ -224,20 +224,20 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
 
 ## Open questions
 
-1. **MQ-1** 15/16 bpp: the data book does not say that the CRTC counts 4 pixels per character clock in
+1. **[Open observation - card/bench]** **MQ-1** 15/16 bpp: the data book does not say that the CRTC counts 4 pixels per character clock in
    colour modes 9 and 10 (MODE-109). VGADOC's CR46 note and the card's measured refresh (S3COMPAT fail
    400 passes on the DSP-3364P with that rule) support it. Does CR43 bit 7 (horizontal counter double
    mode) offer the same with 8-pixel values, and should it be used instead?
-2. **MQ-2** CR5D bits 3 and 5 extend BLANK and HSYNC by 64 and 32 "DCLKs": in 15/16 bpp, is that 16 and
+2. **[Open observation - card/bench (monitor readout)]** **MQ-2** CR5D bits 3 and 5 extend BLANK and HSYNC by 64 and 32 "DCLKs": in 15/16 bpp, is that 16 and
    8 character clocks (DCLK = pixel clock, 4 per character clock), as MODE-113 assumes for 116h/117h?
    A card readout of the sync width (monitor information) would settle it.
-3. **MQ-3** Pipeline offset: IBM's VGA tables place HSYNC two character clocks later than DMT's 640x480
+3. **[Open observation - card/bench]** **MQ-3** Pipeline offset: IBM's VGA tables place HSYNC two character clocks later than DMT's 640x480
    position (CR04 = 54h for 656 pixels). Does the Trio64's enhanced mode pipeline need an offset too
    for the DMT sync to come at the DMT position? MODE-114 adds none.
-4. **MQ-4** T32/64 9.1 step 2 writes M = [f x (N+2) x 2^R / fREF] - 2 with brackets that may mean
+4. **[Project choice - MODE-119 rounds to the nearest integer]** **MQ-4** T32/64 9.1 step 2 writes M = [f x (N+2) x 2^R / fREF] - 2 with brackets that may mean
    rounding or truncation. MODE-119 rounds to the nearest integer; with truncation the first N meeting
    0.5 % changes for 40 and 65 MHz.
-5. **MQ-5** Memory refresh per scan line (CR3A bits 2-0 with bit 2 = 1, or CR11 bit 6 when bit 2 = 0):
+5. **[Answered for the DSP-3364P (MODE-130); remainder open observation - card/bench]** **MQ-5** Memory refresh per scan line (CR3A bits 2-0 with bit 2 = 1, or CR11 bit 6 when bit 2 = 0):
    the data book's example (1 per line) is a 1024x768 mode at 75 Hz (about 60 kHz). At 31.5 kHz (640x480,
    640x400 and the VGA modes) one refresh per line gives 31500 per second; the DRAM's refresh need
    (cycles per ms of the V53C16256H and of EDO parts) is not in the project's notes. Which count should
@@ -255,31 +255,31 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
    blanking (if not, the count must cover the active lines only and rises), the fitted part's revision on
    the card, retention under a sustained mode measured on the card, and other boards' parts (EDO parts
    of the Trio64V+/V2 cards).
-6. **MQ-6** Does the M parameter act in the VGA modes on the Trio64 (MODE-148), and is M = 31 there safe
+6. **[Open observation - card/bench]** **MQ-6** Does the M parameter act in the VGA modes on the Trio64 (MODE-148), and is M = 31 there safe
    on the card? The Vision968 book uses M in VGA modes only, the Trio64 book does not limit it.
-7. **MQ-7** CR40 bit 0 after a packed mode set: left 1 so a driver can use the graphics engine at once,
+7. **[Open observation - card/bench (what programs expect)]** **MQ-7** CR40 bit 0 after a packed mode set: left 1 so a driver can use the graphics engine at once,
    or restored as found (MODE-139)? Which do the Windows 9x driver and DOS programs expect?
-8. **MQ-8** CR31 bit 2 (16-bit VGA memory bus) in the planar and CGA graphics modes: the data book calls
+8. **[Open observation - card/bench]** **MQ-8** CR31 bit 2 (16-bit VGA memory bus) in the planar and CGA graphics modes: the data book calls
    it useful in text modes "when VGA graphics controller functions are typically not used". Safe in
    0Dh-12h, or 0 there?
-9. **MQ-9** Answered for the modes: part C ([`spec-c-vbe.md`](spec-c-vbe.md) VBE-10) offers the planar 102h and 104h
+9. **[Answered for the listed modes; 10Dh-10Fh deferred by scope to later milestones]** **MQ-9** Answered for the modes: part C ([`spec-c-vbe.md`](spec-c-vbe.md) VBE-10) offers the planar 102h and 104h
    through the VGA 16-colour path and no VBE text modes 108h-10Ch. Still open: 10Dh-10Fh (320x200 at 70 Hz in high colour) be possible with SR01 bit 3 halving a 25.175 MHz
    DCLK in an enhanced mode?
-10. **MQ-10** Display start units for 4F07 (VBE part): does CR0C/CR0D/CR69 count 4-byte or 8-byte units in
+10. **[Open observation - card/bench]** **MQ-10** Display start units for 4F07 (VBE part): does CR0C/CR0D/CR69 count 4-byte or 8-byte units in
     the enhanced modes with 2 MB (64-bit bus) and with 1 MB?
-11. **MQ-11** Answered for mode 101h by MODE-136. The 1 MB FIFO is 64 bytes, and M = 31 drains about
+11. **[Answered for 101h by data-book arithmetic; the fit on a 1 MB card is an open acceptance observation]** **MQ-11** Answered for mode 101h by MODE-136. The 1 MB FIFO is 64 bytes, and M = 31 drains about
     36 bytes at the default 50.11 MHz (30 at 59.96 MHz), which fits. No 1 MB card has been run, so that fit is the data book's
     arithmetic only.
-12. **MQ-12** The 5-MCLK and 6-MCLK models are not the rule for 101h. At 60 MHz the DSP-3364P showed
+12. **[Open observation - card/bench (acceptance check)]** **MQ-12** The 5-MCLK and 6-MCLK models are not the rule for 101h. At 60 MHz the DSP-3364P showed
     white dots in windowed video with the 5-MCLK model (#82). MODE-136 uses M = 31 instead. Whether
     101h streaks at that M on the card is still the acceptance check.
-13. **MQ-13** CR67 bit 0 (VCLK phase) in clock-doubled mode 8: the data book's example (CR67 = 00h) is a
+13. **[Project choice, informed by the data book]** **MQ-13** CR67 bit 0 (VCLK phase) in clock-doubled mode 8: the data book's example (CR67 = 00h) is a
     mode 0 setting; is bit 0 = 0 right for mode 8 too?
-14. **MQ-14** SR01 bit 5: on the Trio64V2 the screen off takes effect up to 3 HSYNCs later (V2-REG-6);
+14. **[Open observation - card/bench]** **MQ-14** SR01 bit 5: on the Trio64V2 the screen off takes effect up to 3 HSYNCs later (V2-REG-6);
     must a Trio64 mode set wait before it writes CR54/CR60? The Trio64 book is silent.
-15. **MQ-15** Answered by part C: 4F01 BitsPerPixel of 112h and 115h is 32 with an 8-bit reserved
+15. **[Answered by part C]** **MQ-15** Answered by part C: 4F01 BitsPerPixel of 112h and 115h is 32 with an 8-bit reserved
     field (the 4-byte memory format; the Trio64 has no packed 24-bit mode).
-16. **MQ-16** The DMT border of 640x480 at 60 Hz (checked against DMT 1.0 Rev. 10 ([`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf); 640x480@60 extract [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md)), 2 November 2026).
+16. **[Project choice - the border/blanking decision; the second-pass review's B-9 rewrite makes it one]** **MQ-16** The DMT border of 640x480 at 60 Hz (checked against DMT 1.0 Rev. 10 ([`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf); 640x480@60 extract [`primary-extracts/dmt-640x480-60hz.md`](primary-extracts/dmt-640x480-60hz.md)), 2 November 2026).
     DMT gives this timing an 8-pixel right and left border and an 8-line bottom and top border inside
     the totals: horizontal blanking from pixel 648 for 144 pixels (to 791), vertical blanking from line
     488 for 29 lines (to 516); the 640x480 at 72 Hz entry has the same borders, no other DMT timing of
@@ -294,6 +294,7 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
     horizontally either is a valid choice for a monitor, IBM's has the VGA's own register values.
     VESA CVT 1.2 (2013, section 5.2; it does not redefine DMT timings) has the same model as DMT: a
     margin is part of the total active pixels and lines, and blanking lies outside it.
+Classified 8 November 2026 (owner sweep): every question below is labelled [Answered], [Project choice], [Open decision (owner)] or [Open observation - card/bench], or [Deferred by scope]. None blocks the clean side: it may write correct code with each question so labelled.
 
 ## Sources disagree
 

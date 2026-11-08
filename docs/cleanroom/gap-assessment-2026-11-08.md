@@ -8,6 +8,16 @@ reviewer and not the future implementer, and it does not re-run, overrule or pre
 any review finding. Facts verified in the package or the repository are stated as such;
 inferences are marked.
 
+**Update, 8 November 2026 (later the same day, after the assessment):** G1 is done (the
+review record is applied to [README.md](README.md), reconciled with `main`'s drift);
+G3 is done (POST-41 corrected to 200 µs in the spec, decision and extract); G7 is done
+(the milestone-1 criterion is now the POST text legible on the colour monitor);
+G9 is done (the open questions of parts A/B/C are labelled); G11 is decided (the size
+budget is 28 KB total, about 4 KB held free for fixes and improvements); and the
+allowlist of [allowlist.md](allowlist.md) now exists, extracting `clearance.json`. Still
+open: the G2 owner decisions, the G4 crossing copies, the G5 fresh review, the G6 clean
+repository, and the G8/G10 preparatory items.
+
 ## Executive summary
 
 **Verdict: no — clean-room implementation of milestones 1-5 cannot meaningfully start yet.**
