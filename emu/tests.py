@@ -1150,6 +1150,15 @@ def t_vshow(c):
           'VSHOW /I: no monitor note before the list (Esc there quits)')
     r2 = c.machine(keys=[0x1C0D, 0x011B]).run_com(com, '/I')
     check(r2.stdout.count(b'75 kHz') == 1, 'VSHOW /I: the monitor note is not shown exactly once')
+    # /O: the register overrides of the bench observations (#200), applied after the mode set
+    ro = c.machine().run_com(com, '101 /O CR54=1F /O SR18=40 /S /V')
+    check(ro.exit == ('exit', 0) and b'override CR54=1F SR18=40' in ro.stdout,
+          'VSHOW /O: no override line on stdout')
+    lo = check_dbg(ro.files.get('VSHOW.DBG'), 'VSHOW.DBG /O')
+    l54 = [l for l in lo if l.startswith('D:REG CR50:')]
+    check(l54 and l54[-1].split()[6] == '1F', 'VSHOW /O: CR54 not overridden in the register dump')
+    l18 = [l for l in lo if l.startswith('D:REG SR00:')]
+    check(l18 and l18[-1].split()[26] == '40', 'VSHOW /O: SR18 not overridden in the register dump')
     if v:
         r0 = c.machine().run_com(com, '101 /S')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')

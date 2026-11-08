@@ -15,6 +15,13 @@
 ;                        needed (Esc still stops), no beep; for logs of every mode switch:
 ;                        VSHOW /R /V /S > VSHOW.LOG
 ;   VSHOW /H, /?, /HELP  parameter list
+;   /O SR18=40           override one register after each mode set, before the picture and the
+;                        measurement: SRxx, CRxx, GRxx or ARxx with a 1-2 digit hex index and value
+;                        (up to 8, repeat /O). S3 extended registers are unlocked for the write and
+;                        the locks are put back; the override line is printed once at the start.
+;                        Bench use: CR43 bit 7, CR67 bit 0, CR54 (FIFO threshold M), the HSYNC offset
+;                        and AR13 pixel panning, with the measured refresh and the picture as the
+;                        readout (#200)
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
 ;   /V                   debug log in VSHOW.DBG (see src/tools/common/vdebug.inc): the NASM version
 ;                        that assembled this tool (D:ENV NASM=), the ROM version (D:ENV ROM=), every INT 10h call, 4F00/4F01
@@ -100,6 +107,12 @@ start:  cld
 .sw:    lodsb
         or al,0x20
         mov ah,al
+        cmp al,'o'                      ; /O <reg>=<value>: an override, applied after the mode set
+        jne .swo
+        call parse_ov
+        jc .bad
+        jmp .p
+.swo:
 .swe:   mov al,[si]                     ; skip the rest of the switch word (/help)
         cmp al,' '
         je .swd
@@ -152,7 +165,8 @@ start:  cld
         call dputs
         mov ax,0x4C00
         jmp vexit
-.d:     cmp byte [vreq],1               ; /V: debug log in VSHOW.DBG
+.d:     call ovprint                    ; /O: the override line, once, before anything is set
+        cmp byte [vreq],1               ; /V: debug log in VSHOW.DBG
         jne .d1
         push bx
         push cx
@@ -309,6 +323,250 @@ sfail:  mov [emsg],dx
         stc
         ret
 
+; ---------------------------------------------------------------- /O register overrides
+
+; "/O CR54=1F" at SI (after the O): SR/CR/GR/AR, a 1-2 digit hex index, '=', a 1-2 digit hex value,
+; then a delimiter. Up to 8 entries in [otab] (kind, index, value), [ocnt] counts them. CF on a bad
+; token or a full table; keeps every register of the caller.
+parse_ov:
+        push bx
+        push cx
+        push dx
+.ps:    cmp byte [si],' '               ; skip spaces and tabs
+        je .ps1
+        cmp byte [si],9
+        jne .k
+.ps1:   inc si
+        jmp .ps
+.k:     lodsb                           ; the kind letter
+        and al,0xDF
+        cmp al,'S'
+        je .k1
+        cmp al,'C'
+        je .k1
+        cmp al,'G'
+        je .k1
+        cmp al,'A'
+        je .k1
+        jmp .bad
+.k1:    mov ah,al                       ; the kind letter, kept across the number parsing
+        lodsb                           ; 'R'
+        and al,0xDF
+        cmp al,'R'
+        jne .bad
+        call povhex
+        jc .bad
+        mov ch,al                       ; the index
+        cmp byte [si],'='
+        jne .bad
+        inc si
+        call povhex
+        jc .bad
+        mov cl,al                       ; the value
+        mov al,[si]                     ; a delimiter must follow
+        cmp al,' '
+        je .st
+        cmp al,9
+        je .st
+        cmp al,'/'
+        je .st
+        cmp al,'-'
+        je .st
+        cmp al,13
+        je .st
+        jmp .bad
+.st:    mov al,[ocnt]
+        cmp al,8
+        jae .bad
+        inc byte [ocnt]
+        mov bl,al
+        xor bh,bh
+        imul bx,bx,3
+        mov [otab+bx],ah                ; the kind letter
+        mov [otab+bx+1],ch              ; the index
+        mov [otab+bx+2],cl              ; the value
+        clc
+        pop dx
+        pop cx
+        pop bx
+        ret
+.bad:   stc
+        pop dx
+        pop cx
+        pop bx
+        ret
+
+; 1-2 hex digits at SI -> AL, SI past them (on the byte that ended a single digit). CF when
+; there is none. Keeps CX (the caller holds the index between the two calls).
+povhex: xor dx,dx                       ; DL the value so far, DH the digits seen
+.h:     lodsb
+        call povnib
+        jnc .hd
+        dec si                          ; the byte that ended the number
+        or dh,dh
+        jz .bad
+        mov al,dl
+        clc
+        ret
+.hd:    shl dl,4
+        or dl,al
+        inc dh
+        cmp dh,2
+        jb .h
+        mov al,dl
+        clc
+        ret
+.bad:   stc
+        ret
+
+povnib: cmp al,'0'
+        jb .n
+        cmp al,'9'
+        jbe .d
+        and al,0xDF
+        cmp al,'A'
+        jb .n
+        cmp al,'F'
+        ja .n
+        sub al,'A'-10
+        clc
+        ret
+.d:     sub al,'0'
+        clc
+        ret
+.n:     stc
+        ret
+
+; The override line, once at the start: "VSHOW x.x: override CR54=1F, SR18=40". Nothing without /O.
+ovprint:
+        cmp byte [ocnt],0
+        je .x
+        pusha
+        push es
+        push cs
+        pop es
+        mov di,tbuf
+        mov si,s_ovr
+        call cpy
+        xor bx,bx
+        xor cx,cx
+        mov cl,[ocnt]
+.l:     mov al,' '
+        stosb
+        mov al,[otab+bx]
+        stosb
+        mov al,'R'
+        stosb
+        mov al,[otab+bx+1]
+        call bhex2
+        mov al,'='
+        stosb
+        mov al,[otab+bx+2]
+        call bhex2
+        add bx,3
+        loop .l
+        mov ax,0x0A0D
+        stosw
+        xor al,al
+        stosb
+        mov dx,tbuf
+        call dputz
+        pop es
+        popa
+.x:     ret
+
+; The overrides of [otab], after a mode set: SR08=06h and CR38=48h/CR39=A5h unlock the extended
+; registers for the writes, then the locks and the index registers are put back as found. ARxx is
+; written through the 3C0h flip-flop (reset by a 3DAh read, index bit 5 set so the screen stays on).
+ovapply:
+        cmp byte [ocnt],0
+        je .x
+        push ax
+        push bx
+        push dx
+        mov dx,0x3C4                    ; the indexes and the locks as found
+        in al,dx
+        mov [ov_sri],al
+        mov al,8
+        out dx,al
+        inc dx
+        in al,dx
+        mov [ov_sr08],al
+        mov al,6
+        out dx,al                      ; unlock the extended SRs
+        mov dx,0x3D4
+        in al,dx
+        mov [ov_cri],al
+        mov al,0x38
+        out dx,al
+        inc dx
+        in al,dx
+        mov [ov_cr38],al
+        mov al,0x48
+        out dx,al
+        dec dx
+        mov al,0x39
+        out dx,al
+        inc dx
+        in al,dx
+        mov [ov_cr39],al
+        mov al,0xA5
+        out dx,al                      ; unlock the extended CRs
+        xor bx,bx
+        xor cx,cx
+        mov cl,[ocnt]
+.l:     mov al,[otab+bx]
+        cmp al,'S'
+        jne .c
+        mov dx,0x3C4
+        jmp .w
+.c:     cmp al,'C'
+        jne .g
+        mov dx,0x3D4
+        jmp .w
+.g:     cmp al,'G'
+        jne .a
+        mov dx,0x3CE
+        jmp .w
+.a:     mov dx,0x3DA                    ; ARxx: reset the flip-flop, index bit 5 set
+        in al,dx
+        mov dx,0x3C0
+        mov al,[otab+bx+1]
+        or al,0x20
+        out dx,al
+        mov al,[otab+bx+2]
+        out dx,al
+        mov dx,0x3DA                    ; the flip-flop back at index
+        in al,dx
+        jmp .n
+.w:     mov al,[otab+bx+1]
+        mov ah,[otab+bx+2]
+        out dx,al
+        inc dx
+        mov al,ah
+        out dx,al
+.n:     add bx,3
+        loop .l
+        mov dx,0x3D4                    ; the locks and the indexes back
+        mov al,0x39
+        mov ah,[ov_cr39]
+        out dx,ax
+        mov al,0x38
+        mov ah,[ov_cr38]
+        out dx,ax
+        mov al,[ov_cri]
+        out dx,al
+        mov dx,0x3C4
+        mov al,8
+        mov ah,[ov_sr08]
+        out dx,ax
+        mov al,[ov_sri]
+        out dx,al
+        pop dx
+        pop bx
+        pop ax
+.x:     ret
+
 ; set [mode], draw the test picture and the info box; CF + [emsg] on error (no mode change done then,
 ; except when the mode set itself failed)
 
@@ -405,6 +663,7 @@ showone:
         mov dx,s_e4f02
         jmp sfail
 .set:   mov dword [curbank],0xFFFFFFFF
+        call ovapply                    ; /O: the overrides, before the picture and the measurement
         cmp byte [mi+0x1B],3
         jne .pk
         call planar
@@ -1710,6 +1969,12 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db '                      any key = next mode, Esc = stop, summary at the end',13,10
         db '  VSHOW /R [/L]       robot: as /A, each mode about 0.5 s, no keys (Esc stops); for',13,10
         db '                      logs of every mode switch, e.g. VSHOW /R /V /S > VSHOW.LOG',13,10
+        db '  /O SR18=40         override a register after each mode set, before the picture and',13,10
+        db '                      the measurement: SR/CR/GR/AR with a 1-2 digit hex index and value',13,10
+        db '                      (up to 8, repeat /O); S3 extended registers are unlocked for the',13,10
+        db '                      write and the locks put back. For bench observations (#200):',13,10
+        db '                      CR43 bit 7, CR67 bit 0, CR54 (FIFO threshold M), the HSYNC offset,',13,10
+        db '                      AR13 pixel panning, with the measured refresh and the picture',13,10
         db '  /L                  1-pixel vertical line pattern (LCD clock/phase adjustment)',13,10
         db '                      instead of the colour bars',13,10
         db '  /V                  debug log: ROM version, BIOS calls, registers and timing in VSHOW.DBG',13,10
@@ -1756,6 +2021,7 @@ s_e4f02 db 'mode set (4F02) failed$'
 s_sep   db ', $'
 s_ver   db 'VSHOW ',VERSION,': $'
 s_m     db 'Mode ',0
+s_ovr   db 'VSHOW ',VERSION,': override',0
 s_hz    db ' Hz  ',0
 s_khz   db ' kHz  ',0
 s_lines db ' lines total',0
@@ -1780,6 +2046,13 @@ s_res   db 'VSHOW ',VERSION,' /A results:',13,10,'$'
 s_resr  db 'VSHOW ',VERSION,' /R results:',13,10,'$'
 
 lines   db 0
+ocnt    db 0                            ; /O: the override count (entries in otab)
+otab    times 24 db 0                   ; /O: kind, index, value per entry
+ov_sri  db 0
+ov_sr08 db 0
+ov_cri  db 0
+ov_cr38 db 0
+ov_cr39 db 0
 vreq    db 0                            ; /V given
 allm    db 0
 lastkey db 0
