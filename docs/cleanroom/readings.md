@@ -26,6 +26,7 @@ Cite these first.
 | 6 | VBE 3.0, owner's copy `vbe3.pdf` (September 1998). Not posted here: VESA allows only VBE 2.0 online | Read where it clarifies VBE 2.0. It does not add VBE 3 functions to milestones 1-4 |
 | 7 | VESA DMT 1.0 Rev. 10, [`standards/vesa/VESA-DMT-1.0-Rev10.pdf`](../../standards/vesa/VESA-DMT-1.0-Rev10.pdf). DMT 1.13 is a check only | 640x480 at 60 Hz, and later DMT modes |
 | 8 | IBM "Personal System/2 and Personal Computer BIOS Interface Technical Reference", April 1987; a scanned copy is at the Internet Archive: [archive.org/details/bitsavers_ibmpcps2PSTechnicalReferenceApr87_5816663](https://archive.org/details/bitsavers_ibmpcps2PSTechnicalReferenceApr87_5816663) | INT 10h and the BIOS data area, where that book states them |
+| 8a | VGATEST (PC Tech Journal, November 1988) — declared a **public source** by the owner on 8 November 2026 (a mass-market magazine publication, not vendor material). The issue itself is not yet in hand: the exhibit is to be obtained (the Internet Archive's PC Tech Journal collection is the candidate) and the cited values checked against it | The IBM VGA behaviour that only it publishes: the mode-set clear fills and extents, the state block 1Bh cursor pairs and 0040:0066h values, the CGA graphics scroll fill, the graphics glyph background |
 
 VESA DPMS 1.0 (August 1993) is not in hand. When it is, it sits in this group for the sync states of 4F10h. Until then the DPMS notes in section 3 are only a stand-in.
 
