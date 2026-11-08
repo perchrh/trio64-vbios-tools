@@ -93,6 +93,10 @@ Tests
                    invalid subfunctions and undefined functions refused, 4F0A table layout, 4F10 DPMS
                    states and SR0D sync control, 4F14 S3 OEM functions with the refresh rates measured):
                    all PASS, 4F15 INFO (the model has no DDC lines)
+  s3compat_bench  S3COMPAT's bench observation section alone (#200) with every switch on (/U, /N 1, /B):
+                   the SR18 bit 6 palette load stress, the retention check, the 4F07 display start near
+                   the end of memory and the planar 102h pages past 256 KB/plane all PASS, and cleanup
+                   still finds the mode 03 baseline with CR31 bit 2 restored
   s3compat_full    the whole S3COMPAT /Q (every VESA mode banked and linear, the S3 modes, the VESA
                    functions, pass 2): every line PASS except the known BIOS warnings (8x14 font, 106h
                    above the single-clock limit, the CR86 and CR90/CR91 rules in 012Eh, 010Fh, 0131h,
@@ -1216,6 +1220,55 @@ def build_s3compat_vbe(tmp):
     inc = os.path.join(TOOLS, 'common') + os.sep
     subprocess.run([nasm, '-f', 'bin', '-i' + inc, '-i' + tmp + os.sep, '-o', out, src], check=True, cwd=tmp)
     return open(out, 'rb').read()
+
+
+def build_s3compat_bench(tmp):
+    """S3COMPAT with only the #200 bench observation section (SR18 bit 6 stress, retention, the 4F07
+    wrap, the planar CR6A pages) and the cleanup around it: setup stays (it sets [banks] and the
+    mode 03 baseline), post_tests and everything from the VGA mode lines on are cut out."""
+    nasm = shutil.which(NASM)
+    if not nasm:
+        raise Skip('%s not found (--nasm)' % NASM)
+    t = open(os.path.join(TOOLS, 's3compat', 's3compat.asm')).read()
+    cuts = [("        call post_tests\n", ""),
+            ("        mov byte [pass],1\n", "        mov byte [pass],1\n        call bench_more\n        jmp emu_end\n"),
+            ("        call cleanup\n", "emu_end:\n        call cleanup\n")]
+    for a, b in cuts:
+        check(t.count(a) == 1, 'cannot cut s3compat.asm at %r' % a[:40])
+        t = t.replace(a, b)
+    shutil.copy(os.path.join(TOOLS, 's3compat', 'vgaref.inc'), tmp)
+    src = os.path.join(tmp, 's3cbench.asm')
+    open(src, 'w').write(t)
+    out = os.path.join(tmp, 'S3CBENCH.COM')
+    inc = os.path.join(TOOLS, 'common') + os.sep
+    subprocess.run([nasm, '-f', 'bin', '-i' + inc, '-i' + tmp + os.sep, '-o', out, src], check=True, cwd=tmp)
+    return open(out, 'rb').read()
+
+
+def t_s3compat_bench(c):
+    """The bench observation section of #200 alone, with every switch on (/U SR18 bit 6, /N 1
+    retention, /B CR31 bit 2): the four lines PASS and cleanup still finds the mode 03 baseline."""
+    with tempfile.TemporaryDirectory() as tmp:
+        com = build_s3compat_bench(tmp)
+    r = c.machine().run_com(com, '/B /N 1 /U /S')
+    c.save('S3CBENCH', r)
+    check(r.exit == ('exit', 0), 'S3COMPAT bench did not end cleanly: %s' % (r.exit,))
+    text = r.stdout.decode('latin1')
+    skips_counted(text, 'S3COMPAT')
+    check('CR31 bit 2 (16-bit VGA bus) set for this run' in text, '/B: no set line')
+    names = ('SR18 bit 6 palette load stress', 'VRAM retention', '4F07 display start near the end of memory',
+             'Planar 102h pages past 256 KB/plane', 'Mode 03 after all tests', 'Cleanup: VRAM zeroed')
+    lines = [l for _, l in tagged(text, 'S3COMPAT')]
+    if Machine.vram < 2:               # no planar page past 256 KB/plane: a SKIP line instead
+        names = tuple(n for n in names if not n.startswith('Planar'))
+        check(any('no page past 256 KB/plane' in l for l in skips_counted(text, 'S3COMPAT')),
+              'no planar SKIP line at %d MB' % Machine.vram)
+    got = [l for l in lines for n in names if l.startswith(n)]
+    check(len(got) == len(names), 'only %d of the %d bench lines: %s' % (len(got), len(names), lines))
+    bad = [l.strip() for l in got if not l.rstrip().endswith('PASS')]
+    check(not bad, '%d bench lines not PASS:\n    ' % len(bad) + '\n    '.join(bad))
+    check('bit 6=0: 0 errors' in text and 'bit 6=1: 0 errors' in text, 'SR18 stress: no per-value results')
+    return '%d lines' % len(got)
 
 
 def t_s3compat_vbe(c):
@@ -2870,7 +2923,7 @@ def t_mclk(c):
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -2888,7 +2941,8 @@ TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
     's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram', 'vshow': 'vbe tools card vram',
-    's3compat_vga': 'cga ega vga card', 's3compat_dac_retry': 'vga card', 's3compat_vbe': 'vbe s3 card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
+    's3compat_vga': 'cga ega vga card', 's3compat_dac_retry': 'vga card', 's3compat_vbe': 'vbe s3 card vram',
+    's3compat_bench': 'vbe s3 tools card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
     'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch 765 764 emu',
@@ -2898,7 +2952,7 @@ TAGS = {
 
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
-DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3test': 90, 's3test_any': 60, 'windows': 60,
+DURATION = {'s3compat_full': 480, 'vshow': 330, 's3compat_vbe': 200, 's3compat_bench': 90, 's3test': 90, 's3test_any': 60, 'windows': 60,
             'stores': 55, 's3compat_vga': 45}
 
 
