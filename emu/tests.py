@@ -158,7 +158,10 @@ Tests
   engine_init      (emulator only, Trio64V+/UV+/V2 models) a BIOS that uses the graphics engine writes
                    BEE8h index D and E before its first command (ENG-1); skipped when it uses none
   -t cga,vbe       run only the tests with one of these categories (TAGS: mda cga ega vga vbe s3 rom
-                   patch 765 764 call tools card emu vram; --list shows them; vram = depends on the memory size)
+                   patch 765 764 call tools card emu vram cleanroom; --list shows them; vram = depends on the
+                   memory size; cleanroom = every expected value from a public source or pure observation, no
+                   expectation or tolerated line from a reference or patched ROM, so the test may cross to the
+                   clean side, #201)
   stores           (emulator only) the p11-p14 speed patches write video memory with 32-bit stores: mode
                    set clears, text/planar/13h scrolls, AH=09h, font load (the share per operation)
   --chip 775|765|767|764|764x|764p|732   the chip of the model by its S3 part number (default 775, the card)
@@ -2957,18 +2960,23 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # on the card, whose hardware log decides; emu = only in the emulator. vram: the result depends on
 # the video memory size (the VESA mode list, 4F06 maximum, the mode set clear of the whole memory, the
 # LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
-# functions, the tools) give the same output with 2 and 4 MB.
+# functions, the tools) give the same output with 2 and 4 MB. cleanroom: every expected value comes
+# from a public source (IBM, VESA, the data book, Microsoft's documented interfaces, the PCI 2.3
+# extract) or is pure observation; no expectation or tolerated line derives from a reference or
+# patched ROM, so the test may cross to the clean side (#201). The tests without it carry patch
+# expectations (tagged patch) or reference-derived tolerances (S3COMPAT_KNOWN, S3COMPAT_KNOWN_4MB,
+# T64_BASE, VPLUS_BASE) and stay on the dirty side until the #201 audit splits them.
 TAGS = {
-    'version': 'rom patch 765 764 emu', 'post': 'rom emu', 'rom_patches': 'rom patch emu vram',
-    'vga_registers': 'mda cga ega vga emu', 'vga_palettes': 'cga ega vga emu',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram', 'vshow': 'vbe tools card vram',
-    's3compat_vga': 'cga ega vga card', 's3compat_dac_retry': 'vga card', 's3compat_vbe': 'vbe s3 card vram',
-    's3compat_bench': 'vbe s3 tools card vram', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card', 'vgalog_mem': 'tools card', 'vgalog_trace': 'tools card', 'vgalog_win': 'tools card', 'vgalog_post': 'tools card', 's3alias': 'tools patch card', 's3regs': 'tools s3 card',
-    'dos_exe': 'tools emu', 'mono': 'mda emu', 'errors': 'call cga ega vga vbe emu vram',
-    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu', 'stores': 'cga ega vga patch 765 764 emu',
+    'version': 'rom patch 765 764 emu', 'post': 'rom emu cleanroom', 'rom_patches': 'rom patch emu vram',
+    'vga_registers': 'mda cga ega vga emu cleanroom', 'vga_palettes': 'cga ega vga emu cleanroom',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card cleanroom', 'mclk': 'tools s3 card vram cleanroom', 'vshow': 'vbe tools card vram cleanroom',
+    's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
+    's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
+    'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
+    'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'errors': 'call cga ega vga vbe emu vram',
+    'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu cleanroom', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
-    '775_writes': 's3 emu vram', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu',
+    '775_writes': 's3 emu vram cleanroom', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu cleanroom',
 }
 
 
@@ -2995,8 +3003,10 @@ T64_BASE = {
                r'4F02 BX=0(1(07|12|1[5-9A]|20)|1FF|17F|200) \(refused\) changed the video state'),
     # 4F06 uses 32-bit registers and the Phoenix dispatcher saves the 16-bit ones only
     'windows': (r'4F06 set: upper halves changed: ',),
-    # S3COMPAT's run leaves a register state behind that differs from its baseline, on 1.5-07 as on our ROM
+    # S3COMPAT's run leaves a register state behind that differs from its baseline, on 1.5-07 as on our
+    # ROM; the bench build (cut down to the #200 section, with its own cleanup) leaves the same leftover
     's3compat_full': (r'Mode 03 after all tests vs baseline .*WARN 01$',),
+    's3compat_bench': (r'Mode 03 after all tests vs baseline .*WARN 01$',),
 }
 
 
@@ -3076,7 +3086,7 @@ def main():
                     '$NASM or nasm on the PATH; the project uses NASM 3.02)')
     ap.add_argument('-k', default='', help='run only tests whose name contains this text')
     ap.add_argument('-t', default='', help='run only tests with one of these categories (comma list: mda, cga, '
-                    'ega, vga, vbe, s3, rom, patch, call, tools, card, emu, vram)')
+                    'ega, vga, vbe, s3, rom, patch, call, tools, card, emu, vram, cleanroom)')
     ap.add_argument('--list', action='store_true', help='list the tests with their categories')
     ap.add_argument('-v', action='store_true', help='print tracebacks')
     ap.add_argument('--logs', default=os.path.join(HERE, 'logs'),

@@ -38,7 +38,7 @@
 ; Beep via PIT channel 2 (ports 43h/42h/61h). The tone waits latch-read PIT
 ; channel 0 (counter latch command, the channel is never reprogrammed) and
 ; need no interrupt and no BIOS tick: the system BIOS may call the ROM with
-; interrupts off (CONV-6). Assembler: NASM 3.02, -f bin (src/roms/poc/build.py).
+; interrupts off (CONV-6). Assembler: NASM 3.02, -f bin (src/poc-pci-rom/build.py).
 bits 16
 cpu 386
 org 0

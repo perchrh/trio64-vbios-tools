@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the PoC PCI option ROM from src/roms/poc/hello.asm.
+"""Build the PoC PCI option ROM from src/poc-pci-rom/hello.asm.
 
 Assembles hello.asm with NASM, pads the code with 00h to a 32 KB image
 (ROM-3), patches the expansion ROM checksum (offset 06h) so the sum of all
