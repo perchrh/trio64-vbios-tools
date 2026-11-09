@@ -8,10 +8,18 @@
 ;   MCLK maxima and their sources; docs/chip-rules.md lists every rule). Test ideas follow VGATEST (PC Tech Journal 1988), SVGATEST, VBETest and X-VESA.
 ;
 ; Usage
-;   S3COMPAT [/Q] [/V] > S3COMPAT.LOG
+;   S3COMPAT [/Q] [/V] [/B] [/N s] [/U] > S3COMPAT.LOG
 ;   S3COMPAT /H (or /?) prints the parameters and the monitor note below.
 ;   /S  silent: no start notice and monitor warning on stderr, no key press (for batch runs).
 ;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VSHOW)
+;   /B  set CR31 bit 2 (the 16-bit VGA bus, spec-b MQ-8 of #200) for the whole run, so the planar
+;       sections 0Dh-12h run with the bit set; cleanup puts it back before the mode 03 comparison
+;   /N s retention check (spec-b MQ-5 of #200): after the VRAM test, the pattern is written, the
+;       card left alone for s seconds (1-60, the mode stays up) and the pattern verified;
+;       without /N a SKIP line
+;   /U  SR18 bit 6 stress (spec-a Q7 of #200): in 101h the VRAM pattern is written once, then for
+;       SR18 bit 6 cleared and set a burst of 64 palette loads runs and the pattern is verified;
+;       without /U a SKIP line
 ;   /V  debug log in S3COMPAT.DBG (src/tools/common/vdebug.inc): the NASM version that assembled this
 ;       tool (D:ENV NASM=), the ROM version (D:ENV ROM=), every INT 10h call with registers and duration,
 ;       a register dump and the result line after every test, 4F00/4F01/AH=1Bh blocks, per-frame
@@ -69,6 +77,9 @@
 ;                                               4104 WARN 20 (LFB offered on a planar mode, stock)
 ;   9. S3 modes via AH=00 vs the same via 4F02   PASS
 ;  10. VESA functions (4F01-4F09, VRAM, LFB)     PASS
+;      Bench observations (#200): the 4F07 display start near the end of memory (spec-c 11) and the
+;      planar 102h pages past 256 KB/plane (spec-c 4) always run; the SR18 bit 6 palette load stress
+;      (spec-a Q7) with /U and the retention check (spec-b MQ-5) with /N, a SKIP line without
 ;      More VBE: 4F00 capabilities vs 4F08, 4F04 per state mask, invalid subfunctions refused,
 ;      undefined functions 4F0B-4F1F refused, 4F0A table layout, 4F10 DPMS states (the monitor
 ;      sees the syncs stop for a moment), 4F15 DDC EDID, 4F14 S3 OEM functions (query, mode list
@@ -166,9 +177,53 @@ start:  cld
         jne .o3
         mov byte [quick],1
 .o3:    cmp al,'V'
-        jne .op
+        jne .o4
         mov byte [vreq],1
         jmp .op
+.o4:    cmp al,'B'
+        jne .o5
+        mov byte [busbit],1
+        jmp .op
+.o5:    cmp al,'U'
+        jne .o6
+        mov byte [lutsw],1
+        jmp .op
+.o6:    cmp al,'N'
+        jne .op
+        mov byte [retsw],1
+.ns:    lodsb                           ; the number, after any spaces
+        cmp al,' '
+        je .ns
+        dec si
+        xor bx,bx
+        xor cx,cx
+.nd:    lodsb
+        cmp al,'0'
+        jb .ne
+        cmp al,'9'
+        ja .ne
+        imul bx,bx,10
+        sub al,'0'
+        movzx ax,al
+        add bx,ax
+        inc cx
+        cmp cx,2
+        ja .nbad
+        jmp .nd
+.ne:    dec si
+        or cl,cl
+        jz .nbad
+        or bx,bx
+        jz .nbad
+        cmp bx,60
+        ja .nbad
+        mov [retsec],bx
+        jmp .op
+.nbad:  mov dx,s_badarg
+        mov ah,9
+        int 0x21
+        mov ax,0x4C01
+        int 0x21
 .hlp:   mov dx,s_help                   ; /H, /?: the parameters and the monitor note
         mov ah,9
         int 0x21
@@ -255,6 +310,11 @@ start:  cld
         call chip_id
         call setup
         call post_tests
+        cmp byte [busbit],1              ; /B: CR31 bit 2 for the whole run, restored by cleanup
+        jne .nb
+        call cr31_bset
+        PS 'CR31 bit 2 (16-bit VGA bus) set for this run (/B); cleanup restores it.',13,10
+.nb:
         mov byte [pass],1
         PS 13,10,'--- VGA BIOS modes vs IBM reference tables (VGATEST, IBM parameter table) ---',13,10
         call vskips                     ; the CR90 check of the VGA lines: Trio64V2 only (#72)
@@ -273,6 +333,7 @@ start:  cld
         PS 13,10,'--- VESA functions ---',13,10
         call vesa_func
         call vesa_more
+        call bench_more                 ; the #200 bench observations
         mov byte [pass],2
         PS 13,10,'--- Pass 2: VGA modes set right after a VESA mode (leftover state) ---',13,10
         call vga_pass
@@ -787,6 +848,7 @@ zero_vram:                              ; all banks to 0 through the 64K window,
 ; (WARN 01 if not, the differences are printed), the S3 extensions must be off (fail 4), then VRAM is
 ; zeroed again (fail 1) and mode 03 set.
 cleanup:
+        call cr31_brestore              ; /B: CR31 back before the mode 03 comparison (state list)
         PS 13,10,'--- Final state ---',13,10
         TB C_VGA,'Mode 03 after all tests vs baseline'
         call flush
@@ -7196,6 +7258,377 @@ lfb_cross:
         WARNB 1
 .e:     call tend
         ret
+
+; ======================================================================
+; Bench observations for the card questions (#200). The 4F07 wrap and the planar CR6A pages
+; always run (plain BIOS behaviour, quick); the SR18 bit 6 stress needs /U and the retention check
+; /N, a SKIP line without them.
+
+bench_more:
+        PS 13,10,'--- Bench observations (#200) ---',13,10
+        call lut_stress
+        call retention
+        call start_wrap
+        call planar_pages
+        mov ax,0x13                     ; the FIFO L1 bit (CR90 bit 7) the SVGA mode sets left on:
+        int 0x10                        ; our ROM clears it in 13h only (#166), not in mode 3, and
+        mov ax,3                        ; cleanup compares CR90 against the mode 03 baseline
+        int 0x10
+        ret
+
+; /B: CR31 bit 2 (the 16-bit VGA bus, spec-b MQ-8 of #200) set for the run; cleanup puts it back
+; before the mode 03 comparison (CR31 is in the state list).
+cr31_bset:
+        call unlock
+        mov dx,0x3D4
+        mov al,0x31
+        out dx,al
+        inc dx
+        in al,dx
+        mov [cr31_0],al
+        or al,4
+        out dx,al
+        ret
+cr31_brestore:
+        cmp byte [busbit],1
+        jne .x
+        call unlock
+        mov dx,0x3D4
+        mov al,0x31
+        out dx,al
+        inc dx
+        mov al,[cr31_0]
+        out dx,al
+.x:     ret
+
+; The VRAM pattern of lut_pat (address XOR 5AA5C33Ch, as the VRAM test) written once and verified
+; with [vrerr] counting the mismatches. Shared by the SR18 stress and the retention check.
+lut_pat:
+        xor si,si
+.wb:    call setbank
+        push es
+        mov ax,0xA000
+        mov es,ax
+        xor di,di
+        movzx ebx,si
+        shl ebx,16
+.w:     mov eax,ebx
+        or ax,di
+        xor eax,0x5AA5C33C
+        mov [es:di],eax
+        add di,4
+        jnz .w
+        pop es
+        inc si
+        cmp si,[banks]
+        jb .wb
+        ret
+lut_chk:
+        mov dword [vrerr],0
+        xor si,si
+.rb:    call setbank
+        push es
+        mov ax,0xA000
+        mov es,ax
+        xor di,di
+        movzx ebx,si
+        shl ebx,16
+.r:     mov eax,ebx
+        or ax,di
+        xor eax,0x5AA5C33C
+        cmp [es:di],eax
+        je .n
+        inc dword [vrerr]
+.n:     add di,4
+        jnz .r
+        pop es
+        inc si
+        cmp si,[banks]
+        jb .rb
+        ret
+
+; SR18 bit 6 (the 1-DCLK LUT write cycle, spec-a Q7 of #200): in 101h the VRAM pattern is written
+; once, then for SR18 bit 6 cleared and set a burst of 64 palette loads runs (256 entries each, as
+; fast as the DAC takes them) and the pattern is verified. Fail bit 1 with the error count per
+; value; SR18 is put back as found. Without /U a SKIP line.
+lut_stress:
+        cmp byte [lutsw],1
+        je .go
+        SKIPL C_S3,'SR18 bit 6 palette load stress','option /U'
+        ret
+.go:    TB C_S3,'SR18 bit 6 palette load stress (LUT writes vs VRAM)'
+        call tdots
+        mov bx,0x101
+        call setm
+        call unlock
+        mov dx,0x3C4
+        mov al,0x18
+        out dx,al
+        inc dx
+        in al,dx
+        mov [sr18_0],al
+        call lut_pat
+        mov byte [lutv],0
+.l:     call lut_sr18                     ; SR18 bit 6 = [lutv]
+        mov cx,64                         ; the burst: 64 palette loads
+.p:     push cx
+        mov dx,0x3C8
+        xor al,al
+        out dx,al
+        inc dx
+        mov cx,768
+        mov al,0x5A
+.q:     out dx,al
+        loop .q
+        pop cx
+        loop .p
+        call lut_chk
+        PS 'bit 6='
+        movzx eax,byte [lutv]
+        call pdec
+        PS ': '
+        mov eax,[vrerr]
+        call pdec
+        PS ' errors'
+        call sp1
+        or eax,eax
+        jz .ok
+        FAILB 1
+.ok:    cmp byte [lutv],1
+        je .done
+        mov byte [lutv],1
+        jmp .l
+.done:  mov dx,0x3C4                     ; SR18 back as found
+        mov al,0x18
+        out dx,al
+        inc dx
+        mov al,[sr18_0]
+        out dx,al
+        call tend
+        ret
+
+lut_sr18:
+        mov dx,0x3C4
+        mov al,0x18
+        out dx,al
+        inc dx
+        in al,dx
+        and al,0xBF
+        cmp byte [lutv],0
+        je .w
+        or al,0x40
+.w:     out dx,al
+        ret
+
+; Retention under a sustained mode (spec-b MQ-5 of #200): the pattern is written in 101h, the card
+; is left alone for [retsec] seconds (the mode stays up, the wait is on the BIOS tick), then the
+; pattern is verified. Fail bit 1 with the error count. Without /N a SKIP line.
+retention:
+        cmp byte [retsw],1
+        je .go
+        SKIPL C_S3,'VRAM retention after the wait','option /N'
+        ret
+.go:    TB C_S3,'VRAM retention (pattern written, waited, verified)'
+        call tdots
+        mov bx,0x101
+        call setm
+        call lut_pat
+        PS 'waiting '
+        movzx eax,word [retsec]
+        call pdec
+        PS ' s'
+        call sp1
+        push es
+        xor ax,ax
+        mov es,ax
+        mov ax,[es:0x46C]
+        mov bx,[retsec]
+        imul bx,bx,18                    ; 18.2 ticks per second is close enough for a wait
+        add bx,ax
+.w:     cmp bx,[es:0x46C]
+        jne .w
+        pop es
+        call lut_chk
+        mov eax,[vrerr]
+        call pdec
+        PS ' errors'
+        call sp1
+        or eax,eax
+        jz .ok
+        FAILB 1
+.ok:    call tend
+        ret
+
+; The display start near the end of memory (spec-c 11 of #200): 4F07 sets the start at three
+; offsets at the top of the frame buffer (the last full 640x480 frame, the last bank, the last
+; dword) and the get and CR0C/CR0D/CR69 must hold it again (dword units, CR31 bit 3). Fail bit 1:
+; the get differs, bit 2: the CRTC differs.
+start_wrap:
+        TB C_VBE,'4F07 display start near the end of memory'
+        call tdots
+        mov bx,0x101
+        call setm
+        movzx eax,word [banks]
+        shl eax,16                       ; the end of memory in bytes
+        mov edx,eax
+        sub edx,640*480
+        mov [wrapofs],edx
+        mov edx,eax
+        sub edx,0x10000
+        mov [wrapofs+4],edx
+        sub eax,4
+        mov [wrapofs+8],eax
+        mov byte [wrapi],0
+.l:     mov bl,[wrapi]
+        xor bh,bh
+        shl bx,2
+        mov eax,[wrapofs+bx]
+        mov [wrapcur],eax
+        xor edx,edx
+        mov ecx,640
+        div ecx                          ; EAX = y, EDX = x
+        mov cx,dx                        ; x
+        mov dx,ax                        ; y
+        mov ax,0x4F07
+        xor bx,bx
+        int 0x10
+        cmp ax,0x004F
+        jne .f1
+        mov ax,0x4F07
+        mov bx,1
+        mov cx,0xFFFF
+        mov dx,cx
+        int 0x10
+        cmp ax,0x004F
+        jne .f1
+        movzx eax,cx                     ; the start read back: y*640+x
+        movzx edx,dx
+        imul edx,edx,640
+        add eax,edx
+        cmp eax,[wrapcur]
+        jne .f1
+        RC 0x0D                          ; CR0C/CR0D/CR69 must hold start/4
+        movzx ebx,al
+        RC 0x0C
+        mov bh,al
+        RC 0x69
+        and eax,0x0F
+        shl eax,16
+        or ebx,eax
+        mov eax,[wrapcur]
+        shr eax,2
+        cmp eax,ebx
+        jne .f2
+        inc byte [wrapi]
+        cmp byte [wrapi],3
+        jb .l
+        call tend
+        ret
+.f1:    FAILB 1
+        PS 'start '
+        mov eax,[wrapcur]
+        call phex8
+        PS ' not read back'
+        call sp1
+        jmp .nx
+.f2:    FAILB 2
+        PS 'start '
+        mov eax,[wrapcur]
+        call phex8
+        PS ' CR '
+        mov eax,ebx
+        call phex8
+        call sp1
+.nx:    inc byte [wrapi]
+        cmp byte [wrapi],3
+        jb .l
+        call tend
+        ret
+
+; The planar window pages past 256 KB per plane (spec-c 4 of #200): in 102h 4F05 selects the page
+; in all four planes at once and CR6A holds bank*4 (S3TEST's 4F05 test; the window's plane page
+; starts at bank x 16 KB). Every bank gets a distinct dword at offset 0, then each is read back:
+; a bank not showing its own dword is an alias (fail 1), CR6A not holding bank*4 is WARN 01 (masked
+; to bits 4-0; the reserved bits 7-6 read 1 on the card). With no page past 256 KB/plane (1 MB or
+; less) a SKIP line.
+planar_pages:
+        mov ax,[banks]
+        shr ax,2                        ; the planar banks: one 64 KB window page per plane
+        mov [ppbanks],ax
+        cmp ax,5                        ; a page past 256 KB/plane needs more than 1 MB
+        jae .go
+        SKIPL C_VBE,'Planar 102h pages past 256 KB/plane','no page past 256 KB/plane (4F00)'
+        ret
+.go:    TB C_VBE,'Planar 102h pages past 256 KB/plane (CR6A)'
+        call tdots
+        mov bx,0x102
+        call setm
+        mov byte [ppmask],0x1F         ; the CR6A bank field: 5 bits up to 2 MB, 6 with 4 MB
+        cmp word [ppbanks],8
+        jbe .pm
+        mov byte [ppmask],0x3F
+.pm:    mov dword [pperr],0
+        mov dword [ppcr],0
+        xor si,si
+.w:     call setbank
+        push es
+        mov ax,0xA000
+        mov es,ax
+        movzx ebx,si
+        mov eax,0x5A5A0000
+        or eax,ebx
+        mov [es:0],eax
+        pop es
+        inc si
+        cmp si,[ppbanks]
+        jb .w
+        xor si,si
+.r:     call setbank
+        push es
+        mov ax,0xA000
+        mov es,ax
+        movzx ebx,si
+        mov eax,0x5A5A0000
+        or eax,ebx
+        cmp [es:0],eax
+        pop es
+        je .cr
+        inc dword [pperr]
+.cr:    RC 0x6A
+        and al,[ppmask]
+        movzx eax,al
+        mov bx,si
+        shl bx,2
+        movzx ebx,bx
+        cmp eax,ebx
+        je .n
+        inc dword [ppcr]
+.n:     inc si
+        cmp si,[ppbanks]
+        jb .r
+        mov eax,[pperr]
+        or eax,eax
+        jz .pe
+        FAILB 1
+        mov eax,[pperr]
+        call pdec
+        PS ' aliased banks'
+        call sp1
+.pe:    mov eax,[ppcr]
+        or eax,eax
+        jz .pc
+        WARNB 1
+        mov eax,[ppcr]
+        call pdec
+        PS ' banks with CR6A not bank*4'
+        call sp1
+.pc:    xor si,si                       ; bank 0 and text mode, as vesa_func leaves it
+        call setbank
+        mov ax,3
+        int 0x10
+        call tend
+        ret
+
 bufphys:                                ; EAX = physical address of cmpbuf
         movzx eax,word [cs:segds]
         mov ax,ds
@@ -8084,10 +8517,13 @@ s_start db 'S3COMPAT ',VERSION,': the test takes about 3 minutes. The screen wil
 s_start_len equ $-s_start
 catnames db 'MDA  CGA  EGA  VGA  VBE  S3   '
 s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for Trio64-family video BIOSes',13,10
-        db '  S3COMPAT [/Q] [/V] [/S] > S3COMPAT.LOG',13,10
+        db '  S3COMPAT [/Q] [/V] [/S] [/B] [/N s] [/U] > S3COMPAT.LOG',13,10
         db '  /Q                  skip the 2 MB VRAM test',13,10
         db '  /S                  silent: no start notice and monitor warning, no key press',13,10
         db '  /V                  debug log in S3COMPAT.DBG (ROM version, BIOS calls, registers, timing)',13,10
+        db '  /B                  set CR31 bit 2 (16-bit VGA bus) for the run; cleanup restores it',13,10
+        db '  /N s                retention check: pattern written, s seconds waited, verified (1-60)',13,10
+        db '  /U                  SR18 bit 6 stress: palette load bursts vs the VRAM pattern',13,10
         db '  /H, /?              this help',13,10
         db 'About 3 minutes; a key starts it, Esc cancels. Exit code 0 = no FAIL, 1 = a FAIL.',13,10
         db 'Monitor: line frequencies up to 91 kHz (1280x1024 at 85 Hz in the 4F14 refresh test)',13,10
@@ -8097,6 +8533,7 @@ s_help  db 'S3COMPAT ',VERSION,' - VGA / SVGA / VESA compatibility test for Trio
 s_vname db 'S3COMPAT.DBG',0
 s_vnomem db '/V: not enough memory for the debug buffer, /V ignored.',13,10,'$'
 s_nomem db 'Not enough memory (needs 256 KB free).',13,10,'$'
+s_badarg db 'S3COMPAT ',VERSION,': bad argument. S3COMPAT /H for help.',13,10,'$'
 
 align 4
 logseg  dw 0
@@ -8114,6 +8551,21 @@ tofile  db 0
 quick   db 0
 silent  db 0                            ; /S given
 vreq    db 0                            ; /V given
+busbit  db 0                            ; /B given
+cr31_0  db 0                            ; CR31 as found before /B
+retsw   db 0                            ; /N given
+retsec  dw 0                            ; /N: the wait in seconds
+lutsw   db 0                            ; /U given
+lutv    db 0                            ; the SR18 bit 6 value under test
+sr18_0  db 0                            ; SR18 as found
+wrapi   db 0                            ; the 4F07 wrap offset under test
+align 4
+wrapofs times 3 dd 0                    ; the 4F07 wrap start offsets
+wrapcur dd 0                            ; the start under test
+ppbanks dw 0                            ; the planar bank count (window pages per plane)
+ppmask  db 0                            ; the CR6A bank field mask (5 bits up to 2 MB, 6 with 4 MB)
+pperr   dd 0                            ; planar pages: aliased banks
+ppcr    dd 0                            ; planar pages: banks with CR6A not bank*4
 vline0  dw 0                            ; log buffer offset where the current test started
 vname   dw 0                            ; its name (TB text), 0 = none
 pass    db 0
