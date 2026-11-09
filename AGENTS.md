@@ -278,3 +278,46 @@ interstitial appears only then); private files still need the connector. Keep th
 material in a scratch directory outside the repository tree (for example `/workspace/scratch/`).
 A session that reads dirty-side review material stays dirty-side: it must not later act as the
 clean-room implementer or as a substantive leak reviewer.
+
+## The agent sandbox and GitHub
+
+The AI agent sessions that work on this repository (Vibe Code, built by Mistral AI) run in an
+isolated sandbox with a restricted GitHub credential. What the sandbox policy is, in practice —
+verified 8 November 2026 while delivering PR #207 (all checks green, the merge refused):
+
+What the agent may do:
+
+- Clone, read, build and test: `make`, the emulator tests, git history, the reference ROMs.
+- Create its own task branch (`vibe/<slug>`), commit to it and push it.
+- Open a PR from that branch, keep updating that PR in place, and comment on issues and PRs.
+- Read GitHub through `gh` (views, `gh api` GET, `gh pr checks`, search).
+
+What the sandbox blocks, and no repository or organization setting can lift:
+
+- Every mutating GitHub API call through `gh api` ("Mutating GitHub API calls are not allowed").
+- `gh pr merge` ("Merging pull requests via CLI is not allowed"). Merging a PR is therefore a
+  human action: the owner clicks Merge on the PR page once CI is green. The block is the sandbox's
+  credential policy, not one of GitHub's merge controls (those live under Settings → General →
+  Pull Requests and are permissive here; #187 and #188 were merged the normal way).
+
+Safety rules the agent must follow, so a human reviewer can rely on them:
+
+- Never exposes secrets: no printing, quoting, committing or pasting of tokens, API keys,
+  cookies, private keys, `.env` values or signed URLs.
+- Never makes anything in the sandbox publicly reachable: no tunnels, relays, proxies, public
+  listeners or equivalent. Loopback-only services are allowed.
+- Never pushes to a protected or default branch and never force pushes without the owner's
+  explicit approval; it pushes only to its own task branch.
+- Asks first before: force pushes, protected-branch writes, publishing packages, deployments,
+  non-local database writes or deletes, production or staging config changes, customer-visible
+  notifications, and quota-heavy remote work.
+- Honors scope limits exactly: "no remote", "no commit", "do not push", "review only",
+  "respond only" mean exactly that.
+- Does not bypass tool restrictions, permission failures, sandbox isolation or approval
+  requirements, and never invents workarounds for the blocks above.
+- On a GitHub rate limit (429): waits about 60 seconds, retries once, then stops and reports.
+- Reports a push refused by branch protection with the exact error instead of retrying.
+
+The sandbox itself has network access (see the Google Drive section above), so the restriction is
+on the `gh` credential, not on the network. The consequence for this repository's workflow: the
+agent delivers a CI-green PR and the owner merges it.
