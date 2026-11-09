@@ -1,4 +1,4 @@
-# The PoC PCI option ROM (`src/roms/poc`)
+# The PoC PCI option ROM (`src/poc-pci-rom`)
 
 A generic PCI option ROM for a conventional PCI card, built to the PCI 2.1
 expansion ROM rules (the project's rules [ROM-1 to ROM-4 and ROM-6 in
@@ -54,8 +54,8 @@ the 32 KB image once and pads the 64 KB part with FFh. The subsystem ID and the 
 revision do not go into the image: a PCI 2.1 POST matches only the
 vendor/device IDs.
 
-NASM 3.02 assembles [hello.asm](../src/roms/poc/hello.asm) and
-[build.py](../src/roms/poc/build.py) pads the code with 00h to a 32 KB
+NASM 3.02 assembles [hello.asm](../src/poc-pci-rom/hello.asm) and
+[build.py](../src/poc-pci-rom/build.py) pads the code with 00h to a 32 KB
 image (ROM-3), patches the expansion ROM checksum (offset 06h, the sum of
 all image bytes is 0 mod 256) and writes the image once at offset 0,
 padding the rest of the part with FFh (ROM-4). A system BIOS that scans the

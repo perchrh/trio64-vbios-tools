@@ -499,7 +499,7 @@ the fonts look right ([docs/764-rom.md](docs/764-rom.md), "On the card: 1.5-07-p
 
 ## PoC option ROM
 
-`src/roms/poc/` builds a generic PCI option ROM for any conventional PCI card (PCI 2.1 and later):
+`src/poc-pci-rom/` builds a generic PCI option ROM for any conventional PCI card (PCI 2.1 and later):
 at POST it prints its identity banner ("PoC PCI option ROM 1.0" and the card's vendor:device
 IDs, read from its own PCIR) on INT 10h and beeps high-low high-low (1200/600 Hz) on the PC
 speaker, holds the text for about 1 s more and returns CF=0. One 32 KB image with a valid checksum at offset 0, the rest of the part

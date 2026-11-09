@@ -32,7 +32,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 ## Hard rules for the ROM
 
-- The PoC ROM (`src/roms/poc`) never contains VGA code: no mode set, no INT 10h hook, no register of
+- The PoC ROM (`src/poc-pci-rom`) never contains VGA code: no mode set, no INT 10h hook, no register of
   any card. Its purpose is to prove that we can build a generic PCI option ROM (a valid image the
   system BIOS maps, copies, calls and keeps), nothing more. Screen output is allowed (INT 10h
   teletype), and so are the PC speaker and the PIT.

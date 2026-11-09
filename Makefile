@@ -164,7 +164,7 @@ IN ?= $(REF775)
 	@test -n "$(REF775)" -a -n "$(ROM)" || { echo "775-ref-compare: set ROM (and REF775, default reference/v2/2_04_07.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --ref "$(REF775)" --rom "$(ROM)"
 
-# PoC PCI option ROM (src/roms/poc, docs/poc-rom.md): a generic card ROM that beeps high-low
+# PoC PCI option ROM (src/poc-pci-rom, docs/poc-rom.md): a generic card ROM that beeps high-low
 # high-low and prints "Hello world" at POST. One 32 KB image with a valid checksum at offset 0,
 # the rest of the part padded with FFh (POC_PAD = the file size in KB, POC_OFFSET = the
 # image's offset in KB), so a BIOS scanning the ROM window finds one image; VENDOR/DEVICE (hex)
@@ -176,7 +176,7 @@ POC_OUT ?= $(if $(OUT),$(OUT),build/roms/poc/HELLO$(POC_PAD)K.ROM)
 POC_PAD ?= 64
 POC_OFFSET ?= 0
 poc-rom:
-	python3 $(ROMS_SRC)/poc/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --pad $(POC_PAD) --offset $(POC_OFFSET) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
+	python3 src/poc-pci-rom/build.py --nasm "$(NASMBIN)" -o "$(POC_OUT)" --pad $(POC_PAD) --offset $(POC_OFFSET) $(if $(VENDOR),--vendor $(VENDOR)) $(if $(DEVICE),--device $(DEVICE))
 
 # Removes build/ (the DOS tools and the ROM images under build/roms/)
 clean:
