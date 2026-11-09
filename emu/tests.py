@@ -3003,8 +3003,10 @@ T64_BASE = {
                r'4F02 BX=0(1(07|12|1[5-9A]|20)|1FF|17F|200) \(refused\) changed the video state'),
     # 4F06 uses 32-bit registers and the Phoenix dispatcher saves the 16-bit ones only
     'windows': (r'4F06 set: upper halves changed: ',),
-    # S3COMPAT's run leaves a register state behind that differs from its baseline, on 1.5-07 as on our ROM
+    # S3COMPAT's run leaves a register state behind that differs from its baseline, on 1.5-07 as on our
+    # ROM; the bench build (cut down to the #200 section, with its own cleanup) leaves the same leftover
     's3compat_full': (r'Mode 03 after all tests vs baseline .*WARN 01$',),
+    's3compat_bench': (r'Mode 03 after all tests vs baseline .*WARN 01$',),
 }
 
 
