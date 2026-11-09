@@ -295,10 +295,16 @@ What the agent may do:
 What the sandbox blocks, and no repository or organization setting can lift:
 
 - Every mutating GitHub API call through `gh api` ("Mutating GitHub API calls are not allowed").
-- `gh pr merge` ("Merging pull requests via CLI is not allowed"). Merging a PR is therefore a
-  human action: the owner clicks Merge on the PR page once CI is green. The block is the sandbox's
-  credential policy, not one of GitHub's merge controls (those live under Settings → General →
-  Pull Requests and are permissive here; #187 and #188 were merged the normal way).
+- `gh pr merge`, which fails with exactly:
+
+      Error: Merging pull requests via CLI is not allowed.
+
+  That exact error is a sandbox limitation, not a GitHub response: it appears even when the GitHub
+  App installation has read and write access to pull requests (granted and re-verified 9 November
+  2026), and `--admin` does not change it. Merging a PR is therefore a human action: the owner
+  clicks Merge on the PR page once CI is green. The block is the sandbox's credential and command
+  policy, not one of GitHub's merge controls (those live under Settings → General → Pull Requests
+  and are permissive here; #187 and #188 were merged the normal way).
 
 Safety rules the agent must follow, so a human reviewer can rely on them:
 
