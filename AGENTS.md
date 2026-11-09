@@ -126,6 +126,11 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
+- VSHOW stays cleanroom permissible: it observes (measures the refresh and line frequency, dumps the
+  4F00/4F01 blocks, draws the picture) and every expectation in it comes from a public source; nothing
+  in it may be taken from a reference or patched ROM (a mode list, a register value, a timing, a
+  tolerance). A change that would put such an expectation into VSHOW needs an owner decision first, and
+  the `vshow` emulator test loses its `cleanroom` tag with it (the tag's meaning: emu/tests.py, TAGS; #201).
 - All tools share one version number (1.0.0 now), `VERSION` in `src/tools/common/version.inc`; never write the
   number into a tool's strings, use `VERSION` (and `VER775` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.

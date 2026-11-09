@@ -28,6 +28,11 @@
 ;                        blocks, registers and per-frame timer counts of each mode shown
 ;   /S                   silent: no monitor warning and no key press before the modes (batch runs)
 ;
+; Cleanroom rule (AGENTS.md): VSHOW stays cleanroom permissible. It observes (measures, dumps,
+; draws) and every expectation comes from a public source; nothing in it may be taken from a
+; reference or patched ROM - a mode list, a register value, a timing or a tolerance. Such a change
+; needs an owner decision first and drops the `cleanroom` tag of the `vshow` emulator test (#201).
+;
 ; The test picture and what to expect
 ;   16 colour bars           every bar a solid, distinct colour (direct colour modes use the 4F01 masks)
 ;   single-pixel checkers    bottom half: a sharp, even grey texture; smearing or moire = wrong LCD
