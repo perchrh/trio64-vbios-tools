@@ -115,6 +115,9 @@ Tests
                    the S3 locks are put back, /U unhooks, /D afterwards is refused; /D commits the file
                    and resets the disk before it says it is written (#158); a program's mode 07h and 03h
                    (M7.COM) loaded where /D runs next are logged (#159)
+  vgalog_xl        VGALOG /M /XL installs with a 128 KB ring (4096 slots): the message says 4096 and
+                   128 KB, /D then writes more than 1024 records (the default ring caps at 1024);
+                   /XL without a memory mode is refused
   vgalog_trace     VGALOG /T: every OUT the BIOS makes in the mode sets AX=0003h and 4F02h 101h is in the
                    trace in order with its value, behind the marker of its call; other calls not traced,
                    INT 1 put back after each mode set, the trap flag clear on return
@@ -1742,6 +1745,44 @@ def t_vgalog_mem(c):
     return '%d calls, %d of them nested' % (n, len(nested))
 
 
+def t_vgalog_xl(c):
+    """VGALOG /M /XL installs with a 128 KB ring (4096 slots): the install message says 4096 and 128 KB,
+    and /D writes more than 1024 records when more than 1024 calls were made (the default /M ring caps at
+    1024). /XL without a memory mode is refused with exit code 1."""
+    com = c.tool('VGALOG.COM')
+    m = c.machine()
+    rx = m.run_com(com, '/XL', seg=0x2000)
+    check(rx.exit == ('exit', 1), '/XL without /M not refused: %s' % (rx.exit,))
+    r = m.run_com(com, '/M /XL', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /M /XL did not stay resident: %s' % (r.exit,))
+    check(b'4096' in r.stdout and b'128 KB' in r.stdout,
+          '/XL install message without 4096/128 KB: %r' % bytes(r.stdout)[-120:])
+    for i in range(1500):
+        m.int10(0x0F00)                 # AH=0Fh: logged in memory mode, cheap
+    rd = m.run_com(com, '/D', seg=0x4000)
+    check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
+    b = rd.files.get('VGALOG.BIN')
+    check(b is not None and b[:8] == b'VGALOGM2', 'no memory-mode VGALOG.BIN after /M /XL')
+    total, n, flags = struct.unpack_from('<IHH', b, 8)
+    check(total == 1500 and n == 1500, '/XL ring did not keep all 1500 calls: total=%d n=%d' % (total, n))
+    check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    vgalog_info(c, m, bytes(b[16:48]), '/M /XL')
+    ru = m.run_com(com, '/U', seg=0x4000)
+    check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
+    r = m.run_com(com, '/M', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /M did not stay resident: %s' % (r.exit,))
+    check(b'1024' in r.stdout and b'4096' not in r.stdout,
+          'default /M install message: %r' % bytes(r.stdout)[-120:])
+    for i in range(1500):
+        m.int10(0x0F00)
+    rd2 = m.run_com(com, '/D', seg=0x4000)
+    b2 = rd2.files.get('VGALOG.BIN')
+    total2, n2, _ = struct.unpack_from('<IHH', b2, 8)
+    check(total2 == 1500 and n2 == 1024, 'default /M ring did not cap at 1024: total=%d n=%d' % (total2, n2))
+    c.save('VGALOGXL', rd)
+    return '/XL kept %d of %d calls, /M caps at %d' % (n, total, n2)
+
+
 def t_vgalog_trace(c):
     """VGALOG /T traces the port accesses of the mode sets: every OUT the BIOS makes during AX=0003h and
     4F02h 101h is in the trace, in order and with its value (the model's own record of the OUTs as the
@@ -3030,7 +3071,7 @@ def t_mclk(c):
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vbeshow', t_vbeshow), ('vgashow', t_vgashow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
-         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_xl', t_vgalog_xl), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
@@ -3062,7 +3103,7 @@ TAGS = {
     's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vbeshow': 'vbe tools card vram cleanroom', 'vgashow': 'mda cga ega vga tools card cleanroom',
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
+    'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_xl': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
     'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch 765', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu cleanroom', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',

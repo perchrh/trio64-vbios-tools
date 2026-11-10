@@ -24,7 +24,8 @@
 ; Usage
 ;   REPORT           pack the run's files and print the archive name on stdout
 ;   REPORT /H, /?    this help
-;   Files, in order: *.log, *.dbg, s3regs.txt, vgalog.bin, s3regsr.txt, vgalogr.bin.
+;   Files, in order: *.log, *.dbg, s3regs.txt, vgalog*.bin (VGALOG.BIN, the per-tool VGALOG0.BIN...
+;   dumps of runall.bat, VGALOGR.BIN), s3regsr.txt.
 ;   A missing file is a line "missing <name>" on stderr and is left out. Stdout is the version
 ;   line and the archive name. Exit 0 when the archive was written, 1 when it was not.
 ;
@@ -100,15 +101,11 @@ start:  cld
         call addnamed
         cmp al,2
         je failmsg
-        mov si,fn_vlog
-        call addnamed
+        mov dx,pat_vlog
+        call addwild
         cmp al,2
         je failmsg
         mov si,fn_regsr
-        call addnamed
-        cmp al,2
-        je failmsg
-        mov si,fn_vlogr
         call addnamed
         cmp al,2
         je failmsg
@@ -787,7 +784,7 @@ fail:   call srcclose
 
 s_title db 'REPORT ',VERSION,13,10,'$'
 s_use   db 'REPORT ',VERSION,' - pack a RUNALL into one stored ZIP',13,10
-        db '  REPORT       *.log *.dbg s3regs.txt vgalog.bin s3regsr.txt vgalogr.bin',13,10
+        db '  REPORT       *.log *.dbg s3regs.txt vgalog*.bin s3regsr.txt',13,10
         db '  REPORT /H    this help',13,10
         db 'Name: runall-<part>.zip, created under that name (a rename is not used).',13,10
         db 'If the DOS cannot create a long name: <part>.ZIP (86C775.ZIP).',13,10
@@ -805,9 +802,8 @@ s_old   db 'runall.zip',0
 pat_log db '*.log',0
 pat_dbg db '*.dbg',0
 fn_regs db 's3regs.txt',0
-fn_vlog db 'vgalog.bin',0
+pat_vlog db 'vgalog*.bin',0
 fn_regsr db 's3regsr.txt',0
-fn_vlogr db 'vgalogr.bin',0
 
 named   db 0
 usedlong db 0
