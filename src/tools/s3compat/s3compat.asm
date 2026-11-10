@@ -910,8 +910,9 @@ STATEN  equ ($-statelist)/2
 ; VGA pass
 VENT    equ 114
 
-; All entries of vgaref: modes 00h-07h, 0Dh-0Fh, 10h-13h at 400/480 lines and modes 00h-03h at
-; 350 lines. Run twice: pass 1 from a clean state, pass 2 right after a VESA mode (prevesa).
+; All entries of vgaref: modes 00h-06h, 0Dh-0Fh, 10h-13h at 400/480 lines, modes 00h-03h at 350 lines,
+; then 07h and 0Fh last (a mono mode changes the 0065h/0066h the next mode set leaves). Run twice: pass 1
+; from a clean state, pass 2 right after a VESA mode (prevesa).
 vga_pass:
         mov word [vi],0
 .l:     mov ax,[vi]
@@ -925,8 +926,9 @@ vga_pass:
         jmp .l
 .d:     ret
 
-prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0101,0x0107,0x4103,0x0101,0x0131,0x0133,0x0102,0x0120
-        dw 0x0101,0x0105,0x4101,0x0111  ; idx 7 = 07h and idx 10 = 0Fh get 0101; then the four 350-line entries
+prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131,0x0133,0x0102,0x0120
+        dw 0x0101,0x0105,0x4101,0x0111     ; for the four 350-line entries
+        dw 0x0101,0x0101                   ; 07h and 0Fh (the last two entries)
 
 ; One VGA mode against the IBM reference. Fail bits:
 ;   1  MISC, FEAT, SR, CRTC, ATC or GR register differs from IBM (all 62, detail lines show which)
@@ -1075,7 +1077,8 @@ vga_one:
         call lineinfo
         ; default DAC loaded by the mode set, as the IBM VGA BIOS does it:
         ; 13h the 256-colour table, 04h-06h/0Dh/0Eh (200 lines) the CGA palette, 07h/0Fh the mono grayscale
-        ; palette (dac_mon; a mono display takes the green output), all others the EGA palette
+        ; palette (dac_mon; a mono display takes the green output; the S3 reference loads EGA-gray instead,
+        ; a known deviation, warned not failed), all others the EGA palette
         mov si,[ent]
         mov al,[si]
         cmp al,0x13
@@ -1099,6 +1102,10 @@ vga_one:
 .de:    call dac_ega
         jmp .mem
 .dm:    call dac_mono
+        test word [fails],0x20
+        jz .mem
+        and word [fails],0xFFDF        ; the S3 reference BIOS loads the EGA palette in grayscale in the mono
+        WARNB 1                         ; modes, not VGATEST's DAC.MON ramp (dac_mon): known, warn not fail
 .mem:   mov si,[ent]
         mov al,[si+1]
         and al,0x7F
@@ -1173,7 +1180,7 @@ dac_ega:
         jmp dac_mode
 
 ; Modes 07h/0Fh: the mono default palette (VGATEST DAC.MON, dac_mon in vgaref.inc), a grayscale ramp
-; R=G=B; a mono display takes the green output (the data book's mono signal). Entries 0-63, as dac_ega does.
+; R=G=B; a mono display takes the green output (the data book mono signal). Entries 0-63, as dac_ega does.
 dac_mono:
         mov si,dac_mon
         mov cx,64
@@ -7790,11 +7797,11 @@ readreg:                                ; AL type AH index -> AL
         jmp .ix
 .3:     cmp bl,3
         jne .4
-        call crtcport                   ; DX = CRTC port of the current mode: 3B4h mono, 3D4h colour (MISC bit 0)
+        call crtcport                   ; 3B4h in the mono modes, 3D4h in colour (MISC bit 0)
         jmp .ix
 .4:     cmp bl,4
         jne .5
-        call stat1port                  ; DX = input status 1: 3BAh mono, 3DAh colour
+        call stat1port
         in al,dx
         mov dx,0x3C0
         mov al,ah

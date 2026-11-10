@@ -235,7 +235,14 @@ def read_vgaref():
         if not l.startswith('db'):
             break
         dac += [int(x, 16) for x in l[2:].split(',')]
-    return ents, bytes(dac)
+    k = t.index('dac_mon:')
+    mon = []
+    for l in t[k:].split('\n')[1:]:
+        l = l.strip()
+        if not l.startswith('db'):
+            break
+        mon += [int(x, 16) for x in l[2:].split(',')]
+    return ents, bytes(dac), bytes(mon)
 
 
 def ega(i):
@@ -425,7 +432,7 @@ def t_post(c):
 
 
 def t_vga_registers(c):
-    ents, _ = read_vgaref()
+    ents, _, _ = read_vgaref()
     m = c.machine()
     errs = []
     for mode, memtype, regs, ds in ents:
@@ -457,7 +464,7 @@ def t_vga_registers(c):
 
 
 def t_vga_palettes(c):
-    ents, dac_col = read_vgaref()
+    ents, dac_col, dac_mon = read_vgaref()
     m = c.machine()
     errs = []
     for mode, memtype, regs, ds in ents:
@@ -468,6 +475,10 @@ def t_vga_palettes(c):
         if mode == 0x13:
             if d[:744] != dac_col[:744]:
                 errs.append('13h not the IBM 256-colour table')
+        elif mode in (0x07, 0x0F):
+            gray = bytes(b for i in range(64) for b in ((0x3F if (i >> 3) & 3 == 3 else 0x2A if (i >> 3) & 3 else 0),) * 3)
+            if d[:192] != dac_mon[:192] and d[:192] != gray:
+                errs.append('%02Xh not the mono palette (dac_mon, or the S3 reference gray ramp)' % mode)
         else:
             f = cga if mode in (4, 5, 6, 0x0D, 0x0E) else ega
             for i in range(64):
@@ -1334,7 +1345,9 @@ def t_s3compat_vga(c):
     check(len(vga) >= 17 + 6, 'only %d VGA/Mode X lines' % len(vga))
     check(len(func) >= 35, 'only %d VGA BIOS function lines' % len(func))
     known = (('Mode 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
-             ('Chip ID', 'INFO'), ('AH=12 BL=20', 'WARN 01'))     # 2.04.07 has no alternate print screen
+             ('Chip ID', 'INFO'), ('AH=12 BL=20', 'WARN 01'),          # 2.04.07 has no alternate print screen
+             ('Mode 07h', 'WARN 01'), ('Mode 0Fh', 'WARN 01'))          # mono DAC: the S3 reference loads the
+                                                                        # EGA palette in grayscale, not DAC.MON
     bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
            not any(l.startswith(a) and l.rstrip().endswith(b) for a, b in known)]
     details = [l.strip() for l in lines if l.startswith('      ')]
@@ -1378,7 +1391,8 @@ def t_s3compat_dac_retry(c):
         check(hit, 'no line %r' % name)
         l = hit[0].rstrip()
         check(l.endswith('  ' + res) and det in l, '%s: %r, expected %s with %r' % (fault, l, res, det))
-        others = [t.strip() for t in tests if t is not hit[0] and ('DAC#' in t)]
+        others = [t.strip() for t in tests if t is not hit[0] and ('DAC#' in t)
+                  and not t.startswith(('Mode 07h', 'Mode 0Fh'))]   # known mono-DAC warns, not the fault
         check(not others, 'other lines report the fault: %s' % others)
         dl = check_dbg(r.files.get('S3COMPAT.DBG'), 'S3COMPAT.DBG')
         tries = [d for d in dl if d.startswith('D:DAC try=') and 'ok' not in d]
@@ -1393,6 +1407,8 @@ S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$',
                          r'Banked window and LFB same memory .*WARN 01$']
 S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
                   r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
+                  r'Mode 07h .*WARN 01$', r'Mode 0Fh .*WARN 01$',           # mono DAC: the S3 reference loads
+                                                                            # the EGA palette in grayscale
                   # Accepted datasheet warnings, checked on the card with p18 (S3COMPAT, VSHOW /R and /A,
                   # 30 October 2026): the five modes show a clean picture at the edges and line ends.
                   # 012Eh, 010Fh (320x200) WARN 80: End Horizontal Blank is 00h, so CR86 = 00h cannot be
@@ -2367,7 +2383,7 @@ def t_windows(c):
     # the S3 Windows 9x driver: 4F00, 4F01 for the modes, 4F02, 4F08 to 8 bits, the palette, a mode
     # change, back to text. VBE 2.0: 4F08 BH = the width set; mode 03h after it as IBM's (6-bit DAC,
     # the EGA palette, the registers of vgaref.inc)
-    ents, _ = read_vgaref()
+    ents, _, _ = read_vgaref()
     m = c.machine()
     m.mu.mem_write(BUF * 16, b'VBE2')
     o = int10w(m, dict(eax=0x4F00, edi=0), es=BUF)
