@@ -19,10 +19,13 @@ COMMON = $(TOOLS_SRC)/common
 
 # Versions come from src/tools/common/version.inc; override for one build with
 #   make clean && make VERSION=0.9 VER775=2.04.07-p13
+# The tools are stamped with the short git hash of HEAD when building in a clone, so every build
+# names its exact commit: 1.0.1-a87d7f1da (without .git, just the base version).
+VERSION ?= $(shell sed -n "s/^%define VERSION '\(.*\)'.*/\1/p" $(COMMON)/version.inc)
+GITSHORT := $(shell git rev-parse --short=9 HEAD 2>/dev/null)
+TOOLVER := $(VERSION)$(if $(GITSHORT),-$(GITSHORT))
 DEFS :=
-ifdef VERSION
-DEFS += -DVERSION="'$(VERSION)'"
-endif
+DEFS += -DVERSION=\"'$(TOOLVER)'\"
 ifdef VER775
 DEFS += -DVER775="'$(VER775)'"
 endif
@@ -290,7 +293,7 @@ test-all: tools roms
 # trio64/tools/ with the tools. With ROMS=1 also trio64/roms/, every chip's ROM at its memory clocks
 # (make roms); the default leaves them out (README "Release zip").
 #   make dist [ROMS=1]
-DISTVER = $(or $(VERSION),$(shell sed -n "s/^%define VERSION '\(.*\)'.*/\1/p" $(COMMON)/version.inc))
+DISTVER = $(TOOLVER)
 DISTZIP = build/trio64-tools-$(DISTVER).zip
 dist: tools $(if $(ROMS),roms)
 	rm -rf build/dist $(DISTZIP)
