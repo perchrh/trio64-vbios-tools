@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(SRC, 'src', 'roms'))
 
 NASM = os.environ.get('NASM', 'nasm')       # --nasm: the assembler, also passed to tests.py
 ORDER = ('post,rom_patches,vga_registers,vga_palettes,mono,errors,display_switch,stores,s3compat_vga,s3compat_vbe,windows,vgalog,'
-         'vgalog_mem,s3alias,s3regs,dos_exe,vshow,s3test,s3compat_full')
+         'vgalog_mem,s3alias,s3regs,dos_exe,vbeshow,s3test,s3compat_full')
 
 
 def int10_mutants():

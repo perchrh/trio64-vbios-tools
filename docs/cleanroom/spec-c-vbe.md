@@ -313,10 +313,10 @@ Trio64 BIOSes examined there offers 4F14h.
 3. **[Open observation - survey of drivers/programs]** OEM string wording (VBE-23): the project's own text. Does any driver or program match the OEM string
    (for example on "S3" or "Trio64") to pick its Trio64 code path? If one does, the string must contain
    that word; the README's Windows 9x driver findings say nothing about it.
-4. **[Open observation - card/bench (VSHOW)]** NumberOfImagePages in the planar modes (VBE-34): this specification counts M / 4 bytes per plane
+4. **[Open observation - card/bench (VBESHOW)]** NumberOfImagePages in the planar modes (VBE-34): this specification counts M / 4 bytes per plane
    (102h: 3, 7, 16 pages with 1, 2, 4 MB). Can the Trio64's planar modes reach video memory above
    256 KB per plane through CR6A (VBE-52) and the display start (VBE-64)? Check on the card with
-   VSHOW in 102h after 4F05h DX = 4 and 4F07h past 256 KB per plane; until then a BIOS may report the
+   VBESHOW in 102h after 4F05h DX = 4 and 4F07h past 256 KB per plane; until then a BIOS may report the
    pages of 256 KB per plane (3 in 102h, 1 in 104h).
 5. **[Project choice - this specification refuses]** 4F02h with BH = 0 and BL bit 7 set (0083h, 00E9h): AH=00h semantics (mode BL & 7Fh without the
    clear) or a refusal? Haakenson reports that some 1.2 programs used bit 7 as the no-clear flag.

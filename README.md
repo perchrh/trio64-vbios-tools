@@ -115,7 +115,7 @@ is for the Windows 9x desktop.
 
 | Tool | Purpose | Run |
 | --- | --- | --- |
-| VSHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes. `/O CR54=1F` (repeatable, up to 8) overrides a register (SR/CR/GR/AR with a 1-2 digit hex index and value) after each mode set, before the picture and the measurement, with the S3 locks (SR08, CR38, CR39) opened for the write and put back; the override line prints once at the start. The bench toggles of [#200](https://github.com/perchrh/trio64-vbios-tools/issues/200) (CR43 bit 7, CR67 bit 0, CR54 the FIFO threshold M, the HSYNC offset, AR13 pixel panning) become one-boot A/B runs with the measured refresh and the picture as the readout | `VSHOW /H` for the parameter list |
+| VBESHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes. `/O CR54=1F` (repeatable, up to 8) overrides a register (SR/CR/GR/AR with a 1-2 digit hex index and value) after each mode set, before the picture and the measurement, with the S3 locks (SR08, CR38, CR39) opened for the write and put back; the override line prints once at the start. The bench toggles of [#200](https://github.com/perchrh/trio64-vbios-tools/issues/200) (CR43 bit 7, CR67 bit 0, CR54 the FIFO threshold M, the HSYNC offset, AR13 pixel panning) become one-boot A/B runs with the measured refresh and the picture as the readout | `VBESHOW /H` for the parameter list |
 | S3TEST.COM | Regression test for the ROM patches (signature, chip and its CR2F variant, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X or 86C764-P by CR2F, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) renames `runall.zip` to `runall-<part>.zip` from `chipid.out` when the DOS can rename to a long name. Windows 98 DOS can create a long name and cannot rename an existing file to one, so `/Z` changes nothing there; RUNALL uses REPORT | `CHIPID`, `CHIPID /Q` |
 | ROMVER.COM | Prints the video ROM version S3TEST's signature line reads, using the same scan (`src/tools/common/romver.inc`): "Version " in C000:0000-00FF, then at most 12 characters. `/Q` (`-q`) prints only that version | `ROMVER`, `ROMVER /Q` |
@@ -125,17 +125,17 @@ is for the Windows 9x desktop.
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x; `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. `/P` is `/T` that also traces the program itself after each of its 4F02h calls (its port accesses, with those of the BIOS calls it makes), until 12288 new events, its next mode set or an instruction that would switch to protected mode; it shows how a program changes the bank or programs the DAC and CRTC through the ports, and the program runs much slower until the trace ends by itself. `/W` is `/M` with a window function hook: the WinFuncPtr a 4F01h call returns points to VGALOG, which logs the program's far calls through it (the first 64 as records, all counted) and jumps on to the BIOS's routine, so a log shows whether a program changes the bank with the window function, with INT 10h 4F05h or with its own port writes. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`, `VGALOG /P`, `VGALOG /W`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `src/tools/vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
 | S3REGS32.EXE | The same snapshot from the Windows 9x desktop (Win32 console program), and `/W n` logs every register change for n seconds | `S3REGS32 label`, `S3REGS32 /W 60 label` |
-| S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions (also AH=13h, CGA scroll, graphics XOR, fonts, the video save pointer table), every VESA mode, the VBE functions (also 4F04 masks, 4F0A, 4F10, 4F14, 4F15), datasheet rules, VRAM. After the VESA functions the bench observations of [#200](https://github.com/perchrh/trio64-vbios-tools/issues/200): the 4F07 display start near the end of memory (spec-c 11) and the planar 102h pages past 256 KB/plane (spec-c 4) always run; `/U` adds the SR18 bit 6 palette load stress (spec-a Q7), `/N s` the retention check (spec-b MQ-5: pattern written, s seconds waited, verified), `/B` sets CR31 bit 2 (the 16-bit VGA bus, spec-b MQ-8) for the whole run, restored by cleanup | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VSHOW shows single modes) |
+| S3COMPAT.COM | VGA/SVGA/VESA compatibility test: IBM reference registers and palettes, 350-line text modes, VGA BIOS functions (also AH=13h, CGA scroll, graphics XOR, fonts, the video save pointer table), every VESA mode, the VBE functions (also 4F04 masks, 4F0A, 4F10, 4F14, 4F15), datasheet rules, VRAM. After the VESA functions the bench observations of [#200](https://github.com/perchrh/trio64-vbios-tools/issues/200): the 4F07 display start near the end of memory (spec-c 11) and the planar 102h pages past 256 KB/plane (spec-c 4) always run; `/U` adds the SR18 bit 6 palette load stress (spec-a Q7), `/N s` the retention check (spec-b MQ-5: pattern written, s seconds waited, verified), `/B` sets CR31 bit 2 (the 16-bit VGA bus, spec-b MQ-8) for the whole run, restored by cleanup | `S3COMPAT > S3COMPAT.LOG` (`/Q` skips the VRAM test; VBESHOW shows single modes) |
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
 each test routine has a comment block with its fail and warn bits. S3TEST and S3COMPAT end their log
 with `Time spent: x.y s`, the run time measured with the BIOS tick.
 
-Monitor: VSHOW and S3TEST set modes up to a 75 kHz line frequency (1600x1200 at 60 Hz), S3COMPAT up
+Monitor: VBESHOW and S3TEST set modes up to a 75 kHz line frequency (1600x1200 at 60 Hz), S3COMPAT up
 to 91 kHz (1280x1024 at 85 Hz in its 4F14 refresh test). An LCD refuses a signal it cannot show (out
 of range) and takes no harm; an old fixed-frequency or low-end CRT can be damaged by a line frequency
 above its range, so do not run these tools with one. The `/H` help of each tool says so, and
-`VSHOW /I` shows it once on the screen before the mode list.
+`VBESHOW /I` shows it once on the screen before the mode list.
 
 All tools share one version number, and S3TEST checks for one ROM level per chip; all are set in
 `src/tools/common/version.inc` (`VERSION`; `VER775`, `VER765`, `VER764`) and can be overridden for a build, for
@@ -166,10 +166,10 @@ environment variable `NASM`). A relative path is made absolute. `make` warns whe
 not NASM 3.02.
 
 The .COM files land in `build/`, with `RUNALL.BAT` (from `runall.bat`): it loads VGALOG in memory
-mode (`VGALOG /M`), takes an S3REGS snapshot ("before tests"), runs S3TEST, S3COMPAT and `VSHOW /R`, all
+mode (`VGALOG /M`), takes an S3REGS snapshot ("before tests"), runs S3TEST, S3COMPAT and `VBESHOW /R`, all
 with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.TXT), writes the last
 1024 INT 10h calls with `VGALOG /D`, and beeps (`echo` of Ctrl-G) when done. It leaves S3TEST.LOG,
-S3COMPAT.LOG, VSHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. It then copies
+S3COMPAT.LOG, VBESHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. It then copies
 C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root, when they
 exist) as S3REGSR.TXT and VGALOGR.BIN, and runs REPORT. REPORT writes one stored ZIP (method 0, no
 compression; Info-ZIP's unzip reads it) of the logs, the .DBG files and these four files. A file that
@@ -182,7 +182,7 @@ After the new archive is written, REPORT deletes a leftover `runall.zip` and the
 part's name. VGALOG stays resident afterwards (`VGALOG /U`
 unloads it); while it is loaded, every INT 10h call takes a little longer, which shows only in the timing
 lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
-.DBG files, S3TEST.LOG, S3COMPAT.LOG, VSHOW.LOG, S3REGS.TXT and VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN
+.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, S3REGS.TXT and VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN
 in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only
 start it with a monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V
 debug log code the test tools share.
@@ -190,7 +190,7 @@ debug log code the test tools share.
 RUNALL.BAT works the same on a card with its stock BIOS, and the logs then describe that BIOS and card:
 S3TEST fails its ROM signature (the line shows the version found) and the tests of our changes where
 the stock BIOS lacks them (the refresh rates and the register values are in the FAIL lines), while the
-MCLK, memory type, chip ID, timings, S3COMPAT, VSHOW, S3REGS and VGALOG results are as useful as on our
+MCLK, memory type, chip ID, timings, S3COMPAT, VBESHOW, S3REGS and VGALOG results are as useful as on our
 ROM. `S3TEST /C` runs only the tests that apply to any ROM, for a short pass/fail answer.
 In the emulator, `make stock-test` does the same with the three stock reference ROMs (below).
 
@@ -205,7 +205,7 @@ NASM, and the 64 KB ROM image of the card, which is not in this repository:
     make emu-test ROM=path/to/S3V2P24.BIN
 
 `make emu-test` runs every test with 2 MB and then again, with 4 MB, the seven whose result depends on
-the memory size (tag `vram`: rom_patches, s3test, vshow, s3compat_vbe, s3compat_full, errors, windows;
+the memory size (tag `vram`: rom_patches, s3test, vbeshow, s3compat_vbe, s3compat_full, errors, windows;
 the others give the same output with both sizes); on the Trio64 (`CHIP=764`, `764x`, `764p`) and the
 Trio32 it leaves the 4 MB run out and tests 2 and 1 MB only. `make emu-test ROM=... VRAM=4` runs every test with 4 MB (the CR36 strapping of a 4 MB card; the
 86C775 supports 2 and 4 MB): the BIOS then lists the modes up to 4 MB (1280x1024x15/16, 1152x864x32,
@@ -214,7 +214,7 @@ marks supported). With 4 MB S3COMPAT gives WARN 02 for 1024x768x32, 1152x864x32 
 their default pixel clock is above the datasheet maximum for the depth, as in the reference BIOS.
 
 The tests are independent: `make emu-test` runs as many at a time as the machine has CPUs, each in
-its own process, the long ones (the full S3COMPAT, VSHOW /R, the S3COMPAT VBE part) first; `JOBS=1`
+its own process, the long ones (the full S3COMPAT, VBESHOW /R, the S3COMPAT VBE part) first; `JOBS=1`
 runs them one after the other, `python3 emu/tests.py -j N` sets the number. The full S3COMPAT run
 (about 8 minutes) is the lower limit of the total time.
 
@@ -240,7 +240,7 @@ pedestal, 60 Hz defaults, refresh and line length of the patched timings, booste
 the checksums of both 32 KB halves in the file, and the FIFO fix with CR90 bit 7 set the way the card
 leaves it after a VESA mode (the model does not set it; since p25 mode 03h must leave the bit, mode 13h
 must clear it, [#166](https://github.com/perchrh/trio64-vbios-tools/issues/166)). The other tests check the BIOS registers, state blocks and
-default palettes of every VGA mode against the IBM reference, that S3TEST, VSHOW and the VGA part of
+default palettes of every VGA mode against the IBM reference, that S3TEST, VBESHOW and the VGA part of
 S3COMPAT run and give the same output with and without /V, the /V debug file format, and VGALOG and
 S3ALIAS install and unload. The tools run with /V; their output and debug files are kept in
 `emu/logs/` (S3TEST.LOG, S3TEST.DBG, ...). The emulator models the VGA and S3 registers, the card's
@@ -369,7 +369,7 @@ and S3COMPAT print it with its name, `SKIP:` and the reason, and count these lin
 out. Examples: on the Trio64V2 with our ROM S3TEST skips nothing, and S3COMPAT names the 8x14 glyph
 checks (no 8x14 font in 2.04.07) and the Trio64UV+ register rules; on a Trio64V+ or Trio64 S3TEST
 names the Trio64V2-only lines (pedestal, refresh defaults, the VBE 2.0 lines) and, on a 1 MB card,
-the modes above 1 MB; on a chip without a ROM of ours, everything that needs one. VSHOW /A and /R name
+the modes above 1 MB; on a chip without a ROM of ours, everything that needs one. VBESHOW /A and /R name
 a mode that needs more memory than the card has with both sizes. The emulator tests check that the
 summary counts the SKIP lines.
 
@@ -407,7 +407,7 @@ We want to test compatibility with [rust-dos](https://github.com/dividebysandwic
 later, a DOS and Windows 9x emulator in Rust). It emulates an S3 Trio64 and ViRGE among its video cards and
 provides a VBE 2.0 of its own, without a BIOS image. What we want to know:
 
-- whether our tools (S3TEST, S3COMPAT, VSHOW, VGALOG, S3REGS) run on its Trio64 and what they report
+- whether our tools (S3TEST, S3COMPAT, VBESHOW, VGALOG, S3REGS) run on its Trio64 and what they report
   about its registers and VBE answers, against the data book and our three ROMs;
 - whether it can load a video BIOS image of ours (an option ROM at C000h) instead of its built-in one;
   if so, it is a second emulator for the ROMs and for the clean ROM's milestones;
@@ -464,7 +464,7 @@ S3COMPAT with the three FAILs 1.03-08 has, Windows 98 and video playback working
 the cards"). 1.03-08N-p5 on the Hercules card (2 November 2026): S3TEST 26 PASS, 0 FAIL; S3COMPAT 138
 PASS, 0 FAIL, 2 WARN (AH=12h BL=20h, 106h at 108 MHz), 10Dh-10Fh at their rate with the halved dot clock
 of p2; Windows, video playback and the fonts look right ([docs/765-rom.md](docs/765-rom.md), "On the
-Hercules card: 1.03-08N-p5"). The picture of 10Dh-10Fh in VSHOW is still for a card to show.
+Hercules card: 1.03-08N-p5"). The picture of 10Dh-10Fh in VBESHOW is still for a card to show.
 
 ## Trio64 ROM
 
@@ -672,7 +672,7 @@ tests run by hand.
     make dist [ROMS=1]
 
 builds the tools and packs them into `build/trio64-tools-<VERSION>.zip` (VERSION from
-`src/tools/common/version.inc`, now 1.0.1): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
+`src/tools/common/version.inc`, now 1.0.1): `trio64/tools/` with VBESHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
 CHIPID, ROMVER, REPORT, S3REGS32.EXE, RUNALL.BAT and CLEAN.BAT. CI builds it on
 every run and keeps it as the artifact `trio64-tools-<VERSION>` for 90 days; the download is that zip.
 `ROMS=1` adds `trio64/roms/` with every chip's ROM at its memory clocks (`make roms`); the default leaves
@@ -685,7 +685,7 @@ every emulator test once more. Its logs are kept as the artifact `coverage-logs`
 
 ## Debug log (/V)
 
-VSHOW, S3TEST and S3COMPAT take `/V`. It writes a second file, `VSHOW.DBG`, `S3TEST.DBG` or
+VBESHOW, S3TEST and S3COMPAT take `/V`. It writes a second file, `VBESHOW.DBG`, `S3TEST.DBG` or
 `S3COMPAT.DBG`, in the current directory. Its only purpose is to show how the code ran on the real
 card, so problems can be found and fixed from a log instead of guessed at. The normal output is the
 same with or without /V. The debug file contains:
@@ -746,11 +746,11 @@ Findings (S3REGS.TXT and VGALOG.BIN from the card, Windows 98 SE, October 2026):
   mode 03h twice and 4F03.
 - That is why the booster is refused while Windows runs in enhanced mode: a booster switched on by
   the driver's banked 4F02 leaves CR59/CR5A = 000Ah, and the driver turns its 2 MB window on at
-  A0000h (garbage on the desktop). And with the booster on in a full-screen DOS box (VSHOW 101h, 103h),
+  A0000h (garbage on the desktop). And with the booster on in a full-screen DOS box (VBESHOW 101h, 103h),
   Windows restored the box after Alt+Tab with MISC = 63h (the fixed 25 MHz clock, 400-line sync), which
   the monitor could not show, every time; without the booster this happens only once in many tries, as
   with the stock BIOS. With the ROM the desktop snapshots show CR6D = 01h (the refusal), CR58 92h and
-  CR59/CR5A E000h, and VSHOW in a full-screen box comes back after Alt+Tab as with the stock BIOS. The
+  CR59/CR5A E000h, and VBESHOW in a full-screen box comes back after Alt+Tab as with the stock BIOS. The
   emulator test `windows` replays the driver's 4F02 calls with an INT 2Fh that answers Windows.
 - Windows brings a full-screen DOS box back with its own 4F02 call (8101h, 8103h, C101h; CX = 0,
   DX = 03E0h), and the desktop with 4F02 8115h; the mode set hook restores CR59/CR5A from CR6D when a
@@ -835,7 +835,7 @@ The EGA and CGA default palettes are not tables: S3COMPAT computes them from the
   SHA-256 1056fcee..., not a build base); the Trio64V+ reference is its
   1.03-08N (from p4, [#129](https://github.com/perchrh/trio64-vbios-tools/issues/129), [docs/765-rom.md](docs/765-rom.md)); the Trio64V2 2.04.07 and
   2.04.11 are not there yet.
-- Possible option `/M:50` for S3TEST, S3COMPAT and VSHOW (future work, noted 30 October 2026), so
+- Possible option `/M:50` for S3TEST, S3COMPAT and VBESHOW (future work, noted 30 October 2026), so
   that one ROM can be tested on several cards with different memory speeds without flashing each
   clock (`make roms` builds the clocks as separate images): the tool sets the memory
   clock to the given MHz for its run, then puts back the clock the BIOS set at POST when it ends (a
@@ -1021,7 +1021,7 @@ this for our ROMs).
 - VESA BIOS Extension (VBE) 2.0 specification; VESA DMT; VESA CVT 1.2; the other VESA standards in
   "VESA standards" above.
 - VGATEST by Kent Quirk and Ed McNierney, PC Tech Journal, November 1988 (IBM reference tables).
-- VBETest/Lite (SciTech) and X-VESA 1.0.3: test ideas for S3COMPAT and VSHOW.
+- VBETest/Lite (SciTech) and X-VESA 1.0.3: test ideas for S3COMPAT and VBESHOW.
 - [DOS compatibility tests by gona.mactar.hu](https://gona.mactar.hu/DOS_TESTS/): known S3 issues.
 - The stock 2.04.11 dump, disassembled to locate the mode set, refresh tables and VBE handlers.
 - The S3 reference BIOS 2.04.07, the base of the current ROM, compared with 2.04.11 to find the same

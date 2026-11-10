@@ -76,9 +76,9 @@ Tests
   s3test_any       S3TEST /C (any ROM: a stock BIOS, a clean ROM) on every ROM and chip: the version is
                    INFO, our ROM's tests SKIP with the /C reason, every other check passes but the
                    banked write throughput (#143)
-  vshow            VSHOW 101 runs; with /V the output is the same and VSHOW.DBG is well formed; the
-                   monitor note is in the /H and /? help of VSHOW, S3TEST and S3COMPAT, shown once
-                   before the VSHOW /I list, and S3TEST, S3COMPAT and VSHOW (a mode, /A) print it on
+  vbeshow           VBESHOW 101 runs; with /V the output is the same and VBESHOW.DBG is well formed; the
+                   monitor note is in the /H and /? help of VBESHOW, S3TEST and S3COMPAT, shown once
+                   before the VBESHOW /I list, and S3TEST, S3COMPAT and VBESHOW (a mode, /A) print it on
                    stderr with a key prompt, where Esc cancels (/S prints nothing)
   s3compat_vga     S3COMPAT's VGA, Mode X and VGA BIOS function parts (built with nasm from the source
                    with the rest cut out): every test passes (registers, BIOS data, refresh, planar
@@ -1156,24 +1156,24 @@ def t_s3test_any(c):
     return '%d results, %d SKIP' % (len(results), len(skips))
 
 
-def t_vshow(c):
-    com = c.tool('VSHOW.COM')
+def t_vbeshow(c):
+    com = c.tool('VBESHOW.COM')
     v = ' /V' if has_verbose() else ''
     r1 = c.machine().run_com(com, '101' + v)
-    c.save('VSHOW', r1)
-    check(r1.exit and r1.exit[0] == 'exit' and r1.exit[1] == 0, 'VSHOW 101 ended with %s' % (r1.exit,))
+    c.save('VBESHOW', r1)
+    check(r1.exit and r1.exit[0] == 'exit' and r1.exit[1] == 0, 'VBESHOW 101 ended with %s' % (r1.exit,))
     check(b'75 kHz' in bytes(r1.stderr or b'') and b'Press any key to continue' in bytes(r1.stderr or b''),
-          'VSHOW 101: no monitor warning with a key prompt on stderr')
+          'VBESHOW 101: no monitor warning with a key prompt on stderr')
     rh = c.machine().run_com(com, '/H')
-    check(b'VSHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
-    # the monitor note: in the /H help of VSHOW, S3TEST and S3COMPAT, and once before the /I list
-    for tool, k in (('VSHOW.COM', 75), ('S3TEST.COM', 75), ('S3COMPAT.COM', 91)):
+    check(b'VBESHOW' in rh.stdout and b'/L' in rh.stdout, '/H shows no parameter list')
+    # the monitor note: in the /H help of VBESHOW, S3TEST and S3COMPAT, and once before the /I list
+    for tool, k in (('VBESHOW.COM', 75), ('S3TEST.COM', 75), ('S3COMPAT.COM', 91)):
         for sw in ('/H', '/?'):
-            r = rh if (tool, sw) == ('VSHOW.COM', '/H') else c.machine().run_com(c.tool(tool), sw)
+            r = rh if (tool, sw) == ('VBESHOW.COM', '/H') else c.machine().run_com(c.tool(tool), sw)
             out = r.stdout.replace(b'\r\n', b' ')
             check(r.exit == ('exit', 0) and b'%d kHz' % k in out and b'CRT can be damaged' in out,
                   '%s %s: no monitor note in the help' % (tool, sw))
-    for tool, k, arg in (('S3TEST.COM', 75, ''), ('S3COMPAT.COM', 91, ''), ('VSHOW.COM', 75, '101')):
+    for tool, k, arg in (('S3TEST.COM', 75, ''), ('S3COMPAT.COM', 91, ''), ('VBESHOW.COM', 75, '101')):
         r = c.machine(keys=[0x011B]).run_com(c.tool(tool), arg)
         err = bytes(r.stderr or b'').replace(b'\r\n', b' ')
         check(r.exit == ('exit', 0) and b'%d kHz' % k in err and b'Press any key to continue' in err
@@ -1183,26 +1183,26 @@ def t_vshow(c):
     want = vesa_supported(c.machine())
     miss = [v for v in want if 'Mode %04X' % v not in out]
     check(rr.exit == ('exit', 0) and 'stopped' not in out and '/R results:' in out and want and not miss,
-          'VSHOW /R /S did not run through the modes without keys: %s, missing %s' % (rr.exit, miss))
+          'VBESHOW /R /S did not run through the modes without keys: %s, missing %s' % (rr.exit, miss))
     ri = c.machine(keys=[0x011B]).run_com(com, '/I')
     check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to cancel' in ri.stdout,
-          'VSHOW /I: no monitor note before the list (Esc there quits)')
+          'VBESHOW /I: no monitor note before the list (Esc there quits)')
     r2 = c.machine(keys=[0x1C0D, 0x011B]).run_com(com, '/I')
-    check(r2.stdout.count(b'75 kHz') == 1, 'VSHOW /I: the monitor note is not shown exactly once')
+    check(r2.stdout.count(b'75 kHz') == 1, 'VBESHOW /I: the monitor note is not shown exactly once')
     # /O: the register overrides of the bench observations (#200), applied after the mode set
     ro = c.machine().run_com(com, '101 /O CR54=1F /O SR18=40 /S /V')
     check(ro.exit == ('exit', 0) and b'override CR54=1F SR18=40' in ro.stdout,
-          'VSHOW /O: no override line on stdout')
-    lo = check_dbg(ro.files.get('VSHOW.DBG'), 'VSHOW.DBG /O')
+          'VBESHOW /O: no override line on stdout')
+    lo = check_dbg(ro.files.get('VBESHOW.DBG'), 'VBESHOW.DBG /O')
     l54 = [l for l in lo if l.startswith('D:REG CR50:')]
-    check(l54 and l54[-1].split()[6] == '1F', 'VSHOW /O: CR54 not overridden in the register dump')
+    check(l54 and l54[-1].split()[6] == '1F', 'VBESHOW /O: CR54 not overridden in the register dump')
     l18 = [l for l in lo if l.startswith('D:REG SR00:')]
-    check(l18 and l18[-1].split()[26] == '40', 'VSHOW /O: SR18 not overridden in the register dump')
+    check(l18 and l18[-1].split()[26] == '40', 'VBESHOW /O: SR18 not overridden in the register dump')
     if v:
         r0 = c.machine().run_com(com, '101 /S')
         check(no_time(r1.stdout) == no_time(r0.stdout), 'output differs without /V')
-        check(b'kHz' not in bytes(r0.stderr or b''), 'VSHOW /S: the monitor warning is still printed')
-        lines = check_dbg(r1.files.get('VSHOW.DBG'), 'VSHOW.DBG')
+        check(b'kHz' not in bytes(r0.stderr or b''), 'VBESHOW /S: the monitor warning is still printed')
+        lines = check_dbg(r1.files.get('VBESHOW.DBG'), 'VBESHOW.DBG')
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
         check(any(l.startswith('D:FRM n=31') for l in lines), 'no frame timing')
@@ -1411,7 +1411,7 @@ S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', 
                   r'Mode 07h .*WARN 01$', r'Mode 0Fh .*WARN 01$',           # mono: the S3 reference loads the EGA
                                                                             # palette in grayscale; 0Fh also warns
                                                                             # without the 8x14 font (21 rows / 16 lines)
-                  # Accepted datasheet warnings, checked on the card with p18 (S3COMPAT, VSHOW /R and /A,
+                  # Accepted datasheet warnings, checked on the card with p18 (S3COMPAT, VBESHOW /R and /A,
                   # 30 October 2026): the five modes show a clean picture at the edges and line ends.
                   # 012Eh, 010Fh (320x200) WARN 80: End Horizontal Blank is 00h, so CR86 = 00h cannot be
                   #   "1 less" (V2-REG-3); the reference 2.04.07 sets the same registers.
@@ -2748,7 +2748,7 @@ def t_romver(c):
         check(dbg is not None and mark in dbg, '%s /V log has no %r (exit %s)' % (tool, mark, run.exit))
         return run, dbg
 
-    vlog('VSHOW.COM', '/V /S', 3_000_000, 'VSHOW.DBG')
+    vlog('VBESHOW.COM', '/V /S', 3_000_000, 'VBESHOW.DBG')
     comp, _cdbg = vlog('S3COMPAT.COM', '/S /V', 8_000_000, 'S3COMPAT.DBG')
     check(b'ROM: ' + want in bytes(comp.stdout), 'S3COMPAT ROM line missing in %r (exit %s)' % (bytes(comp.stdout)[:400], comp.exit))
     _st, sdbg = vlog('S3TEST.COM', '/S /V', 6_000_000, 'S3TEST.DBG')
@@ -2996,7 +2996,7 @@ def t_mclk(c):
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vbeshow', t_vbeshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -3026,7 +3026,7 @@ EXPECTED_FAIL = {'mono_4f05': '#193: 4F05 in a mono mode must use the CRTC port 
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu cleanroom', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu cleanroom', 'vga_palettes': 'cga ega vga emu cleanroom',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vshow': 'vbe tools card vram cleanroom',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vbeshow': 'vbe tools card vram cleanroom',
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
@@ -3038,7 +3038,7 @@ TAGS = {
 
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
-DURATION = {'s3compat_full': 170, 's3compat_bench': 30, 's3compat_vbe': 70, 'vshow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
+DURATION = {'s3compat_full': 170, 's3compat_bench': 30, 's3compat_vbe': 70, 'vbeshow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
             's3test_any': 10, 'stores': 5}
 
 

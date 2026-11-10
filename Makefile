@@ -39,14 +39,14 @@ endif
 # make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM, REPORT.COM, MCLK.COM and the batch files into build/
 # make all: tools and every chip's ROM at its memory clocks (make roms)
 # make clean: removes build/ (tools and ROM images)
-TOOLS = build/VSHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
+TOOLS = build/VBESHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
         build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/REPORT.COM \
         build/MCLK.COM \
         build/RUNALL.BAT build/CLEAN.BAT
 all: tools roms
 tools: $(TOOLS)
 
-# runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VSHOW /R with /V and /S, S3REGS, VGALOG /D, then
+# runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VBESHOW /R with /V and /S, S3REGS, VGALOG /D, then
 # REPORT.COM (stored ZIP, created under the part name; DOS line ends).
 # clean.bat deletes what a run leaves behind
 build/RUNALL.BAT: $(TOOLS_SRC)/runall.bat | build
@@ -58,11 +58,11 @@ build/CLEAN.BAT: $(TOOLS_SRC)/clean.bat | build
 build:
 	mkdir -p build
 
-# src/tools/common/ holds the /V debug log code shared by VSHOW, S3TEST and S3COMPAT
+# src/tools/common/ holds the /V debug log code shared by VBESHOW, S3TEST and S3COMPAT
 VDEBUG = $(COMMON)/vdebug.inc $(COMMON)/vdebug.mac $(COMMON)/version.inc $(COMMON)/chip.inc \
          $(COMMON)/romver.inc
 
-build/VSHOW.COM: $(TOOLS_SRC)/vshow/vshow.asm $(VDEBUG) | build
+build/VBESHOW.COM: $(TOOLS_SRC)/vbeshow/vbeshow.asm $(VDEBUG) | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
 
 build/S3TEST.COM: $(TOOLS_SRC)/s3test/s3test.asm $(VDEBUG) | build
@@ -143,7 +143,7 @@ coverage: tools
 	$(PYTHON) emu/codemap.py --rom "$(ROM)" --cover emu/logs/COVER.BIN --list --fail-under 80
 
 # The tools and the emulator tests on the stock reference ROMs (#143): every test, the ones tagged patch too
-# (tests.py --stock), so S3TEST, S3COMPAT, VSHOW, VGALOG and S3REGS run on S3's and Phoenix's own BIOSes
+# (tests.py --stock), so S3TEST, S3COMPAT, VBESHOW, VGALOG and S3REGS run on S3's and Phoenix's own BIOSes
 # and leave their logs in emu/stock-775, emu/stock-765 and emu/stock-764x (2 MB). Failures are expected
 # (a stock BIOS lacks our changes) and do not stop make; the logs are the result.
 #   make stock-test [STOCK_CHIPS="775 765 764x"] [EMUARGS=...]

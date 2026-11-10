@@ -2674,7 +2674,7 @@ pdec10: push edx                ; EAX = value*10 -> "x.y"
         pop edx
         ret
 
-; /V debug log (shared with VSHOW and S3COMPAT)
+; /V debug log (shared with VBESHOW and S3COMPAT)
 %include "vdebug.inc"
 %define CHIPVAR                         ; chipvar: the Chip variant line
 %include "chip.inc"

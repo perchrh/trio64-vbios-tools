@@ -1,4 +1,4 @@
-; vdebug.inc - /V debug log shared by VSHOW, S3TEST and S3COMPAT (386+, NASM)
+; vdebug.inc - /V debug log shared by VBESHOW, S3TEST and S3COMPAT (386+, NASM)
 ;
 ; Purpose
 ;   With /V a tool writes a second file, <TOOL>.DBG in the current directory, with raw information
@@ -15,7 +15,7 @@
 ;   D:ENV ROM=text                    version after "Version " (romfind), or (no version string)
 ;   D:PCI ...                         PCI configuration of the display controller
 ;   D:HEX tag oooo: xx xx ...          16 bytes of a memory block (tag says which block)
-;   D:TEST name                       a test starts (S3COMPAT, S3TEST) or a mode is shown (VSHOW)
+;   D:TEST name                       a test starts (S3COMPAT, S3TEST) or a mode is shown (VBESHOW)
 ;   D:RES text                        the normal result line(s) of the test, copied
 ;   D:I10> AX= BX= CX= DX= SI= DI= BP= DS= ES= FL=    INT 10h call, before (I10>2 = nested call)
 ;   D:I10< AX= BX= CX= DX= SI= DI= BP= DS= ES= FL= T= after; T = duration in PIT counts (decimal,
