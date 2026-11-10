@@ -910,7 +910,7 @@ STATEN  equ ($-statelist)/2
 ; VGA pass
 VENT    equ 114
 
-; All entries of vgaref: modes 00h-06h, 0Dh, 0Eh, 10h-13h at 400/480 lines and modes 00h-03h at
+; All entries of vgaref: modes 00h-07h, 0Dh-0Fh, 10h-13h at 400/480 lines and modes 00h-03h at
 ; 350 lines. Run twice: pass 1 from a clean state, pass 2 right after a VESA mode (prevesa).
 vga_pass:
         mov word [vi],0
@@ -925,8 +925,8 @@ vga_pass:
         jmp .l
 .d:     ret
 
-prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131,0x0133,0x0102,0x0120
-        dw 0x0101,0x0105,0x4101,0x0111     ; for the four 350-line entries
+prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0101,0x0107,0x4103,0x0101,0x0131,0x0133,0x0102,0x0120
+        dw 0x0101,0x0105,0x4101,0x0111  ; idx 7 = 07h and idx 10 = 0Fh get 0101; then the four 350-line entries
 
 ; One VGA mode against the IBM reference. Fail bits:
 ;   1  MISC, FEAT, SR, CRTC, ATC or GR register differs from IBM (all 62, detail lines show which)
@@ -1074,13 +1074,18 @@ vga_one:
         xor ax,ax
         call lineinfo
         ; default DAC loaded by the mode set, as the IBM VGA BIOS does it:
-        ; 13h the 256-colour table, 04h-06h/0Dh/0Eh (200 lines) the CGA palette, all others the EGA palette
+        ; 13h the 256-colour table, 04h-06h/0Dh/0Eh (200 lines) the CGA palette, 07h/0Fh the mono grayscale
+        ; palette (dac_mon; a mono display takes the green output), all others the EGA palette
         mov si,[ent]
         mov al,[si]
         cmp al,0x13
-        jne .dg
+        jne .d0
         call dac_256
         jmp .mem
+.d0:    cmp al,0x07
+        je .dm
+        cmp al,0x0F
+        je .dm
 .dg:    mov byte [cgapal],0
         cmp al,4
         jb .de
@@ -1092,6 +1097,8 @@ vga_one:
         ja .de
 .dcg:   mov byte [cgapal],1
 .de:    call dac_ega
+        jmp .mem
+.dm:    call dac_mono
 .mem:   mov si,[ent]
         mov al,[si+1]
         and al,0x7F
@@ -1162,6 +1169,13 @@ dac_ega:
         cmp bx,64
         jb .l
         mov si,dacexp
+        mov cx,64
+        jmp dac_mode
+
+; Modes 07h/0Fh: the mono default palette (VGATEST DAC.MON, dac_mon in vgaref.inc), a grayscale ramp
+; R=G=B; a mono display takes the green output (the data book's mono signal). Entries 0-63, as dac_ega does.
+dac_mono:
+        mov si,dac_mon
         mov cx,64
         jmp dac_mode
 
@@ -1402,10 +1416,14 @@ memtest:                                ; AL type, CX bytes -> CF on error
         je .lin8
         cmp al,3
         je mplan
+        cmp al,5
+        je .linB
         mov ax,0xA000
         xor cx,cx                       ; 65536
         jmp mlin
 .lin8:  mov ax,0xB800
+        jmp mlin
+.linB:  mov ax,0xB000                   ; mono text mode 07h: the window is B000h, 32 KB
         jmp mlin
 
 mlin:   push es
@@ -7730,6 +7748,28 @@ bankrw: ; EBX = linear offset: write/read 4 bytes through window A -> CF on erro
 ; Read a register: AL type (0 MISC, 1 FEAT, 2 SR, 3 CR, 4 AR, 5 GR), AH index -> AL.
 ; AR00-0F are read with the palette address source bit clear (the screen blanks for a moment),
 ; otherwise the ATC returns the index.
+crtcport:                               ; -> DX = CRTC port of the current mode: 3B4h when MISC bit 0 = 0
+        push ax                         ; (mono modes 07h/0Fh), 3D4h otherwise
+        mov dx,0x3CC
+        in al,dx
+        test al,1
+        mov dx,0x3D4
+        jnz .c
+        mov dx,0x3B4
+.c:     pop ax
+        ret
+
+stat1port:                              ; -> DX = input status 1 port of the current mode (3BAh/3DAh)
+        push ax
+        mov dx,0x3CC
+        in al,dx
+        test al,1
+        mov dx,0x3DA
+        jnz .s
+        mov dx,0x3BA
+.s:     pop ax
+        ret
+
 readreg:                                ; AL type AH index -> AL
         push dx
         push bx
@@ -7750,11 +7790,11 @@ readreg:                                ; AL type AH index -> AL
         jmp .ix
 .3:     cmp bl,3
         jne .4
-        mov dx,0x3D4
+        call crtcport                   ; DX = CRTC port of the current mode: 3B4h mono, 3D4h colour (MISC bit 0)
         jmp .ix
 .4:     cmp bl,4
         jne .5
-        mov dx,0x3DA
+        call stat1port                  ; DX = input status 1: 3BAh mono, 3DAh colour
         in al,dx
         mov dx,0x3C0
         mov al,ah
@@ -7765,7 +7805,7 @@ readreg:                                ; AL type AH index -> AL
         inc dx
         in al,dx
         mov bl,al
-        mov dx,0x3DA
+        call stat1port
         in al,dx
         mov dx,0x3C0
         mov al,0x20
@@ -7972,7 +8012,7 @@ measure:
         ret
 waitvr: ; wait for the start of vertical retrace, CF on timeout (~0.25 s)
         mov dword [pwt],0
-        mov dx,0x3DA
+        call stat1port                  ; 3BAh in the mono modes, 3DAh in colour
 .a:     call pupd
         cmp dword [pwt],300000
         ja .t
