@@ -5,7 +5,8 @@
 # books, standards or the bundled zip program alone, and cancels a run when a newer commit of the same
 # branch or pull request arrives.
 #
-# Emulator tests (jobs test and stock) run only when src/roms/** changed, or on workflow_dispatch. The
+# Emulator tests (jobs test and stock) run when src/roms/**, src/tools/** or emu/** changed, or on
+# workflow_dispatch (the tests build the tools and exercise them in the emulator). The
 # job roms (make roms + make dist) still runs on every CI start. Sources live under src/tools/ and
 # src/roms/; `make` builds both, CI tool steps use `make tools`.
 #
@@ -53,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       roms: ${{ steps.filter.outputs.roms }}
+      tools: ${{ steps.filter.outputs.tools }}
+      emu: ${{ steps.filter.outputs.emu }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -61,11 +64,15 @@ jobs:
           filters: |
             roms:
               - 'src/roms/**'
+            tools:
+              - 'src/tools/**'
+            emu:
+              - 'emu/**'
 
   test:
     name: ${{ matrix.chip }} ${{ matrix.part }}
     needs: changes
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.roms == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.roms == 'true' || needs.changes.outputs.tools == 'true' || needs.changes.outputs.emu == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -230,7 +237,7 @@ jobs:
     # Same path gate as job test: only when src/roms/** changed (or workflow_dispatch).
     name: Stock ROM ${{ matrix.chip }} (informational)
     needs: changes
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.roms == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.roms == 'true' || needs.changes.outputs.tools == 'true' || needs.changes.outputs.emu == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -291,9 +298,9 @@ jobs:
     steps:
       - name: Every chip and memory size passed, every ROM built
         run: |
-          echo "roms path changed: ${{ needs.changes.outputs.roms }}, matrix: ${{ needs.test.result }}, roms: ${{ needs.roms.result }}"
+          echo "changed: roms=${{ needs.changes.outputs.roms }} tools=${{ needs.changes.outputs.tools }} emu=${{ needs.changes.outputs.emu }}, matrix: ${{ needs.test.result }}, roms: ${{ needs.roms.result }}"
           test "${{ needs.roms.result }}" = success
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ needs.changes.outputs.roms }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ needs.changes.outputs.roms }}" = "true" ] || [ "${{ needs.changes.outputs.tools }}" = "true" ] || [ "${{ needs.changes.outputs.emu }}" = "true" ]; then
             test "${{ needs.test.result }}" = success
           else
             test "${{ needs.test.result }}" = skipped
