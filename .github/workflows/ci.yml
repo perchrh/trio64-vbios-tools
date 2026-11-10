@@ -107,14 +107,15 @@ jobs:
 
       - name: NASM ${{ env.NASM_VERSION }} (the ci-deps release; built from source when it is not usable)
         env:
-          NASM_SUM: "NASM_${NASM_VERSION/./_}_SHA256.txt"
+          NASM_SUM: "nasm-$NASM_VERSION-linux-x86_64_SHA256.txt"
         run: |
           mkdir -p ~/nasm
           if gh release download ci-deps --repo "${{ github.repository }}" \
-              --pattern "nasm-$NASM_VERSION-linux-x86_64" --pattern "$NASM_SUM" \
+              --pattern "nasm-$NASM_VERSION-linux-x86_64.tgz" --pattern "$NASM_SUM" \
               --dir "$RUNNER_TEMP" 2>/dev/null \
-             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM"); then
-            mv "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64" ~/nasm/nasm
+             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM") \
+             && tar -xzf "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64.tgz" -C "$RUNNER_TEMP" \
+             && mv "$RUNNER_TEMP/nasm/nasm-$NASM_VERSION/nasm" ~/nasm/nasm; then
             chmod +x ~/nasm/nasm
           fi
           if [ ! -x ~/nasm/nasm ]; then
@@ -203,14 +204,15 @@ jobs:
 
       - name: NASM ${{ env.NASM_VERSION }} (the ci-deps release; built from source when it is not usable)
         env:
-          NASM_SUM: "NASM_${NASM_VERSION/./_}_SHA256.txt"
+          NASM_SUM: "nasm-$NASM_VERSION-linux-x86_64_SHA256.txt"
         run: |
           mkdir -p ~/nasm
           if gh release download ci-deps --repo "${{ github.repository }}" \
-              --pattern "nasm-$NASM_VERSION-linux-x86_64" --pattern "$NASM_SUM" \
+              --pattern "nasm-$NASM_VERSION-linux-x86_64.tgz" --pattern "$NASM_SUM" \
               --dir "$RUNNER_TEMP" 2>/dev/null \
-             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM"); then
-            mv "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64" ~/nasm/nasm
+             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM") \
+             && tar -xzf "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64.tgz" -C "$RUNNER_TEMP" \
+             && mv "$RUNNER_TEMP/nasm/nasm-$NASM_VERSION/nasm" ~/nasm/nasm; then
             chmod +x ~/nasm/nasm
           fi
           if [ ! -x ~/nasm/nasm ]; then
@@ -260,14 +262,15 @@ jobs:
 
       - name: NASM ${{ env.NASM_VERSION }} (the ci-deps release; built from source when it is not usable)
         env:
-          NASM_SUM: "NASM_${NASM_VERSION/./_}_SHA256.txt"
+          NASM_SUM: "nasm-$NASM_VERSION-linux-x86_64_SHA256.txt"
         run: |
           mkdir -p ~/nasm
           if gh release download ci-deps --repo "${{ github.repository }}" \
-              --pattern "nasm-$NASM_VERSION-linux-x86_64" --pattern "$NASM_SUM" \
+              --pattern "nasm-$NASM_VERSION-linux-x86_64.tgz" --pattern "$NASM_SUM" \
               --dir "$RUNNER_TEMP" 2>/dev/null \
-             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM"); then
-            mv "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64" ~/nasm/nasm
+             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM") \
+             && tar -xzf "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64.tgz" -C "$RUNNER_TEMP" \
+             && mv "$RUNNER_TEMP/nasm/nasm-$NASM_VERSION/nasm" ~/nasm/nasm; then
             chmod +x ~/nasm/nasm
           fi
           if [ ! -x ~/nasm/nasm ]; then

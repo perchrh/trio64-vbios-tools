@@ -620,13 +620,15 @@ matrix and the stock-ROM runs) start when `src/roms/**`, `src/tools/**` or `emu/
 manual run; `make roms` and the release zip still run on every CI start.
 
 NASM 3.02 (the ROM targets need exactly that version) comes from the `ci-deps` release: every job
-downloads `nasm-3.02-linux-x86_64` with `gh release download`, checks it against
-`NASM_3_02_SHA256.txt` and builds it from the official release source only when the asset is missing
-or fails the check. An agent in a fresh sandbox does the same instead of building it:
+downloads `nasm-3.02-linux-x86_64.tgz` with `gh release download`, checks it against
+`nasm-3.02-linux-x86_64_SHA256.txt` and builds 3.02 from the official release source only when the
+asset is missing or fails the check. An agent in a fresh Ubuntu 26.04 x86-64 sandbox (the runners'
+image; the binary needs glibc 2.38 or newer) does the same instead of building:
 
     gh release download ci-deps --repo perchrh/trio64-vbios-tools \
-        -p 'nasm-3.02-linux-x86_64' -p 'NASM_3_02_SHA256.txt'
-    sha256sum -c NASM_3_02_SHA256.txt && chmod +x nasm-3.02-linux-x86_64
+        -p 'nasm-3.02-linux-x86_64.tgz' -p 'nasm-3.02-linux-x86_64_SHA256.txt'
+    sha256sum -c nasm-3.02-linux-x86_64_SHA256.txt
+    tar xzf nasm-3.02-linux-x86_64.tgz        # the binary is nasm/nasm-3.02/nasm
 
 Tool and ROM sources live under `src/tools/` and `src/roms/`. `make` builds both; `make tools` and
 `make roms` build one or the other; `make clean` removes `build/` (tools and ROM images). CHIPID.COM,
