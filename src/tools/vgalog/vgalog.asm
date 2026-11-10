@@ -13,6 +13,9 @@
 ;                    kept in a 32 KB ring buffer in memory (the last 1024 calls), nothing is written to
 ;                    disk. For Windows 9x: load it before Windows (AUTOEXEC.BAT), use Windows, then
 ;                    VGALOG /D in a DOS box or after leaving Windows.
+;   VGALOG /M /XL    as /M, but the ring buffer is 128 KB (the last 4096 calls) instead of 32 KB
+;                    (the last 1024); about 130 KB of conventional memory (about 194 KB with /T).
+;                    /XL without a memory mode (/M, /T, /P, /W) is refused.
 ;   VGALOG /T        memory mode with a port trace: as /M, and during every mode set (AH=00h and AX=4F02h,
 ;                    with the calls the BIOS makes from inside them) VGALOG single-steps the BIOS and keeps
 ;                    each access to a VGA or S3 port in a second ring buffer of 64 KB (the last 16384
@@ -80,6 +83,7 @@
 ;   A 'B' record without its 'A' record is the call that hung.
 ;
 ; Memory mode (/M, dumped with /D): a 48-byte file header, then 32 bytes per call, oldest first
+;   (up to 1024 calls, 4096 with /XL)
 ;   header  'VGALOGM2', dd calls logged in total, dw records in the file, dw flags (bit 0 = the trace
 ;           part follows, bit 1 = /W: window function calls are logged, bit 2 = /P: the program
 ;           was traced after 4F02h too), then the chip and ROM block (32 bytes); the calls start at file offset 48.
@@ -143,8 +147,12 @@ rec     times 16 db 0
 mmode   db 0                    ; 1 = memory mode (/M)
 depth   db 0                    ; INT 10h nesting in memory mode
 rtotal  dd 0                    ; calls logged in memory mode
-rnext   dw 0                    ; next ring slot (0..RBN-1)
-RBN     equ 1024                ; ring slots of 32 bytes, at ring (after the resident code)
+rnext   dw 0                    ; next ring slot (0..rbn-1)
+RBN     equ 1024                ; default ring slots of 32 bytes, at ring (after the resident code)
+RBNXL   equ 4096                ; /XL: a 128 KB ring instead
+rbn     dw RBN                  ; active ring slots (RBNXL with /XL); /D reads it as [es:rbn]
+rmask   dw RBN-1                ; rnext mask (rbn-1; rbn is a power of two)
+xlflag  db 0                    ; 1 = /XL was given on the command line
 tflag   db 0                    ; 1 = port trace (/T)
 tron    db 0                    ; 1 while a traced mode set runs
 tpend   db 0                    ; an IN ran at the last trap: 1 = byte, 2 = word (value read at this one)
@@ -344,7 +352,10 @@ misr:   cmp ah,0x02
 ; counted. Keeps the other registers.
 slot:   mov si,[rnext]
         inc word [rnext]
-        and word [rnext],RBN-1
+        push ax
+        mov ax,[rmask]
+        and [rnext],ax
+        pop ax
         shl si,5
         add si,ring
         push ax
@@ -939,10 +950,31 @@ flush:  ; write rec (16 bytes) and commit, only if DOS is not busy. DS=CS
         pop ax
 .skip:  ret
 resend:                                 ; everything from here is freed after installation (file mode)
-ring:                                   ; memory mode: RBN x 32 bytes of ring buffer from here
+ring:                                   ; memory mode: rbn x 32 bytes of ring buffer from here (RBN, or RBNXL with /XL)
 
 ; ---------------- command line ----------------
 init:   mov si,0x81
+        ; pre-scan the whole command line for /XL (with /M, /T, /P or /W): a 128 KB ring, not 32 KB
+.ps:    lodsb
+        cmp al,13
+        je .pd
+        cmp al,'/'
+        jne .ps
+        lodsb
+        or al,0x20
+        cmp al,'x'
+        jne .ps
+        lodsb
+        or al,0x20
+        cmp al,'l'
+        jne .ps
+        mov byte [xlflag],1
+        jmp .ps
+.pd:    cmp byte [xlflag],0
+        je .pn
+        mov word [rbn],RBNXL
+        mov word [rmask],RBNXL-1
+.pn:    mov si,0x81
 .p:     lodsb
         cmp al,13
         je install
@@ -966,7 +998,9 @@ init:   mov si,0x81
         je .sd
         inc si
         jmp .sk
-.sd:    cmp ah,'u'
+.sd:    cmp ah,'x'                      ; /XL: already handled in the pre-scan
+        je .p
+        cmp ah,'u'
         je unload
         cmp ah,'m'
         je minst
@@ -1057,6 +1091,8 @@ findmem:
 
 ; ---------------- install ----------------
 install:
+        cmp byte [xlflag],0             ; /XL needs a memory mode (/M /T /P /W): no ring in file mode
+        jne bad
         call findmem
         jne .go
         mov dx,s_twice
@@ -1111,6 +1147,14 @@ install:
         mov ax,0x4C01
         int 0x21
 
+; DX = paragraphs for the PSP + the resident code + the call ring (rbn x 32 bytes). Clobbers EAX.
+rbnpara: movzx eax,word [rbn]
+        shl eax,5
+        add eax,ring-$$+0x100+15
+        shr eax,4
+        mov dx,ax
+        ret
+
 ; ---------------- install in memory mode with the window function hook ----------------
 winst:  mov byte [wflag],1
         jmp minst
@@ -1118,10 +1162,13 @@ winst:  mov byte [wflag],1
 ; ---------------- install with the port trace of the program after 4F02h ----------------
 pinst:  mov byte [tpflag],1
 ; ---------------- install in memory mode with the port trace ----------------
-tinst:  mov ax,[2]                      ; the end of our memory block (PSP+2)
-        mov bx,cs
-        sub ax,bx
-        cmp ax,TPARA
+tinst:  call rbnpara
+        mov bx,dx
+        add bx,0x1000                   ; the trace ring needs 64 KB more
+        mov ax,[2]                      ; the end of our memory block (PSP+2)
+        mov cx,cs
+        sub ax,cx
+        cmp ax,bx
         jae .ok
         mov dx,s_tmem
         mov ah,9
@@ -1130,7 +1177,7 @@ tinst:  mov ax,[2]                      ; the end of our memory block (PSP+2)
         int 0x21
 .ok:    mov byte [tflag],1
         mov ax,cs
-        add ax,TPARA - 0x1000
+        add ax,dx                       ; tseg = PSP + code + call ring
         mov [tseg],ax
 ; ---------------- install in memory mode ----------------
 minst:  call findmem
@@ -1155,7 +1202,10 @@ minst:  call findmem
         int 0x21
         mov word [0x2C],0
         mov dx,msgm
-        cmp byte [tflag],0
+        cmp byte [xlflag],0
+        je .nx
+        mov dx,msgxl
+.nx:    cmp byte [tflag],0
         je .w
         mov dx,msgt
         cmp byte [tpflag],0
@@ -1166,14 +1216,12 @@ minst:  call findmem
         mov dx,msgw
 .m:     mov ah,9
         int 0x21
-        mov dx,ring+RBN*32+15           ; PSP + handler + ring buffer, in paragraphs
-        shr dx,4
+        call rbnpara                    ; DX = PSP + handler + call ring, in paragraphs
         cmp byte [tflag],0
         je .k
-        mov dx,TPARA                    ; and the trace ring
+        add dx,0x1000                   ; and the 64 KB trace ring
 .k:     mov ax,0x3100
         int 0x21
-TPARA   equ ((ring - $$ + 0x100 + RBN*32 + 15) >> 4) + 0x1000   ; PSP + code + call ring, then the 64 KB trace ring
 
 ; ---------------- dump the ring buffer of a resident memory-mode copy ----------------
 dump:   call findmem
@@ -1187,8 +1235,9 @@ dump:   call findmem
         int 0x21
 .go:    mov eax,[es:rtotal]             ; header
         mov [dhdr+8],eax
-        mov cx,RBN
-        cmp eax,RBN
+        movzx edx,word [es:rbn]         ; the ring holds rbn slots (4096 with /XL)
+        mov cx,dx
+        cmp eax,edx
         jae .f
         mov cx,ax
 .f:     test cx,cx                      ; no calls since /M: nothing to write, say so
@@ -1207,7 +1256,7 @@ dump:   call findmem
         mov [es:info+28],eax
         mov ax,[es:rnext]               ; oldest slot = rnext - count
         sub ax,cx
-        and ax,RBN-1
+        and ax,[es:rmask]
         mov [dfirst],ax
         push es
         mov ah,0x3C
@@ -1232,7 +1281,7 @@ dump:   call findmem
         pop ds
         jc .err
         ; part 1: dfirst .. end (or count), part 2: 0 ..
-        mov ax,RBN
+        mov ax,[es:rbn]
         sub ax,[dfirst]
         cmp ax,[dcnt]
         jbe .p1
@@ -1476,6 +1525,7 @@ fname   db 'VGALOG.BIN',0
 msg     db 'VGALOG ',VERSION,' installed, logging INT 10h AH=00 and 4F01/4F02/4F06 to VGALOG.BIN',13,10,'$'
 msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
 msgm    db 'VGALOG ',VERSION,' installed in memory mode: the last 1024 INT 10h calls (no text/pixel output), VGALOG /D writes them',13,10,'$'
+msgxl   db 'VGALOG ',VERSION,' installed in memory mode: the last 4096 INT 10h calls in a 128 KB ring (no text/pixel output), VGALOG /D writes them',13,10,'$'
 msgt    db 'VGALOG ',VERSION,' installed in memory mode with the port trace of the mode sets (AH=00h, 4F02h), VGALOG /D writes them',13,10,'$'
 msgw    db 'VGALOG ',VERSION,' installed in memory mode with the window function hook (4F01h WinFuncPtr), VGALOG /D writes them',13,10,'$'
 msgp    db 'VGALOG ',VERSION,' installed in memory mode with the port trace of the mode sets and of the program after 4F02h, VGALOG /D writes them',13,10,'$'
@@ -1491,6 +1541,7 @@ dfirst  dw 0
 s_use   db 'VGALOG ',VERSION,' - logs INT 10h AH=00 and VBE 4F01/4F02/4F06 calls to VGALOG.BIN',13,10
         db '  VGALOG              install (VGALOG.BIN is created new in the current directory)',13,10
         db '  VGALOG /M           install in memory mode: last 1024 INT 10h calls in RAM (for Windows 9x)',13,10
+        db '  VGALOG /M /XL       as /M with a 128 KB ring: the last 4096 calls (about 130 KB of memory)',13,10
         db '  VGALOG /T           as /M, and every VGA/S3 port access of the mode sets (AH=00h, 4F02h)',13,10
         db '  VGALOG /P           as /T, and the program itself for a while after its 4F02h',13,10
         db '  VGALOG /W           as /M, and the far calls through the window function (4F01h WinFuncPtr)',13,10
