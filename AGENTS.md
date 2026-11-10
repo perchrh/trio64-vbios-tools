@@ -9,7 +9,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - The ROM is a 64 KB image. The lower 32 KB is the S3 reference BIOS 2.04.07 with our patches
   (currently -p24); the upper 32 KB is a copy of it (#78; p15 to p21 were built with zeros there, up to
   p14 it was the card's Trio64V+ BIOS 1.03-08). p1-p13 were developed on the card's stock 2.04.11; only the reference is patched now.
-- Layout: `src/tools/` holds the DOS tools (VBESHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, CHIPID, ROMVER, REPORT,
+- Layout: `src/tools/` holds the DOS tools (VBESHOW, VGASHOW, S3TEST, S3COMPAT, VGALOG, S3REGS, CHIPID, ROMVER, REPORT,
   MCLK, S3REGS32, S3ALIAS) and shared includes (`src/tools/common/`); `src/roms/` holds the ROM patchers and assembly.
   `make` / `make all` builds tools and ROMs; `make tools` and `make roms` build one side; `make clean`
   removes `build/` (both). CHIPID.COM, ROMVER.COM, REPORT.COM and MCLK.COM are part of the tools artefacts and the release zip.
@@ -122,15 +122,16 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 - Start from a known state and leave one: set mode 03, take a baseline, zero VRAM without destroying
   the DOS screen, and restore the screen and the PIT at the end.
 - Exit code 0 when nothing failed, 1 otherwise.
-- VBESHOW, S3TEST and S3COMPAT take /V: a debug log in <TOOL>.DBG (src/tools/common/vdebug.inc). New code paths
+- VBESHOW, VGASHOW, S3TEST and S3COMPAT take /V: a debug log in <TOOL>.DBG (src/tools/common/vdebug.inc). New code paths
   should log what is needed to diagnose them from a hardware run (raw values, not verdicts), with
   `D:` records in the documented format. /V must not change the normal output, and nothing may be
   logged inside timed loops (set `vquiet` around timed code that calls INT 10h).
-- VBESHOW stays cleanroom permissible: it observes (measures the refresh and line frequency, dumps the
-  4F00/4F01 blocks, draws the picture) and every expectation in it comes from a public source; nothing
-  in it may be taken from a reference or patched ROM (a mode list, a register value, a timing, a
-  tolerance). A change that would put such an expectation into VBESHOW needs an owner decision first, and
-  the `vbeshow` emulator test loses its `cleanroom` tag with it (the tag's meaning: emu/tests.py, TAGS; #201).
+- VBESHOW and VGASHOW stay cleanroom permissible: they observe (measure the refresh and line frequency, dump the
+  4F00/4F01 blocks, draw the picture) and every expectation in them comes from a public source (the IBM standard
+  mode attributes for VGASHOW); nothing in them may be taken from a reference or patched ROM (a mode list, a
+  register value, a timing, a tolerance). A change that would put such an expectation into either needs an owner
+  decision first, and the `vbeshow`/`vgashow` emulator test loses its `cleanroom` tag with it (the tag's meaning:
+  emu/tests.py, TAGS; #201).
 - All tools share one version number (1.0.0 now), `VERSION` in `src/tools/common/version.inc`; never write the
   number into a tool's strings, use `VERSION` (and `VER775` for the ROM S3TEST expects). Each tool prints its version on its first line of
   output and in its error messages. Bump them all together, and only when asked.

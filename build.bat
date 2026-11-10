@@ -9,6 +9,7 @@ if exist "%NASM%" for %%I in ("%NASM%") do set NASM=%%~fI
 if exist "%NASM%.exe" for %%I in ("%NASM%.exe") do set NASM=%%~fI
 if not exist build mkdir build
 "%NASM%" -f bin -isrc\tools\common\ -o build\VBESHOW.COM src\tools\vbeshow\vbeshow.asm
+"%NASM%" -f bin -isrc\tools\common\ -o build\VGASHOW.COM src\tools\vgashow\vgashow.asm
 if errorlevel 1 goto fail
 "%NASM%" -f bin -isrc\tools\common\ -o build\S3TEST.COM src\tools\s3test\s3test.asm
 if errorlevel 1 goto fail

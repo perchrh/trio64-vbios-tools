@@ -116,6 +116,7 @@ is for the Windows 9x desktop.
 | Tool | Purpose | Run |
 | --- | --- | --- |
 | VBESHOW.COM | VESA mode viewer: test picture, measured refresh and line frequency, LCD line pattern, interactive menu, run through all modes. `/O CR54=1F` (repeatable, up to 8) overrides a register (SR/CR/GR/AR with a 1-2 digit hex index and value) after each mode set, before the picture and the measurement, with the S3 locks (SR08, CR38, CR39) opened for the write and put back; the override line prints once at the start. The bench toggles of [#200](https://github.com/perchrh/trio64-vbios-tools/issues/200) (CR43 bit 7, CR67 bit 0, CR54 the FIFO threshold M, the HSYNC offset, AR13 pixel panning) become one-boot A/B runs with the measured refresh and the picture as the readout | `VBESHOW /H` for the parameter list |
+| VGASHOW.COM | Standard-mode viewer (MDA/CGA/EGA/VGA modes 00h-13h, set with AH=00h): list, one mode, or all in turn (/A, /R); test pattern per mode (checker in text modes, 16 bars in graphics modes) with measured refresh and line frequency; the CRTC and status ports come from MISC bit 0, so the mono modes are measured at 3B4h/3BAh (#193). All standard modes are at most 31.5 kHz and 70 Hz | `VGASHOW /H` for the parameter list |
 | S3TEST.COM | Regression test for the ROM patches (signature, chip and its CR2F variant, clocks, memory type, pedestal, refresh and line length, booster, LFB, 4F05/4F06, CR50, flip-flop, VGA clear, font load, scrolls in modes 13h, text and planar, AH=09h, timings); the test set follows the chip from PCI (`src/tools/common/chip.inc`: device id and, on 8811h, revision bit 6, then CR2E; on 8901h, CR6F bit 0 for Trio64V2/DX vs /GX), and the Chip ID INFO line prints the S3 part number (86C732, 86C764X or 86C764-P by CR2F, 86C765, 86C775, 86C785, 86C767); our Trio64V2, Trio64V+ or Trio64 ROM, or on the Trio32 only the tests that need no ROM of ours | `S3TEST > S3TEST.LOG` |
 | CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) renames `runall.zip` to `runall-<part>.zip` from `chipid.out` when the DOS can rename to a long name. Windows 98 DOS can create a long name and cannot rename an existing file to one, so `/Z` changes nothing there; RUNALL uses REPORT | `CHIPID`, `CHIPID /Q` |
 | ROMVER.COM | Prints the video ROM version S3TEST's signature line reads, using the same scan (`src/tools/common/romver.inc`): "Version " in C000:0000-00FF, then at most 12 characters. `/Q` (`-q`) prints only that version | `ROMVER`, `ROMVER /Q` |
@@ -166,10 +167,13 @@ environment variable `NASM`). A relative path is made absolute. `make` warns whe
 not NASM 3.02.
 
 The .COM files land in `build/`, with `RUNALL.BAT` (from `runall.bat`): it loads VGALOG in memory
-mode (`VGALOG /M`), takes an S3REGS snapshot ("before tests"), runs S3TEST, S3COMPAT and `VBESHOW /R`, all
-with `/V /S`, takes a second snapshot ("after tests"; S3REGS appends to S3REGS.TXT), writes the last
-1024 INT 10h calls with `VGALOG /D`, and beeps (`echo` of Ctrl-G) when done. It leaves S3TEST.LOG,
-S3COMPAT.LOG, VBESHOW.LOG and their .DBG files, S3REGS.TXT and VGALOG.BIN next to them. It then copies
+mode (`VGALOG /M`), takes an S3REGS snapshot ("before tests"), then runs each test tool (S3TEST, S3COMPAT,
+`VBESHOW /R`) with `/V /S`: another S3REGS snapshot first ("before S3TEST" and so on; S3REGS appends to
+S3REGS.TXT), then the tool, then `VGALOG /D` with the dump renamed to VGALOG0.BIN, VGALOG1.BIN, ... (one per
+tool run; `VGALOG /U` and `/M` between the tools start a fresh session, so each file's call counter covers
+only that tool and holds its last 1024 INT 10h calls). At the end a second snapshot ("after tests") and
+`VGALOG /D` write VGALOG.BIN, and it beeps (`echo` of Ctrl-G) when done. It leaves the .LOG and .DBG files,
+S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies
 C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root, when they
 exist) as S3REGSR.TXT and VGALOGR.BIN, and runs REPORT. REPORT writes one stored ZIP (method 0, no
 compression; Info-ZIP's unzip reads it) of the logs, the .DBG files and these four files. A file that
@@ -182,7 +186,7 @@ After the new archive is written, REPORT deletes a leftover `runall.zip` and the
 part's name. VGALOG stays resident afterwards (`VGALOG /U`
 unloads it); while it is loaded, every INT 10h call takes a little longer, which shows only in the timing
 lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
-.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, S3REGS.TXT and VGALOG.BIN, S3REGSR.TXT and VGALOGR.BIN
+.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, VGASHOW.LOG, S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps, S3REGSR.TXT and VGALOGR.BIN
 in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only
 start it with a monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V
 debug log code the test tools share.

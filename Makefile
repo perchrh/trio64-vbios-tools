@@ -39,14 +39,15 @@ endif
 # make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM, REPORT.COM, MCLK.COM and the batch files into build/
 # make all: tools and every chip's ROM at its memory clocks (make roms)
 # make clean: removes build/ (tools and ROM images)
-TOOLS = build/VBESHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
+TOOLS = build/VBESHOW.COM build/VGASHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
         build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/REPORT.COM \
         build/MCLK.COM \
         build/RUNALL.BAT build/CLEAN.BAT
 all: tools roms
 tools: $(TOOLS)
 
-# runall.bat: VGALOG /M, S3REGS, S3TEST, S3COMPAT and VBESHOW /R with /V and /S, S3REGS, VGALOG /D, then
+# runall.bat: VGALOG /M, S3REGS, then per test tool (S3TEST, S3COMPAT, VBESHOW /R with /V /S): S3REGS,
+# VGALOG /D renamed to vgalogN.bin, VGALOG /U + /M; finally S3REGS, VGALOG /D, then
 # REPORT.COM (stored ZIP, created under the part name; DOS line ends).
 # clean.bat deletes what a run leaves behind
 build/RUNALL.BAT: $(TOOLS_SRC)/runall.bat | build
@@ -63,6 +64,9 @@ VDEBUG = $(COMMON)/vdebug.inc $(COMMON)/vdebug.mac $(COMMON)/version.inc $(COMMO
          $(COMMON)/romver.inc
 
 build/VBESHOW.COM: $(TOOLS_SRC)/vbeshow/vbeshow.asm $(VDEBUG) | build
+	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
+
+build/VGASHOW.COM: $(TOOLS_SRC)/vgashow/vgashow.asm $(VDEBUG) | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
 
 build/S3TEST.COM: $(TOOLS_SRC)/s3test/s3test.asm $(VDEBUG) | build

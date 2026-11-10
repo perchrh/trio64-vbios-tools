@@ -80,6 +80,10 @@ Tests
                    monitor note is in the /H and /? help of VBESHOW, S3TEST and S3COMPAT, shown once
                    before the VBESHOW /I list, and S3TEST, S3COMPAT and VBESHOW (a mode, /A) print it on
                    stderr with a key prompt, where Esc cancels (/S prints nothing)
+  vgashow           VGASHOW lists the standard modes 00h-13h and runs them (/A, /R) with measured
+                   refresh and line frequency; "VGASHOW 13" prints the result line (mode, resolution,
+                   Hz, kHz, lines); /V log VGASHOW.DBG with D:TEST mode, D:REG and D:FRM records; all
+                   PASS on the current ROMs (mono modes 07h/0Fh measured at 3B4h/3BAh, #193)
   s3compat_vga     S3COMPAT's VGA, Mode X and VGA BIOS function parts (built with nasm from the source
                    with the rest cut out): every test passes (registers, BIOS data, refresh, planar
                    memory, palettes, AH=01h-1Ch, AH=13h, CGA scroll, graphics XOR, AX=1120h-1124h, the
@@ -1204,6 +1208,35 @@ def t_vbeshow(c):
         check(b'kHz' not in bytes(r0.stderr or b''), 'VBESHOW /S: the monitor warning is still printed')
         lines = check_dbg(r1.files.get('VBESHOW.DBG'), 'VBESHOW.DBG')
         check('D:TEST mode 0101' in lines, 'no D:TEST mode 0101')
+        check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
+        check(any(l.startswith('D:FRM n=31') for l in lines), 'no frame timing')
+
+
+def t_vgashow(c):
+    com = c.tool('VGASHOW.COM')
+    v = ' /V' if has_verbose() else ''
+    r0 = c.machine().run_com(com, '', name='VGASHOW.COM')
+    out0 = bytes(r0.stdout)
+    check(r0.exit == ('exit', 0) and out0.startswith(b'VGASHOW '), 'VGASHOW list ended with %s: %r' % (r0.exit, out0[:40]))
+    for m in (b'Mode 00h', b'Mode 07h', b'Mode 13h'):
+        check(m in out0, 'VGASHOW list: no %s line' % m.decode())
+    r1 = c.machine().run_com(com, '13 /S' + v)
+    c.save('VGASHOW', r1)
+    o1 = bytes(r1.stdout)
+    check(r1.exit and r1.exit[0] == 'exit' and r1.exit[1] == 0, 'VGASHOW 13 ended with %s' % (r1.exit,))
+    check(b'Mode 13h' in o1 and b'320x200x8' in o1 and b'Hz' in o1 and b'kHz' in o1 and b'lines total' in o1,
+          'VGASHOW 13: no result line: %r' % o1[-200:])
+    rh = c.machine().run_com(com, '/H')
+    check(b'VGASHOW' in rh.stdout and b'/A' in rh.stdout, 'VGASHOW /H shows no parameter list')
+    rr = c.machine(keys=[]).run_com(com, '/R /S', max_insn=6_000_000_000)
+    out = rr.stdout.decode('latin1')
+    check(rr.exit == ('exit', 0) and '/R results:' in out and 'stopped' not in out,
+          'VGASHOW /R /S ended with %s' % (rr.exit,))
+    miss = [m for m in (list(range(8)) + list(range(0x0D, 0x14))) if 'Mode %02Xh' % m not in out]
+    check(not miss, 'VGASHOW /R /S: missing modes %s' % [hex(m) for m in miss])
+    if v:
+        lines = check_dbg(r1.files.get('VGASHOW.DBG'), 'VGASHOW.DBG')
+        check('D:TEST mode 0013' in lines, 'no D:TEST mode 0013')
         check(any(l.startswith('D:REG CR00:') for l in lines), 'no register dump')
         check(any(l.startswith('D:FRM n=31') for l in lines), 'no frame timing')
 
@@ -2996,7 +3029,7 @@ def t_mclk(c):
 
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
-         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vbeshow', t_vbeshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
+         ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vbeshow', t_vbeshow), ('vgashow', t_vgashow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
@@ -3026,7 +3059,7 @@ EXPECTED_FAIL = {'mono_4f05': '#193: 4F05 in a mono mode must use the CRTC port 
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu cleanroom', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu cleanroom', 'vga_palettes': 'cga ega vga emu cleanroom',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vbeshow': 'vbe tools card vram cleanroom',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vbeshow': 'vbe tools card vram cleanroom', 'vgashow': 'mda cga ega vga tools card cleanroom',
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
@@ -3038,7 +3071,7 @@ TAGS = {
 
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
-DURATION = {'s3compat_full': 170, 's3compat_bench': 30, 's3compat_vbe': 70, 'vbeshow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
+DURATION = {'s3compat_full': 170, 's3compat_bench': 30, 's3compat_vbe': 70, 'vbeshow': 60, 'vgashow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
             's3test_any': 10, 'stores': 5}
 
 
