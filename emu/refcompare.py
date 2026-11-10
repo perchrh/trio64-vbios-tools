@@ -39,7 +39,13 @@ def std(m):
     r=m.r
     return (r['misc'],tuple(r['seq'].get(i,0) for i in range(5)),tuple(r['crtc'].get(i,0) for i in range(0x19)),
             tuple(r['gc'].get(i,0) for i in range(9)),tuple(r['atc'].get(i,0) for i in range(0x15)))
-def state(m): return std(m)+(m.mem(0x400,0x100),m.mem(0xA0000,0x20000),tuple(bytes(p) for p in m.planes),tuple(map(tuple,m.dac)))
+def win(m):
+    """The CPU window at A0000-BFFFF. B0000-BFFFF is plain RAM in every mode; A0000-AFFFF is plain
+    RAM only in a packed window - while the window is planar the CPU reads vram through the model's
+    read hook and the shadow there is stale (not what a program gets), so only the B half is compared
+    and the planes (the whole of vram) carry the A half."""
+    return m.mem(0xB0000,0x10000) if m.win[0]=='planar' else m.mem(0xA0000,0x20000)
+def state(m): return std(m)+(m.mem(0x400,0x100),win(m),tuple(bytes(p) for p in m.planes),tuple(map(tuple,m.dac)))
 names=['misc','seq','crtc','gc','atc','bda','mem','planes','dac']
 def call(m,ax,**kw):
     for reg,v in zip(R32,(0x11110000,0x22220000,0x33330000,0x44440000,0x55550000,0x66660000)): m.mu.reg_write(reg,v)
