@@ -139,6 +139,11 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 - NASM 3.02 (the project's assembler; the pinned ROM SHA-256 is of a 3.02 build), `-f bin`, 16-bit .COM files (`bits 16`, `org 0x100`), `cpu 386` where 32-bit registers are
   used. No other build dependencies: tables are `db` data in the source or in an `.inc` file.
+- On an Ubuntu 26.04 x86-64 sandbox (the CI runners' image) do not build NASM: fetch the prebuilt
+  3.02 of the `ci-deps` release instead (`gh release download ci-deps -p 'nasm-3.02-linux-x86_64.tgz'
+  -p 'nasm-3.02-linux-x86_64_SHA256.txt'`, then `sha256sum -c nasm-3.02-linux-x86_64_SHA256.txt &&
+  tar xzf nasm-3.02-linux-x86_64.tgz` gives `nasm/nasm-3.02/nasm`). CI does the same; the binary
+  needs glibc 2.38 or newer. On any other system build 3.02 from the official nasm.us tarball.
 - Use local labels (`.name`) inside routines; NASM reports clashes as "inconsistently redefined".
   Avoid names that NASM treats as reserved or instructions (`r13`, `wait`, `bpl` and similar).
 - Say in the routine comment what goes in and out (registers, flags) and which registers are kept.
