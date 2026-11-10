@@ -453,7 +453,7 @@ def t_vga_registers(c):
             off = j + 4
             if off in (0x26, 0x2D):                          # model artefacts (equipment, flags)
                 continue
-            if mode == 0x10 and off in (0x22, 0x23):         # known: 8x14 font missing in the ROM
+            if mode in (0x10, 0x0F) and off in (0x22, 0x23):  # known: 8x14 font missing in the ROM
                 continue
             if a != e:
                 errs.append('%s DS+%02X=%02X(%02X)' % (tag, off, a, e))
@@ -1346,8 +1346,9 @@ def t_s3compat_vga(c):
     check(len(func) >= 35, 'only %d VGA BIOS function lines' % len(func))
     known = (('Mode 10h', 'WARN 01'), ('AX=1130 BH=2', 'WARN 01'), ('AX=1120-1124', 'WARN 01'),   # no 8x14 font
              ('Chip ID', 'INFO'), ('AH=12 BL=20', 'WARN 01'),          # 2.04.07 has no alternate print screen
-             ('Mode 07h', 'WARN 01'), ('Mode 0Fh', 'WARN 01'))          # mono DAC: the S3 reference loads the
-                                                                        # EGA palette in grayscale, not DAC.MON
+             ('Mode 07h', 'WARN 01'), ('Mode 0Fh', 'WARN 01'))          # mono: the S3 reference loads the EGA
+                                                                        # palette in grayscale, not DAC.MON, and
+                                                                        # 0Fh reports 21 rows / 16 lines (no 8x14)
     bad = [l.strip() for l in tests if not l.rstrip().endswith('PASS') and
            not any(l.startswith(a) and l.rstrip().endswith(b) for a, b in known)]
     details = [l.strip() for l in lines if l.startswith('      ')]
@@ -1407,8 +1408,9 @@ S3COMPAT_MODEL_LIMITS = [r'VESA 4[0-9A-F]{3} linear .*WARN 20$',
                          r'Banked window and LFB same memory .*WARN 01$']
 S3COMPAT_KNOWN = [r'Mode 10h .*WARN 01$', r'AX=1130 BH=2 8x14 font .*WARN 01$', r'AX=1120-1124 .*WARN 01$',
                   r'VESA 0106 .*WARN 02$', r'AH=12 BL=20 .*WARN 01$',       # no alternate print screen
-                  r'Mode 07h .*WARN 01$', r'Mode 0Fh .*WARN 01$',           # mono DAC: the S3 reference loads
-                                                                            # the EGA palette in grayscale
+                  r'Mode 07h .*WARN 01$', r'Mode 0Fh .*WARN 01$',           # mono: the S3 reference loads the EGA
+                                                                            # palette in grayscale; 0Fh also warns
+                                                                            # without the 8x14 font (21 rows / 16 lines)
                   # Accepted datasheet warnings, checked on the card with p18 (S3COMPAT, VSHOW /R and /A,
                   # 30 October 2026): the five modes show a clean picture at the edges and line ends.
                   # 012Eh, 010Fh (320x200) WARN 80: End Horizontal Blank is 00h, so CR86 = 00h cannot be

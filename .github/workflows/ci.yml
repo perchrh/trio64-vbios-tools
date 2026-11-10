@@ -167,7 +167,7 @@ jobs:
       - name: ${{ matrix.chip }} EGA/CGA against the unpatched reference
         if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
         run: |
-          make ${{ matrix.code }}-ref-compare ROM="$RUNNER_TEMP/ROM.BIN"
+          make ${{ matrix.code }}-ref-compare NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
 
       - name: Name for the log artifact
         id: art
