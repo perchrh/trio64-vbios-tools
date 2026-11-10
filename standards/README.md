@@ -51,7 +51,8 @@ is outranked only by the standards and data books.
 The PCI ID database (`pci.ids`), version 2026.11.09, copied unmodified; the licence is in the file
 header (GPL 2 or higher, or 3-clause BSD) and in the folder's [README.md](pci-ids/README.md) with the
 SHA-256 of the copy. Official source: [github.com/pciutils/pciids](https://github.com/pciutils/pciids)
-(project site [pci-ids.ucw.cz](https://pci-ids.ucw.cz/)).
+(project site [pci-ids.ucw.cz](https://pci-ids.ucw.cz/)); the S3 vendor list (5333h) is browsable at
+[admin.pci-ids.ucw.cz/read/PC/5333](https://admin.pci-ids.ucw.cz/read/PC/5333).
 
 Of use here: the vendor:device IDs and names under vendor 5333 "S3 Graphics Ltd." (8811, 8812, 8814,
 8901, 8904, 8a13 and the rest), cited as PCI-IDS by [`docs/chip-rules.md`](../docs/chip-rules.md).

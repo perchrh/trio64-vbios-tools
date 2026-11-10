@@ -10,7 +10,9 @@ from the PCI ID Project's repository:
   distributed under either the GNU General Public License (version 2 or higher) or the 3-clause BSD
   License. The database is a compilation of factual data; the copyright covers only the aggregation
   and formatting (Martin Mares and Albert Pool). The project site is
-  [pci-ids.ucw.cz](https://pci-ids.ucw.cz/).
+  [pci-ids.ucw.cz](https://pci-ids.ucw.cz/); the vendor list for S3 Graphics (5333h), where the Trio
+  models are listed among the other S3 parts, is browsable at
+  [admin.pci-ids.ucw.cz/read/PC/5333](https://admin.pci-ids.ucw.cz/read/PC/5333).
 
 Of use here: the PCI vendor and device IDs and names of the Trio64 family and its relatives, under
 vendor `5333` "S3 Graphics Ltd." - `8811` 86c764/765 [Trio32/64/64V+], `8812` 86cM65 [Aurora64V+],
