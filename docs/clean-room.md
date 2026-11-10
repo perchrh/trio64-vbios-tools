@@ -79,6 +79,15 @@ including format conversion, with Ralf Brown's name and addresses, the contribut
 release information preserved, and waives the credit requirement for excerpts under 2000 lines. Not
 public domain, but its terms allow posting; the notice is in [`INTERRUP.1ST`](../standards/rbil-all/INTERRUP.1ST).
 
+The PCI ID database (`pci.ids`) is in the repository since 10 November 2026
+([`standards/pci-ids/`](../standards/pci-ids/), version 2026.11.09, SHA-256 in the folder's
+README.md): the file's own header permits distribution under GPL 2 or higher or the 3-clause BSD
+License. It is a public source for the clean side (owner decision, 10 November 2026): the PCI
+vendor:device IDs and names are hardware facts, so they may be cited (as PCI-IDS) and cross - for
+example vendor 5333 "S3 Graphics Ltd." with devices 8811, 8812, 8814, 8901, 8904 and 8A13 for the
+Trio32/64, Aurora64V+, Trio64UV+, Trio64V2, Trio3D and Trio3D/2X. What it does not give is anything
+about a specific silicon revision (CR2F) or a board: that material stays where it is.
+
 Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, IBM's
 "Personal System/2 and Personal Computer BIOS Interface Technical Reference"
 (April 1987: the INT 10h functions at first hand; allowlisted for the clean side on
@@ -124,9 +133,10 @@ What those files state:
 - [`docs/bios-rules.md`](bios-rules.md): 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
   area, the published tables) from public sources, with the open questions still to settle in the
   emulator: the start of item 1 below.
-- [`docs/chip-rules.md`](chip-rules.md): 74 rules, from the data books apart from a few identification rules
-  taken from S3's drivers (marked *derived* or "information"): clock limits, memory timing, register
-  meanings, each with its source.
+- [`docs/chip-rules.md`](chip-rules.md): 74 rules, from the data books and the PCI ID database
+  (PCI-IDS, a public source since 10 November 2026) apart from the CR2F variant-name table taken from
+  S3's drivers (marked *derived*; dirty-side only per the ID-INF decision of 8 November 2026): clock
+  limits, memory timing, register meanings, each with its source.
 - S3TEST and S3COMPAT: checks against the IBM VGA tables, the VBE 2.0 specification, VESA DMT and
   the data book, written to the [AGENTS.md](../AGENTS.md) rule that expected values come from independent sources.
 - The emulator ([`emu/`](../emu/)): our own code, a VGA and S3 register model with a small DOS. Its tests need
@@ -358,6 +368,7 @@ maps the upper half, #78). Optional later: a 64 KB linear window for the banked 
   | DOSBox-X (`src/hardware/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (file headers) | The emulator to read first (decision of 1 November 2026): cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions. Closer to our chips than DOSBox Staging: it models the Vision864, Trio32/Trio64 and Trio64V+ as separate cards (CR2E 11h for the Trio64, revision 40h for the Trio64V+) and cites the Vision864 and Trio32/Trio64 data books in its comments; condition 3 for its mode tables |
   | DOSBox Staging (`src/hardware/video/vga_s3.cpp`, `src/ints/int10_vesa.cpp`, `int10_modes.cpp`) | GPL 2 or later (SPDX header) | Lower tier: read only where DOSBox-X says nothing. Cross-check of the S3 PLL formula, CR67 and the high-colour modes, the S3 mode numbers and the VBE functions; condition 3 for its mode tables |
   | X.Org server `hw/xfree86/common/vesamodes` | XFree86 Project licence (MIT style) | 34 modelines "distilled from" VESA DMT 1.0 Rev. 0.8 (1998): pixel clock, horizontal and vertical totals, sync positions and polarities, for example 640x480 at 60 Hz (25.175 MHz, 800 x 525), 800x600 at 60 Hz (40 MHz, 1056 x 628), 1024x768 at 60 Hz (65 MHz, 1344 x 806). A stand-in for DMT until DMT itself is at hand |
+  | X.Org `xf86-video-s3` driver (e.g. `src/s3_driver.c`, `s3_Trio64DAC.c`) | Permissive MIT-style licence in the file headers ("Permission to use, copy, modify, distribute, and sell this software and its documentation for any purpose...", copyright and permission notices to be kept, author names not for advertising; header checked 10 November 2026). Old XFree86 4.x files as a whole carried the XFree86 1.1 licence with an advertising clause - the per-file header governs each file | S3's own driver code, contributed to X.Org: a secondary source for facts the data books do not state (register behaviour, a PLL range). Gleaning facts from code never violates a licence - copyright covers the code's expression, not the facts - and even code reuse would be allowed with the notices kept; the project still takes facts only and puts no code of any third-party project into the ROM (decision of 2 November 2026). Where a data book states the fact, the book is cited instead (V2-PLL-2, 10 November 2026) |
   | Linux `drivers/gpu/drm/drm_edid.c`, the table `drm_dmt_modes[]` | MIT | The DMT modes as a second copy, to check `vesamodes` against |
   | Linux `drivers/video/fbdev/core/modedb.c`, `vesa_modes[]` | GPL 2 (the kernel's COPYING) | DMT timings, facts only (GPL 2 only) |
   | 86Box `src/video/vid_s3.c` (from PCem) | GPL 2 (COPYING; the file header states no "or later") | A closer model of the Trio64 than DOSBox (register behaviour, the high-colour modes); facts only |

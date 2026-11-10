@@ -70,6 +70,18 @@ counts and cross as such; the dirty-side run material does not cross.
 - [freedos-1.4.md](freedos-1.4.md), [freedos-reports.md](freedos-reports.md) — deferred
   to milestone 6, not reviewed.
 - Fonts and the asset manifest: no legal/release clearance granted.
+- **CHIPID** ([src/tools/chipid/](../src/tools/chipid/)) and **ROMVER** ([src/tools/romver/](../src/tools/romver/),
+  with [src/tools/common/romver.inc](../src/tools/common/romver.inc), via vdebug.inc) — dirty as wholes
+  (owner decision, 10 November 2026, recorded on #201): CHIPID's classification rests on S3 driver
+  INF/DRV material (the CR2F variant-name table, T64-ID-2), and ROMVER's whole contract is the
+  "Version " sign-on convention of S3's and Phoenix's BIOSes — a vendor convention, not a public
+  rule (the PCI 2.3 6.3 header is the public rule, checked by the `post` emulator test). The clean
+  side replaces CHIPID with its own identifier written from the data books and the PCI ID database
+  ([standards/pci-ids/](../../standards/pci-ids/), public since 10 November 2026), and does not ship
+  ROMVER. Until the ROMTEST split lands, note that [src/tools/common/chip.inc](../src/tools/common/chip.inc)
+  is shared with the clean-listed tools (REPORT, S3REGS, MCLK) and still carries the driver-derived
+  `chippart`/`chipvar` tables: when ROMTEST shares chip.inc, those tables must be split out (the PCI
+  device IDs re-sourced from PCI-IDS), so no dirty table crosses inside a shared include.
 
 ## What must happen before this allowlist is usable
 

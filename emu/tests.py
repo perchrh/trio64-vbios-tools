@@ -2718,7 +2718,10 @@ def t_stores(c):
 
 
 def t_romver(c):
-    """ROMVER, S3COMPAT's ROM line and the /V log all print the version romfind reads from C000:0000-00FF."""
+    """ROMVER, S3COMPAT's ROM line and the /V log all print the version romfind reads from C000:0000-00FF.
+    Dirty-side test (no cleanroom tag, owner decision 10 November 2026): the "Version " sign-on in the
+    first 256 ROM bytes is a vendor BIOS convention, not a public rule; the clean side checks the PCI
+    header instead (t_post)."""
     raw = c.rom[:0x100]
     at = raw.find(b'Version ')
     check(at >= 0, 'the ROM image has no "Version " in the first 256 bytes')
@@ -3007,11 +3010,14 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # the video memory size (the VESA mode list, 4F06 maximum, the mode set clear of the whole memory, the
 # LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
 # functions, the tools) give the same output with 2 and 4 MB. cleanroom: every expected value comes
-# from a public source (IBM, VESA, the data book, Microsoft's documented interfaces, the PCI 2.3
-# extract) or is pure observation; no expectation or tolerated line derives from a reference or
-# patched ROM, so the test may cross to the clean side (#201). The tests without it carry patch
-# expectations (tagged patch) or reference-derived tolerances (S3COMPAT_KNOWN, S3COMPAT_KNOWN_4MB,
-# T64_BASE, VPLUS_BASE) and stay on the dirty side until the #201 audit splits them.
+# from a public source (IBM, VESA, the data book, the PCI ID database, Microsoft's documented
+# interfaces, the PCI 2.3 extract) or is pure observation; no expectation or tolerated line derives
+# from a reference or patched ROM, so the test may cross to the clean side (#201). The tests without
+# it carry patch expectations (tagged patch), reference-derived tolerances (S3COMPAT_KNOWN,
+# S3COMPAT_KNOWN_4MB, T64_BASE, VPLUS_BASE) or a vendor sign-on convention (romver: "Version " in
+# C000:0000-00FF is how S3's and Phoenix's BIOSes sign on, not a public rule - ROMVER.COM is dirty
+# as a whole, owner decision 10 November 2026) and stay on the dirty side until the #201 audit
+# splits them.
 # Tests that are expected to fail on the current ROM level, with the reason: they expose a known
 # issue (the result is XFAIL, not FAIL, so CI stays green; XPASS when fixed). #193: the fast 4F05
 # must pick the CRTC port from MISC bit 0; a hardcoded 3D4h is not decoded in the mono modes.
@@ -3020,7 +3026,7 @@ EXPECTED_FAIL = {'mono_4f05': '#193: 4F05 in a mono mode must use the CRTC port 
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu cleanroom', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu cleanroom', 'vga_palettes': 'cga ega vga emu cleanroom',
-    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card cleanroom', 'mclk': 'tools s3 card vram cleanroom', 'vshow': 'vbe tools card vram cleanroom',
+    's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vshow': 'vbe tools card vram cleanroom',
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
