@@ -15,7 +15,7 @@ so the LFB lines and the banked write throughput stay with the hardware runs.
 
 Tests
   version          the tests are for the newest ROM: the ROM under test carries the sign-on of its level in
-                   src/tools/common/version.inc (VER775 2.04.07-p21, VER765 1.03-08N-p4, VER764 1.5-07-p2), where
+                   src/tools/common/version.inc (VER775 2.04.07-p27, VER765 1.03-08N-p7, VER764 1.5-07-p6), where
                    the patchers read it and S3TEST expects it; an older ROM fails here
   post             the ROM initialises and hooks INT 10h into C000
   rom_patches      what S3TEST cannot check: sign-on VER775, the checksum and 32 KB size of the lower
@@ -501,7 +501,7 @@ def romver(name='VER775'):
 
 def latest(patcher='s3patch.py'):
     """The newest ROM version in the repository, which the patcher builds: src/tools/common/version.inc, where the
-    patchers read their level (VER775 for src/roms/s3patch.py, 2.04.07-p21; VER765 for
+    patchers read their level (VER775 for src/roms/s3patch.py, 2.04.07-p27; VER765 for
     'vplus/s3vpatch.py'; VER764 for 'trio64/s3tpatch.py')."""
     return romver({'s3patch.py': 'VER775', 'vplus/s3vpatch.py': 'VER765', 'trio64/s3tpatch.py': 'VER764'}[patcher])
 
@@ -2092,7 +2092,8 @@ def t_mono_4f05(c):
     """Bank switch in a mono mode: AX=4F05 BH=0 in mode 07h must write CR6A at the mono CRTC port
     3B4h (MISC bit 0 = 0); writes to 3D4h are not decoded there (#193). Traces the OUT ports of one
     4F05 call and checks where the CR6A index write went. If the CRTC port is hardcoded to 3D4h
-    (the pre-p27 code) this fails - it is in EXPECTED_FAIL, so it shows as XFAIL, not red CI."""
+    (the pre-p27 Trio64V2 code, the pre-p7 Trio64V+ code, #193/#217) this fails - it is in
+    EXPECTED_FAIL, so it shows as XFAIL, not red CI."""
     m = c.machine()
     m.int10(0x0007)
     check(m.r['misc'] & 1 == 0, 'mode 07h: MISC bit 0 not clear')
@@ -3023,7 +3024,7 @@ TAGS = {
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
-    'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch', 'errors': 'call cga ega vga vbe emu vram',
+    'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch 765', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu cleanroom', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
     '775_writes': 's3 emu vram cleanroom', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu cleanroom',

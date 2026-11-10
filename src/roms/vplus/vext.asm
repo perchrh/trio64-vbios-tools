@@ -2,6 +2,8 @@
 ; src/roms/p12ext.asm (2.04.07), whose font load and mode 13h scroll this build takes from the shared
 ; src/roms/font32.asm and src/roms/scr13.asm. The 4F05 fast path differs: 1.03-08 neither keeps the
 ; bank at 0040:04FE nor refuses 4F05 with linear addressing on, so neither does the fast path.
+; p7 (#217): the CRTC port comes from GETCRTC (MISC bit 0), not a hardcoded 3D4h, so the mono modes
+; (07h/0Fh, CRTC at 3B4h) get the unlock and the CR6A write too, as p27 does on the Trio64V2.
 bits 16
 cpu 386
 %include "bios.inc"
@@ -22,7 +24,8 @@ int10x: cmp ax,0x4F05
         push dx
         push bx
         mov bx,dx               ; BX = bank (64 KB units)
-        mov dx,0x3D4
+        call GETCRTC            ; DX = 3B4h/3D4h by MISC bit 0: in a mono mode the CRTC is at 3B4h,
+                                ; and writes to 3D4h would not be decoded there (p7, #217)
         mov ax,0x4838           ; unlock CR40-FF (the BIOS leaves them unlocked, a program may not)
         out dx,ax
         mov ax,0xA539
@@ -35,7 +38,8 @@ int10x: cmp ax,0x4F05
         test al,0x10
         jnz .nl
         call L_bon
-.nl:    mov dl,0xC4             ; SR04 bit 3 = 0: planar (4 bpp), bank x 4
+.nl:    push dx                 ; keep the CRTC port across the sequencer access
+        mov dl,0xC4             ; SR04 bit 3 = 0: planar (4 bpp), bank x 4
         in al,dx
         mov ah,al               ; AH = SR index, put back below
         mov al,0x04
@@ -48,8 +52,8 @@ int10x: cmp ax,0x4F05
         test ah,0x08
         jnz .c4
         shl bx,2
-.c4:    mov dl,0xD4             ; CR6A = bank
-        mov al,0x6A
+.c4:    pop dx                  ; CRTC port (3B4h in a mono mode)
+        mov al,0x6A             ; CR6A = bank
         mov ah,bl
         out dx,ax
         pop bx

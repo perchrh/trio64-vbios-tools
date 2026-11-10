@@ -527,7 +527,7 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
 | 775 (Trio64V2/DX) | `775-P26/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p26, 64 KB (`SIZE775=32` for 32 KB), the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P6/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p6, 64 KB (`SIZE765=32` for 32 KB), the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P7/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p7, 64 KB (`SIZE765=32` for 32 KB), the clock in the edo1 entry |
 | 764X (Trio64 PnP) | `764X-P6/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p6, 64 KB (`SIZE764=32` for 32 KB) |
 | 764P (86C764-P) | `764P-P6/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p6, 64 KB |
 
