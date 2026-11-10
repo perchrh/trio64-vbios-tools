@@ -16,9 +16,11 @@ What is emulated
     the programmed CRTC and clock registers give. So refresh rates the tools measure here equal the
     rate the registers define, and call durations are plausible, but not real: the emulation runs as
     fast as the host allows, there is no real-time pacing. Every planar write to A0000-AFFFF takes
-    one count; in the packed modes the window is plain shadow RAM (the access hooks are off there,
-    see _vhooks) and its writes are charged in bulk when the page leaves the screen (_remap), as a
-    dword-clear of the 64 KB page, so loops that write video memory until a tick passes come to an end.
+    one count; a rep stos that writes the planar window with the plain write mode is emulated in one
+    step, with the same total of counts (_rep, off with rep_fast). In the packed modes the window is
+    plain shadow RAM (the access hooks are off there, see _vhooks) and its writes are charged in bulk
+    when the page leaves the screen (_remap), as a dword-clear of the 64 KB page, so loops that write
+    video memory until a tick passes come to an end.
   - A small DOS (INT 21h) for .COM and .EXE programs (MZ header with relocations, run_exe): console and
     file output, create/close, IOCTL, InDOS, get/set vector, version, PSP (51h/62h), memory blocks
     (48h-4Ah, with MCBs in front of the environment and the program; 49h and the exit free a block, 31h
@@ -161,6 +163,20 @@ class _Plane:
         return iter(self.v[self.p::4])
 
 
+# The rep stos opcodes the planar fast path of Machine._rep knows (16-bit mode: the count is CX, the
+# offset wraps at 64 KB), as (opcode bytes, (op, operand size)). F2h (repne) repeats stos like F3h does;
+# 66h in front of or between the prefix and the opcode makes the operand a dword. The rep movs
+# opcodes are left out: they are a negligible share of the planar accesses, so they keep running one
+# Unicorn iteration at a time. 67h (address size) is not included either: it changes count and wrap.
+_REP_OPS = {b'\xf3\xaa': ('stos', 1), b'\xf3\xab': ('stos', 2), b'\xf2\xaa': ('stos', 1),
+            b'\xf2\xab': ('stos', 2)}
+for _pat, (_op, _sz) in list(_REP_OPS.items()):
+    _REP_OPS[b'\x66' + _pat] = _REP_OPS[_pat[:1] + b'\x66' + _pat[1:]] = (_op, 4)
+# prefixes that can stand in front of the patterns (a pattern behind one starts mid-instruction)
+_REP_PREFIXES = frozenset((0x26, 0x2E, 0x36, 0x3E, 0x64, 0x65, 0x66, 0x67, 0xF0, 0xF2, 0xF3))
+_REP_SCAN = (None, {})                          # Machine._repscan's cache: (ROM image, its scan)
+
+
 class Machine:
     def __init__(self, rom, keys=None):
         self.rom = rom
@@ -204,6 +220,9 @@ class Machine:
         # packed, where the shadow RAM at A0000 is plain memory and a hook per access would only
         # cost time
         self.h_vw = self.h_vr = None
+        self.h_reps = []                          # the rep stos block hooks (see _rephooks)
+        self._reps = {}                           # the ROM image's rep stos (see _repscan)
+        self.rep_fast = True                      # the rep stos fast path (_rep); off for t_stores
         self.vram = bytearray(Machine.vram << 20)     # the card's video memory (see the module docstring)
         self.win = ('packed', 0)                        # what A0000-AFFFF shows now: (kind, page base)
         self.ge_cmds = 0                                # graphics engine commands written to 9AE8h
@@ -505,10 +524,89 @@ class Machine:
         if on and self.h_vw is None:
             self.h_vw = self.mu.hook_add(UC_HOOK_MEM_WRITE, self._vwrite, None, 0xA0000, 0xBFFFF)
             self.h_vr = self.mu.hook_add(UC_HOOK_MEM_READ, self._vread, None, 0xA0000, 0xAFFFF)
+            self._rephooks(True)
         elif not on and self.h_vw is not None:
             self.mu.hook_del(self.h_vw)
             self.mu.hook_del(self.h_vr)
             self.h_vw = self.h_vr = None
+            self._rephooks(False)
+
+    def _repscan(self):
+        """The ROM image's rep stos instructions for _rep: offset in the image mapped to
+        (opcode bytes, operand size). A byte scan finds the patterns also where they are not
+        instruction boundaries; such an address is never executed at, and _rep checks the bytes
+        again before it acts. A pattern with another prefix in front (a segment override, 67h) is
+        left out: the instruction would start earlier and behave differently."""
+        global _REP_SCAN
+        if _REP_SCAN[0] == self.rom:
+            return _REP_SCAN[1]
+        reps = {}
+        rom = self.rom
+        for pat, (_op, sz) in _REP_OPS.items():
+            o = rom.find(pat)
+            while o >= 0:
+                if o == 0 or rom[o - 1] not in _REP_PREFIXES:
+                    reps[o] = (pat, 4 if b'\x66' in pat else sz)
+                o = rom.find(pat, o + 1)
+        _REP_SCAN = (rom, reps)
+        return reps
+
+    def _rephooks(self, on):
+        """Block hooks at the ROM's rep stos instructions (see _rep), on only while the window is
+        planar: always on, every iteration of every rep in the ROM would pay a Python call, also in
+        the packed modes, where the string writes are plain memory. Unicorn translates a rep into the
+        block that leads into it plus a block of its own for the iterations, so the hook at its
+        address fires once per execution, after the first iteration. The blocks that contain the
+        instructions are dropped when the hooks change, because a hook takes effect only in a block
+        translated after it was added (as _noop_hook does)."""
+        if on and not self.h_reps and self.rep_fast:
+            self._reps = self._repscan()
+            self.h_reps = [self.mu.hook_add(UC_HOOK_BLOCK, self._rep, None, 0xC0000 + o, 0xC0000 + o)
+                            for o in self._reps]
+            self.mu.ctl_remove_cache(0xC0000, 0xD0000)
+        elif not on and self.h_reps:
+            for h in self.h_reps:
+                self.mu.hook_del(h)
+            self.h_reps = []
+            self.mu.ctl_remove_cache(0xC0000, 0xD0000)
+
+    def _rep(self, uc, addr, size, ud):
+        """At a rep stos of the ROM while the window is planar: when the rest of the string operation
+        writes the window with the plain write mode (write mode 0, no rotate, no set/reset, bit mask
+        FFh - the mode set's clears, which dominate the planar accesses of S3COMPAT /Q), emulate it
+        in bulk, one strided slice per plane and run of bytes, instead of one Unicorn slow path and
+        Python callback per iteration (about 4 us each). The virtual clock is charged the same total
+        (one count per write, as _vwrite). Anything else (another write mode, another segment, DF
+        set) is left to Unicorn, which runs it per iteration as before. A rep cannot hang by itself
+        (CX bounds it), so skipping its iterations weakens no hang detection that a budget needs."""
+        if self.win[0] != 'planar':
+            return
+        pat, osize = self._reps[addr - 0xC0000]
+        if uc.reg_read(UC_X86_REG_ES) != 0xA000 or uc.reg_read(UC_X86_REG_EFLAGS) & 0x400:
+            return                                              # DF set: backwards, leave it to Unicorn
+        mode, mask, sr_en, sr_val, mapmask, rot, fn = self._wcfg()
+        if mode or rot or fn or mask != 0xFF or sr_en or not mapmask:
+            return
+        if bytes(uc.mem_read(addr, len(pat))) != pat:           # the ROM image is plain RAM here
+            return
+        ecx, edi = uc.reg_read(UC_X86_REG_ECX), uc.reg_read(UC_X86_REG_EDI)
+        n = ecx & 0xFFFF
+        data = (uc.reg_read(UC_X86_REG_EAX) & (1 << (8 * osize)) - 1).to_bytes(osize, 'little') * n
+        base, psize, vm = self.win[1], len(self.vram) // 4, self.vram
+        total, b = n * osize, 0
+        while b < total:
+            w = (edi + b) & 0xFFFF
+            s = (base + w) % psize
+            L = min(total - b, 0x10000 - w, psize - s)
+            chunk = data[b:b + L]
+            for p in range(4):
+                if mapmask & (1 << p):
+                    vm[4 * s + p:4 * s + p + 4 * L - 3:4] = chunk
+            b += L
+        self.t += n
+        uc.reg_write(UC_X86_REG_ECX, ecx & 0xFFFF0000)
+        uc.reg_write(UC_X86_REG_EDI, (edi + n * osize) & 0xFFFF | edi & 0xFFFF0000)
+        uc.reg_write(UC_X86_REG_EIP, uc.reg_read(UC_X86_REG_EIP) + len(pat))
 
     def _remap(self):
         """After a register write that can move the window: keep the old page, show the new one."""
