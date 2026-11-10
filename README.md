@@ -670,7 +670,7 @@ tests run by hand.
     make dist [ROMS=1]
 
 builds the tools and packs them into `build/trio64-tools-<VERSION>.zip` (VERSION from
-`src/tools/common/version.inc`, now 1.0.0): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
+`src/tools/common/version.inc`, now 1.0.1): `trio64/tools/` with VSHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
 CHIPID, ROMVER, REPORT, S3REGS32.EXE, RUNALL.BAT and CLEAN.BAT. CI builds it on
 every run and keeps it as the artifact `trio64-tools-<VERSION>` for 90 days; the download is that zip.
 `ROMS=1` adds `trio64/roms/` with every chip's ROM at its memory clocks (`make roms`); the default leaves
@@ -784,7 +784,7 @@ Findings (S3REGS.TXT and VGALOG.BIN from the card, Windows 98 SE, October 2026):
 
 S3REGS.TXT format (S3REGS and S3REGS32 write the same):
 
-    S3REGS 1.0.0 [label] DOS                  or  S3REGS32 1.0.0 [label] Win32
+    S3REGS 1.0.1 [label] DOS                  or  S3REGS32 1.0.1 [label] Win32
     MISC=EF FEAT=00 PEL=FF MODE=59 VBE=0101 TICK=00000032   (MODE and VBE only from DOS)
     SR00: 16 bytes SR00-SR0F                  SR10: SR10-SR1F
     CR00: ... CRF0: 16 rows of CR00-CRFF      (CR45, CR4A, CR4B, CRC5, CRCA, CRCB shown as --, not read)
