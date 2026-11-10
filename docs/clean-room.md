@@ -79,6 +79,15 @@ including format conversion, with Ralf Brown's name and addresses, the contribut
 release information preserved, and waives the credit requirement for excerpts under 2000 lines. Not
 public domain, but its terms allow posting; the notice is in [`INTERRUP.1ST`](../standards/rbil-all/INTERRUP.1ST).
 
+The PCI ID database (`pci.ids`) is in the repository since 10 November 2026
+([`standards/pci-ids/`](../standards/pci-ids/), version 2026.11.09, SHA-256 in the folder's
+README.md): the file's own header permits distribution under GPL 2 or higher or the 3-clause BSD
+License. It is a public source for the clean side (owner decision, 10 November 2026): the PCI
+vendor:device IDs and names are hardware facts, so they may be cited (as PCI-IDS) and cross - for
+example vendor 5333 "S3 Graphics Ltd." with devices 8811, 8812, 8814, 8901, 8904 and 8A13 for the
+Trio32/64, Aurora64V+, Trio64UV+, Trio64V2, Trio3D and Trio3D/2X. What it does not give is anything
+about a specific silicon revision (CR2F) or a board: that material stays where it is.
+
 Still owner's copies outside the repository unless their terms allow posting: VBE 3.0, IBM's
 "Personal System/2 and Personal Computer BIOS Interface Technical Reference"
 (April 1987: the INT 10h functions at first hand; allowlisted for the clean side on
@@ -124,9 +133,10 @@ What those files state:
 - [`docs/bios-rules.md`](bios-rules.md): 323 rules for the standard functions (INT 10h AH=00h-1Ch, the BIOS data
   area, the published tables) from public sources, with the open questions still to settle in the
   emulator: the start of item 1 below.
-- [`docs/chip-rules.md`](chip-rules.md): 74 rules, from the data books apart from a few identification rules
-  taken from S3's drivers (marked *derived* or "information"): clock limits, memory timing, register
-  meanings, each with its source.
+- [`docs/chip-rules.md`](chip-rules.md): 74 rules, from the data books and the PCI ID database
+  (PCI-IDS, a public source since 10 November 2026) apart from the CR2F variant-name table taken from
+  S3's drivers (marked *derived*; dirty-side only per the ID-INF decision of 8 November 2026): clock
+  limits, memory timing, register meanings, each with its source.
 - S3TEST and S3COMPAT: checks against the IBM VGA tables, the VBE 2.0 specification, VESA DMT and
   the data book, written to the [AGENTS.md](../AGENTS.md) rule that expected values come from independent sources.
 - The emulator ([`emu/`](../emu/)): our own code, a VGA and S3 register model with a small DOS. Its tests need

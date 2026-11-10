@@ -20,6 +20,7 @@ Cite these first.
 | --- | --- | --- |
 | 1 | S3 Trio32/Trio64 data book, March 1995, in [`datasheets/`](../../datasheets/) | The chip: wake-up, unlock, PCI configuration, memory, clocks, registers |
 | 2 | PCI Local Bus Specification 2.3, section 6.3, [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf). Extract: [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | The option ROM image: header, PCIR, initialisation entry, AX = bus/device/function, checksum |
+| 2a | The PCI ID database `pci.ids`, version 2026.11.09, [`standards/pci-ids/`](../../standards/pci-ids/) (GPL 2+ or 3-clause BSD per the file header; public source for the clean side, owner decision 10 November 2026) | The PCI vendor:device IDs and names (vendor 5333 "S3 Graphics Ltd.": 8811, 8812, 8814, 8901, 8904, 8A13). Hardware facts, cited as PCI-IDS. Not a source for silicon revisions (CR2F) or boards |
 | 3 | The DRAM data sheet of the parts on the card. V53C16256H for the DSP-3364P is in [`datasheets/`](../../datasheets/) | Power-up and refresh, and how high the memory clock may go on that card. The chip book still sets the chip's own maximum |
 | 4 | VBE 1.2, VS911022, [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) | The VBE version this ROM reports. Milestone 4 calls (4F00h, 4F01h, 4F02h, the window) |
 | 5 | VBE 2.0, [`standards/vesa/vbe20.pdf`](../../standards/vesa/vbe20.pdf) | Read with 1.2. It clarifies those functions and records what 2.0 added. Milestone 4 does not take a 2.0-only requirement from it |

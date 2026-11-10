@@ -45,3 +45,15 @@ Of use here: `MEMORY.LST` (the BIOS data area, tables M0024-M0027, cited by
 (INT 10h, including AH=12h BL=30h-35h), `GLOSSARY.LST`, `BIBLIO.LST`. The reading order is
 [`docs/cleanroom/readings.md`](../docs/cleanroom/readings.md) row 9; the list outranks VGADOC and
 is outranked only by the standards and data books.
+
+## pci-ids/
+
+The PCI ID database (`pci.ids`), version 2026.11.09, copied unmodified; the licence is in the file
+header (GPL 2 or higher, or 3-clause BSD) and in the folder's [README.md](pci-ids/README.md) with the
+SHA-256 of the copy. Official source: [github.com/pciutils/pciids](https://github.com/pciutils/pciids)
+(project site [pci-ids.ucw.cz](https://pci-ids.ucw.cz/)).
+
+Of use here: the vendor:device IDs and names under vendor 5333 "S3 Graphics Ltd." (8811, 8812, 8814,
+8901, 8904, 8a13 and the rest), cited as PCI-IDS by [`docs/chip-rules.md`](../docs/chip-rules.md).
+Public source for the clean side (owner decision, 10 November 2026); reading order
+[`docs/cleanroom/readings.md`](../docs/cleanroom/readings.md).
