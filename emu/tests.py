@@ -1748,7 +1748,10 @@ def t_vgalog_mem(c):
 def t_vgalog_xl(c):
     """VGALOG /M /XL installs with a 128 KB ring (4096 slots): the install message says 4096 and 128 KB,
     and /D writes more than 1024 records when more than 1024 calls were made (the default /M ring caps at
-    1024). /XL without a memory mode is refused with exit code 1."""
+    1024). The ring starts at its own 16-aligned segment and spans two 64 KB segments with /XL, so the
+    test logs 2600 calls - past slot 2048, where a 16-bit ring offset from the PSP used to wrap into the
+    resident code and hang the machine (the /XL lockup on the card) - and checks a record from the
+    second segment. /XL without a memory mode is refused with exit code 1."""
     com = c.tool('VGALOG.COM')
     m = c.machine()
     rx = m.run_com(com, '/XL', seg=0x2000)
@@ -1757,15 +1760,21 @@ def t_vgalog_xl(c):
     check(r.exit and r.exit[0] == 'tsr', 'VGALOG /M /XL did not stay resident: %s' % (r.exit,))
     check(b'4096' in r.stdout and b'128 KB' in r.stdout,
           '/XL install message without 4096/128 KB: %r' % bytes(r.stdout)[-120:])
-    for i in range(1500):
+    for i in range(2600):
         m.int10(0x0F00)                 # AH=0Fh: logged in memory mode, cheap
     rd = m.run_com(com, '/D', seg=0x4000)
     check(rd.exit == ('exit', 0), '/D ended with %s' % (rd.exit,))
     b = rd.files.get('VGALOG.BIN')
     check(b is not None and b[:8] == b'VGALOGM2', 'no memory-mode VGALOG.BIN after /M /XL')
     total, n, flags = struct.unpack_from('<IHH', b, 8)
-    check(total == 1500 and n == 1500, '/XL ring did not keep all 1500 calls: total=%d n=%d' % (total, n))
+    check(total == 2600 and n == 2600, '/XL ring did not keep all 2600 calls: total=%d n=%d' % (total, n))
     check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    # record k = slot k (2600 < 4096, nothing wrapped yet): call number k, AX=0F00h; 2500 is in the
+    # ring's second 64 KB segment
+    bad = [k for k in (0, 1, 1000, 2047, 2048, 2500, 2599)
+           if struct.unpack_from('<H', b, 48 + k * 32)[0] != k or
+              struct.unpack_from('<H', b, 48 + k * 32 + 2)[0] != 0x0F00]
+    check(not bad, 'records wrong (call number/AX) at slots %s' % bad)
     vgalog_info(c, m, bytes(b[16:48]), '/M /XL')
     ru = m.run_com(com, '/U', seg=0x4000)
     check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
