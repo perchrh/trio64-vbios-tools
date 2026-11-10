@@ -941,6 +941,7 @@ prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131
 ;      EGA palette (all others, also in 350-line text); the same entry wrong on a second read and
 ;      again after the mode set is made a second time (dac_mode)
 ;   40 measured refresh does not match the rate predicted from the CRTC and clock registers
+;   80 4F05 in a mono mode (07h/0Fh) did not reach the CRTC at 3B4h: CR6A readback wrong (#193)
 ; Warn bit 1: mode 10h and 0Fh report 21 rows / 16 lines in AH=1Bh because the 8x14 font is missing
 ;   (known; IBM's MODE-5 text grid of the 350-line graphics modes is 25 rows / 14 lines).
 ; Warn bit 2: a default DAC entry read wrong once, right on the second read (a port read glitch).
@@ -1119,13 +1120,28 @@ vga_one:
         jnc .e
         FAILB 0x10
 .e:     mov si,[ent]
+        mov al,[si]
+        cmp al,0x07                 ; mono modes: 4F05 must switch the bank at the mono CRTC port 3B4h
+        je .m5                      ; (MISC bit 0 = 0; writes to 3D4h are not decoded there, #193)
+        cmp al,0x0F
+        je .m5
+        jmp .e4
+.m5:    mov ax,0x4F05               ; set bank 2
+        xor bx,bx
+        mov dx,2
+        int 0x10
+        mov ax,(0x6A<<8)|3          ; readreg type 3 (CRTC), index 6Ah: readreg picks 3B4h in a mono mode
+        call readreg
+        or al,al                    ; bank 2 -> CR6A = 2 or 8 (bank x 4 with SR04 bit 3); 0 = the write
+        jnz .e4                     ; went to the undecoded 3D4h (#193)
+        FAILB 0x80
+.e4:    mov si,[ent]
         test byte [si+1],0x80
-        jz .e4
+        jz .e5
         mov ax,0x1202                   ; back to 400 scan lines for the following modes
         mov bl,0x30
         int 0x10
-.e4:
-        call tend
+.e5:    call tend
         ret
 
 ; Mode set of the current entry [ent], as vga_one makes it: in pass 2 first the VESA mode of
