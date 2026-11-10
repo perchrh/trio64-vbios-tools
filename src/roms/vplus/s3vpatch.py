@@ -72,11 +72,11 @@ REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   #
 # only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = 'd715365c584d4592277d65fd16dcf8a46b801d6b79c95d585bfd4d70e4652b40'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = '84760b52a4504cb5dee2f70ab18471c11df17502471fd614877e969020fb2108'  # 1.03-08N-p6 (NASM 3.02), emulator tests passed
+RESULT_SHA = '22dbd84501f22502dc7188c390d01ad6a32825426ddb57ec2a9cb57c1349ddf7'  # 1.03-08N-p7 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
-    'vhooks.asm': '042132c715684eb1', 'vext.asm': '911cb6e38ca370ef',
+    'vhooks.asm': '042132c715684eb1', 'vext.asm': '690f6ead49b597e5',
     'font32.asm': '8d11cc74c14ffc30', 'scr13.asm': '5df0f0902ec6065b',
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
