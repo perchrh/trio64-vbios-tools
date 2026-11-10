@@ -2,9 +2,11 @@ del *.dbg
 del s3test.log
 del s3compat.log
 del vbeshow.log
+del vgashow.log
 del s3regs.txt
 del c:\s3regs.txt
 del c:\vgalog.bin
+del vgalog?.bin
 del vgalog.bin
 del vgalogr.bin
 del s3regsr.txt
