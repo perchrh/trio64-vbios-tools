@@ -65,7 +65,7 @@
 ;      PCI subsystem ID from the ROM (Trio64V2)  PASS (ROM 40h = CR81-84 = PCI 2Ch, CR37 bit 2 = 0)
 ;   3. Initial state, setup                     INFO, PASS (mode 03, baseline, VRAM zeroed)
 ;   4. VGA modes 00h-13h and the 350-line text modes against the IBM reference
-;                                               PASS; mode 10h WARN 01 (8x16 font used, 8x14 missing)
+;                                               PASS; mode 10h and 0Fh WARN 01 (8x16 font used, 8x14 missing)
 ;   5. Mode X family and 80x50 text             PASS
 ;   6. VGA BIOS functions (cursor .. AH=1B)     PASS; AX=1130 BH=2 WARN 01 (8x14 font missing)
 ;      More: AH=13h write string, CGA graphics scroll 04h/06h, AH=09h/0Ah glyphs and XOR in 04h, 06h,
@@ -292,7 +292,7 @@ start:  cld
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
         PS '  8 refresh  10 memory  20 default DAC (256/EGA/CGA)  40 refresh vs CRTC/PLL math',13,10
-        PS 'VGA warn bits: 1 mode 10h without 8x14 font  2 DAC entry wrong once, right on a 2nd read',13,10
+        PS 'VGA warn bits: 1 mode 10h/0Fh without 8x14 font  2 DAC entry wrong once, right on a 2nd read',13,10
         PS '  4 DAC entry right after the mode set again (also AX=101B: warn 2/4, fail 1 = wrong 3 times)',13,10
         PS 'Mode xxh 350 = the mode at 350 scan lines (AH=12 BL=30 first).',13,10
         PS 'VESA fail bits: 1 4F01  2 window  4 layout  8 set/4F03  10 refresh  20 memory',13,10
@@ -941,12 +941,13 @@ prevesa dw 0x4101,0x0111,0x0105,0x0103,0x4111,0x0101,0x0112,0x0107,0x4103,0x0131
 ;      EGA palette (all others, also in 350-line text); the same entry wrong on a second read and
 ;      again after the mode set is made a second time (dac_mode)
 ;   40 measured refresh does not match the rate predicted from the CRTC and clock registers
-; Warn bit 1: mode 10h reports 21 rows / 16 lines in AH=1Bh because the 8x14 font is missing (known).
+; Warn bit 1: mode 10h and 0Fh report 21 rows / 16 lines in AH=1Bh because the 8x14 font is missing
+;   (known; IBM's MODE-5 text grid of the 350-line graphics modes is 25 rows / 14 lines).
 ; Warn bit 2: a default DAC entry read wrong once, right on the second read (a port read glitch).
 ; Warn bit 4: a default DAC entry wrong on two reads, right after the mode set again (a DAC write
 ;   that did not land once). Neither is the BIOS's table: it loaded the right value the second time.
 ; The 350-line entries select 350 scan lines with AH=12h BL=30h AL=01h first and go back to 400 after.
-; Expect PASS for every entry (WARN 01 for mode 10h).
+; Expect PASS for every entry (WARN 01 for mode 10h and 0Fh).
 vga_one:
         mov si,[ent]
         mov al,[si]
@@ -1009,14 +1010,18 @@ vga_one:
         push si
         mov si,[ent]
         cmp byte [si],0x10
+        je .d10
+        cmp byte [si],0x0F
         pop si
         jne .dfl
-        cmp bl,0x22
+        jmp .dfont
+.d10:   pop si
+.dfont: cmp bl,0x22
         je .dkn
         cmp bl,0x23
         jne .dfl
-.dkn:   WARNB 1                         ; mode 10h: 8x16 font used, 8x14 missing (known)
-        jmp .dn
+.dkn:   WARNB 1                         ; mode 10h and 0Fh: the 8x14 font of the 350-line modes
+        jmp .dn                          ; is missing, the 8x16 font gives 21 rows / 16 lines (known)
 .dfl:   push bx
         mov ah,bl
         mov bl,al

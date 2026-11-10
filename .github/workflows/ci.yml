@@ -21,7 +21,8 @@
 # the memory size) with 4 MB and with 1 MB; the Trio64 rows (764X, 764P) with 1 MB only, as no Trio64
 # card was built with 4 MB (the emulator still takes --vram 4 on the Trio64 model, for a run by hand). On the Trio64V2 the longest
 # test, s3compat_full, has rows of its own: 2 MB on the 50 MHz image, 4 MB on the 60 MHz one. Every job
-# builds NASM 3.02 from its release source (cached) and the tools with `make tools`. The first row of each
+# takes NASM 3.02 from the ci-deps release (SHA-256 checked; built from the official release source
+# only when the asset is missing or fails the check) and builds the tools with `make tools`. The first row of each
 # chip also runs the patcher tests, which build the default ROM (without MCLK) and check it against the
 # pinned SHA-256, and the EGA/CGA comparison with the unpatched reference. The last job, build-and-test,
 # passes when every required row passed and every ROM built (the check name branch rules can require).
@@ -104,24 +105,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Cache NASM
-        id: nasm-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/nasm
-          key: nasm-${{ env.NASM_VERSION }}-${{ runner.os }}
-
-      - name: Build NASM ${{ env.NASM_VERSION }}
-        if: steps.nasm-cache.outputs.cache-hit != 'true'
+      - name: NASM ${{ env.NASM_VERSION }} (the ci-deps release; built from source when it is not usable)
+        env:
+          NASM_SUM: "NASM_${NASM_VERSION/./_}_SHA256.txt"
         run: |
-          curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
-            "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
-          tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
-          cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
-          ./configure --quiet
-          make -j"$(nproc)" nasm
           mkdir -p ~/nasm
-          cp nasm ~/nasm/
+          if gh release download ci-deps --repo "${{ github.repository }}" \
+              --pattern "nasm-$NASM_VERSION-linux-x86_64" --pattern "$NASM_SUM" \
+              --dir "$RUNNER_TEMP" 2>/dev/null \
+             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM"); then
+            mv "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64" ~/nasm/nasm
+            chmod +x ~/nasm/nasm
+          fi
+          if [ ! -x ~/nasm/nasm ]; then
+            echo "::group::Build NASM $NASM_VERSION from the official release source"
+            curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
+              "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
+            tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
+            cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
+            ./configure --quiet
+            make -j"$(nproc)" nasm
+            cp nasm ~/nasm/
+            echo "::endgroup::"
+          fi
 
       - name: Check NASM
         run: |
@@ -167,7 +173,7 @@ jobs:
       - name: ${{ matrix.chip }} EGA/CGA against the unpatched reference
         if: ${{ !cancelled() && steps.rom.outcome == 'success' && matrix.first }}
         run: |
-          make ${{ matrix.code }}-ref-compare ROM="$RUNNER_TEMP/ROM.BIN"
+          make ${{ matrix.code }}-ref-compare NASM=$HOME/nasm/nasm ROM="$RUNNER_TEMP/ROM.BIN"
 
       - name: Name for the log artifact
         id: art
@@ -195,24 +201,29 @@ jobs:
       - name: similarity.py self-test (first, it takes a second)
         run: python3 emu/similarity.py --self-test
 
-      - name: Cache NASM
-        id: nasm-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/nasm
-          key: nasm-${{ env.NASM_VERSION }}-${{ runner.os }}
-
-      - name: Build NASM ${{ env.NASM_VERSION }}
-        if: steps.nasm-cache.outputs.cache-hit != 'true'
+      - name: NASM ${{ env.NASM_VERSION }} (the ci-deps release; built from source when it is not usable)
+        env:
+          NASM_SUM: "NASM_${NASM_VERSION/./_}_SHA256.txt"
         run: |
-          curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
-            "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
-          tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
-          cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
-          ./configure --quiet
-          make -j"$(nproc)" nasm
           mkdir -p ~/nasm
-          cp nasm ~/nasm/
+          if gh release download ci-deps --repo "${{ github.repository }}" \
+              --pattern "nasm-$NASM_VERSION-linux-x86_64" --pattern "$NASM_SUM" \
+              --dir "$RUNNER_TEMP" 2>/dev/null \
+             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM"); then
+            mv "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64" ~/nasm/nasm
+            chmod +x ~/nasm/nasm
+          fi
+          if [ ! -x ~/nasm/nasm ]; then
+            echo "::group::Build NASM $NASM_VERSION from the official release source"
+            curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
+              "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
+            tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
+            cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
+            ./configure --quiet
+            make -j"$(nproc)" nasm
+            cp nasm ~/nasm/
+            echo "::endgroup::"
+          fi
 
       - name: Every chip's ROM at its memory clocks (built, not uploaded)
         run: make roms NASM=$HOME/nasm/nasm
@@ -247,24 +258,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Cache NASM
-        id: nasm-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/nasm
-          key: nasm-${{ env.NASM_VERSION }}-${{ runner.os }}
-
-      - name: Build NASM ${{ env.NASM_VERSION }}
-        if: steps.nasm-cache.outputs.cache-hit != 'true'
+      - name: NASM ${{ env.NASM_VERSION }} (the ci-deps release; built from source when it is not usable)
+        env:
+          NASM_SUM: "NASM_${NASM_VERSION/./_}_SHA256.txt"
         run: |
-          curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
-            "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
-          tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
-          cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
-          ./configure --quiet
-          make -j"$(nproc)" nasm
           mkdir -p ~/nasm
-          cp nasm ~/nasm/
+          if gh release download ci-deps --repo "${{ github.repository }}" \
+              --pattern "nasm-$NASM_VERSION-linux-x86_64" --pattern "$NASM_SUM" \
+              --dir "$RUNNER_TEMP" 2>/dev/null \
+             && (cd "$RUNNER_TEMP" && sha256sum -c "$NASM_SUM"); then
+            mv "$RUNNER_TEMP/nasm-$NASM_VERSION-linux-x86_64" ~/nasm/nasm
+            chmod +x ~/nasm/nasm
+          fi
+          if [ ! -x ~/nasm/nasm ]; then
+            echo "::group::Build NASM $NASM_VERSION from the official release source"
+            curl -sSfL -o "$RUNNER_TEMP/nasm.tar.xz" \
+              "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/nasm-$NASM_VERSION.tar.xz"
+            tar -xf "$RUNNER_TEMP/nasm.tar.xz" -C "$RUNNER_TEMP"
+            cd "$RUNNER_TEMP/nasm-$NASM_VERSION"
+            ./configure --quiet
+            make -j"$(nproc)" nasm
+            cp nasm ~/nasm/
+            echo "::endgroup::"
+          fi
 
       - uses: actions/setup-python@v6
         with:
