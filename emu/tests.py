@@ -2654,6 +2654,7 @@ def t_stores(c):
     fails = []
     for name, mode, fn, need in ops:
         m = c.machine()
+        m.rep_fast = False                     # the clear must run store by store to be counted
         if mode is not None:
             m.int10(mode)
         sz = {}
@@ -2981,7 +2982,7 @@ TAGS = {
 
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
-DURATION = {'s3compat_full': 300, 's3compat_bench': 30, 's3compat_vbe': 70, 'vshow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
+DURATION = {'s3compat_full': 170, 's3compat_bench': 30, 's3compat_vbe': 70, 'vshow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
             's3test_any': 10, 'stores': 5}
 
 
