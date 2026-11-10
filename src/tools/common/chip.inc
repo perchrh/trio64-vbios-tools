@@ -1,4 +1,4 @@
-; chip.inc - which Trio64-family chip the card has, and that chip's limits (VSHOW, S3TEST, S3COMPAT,
+; chip.inc - which Trio64-family chip the card has, and that chip's limits (VBESHOW, S3TEST, S3COMPAT,
 ; S3REGS, CHIPID). Include it once, in the code part of a tool; it needs no other include.
 ;
 ; chipfind   finds the card through the PCI BIOS (INT 1Ah AX=B102h, vendor 5333h):

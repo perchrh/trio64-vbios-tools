@@ -98,7 +98,7 @@ to implement from:
   its open-question lists were written while reading another vendor's BIOS source.
 - SeaVGABIOS (branch `claude/slim-vgabios` of perchrh/seabios_fork), under its LGPLv3, as a comparison
   implementation and a source of facts: none of its code goes into the ROM.
-- The test tools as programs and their result lines (S3TEST, S3COMPAT, VSHOW, VGALOG, S3REGS): what
+- The test tools as programs and their result lines (S3TEST, S3COMPAT, VBESHOW, VGALOG, S3REGS): what
   they check is stated in their headers from public sources.
 
 ## What stays on the dirty side
@@ -115,7 +115,7 @@ notes), and anything from another vendor's BIOS source.
    `s3test_any` runs `S3TEST /C` instead: the set that needs no ROM of ours (checksum, MCLK, VGA
    clear, font load, the scrolls, AH=09h, timings), on any chip, with the version as INFO (#143).
    It is 8 result lines: the mode list and the VBE checks of S3TEST are our ROMs' and have no clean
-   counterpart yet. S3COMPAT and VSHOW run in full. `post` checks the ROM header without running it
+   counterpart yet. S3COMPAT and VBESHOW run in full. `post` checks the ROM header without running it
    and fails a POST that does not return (#143). On the card, run `S3TEST /C`.
 2. **The oracle**: the register state after POST and after each mode set compared with
    [`oracle-a-post.md`](oracle-a-post.md) and [`oracle-b-modeset.md`](oracle-b-modeset.md), the 4F00/4F01 blocks with [`oracle-c-vbe.md`](oracle-c-vbe.md). Where the
@@ -132,7 +132,7 @@ notes), and anything from another vendor's BIOS source.
 
 4. **On the card**, with a way back: keep the card's own ROM image and a second graphics card (or a
    machine that can flash the card blind) at hand, as for every ROM so far. Flash the 64 KB image
-   (the 32 KB twice), cold boot, then RUNALL (S3TEST, S3COMPAT, VSHOW /R, VGALOG, S3REGS) and the
+   (the 32 KB twice), cold boot, then RUNALL (S3TEST, S3COMPAT, VBESHOW /R, VGALOG, S3REGS) and the
    programs of the milestone.
 
 ## Leak review

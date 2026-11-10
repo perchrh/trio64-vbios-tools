@@ -11,7 +11,7 @@
 ;   S3COMPAT [/Q] [/V] [/B] [/N s] [/U] > S3COMPAT.LOG
 ;   S3COMPAT /H (or /?) prints the parameters and the monitor note below.
 ;   /S  silent: no start notice and monitor warning on stderr, no key press (for batch runs).
-;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VSHOW)
+;   /Q  skip the 2 MB VRAM test   (to look at a mode on the screen, use VBESHOW)
 ;   /B  set CR31 bit 2 (the 16-bit VGA bus, spec-b MQ-8 of #200) for the whole run, so the planar
 ;       sections 0Dh-12h run with the bit set; cleanup puts it back before the mode 03 comparison
 ;   /N s retention check (spec-b MQ-5 of #200): after the VRAM test, the pattern is written, the
@@ -8515,7 +8515,7 @@ pdec10: push eax
         ret
 
 ; ======================================================================
-; /V debug log (shared with VSHOW and S3TEST)
+; /V debug log (shared with VBESHOW and S3TEST)
 %include "vdebug.inc"
 %include "chip.inc"
 

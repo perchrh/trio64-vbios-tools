@@ -72,7 +72,7 @@ from unicorn.x86_const import *
 REGNAMES = ['MISC', 'FEAT', 'SR0', 'SR1', 'SR2', 'SR3', 'SR4'] + ['CR%02X' % i for i in range(25)] + \
            ['AR%02X' % i for i in range(21)] + ['GR%02X' % i for i in range(9)]
 
-# PCI configuration header of the card as read on the real hardware (VSHOW /V log): 5333:8901,
+# PCI configuration header of the card as read on the real hardware (VBESHOW /V log): 5333:8901,
 # command 0003, class 030000, IRQ 10. BAR0 (E0000000 on the card) is read from CR59/CR5A, which the
 # Trio64 uses as the BAR.
 PCI_CONFIG = {0x00: 0x89015333, 0x04: 0x02000003, 0x08: 0x03000006,

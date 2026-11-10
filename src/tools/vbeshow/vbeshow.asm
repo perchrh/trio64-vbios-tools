@@ -1,20 +1,20 @@
-; VSHOW.COM - VESA mode viewer for LCD and monitor checks of the Trio64V2/DX VBIOS (386+)
+; VBESHOW.COM - VESA mode viewer for LCD and monitor checks of the Trio64V2/DX VBIOS (386+)
 ;
 ; Purpose
 ;   A visual test: it shows what a VESA mode set by the BIOS looks like on a real monitor, and measures
-;   the timing the monitor receives. S3TEST and S3COMPAT check registers; VSHOW checks the picture.
+;   the timing the monitor receives. S3TEST and S3COMPAT check registers; VBESHOW checks the picture.
 ;
 ; Usage
-;   VSHOW                list all VESA modes the BIOS reports (4F00 mode list, 4F01 per mode)
-;   VSHOW mode [/L]      set one mode (hex: 106, 0x106 or 106h) and draw the test picture
-;   VSHOW /I [/L]        interactive: list of the modes VSHOW can show, arrows select, Enter shows,
+;   VBESHOW                list all VESA modes the BIOS reports (4F00 mode list, 4F01 per mode)
+;   VBESHOW mode [/L]      set one mode (hex: 106, 0x106 or 106h) and draw the test picture
+;   VBESHOW /I [/L]        interactive: list of the modes VBESHOW can show, arrows select, Enter shows,
 ;                        any key returns to the list, L toggles the line pattern, Esc quits
-;   VSHOW /A [/L]        every graphics mode in turn: picture and info per mode, a beep when the mode
+;   VBESHOW /A [/L]        every graphics mode in turn: picture and info per mode, a beep when the mode
 ;                        is up, any key for the next mode, Esc stops; a summary is printed at the end
-;   VSHOW /R [/L]        robot: as /A, but each mode stays about 0.5 s (9 BIOS ticks) and no key is
+;   VBESHOW /R [/L]        robot: as /A, but each mode stays about 0.5 s (9 BIOS ticks) and no key is
 ;                        needed (Esc still stops), no beep; for logs of every mode switch:
-;                        VSHOW /R /V /S > VSHOW.LOG
-;   VSHOW /H, /?, /HELP  parameter list
+;                        VBESHOW /R /V /S > VBESHOW.LOG
+;   VBESHOW /H, /?, /HELP  parameter list
 ;   /O SR18=40           override one register after each mode set, before the picture and the
 ;                        measurement: SRxx, CRxx, GRxx or ARxx with a 1-2 digit hex index and value
 ;                        (up to 8, repeat /O). S3 extended registers are unlocked for the write and
@@ -23,15 +23,15 @@
 ;                        and AR13 pixel panning, with the measured refresh and the picture as the
 ;                        readout (#200)
 ;   /L                   alternating 1-pixel vertical lines over the whole screen instead of the bars
-;   /V                   debug log in VSHOW.DBG (see src/tools/common/vdebug.inc): the NASM version
+;   /V                   debug log in VBESHOW.DBG (see src/tools/common/vdebug.inc): the NASM version
 ;                        that assembled this tool (D:ENV NASM=), the ROM version (D:ENV ROM=), every INT 10h call, 4F00/4F01
 ;                        blocks, registers and per-frame timer counts of each mode shown
 ;   /S                   silent: no monitor warning and no key press before the modes (batch runs)
 ;
-; Cleanroom rule (AGENTS.md): VSHOW stays cleanroom permissible. It observes (measures, dumps,
+; Cleanroom rule (AGENTS.md): VBESHOW stays cleanroom permissible. It observes (measures, dumps,
 ; draws) and every expectation comes from a public source; nothing in it may be taken from a
 ; reference or patched ROM - a mode list, a register value, a timing or a tolerance. Such a change
-; needs an owner decision first and drops the `cleanroom` tag of the `vshow` emulator test (#201).
+; needs an owner decision first and drops the `cleanroom` tag of the `vbeshow` emulator test (#201).
 ;
 ; The test picture and what to expect
 ;   16 colour bars           every bar a solid, distinct colour (direct colour modes use the 4F01 masks)
@@ -45,11 +45,11 @@
 ;                            intended timing (for example 1280x1024 DMT: 60.0 Hz, 64.0 kHz, 1066 lines)
 ;   Monitor: the BIOS's default timings reach a 75 kHz line frequency (1600x1200 at 60 Hz; 1280x1024 at
 ;   60 Hz is 64 kHz). LCDs refuse what they cannot show; an old fixed-frequency or low-end CRT can be
-;   damaged by a line frequency above its range. Before a mode or /A, VSHOW prints this on stderr and
+;   damaged by a line frequency above its range. Before a mode or /A, VBESHOW prints this on stderr and
 ;   waits for a key (Esc cancels); /I shows it on the screen once, before the mode list. /S skips the
 ;   warning and the key. The /H help says so too.
-;   Errors are printed as "VSHOW <version>: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
-;   or 4F02 fail or the mode is a text mode or uses a memory model VSHOW cannot draw. /A and /R list a
+;   Errors are printed as "VBESHOW <version>: mode XXXX: <reason>[, BIOS status XXXX]", for example when 4F01
+;   or 4F02 fail or the mode is a text mode or uses a memory model VBESHOW cannot draw. /A and /R list a
 ;   mode they leave out as "Mode XXXX: <reason>, skipped"; a mode 4F01 marks unsupported because it
 ;   needs more memory than 4F00 reports says so: "not supported: needs 2560 KB, the card has 1024 KB
 ;   (4F00)" (bytes per line times lines, four planes in a planar mode).
@@ -171,7 +171,7 @@ start:  cld
         mov ax,0x4C00
         jmp vexit
 .d:     call ovprint                    ; /O: the override line, once, before anything is set
-        cmp byte [vreq],1               ; /V: debug log in VSHOW.DBG
+        cmp byte [vreq],1               ; /V: debug log in VBESHOW.DBG
         jne .d1
         push bx
         push cx
@@ -442,7 +442,7 @@ povnib: cmp al,'0'
 .n:     stc
         ret
 
-; The override line, once at the start: "VSHOW x.x: override CR54=1F, SR18=40". Nothing without /O.
+; The override line, once at the start: "VBESHOW x.x: override CR54=1F, SR18=40". Nothing without /O.
 ovprint:
         cmp byte [ocnt],0
         je .x
@@ -722,7 +722,7 @@ fmt3:   mov di,tbuf
         stosb
         ret
 
-; /A: every mode VSHOW can show, in list order. Expect a beep for each mode once its picture is up;
+; /A: every mode VBESHOW can show, in list order. Expect a beep for each mode once its picture is up;
 ; the summary lists each mode with its measured Hz/kHz, or the reason it was skipped.
 runall: mov dword [vib],'VBE2'
         mov ax,0x4F00
@@ -850,7 +850,7 @@ menu:   mov dword [vib],'VBE2'
         loop .cp
         mov word [es:di],0xFFFF
 .cd:    pop ds
-        ; keep the modes VSHOW can show
+        ; keep the modes VBESHOW can show
         mov si,mlist
         xor bx,bx                       ; entry count
 .f:     lodsw
@@ -998,7 +998,7 @@ menu:   mov dword [vib],'VBE2'
         jmp vexit
 
 ; Same acceptance rules as showone, without setting the mode: used to build the menu.
-modeok: ; mode info in mi: CF if VSHOW cannot show it (same rules as showone); keeps BX
+modeok: ; mode info in mi: CF if VBESHOW cannot show it (same rules as showone); keeps BX
         push bx
         call .chk
         pop bx
@@ -1911,7 +1911,7 @@ vexit:  push ax                         ; AX = exit code
         mov ah,0x68                     ; commit a redirected log
         int 0x21
         call vdone                      ; close the /V log
-        mov ah,0x0D                     ; SMARTDRV: the log and VSHOW.DBG
+        mov ah,0x0D                     ; SMARTDRV: the log and VBESHOW.DBG
         int 0x21
         pop ax
         int 0x21
@@ -1965,15 +1965,15 @@ ddec:   push di
         pop di
         ret
 
-s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,10
-        db '  VSHOW               list the VESA modes the BIOS reports',13,10
-        db '  VSHOW mode [/L]     show one mode; mode in hex: 106, 0x106 or 106h',13,10
-        db '  VSHOW /I [/L]       interactive: arrows select a mode, Enter shows it,',13,10
+s_use   db 'VBESHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,10
+        db '  VBESHOW               list the VESA modes the BIOS reports',13,10
+        db '  VBESHOW mode [/L]     show one mode; mode in hex: 106, 0x106 or 106h',13,10
+        db '  VBESHOW /I [/L]       interactive: arrows select a mode, Enter shows it,',13,10
         db '                      any key returns to the list, L toggles the pattern, Esc quits',13,10
-        db '  VSHOW /A [/L]       every graphics mode in turn: beep when shown,',13,10
+        db '  VBESHOW /A [/L]       every graphics mode in turn: beep when shown,',13,10
         db '                      any key = next mode, Esc = stop, summary at the end',13,10
-        db '  VSHOW /R [/L]       robot: as /A, each mode about 0.5 s, no keys (Esc stops); for',13,10
-        db '                      logs of every mode switch, e.g. VSHOW /R /V /S > VSHOW.LOG',13,10
+        db '  VBESHOW /R [/L]       robot: as /A, each mode about 0.5 s, no keys (Esc stops); for',13,10
+        db '                      logs of every mode switch, e.g. VBESHOW /R /V /S > VBESHOW.LOG',13,10
         db '  /O SR18=40         override a register after each mode set, before the picture and',13,10
         db '                      the measurement: SR/CR/GR/AR with a 1-2 digit hex index and value',13,10
         db '                      (up to 8, repeat /O); S3 extended registers are unlocked for the',13,10
@@ -1982,7 +1982,7 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db '                      AR13 pixel panning, with the measured refresh and the picture',13,10
         db '  /L                  1-pixel vertical line pattern (LCD clock/phase adjustment)',13,10
         db '                      instead of the colour bars',13,10
-        db '  /V                  debug log: ROM version, BIOS calls, registers and timing in VSHOW.DBG',13,10
+        db '  /V                  debug log: ROM version, BIOS calls, registers and timing in VBESHOW.DBG',13,10
         db '  /S                  silent: no monitor warning, no key press before the modes',13,10
         db '  /H, /?, /HELP       this help',13,10
         db 'Each mode shows a white frame, the pattern, the mode, measured refresh,',13,10
@@ -1990,12 +1990,12 @@ s_use   db 'VSHOW ',VERSION,' - VESA mode viewer for monitor and LCD checks',13,
         db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
         db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
         db 'by a line frequency above its range: do not use one.',13,10,'$'
-s_mon   db 'VSHOW ',VERSION,' interactive mode',13,10,13,10
+s_mon   db 'VBESHOW ',VERSION,' interactive mode',13,10,13,10
         db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
         db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
         db 'by a line frequency above its range: do not use one.',13,10
         db 13,10,'Press any key to continue, Esc to cancel.',13,10,'$'
-s_monw  db 'VSHOW ',VERSION,13,10
+s_monw  db 'VBESHOW ',VERSION,13,10
         db 'Monitor: the modes reach a 75 kHz line frequency (1600x1200 at 60 Hz). An LCD shows',13,10
         db 'out of range and takes no harm; an old fixed-frequency or low-end CRT can be damaged',13,10
         db 'by a line frequency above its range: do not use one.',13,10
@@ -2003,15 +2003,15 @@ s_monw  db 'VSHOW ',VERSION,13,10
 s_monw_len equ $-s_monw
 warned  db 0
 silent  db 0                            ; /S given
-s_vname db 'VSHOW.DBG',0
-s_vnomem db 'VSHOW ',VERSION,': not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
-s_bad   db 'VSHOW ',VERSION,': bad argument.',13,10,13,10,'$'
-s_novbe db 'VSHOW ',VERSION,': no VESA BIOS (4F00 failed).',13,10,'$'
+s_vname db 'VBESHOW.DBG',0
+s_vnomem db 'VBESHOW ',VERSION,': not enough memory for the /V debug buffer, /V ignored.',13,10,'$'
+s_bad   db 'VBESHOW ',VERSION,': bad argument.',13,10,13,10,'$'
+s_novbe db 'VBESHOW ',VERSION,': no VESA BIOS (4F00 failed).',13,10,'$'
 s_list  db 13,10,'Mode  Resolution',13,10,'$'
 s_text  db ' text$'
 s_na    db ' (n/a)$'
 s_crlf  db 13,10,'$'
-s_mode  db 'VSHOW ',VERSION,': mode $'
+s_mode  db 'VBESHOW ',VERSION,': mode $'
 s_colon db ': $'
 s_status db ', BIOS status $'
 s_e4f01 db 'mode info (4F01) failed$'
@@ -2020,13 +2020,13 @@ s_need1 db 'not supported: needs $'
 s_need2 db ' KB, the card has $'
 s_need3 db ' KB (4F00)$'
 s_etext db 'is a text mode$'
-s_emodel db 'memory model / colour depth not supported by VSHOW$'
+s_emodel db 'memory model / colour depth not supported by VBESHOW$'
 s_ewin  db 'no readable+writable window$'
 s_e4f02 db 'mode set (4F02) failed$'
 s_sep   db ', $'
-s_ver   db 'VSHOW ',VERSION,': $'
+s_ver   db 'VBESHOW ',VERSION,': $'
 s_m     db 'Mode ',0
-s_ovr   db 'VSHOW ',VERSION,': override',0
+s_ovr   db 'VBESHOW ',VERSION,': override',0
 s_hz    db ' Hz  ',0
 s_khz   db ' kHz  ',0
 s_lines db ' lines total',0
@@ -2035,11 +2035,11 @@ s_info2 db 0
 s_info3 db 'Press any key',0
 s_back  db 'Any key: back to the list',0
 s_last  db 'Last: ',0
-s_mt1   db 'VSHOW ',VERSION,' - supported graphics modes',0
+s_mt1   db 'VBESHOW ',VERSION,' - supported graphics modes',0
 s_mt2   db 'Up/Down/PgUp/PgDn select, Enter show, L line pattern, Esc quit',0
 s_pon   db '  [pattern: lines] ',0
 s_poff  db '  [pattern: bars]  ',0
-s_none  db 'VSHOW ',VERSION,': no graphics mode VSHOW can show.',13,10,'$'
+s_none  db 'VBESHOW ',VERSION,': no graphics mode VBESHOW can show.',13,10,'$'
 s_of    db ' of ',0
 s_next  db ': any key = next mode, Esc = stop',0
 s_sep2  db ', ',0
@@ -2047,8 +2047,8 @@ s_crlf0 db 13,10,0
 s_colon0 db ': ',0
 s_skip  db ', skipped',13,10,0
 s_stopped db 'Stopped with Esc.',13,10,0
-s_res   db 'VSHOW ',VERSION,' /A results:',13,10,'$'
-s_resr  db 'VSHOW ',VERSION,' /R results:',13,10,'$'
+s_res   db 'VBESHOW ',VERSION,' /A results:',13,10,'$'
+s_resr  db 'VBESHOW ',VERSION,' /R results:',13,10,'$'
 
 lines   db 0
 ocnt    db 0                            ; /O: the override count (entries in otab)

@@ -246,7 +246,7 @@ jobs:
   stock:
     # The tools and every emulator test, those tagged patch too (make stock-test, tests.py --stock), on
     # the three stock reference ROMs. Failures are expected and do not fail the run (not in
-    # build-and-test); the logs (S3TEST, S3COMPAT, VSHOW, VGALOG, S3REGS) are kept as an artifact.
+    # build-and-test); the logs (S3TEST, S3COMPAT, VBESHOW, VGALOG, S3REGS) are kept as an artifact.
     # Same path gate as job test: only when src/roms/** changed (or workflow_dispatch).
     name: Stock ROM ${{ matrix.chip }} (informational)
     needs: changes

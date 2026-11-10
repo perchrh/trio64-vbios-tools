@@ -6,7 +6,7 @@
 ; - lfbchk: the 4F05/4F03 linear test (p7, unchanged)
 ; Why: with the booster on in a full-screen DOS box, Windows 98's S3 driver restores the box after
 ; Alt+Tab with MISC = 63h (the fixed 25 MHz clock, 400-line sync) and the monitor cannot show it
-; (VSHOW 101h/103h every time on the card; without the booster as rarely as with the stock BIOS).
+; (VBESHOW 101h/103h every time on the card; without the booster as rarely as with the stock BIOS).
 ; README "Windows 9x driver test".
 bits 16
 org 0x7C8B
