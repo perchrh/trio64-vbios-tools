@@ -2088,6 +2088,32 @@ def text_pattern(r, c):
     return ((7 * c + 13 * r) & 0xFF) | ((((5 * c + 11 * r) & 0x7F) | 0) << 8)
 
 
+def t_mono_4f05(c):
+    """Bank switch in a mono mode: AX=4F05 BH=0 in mode 07h must write CR6A at the mono CRTC port
+    3B4h (MISC bit 0 = 0); writes to 3D4h are not decoded there (#193). Traces the OUT ports of one
+    4F05 call and checks where the CR6A index write went. If the CRTC port is hardcoded to 3D4h
+    (the pre-p27 code) this fails - it is in EXPECTED_FAIL, so it shows as XFAIL, not red CI."""
+    m = c.machine()
+    m.int10(0x0007)
+    check(m.r['misc'] & 1 == 0, 'mode 07h: MISC bit 0 not clear')
+    outs = []
+    def h_out(uc, port, size, val, u):
+        outs.append((port, val))
+    h = m.mu.hook_add(UC_HOOK_INSN, h_out, None, 1, 0, UC_X86_INS_OUT)
+    res = m.int10(0x4F05, bx=0, dx=3)
+    m.mu.hook_del(h)
+    check(res['ax'] == 0x004F, '4F05 in 07h: AX=%04X' % res['ax'])
+    # the CR6A write is a word OUT of (bank<<8)|6Ah to the CRTC port: it must go to 3B4h, and no
+    # CRTC write may go to 3D4h/3D5h, which are not decoded in a mono mode (#193)
+    bad = [p for p, v in outs if p in (0x3D4, 0x3D5)]
+    cr6a = [p for p, v in outs if p in (0x3B4, 0x3D4) and (v & 0xFF) == 0x6A]
+    check(not bad, '4F05 in 07h: CRTC writes to the colour port %s (not decoded in a mono mode, #193)'
+          % [hex(p) for p in bad])
+    check(cr6a == [0x3B4], '4F05 in 07h: CR6A index written to %s, expected [3B4h]' % [hex(p) for p in cr6a])
+    m.int10(0x0003)
+    return '4F05 in 07h, CR6A via %s' % ([hex(p) for p in cr6a] or 'no write')
+
+
 def t_mono(c):
     """Monochrome addressing (mode 07h at B000, CRTC at 3B4h, mode 0Fh) and the equipment word."""
     m = c.machine()
@@ -2968,7 +2994,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vshow', t_vshow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
@@ -2985,6 +3011,11 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # patched ROM, so the test may cross to the clean side (#201). The tests without it carry patch
 # expectations (tagged patch) or reference-derived tolerances (S3COMPAT_KNOWN, S3COMPAT_KNOWN_4MB,
 # T64_BASE, VPLUS_BASE) and stay on the dirty side until the #201 audit splits them.
+# Tests that are expected to fail on the current ROM level, with the reason: they expose a known
+# issue (the result is XFAIL, not FAIL, so CI stays green; XPASS when fixed). #193: the fast 4F05
+# must pick the CRTC port from MISC bit 0; a hardcoded 3D4h is not decoded in the mono modes.
+EXPECTED_FAIL = {'mono_4f05': '#193: 4F05 in a mono mode must use the CRTC port 3B4h'}
+
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu cleanroom', 'rom_patches': 'rom patch emu vram',
     'vga_registers': 'mda cga ega vga emu cleanroom', 'vga_palettes': 'cga ega vga emu cleanroom',
@@ -2992,7 +3023,7 @@ TAGS = {
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
-    'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'errors': 'call cga ega vga vbe emu vram',
+    'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu cleanroom', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
     '775_writes': 's3 emu vram cleanroom', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu cleanroom',
@@ -3060,11 +3091,18 @@ def run_test(c, name, fn, verbose):
         if n:
             return 'PASS  (%d line%s as in %s)' % (n, 's' if n > 1 else '', '1.03-08, VPLUS_BASE' if c.vours
                                                      else '1.5-07, T64_BASE'), False, time.time() - t0
-        bad = True
-        res = 'FAIL  %s' % e
+        if name in EXPECTED_FAIL:
+            res = 'XFAIL %s' % EXPECTED_FAIL[name]
+        else:
+            bad = True
+            res = 'FAIL  %s' % e
         if verbose:
             import traceback
             traceback.print_exc()
+    else:
+        pass
+    if not bad and name in EXPECTED_FAIL and res.startswith('PASS'):
+        res = 'XPASS (%s)' % EXPECTED_FAIL[name]
     return res, bad, time.time() - t0
 
 
