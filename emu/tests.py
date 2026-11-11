@@ -79,7 +79,9 @@ Tests
   vbeshow           VBESHOW 101 runs; with /V the output is the same and VBESHOW.DBG is well formed; the
                    monitor note is in the /H and /? help of VBESHOW, S3TEST and S3COMPAT, shown once
                    before the VBESHOW /I list, and S3TEST, S3COMPAT and VBESHOW (a mode, /A) print it on
-                   stderr with a key prompt, where Esc cancels (/S prints nothing)
+                   stderr with a key prompt, where Esc cancels (/S prints nothing); /R /S runs through
+                   every listed mode, and on our Trio64V+ ROM 10Dh-10Fh measure about 69.8 Hz (the DCLK
+                   halved by SR01 bit 3; 69.7 Hz on the Hercules card, #238)
   vgashow           VGASHOW lists the standard modes 00h-13h and runs them (/A, /R) with measured
                    refresh and line frequency; "VGASHOW 13" prints the result line (mode, resolution,
                    Hz, kHz, lines); /V log VGASHOW.DBG with D:TEST mode, D:REG and D:FRM records; all
@@ -1191,6 +1193,12 @@ def t_vbeshow(c):
     miss = [v for v in want if 'Mode %04X' % v not in out]
     check(rr.exit == ('exit', 0) and 'stopped' not in out and '/R results:' in out and want and not miss,
           'VBESHOW /R /S did not run through the modes without keys: %s, missing %s' % (rr.exit, miss))
+    if c.vours:                    # 10Dh-10Fh: the DCLK halved by SR01 bit 3 (p2), 69.8 Hz in the emulator,
+        for v in (0x10D, 0x10E, 0x10F):   # 69.7 Hz measured on the Hercules card with VBESHOW /R (#238)
+            line = next((l for l in out.split('\r\n') if l.startswith('Mode %04X' % v)), '')
+            hz = re.search(r'([\d.]+) Hz', line)
+            check(hz is not None and abs(float(hz.group(1)) - 69.8) < 1,
+                  'VBESHOW /R: Mode %03X line %r, expected about 69.8 Hz (10Dh-10Fh, #238)' % (v, line))
     ri = c.machine(keys=[0x011B]).run_com(com, '/I')
     check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to cancel' in ri.stdout,
           'VBESHOW /I: no monitor note before the list (Esc there quits)')
