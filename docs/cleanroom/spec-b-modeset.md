@@ -45,15 +45,17 @@ rules describe behaviour and hold unchanged for the ROM written from scratch.
   in SR12 (N bits 4-0, R bits 6-5) and SR13 (M bits 6-0) (PLL-1, PLL-2). In every mode of this part
   DCLK is programmed to the pixel clock.
 - **VCLK**: the signal that clocks pixel data into the internal RAMDAC (T32/64 9.3). For most modes VCLK
-  is generated directly from DCLK, same frequency and phase. SR15 bit 4 (DCLK/2, register description:
-  "Divide DCLK by 2", T32/64 14-15) divides DCLK by 2 into VCLK; T32/64 9.3 names its uses: clock-doubled
-  RAMDAC operation in colour mode 0001 (SR15 bit 4 or bit 6) and the DCLK halving of the modes with
-  AR10 bit 6 (256 CLR) = 1 / CR3A bit 4 = 0, enabled with CR33 bit 3 = 0 (T32/64 CR33 bit 3: 0 = VCLK is
-  the external pass-through clock, or DCLK/2 in those modes; 1 = VCLK is the internal DCLK). SR01 bit 3
-  (DCK 1/2, T32/64 SR1 bit 3: "internal character clock = 1/2 DCLK") is a different bit: it halves the
-  CRTC's character clock only, not VCLK - a mode whose pixels must run at DCLK / 2 needs SR15 bit 4
-  (CLK-5 in [`docs/chip-rules.md`](../chip-rules.md); SR15 is an extended sequencer register, so the
-  write takes effect only while SR8 = 06h, REG-4).
+  is generated directly from DCLK, same frequency and phase. SR15 bit 4 (DCLK/2, register description
+  "Divide DCLK by 2", T32/64 14-15) divides DCLK itself by 2, so VCLK and the CRTC's character clock
+  (which is DCLK unless SR01 bit 3 is set) both follow; T32/64 9.3 names the VCLK-side uses:
+  clock-doubled RAMDAC operation in colour mode 0001 (SR15 bit 4 or bit 6) and the DCLK halving of the
+  modes with AR10 bit 6 (256 CLR) = 1 / CR3A bit 4 = 0, enabled with CR33 bit 3 = 0 (T32/64 CR33 bit 3:
+  0 = VCLK is the external pass-through clock, or DCLK/2 in those modes; 1 = VCLK is the internal
+  DCLK). SR01 bit 3 (DCK 1/2, T32/64 SR1 bit 3: "internal character clock = 1/2 DCLK") is a different
+  bit: it halves the CRTC's character clock only, not VCLK - a mode whose pixels must run at DCLK / 2
+  needs SR15 bit 4 (CLK-5 in [`docs/chip-rules.md`](../chip-rules.md); SR15 is an extended sequencer
+  register, so the write takes effect only while SR8 = 06h, REG-4). On a V+ card the character clock
+  followed SR15 bit 4 as well (black-box: with the bit set the line rate halved with valid sync, #247/#238).
 - **Colour mode**: CR67 bits 7-4 (T32/64 table 8-1): mode 0 (0000b, 8 bpp, one pixel per VCLK),
   mode 8 (0001b, 8 bpp clock-doubled, two pixels per VCLK), mode 9 (0011b, 15 bpp), mode 10 (0101b,
   16 bpp), mode 13 (1101b, 24-bit colour in 4 bytes, the upper byte unused; CR50 bits 5-4 = 11b).
@@ -123,7 +125,7 @@ by the data book procedure and the rates it gives.
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
 | MODE-101 | The packed modes offered are 100h, 101h, 103h, 105h, 107h and 110h-117h, each with the resolution, colours and memory layout of the mode table. A mode is offered only when its memory need (pitch x YRes, the "Memory" column) fits the video memory found at POST (CR36 bits 7-5: 1, 2 or 4 MB, T64-MEM-5): with 1 MB, 107h, 112h, 115h, 116h and 117h are not offered. A mode not offered gets AX = 014Fh from 4F02 (nothing is changed) and mode attribute bit 0 = 0 from 4F01 | VBE 1.2 (4F01 ModeAttributes bit 0 "mode supported in hardware", 4F02 status 014Fh); T64-MEM-5 | must | emu t_errors (1 MB: 4F02 of 107h, 112h, 115h-117h); S3COMPAT 'VBE VESA nnnn' INFO for unsupported modes; S3TEST 'VBE Mode 0107 (over 1 MB) SKIP' |
-| MODE-102 | Not offered: 106h (1280x1024 in 16 planar colours needs 108 MHz in a 4-bit VGA-style mode, which has no clock doubling; colour mode 0 allows 80 MHz, CLK-1) and 10Dh-10Fh (320x200 at 70 Hz needs a 12.59 MHz pixel clock, below the lowest PLL output, 135 MHz / 8 = 16.9 MHz, PLL-1 with R at most 3; whether SR01 bit 3 can halve the dot clock in an enhanced mode is MQ-9). No mode is offered interlaced, and no mode whose timing exceeds the colour mode's clock limit (MODE-120): 1024x768 in 16M colours (65 MHz > 50 MHz in mode 13) and 1280x1024 in 32K/64K colours (108 MHz > 80 MHz in modes 9/10) do not exist on the Trio64 at 60 Hz | T32/64 table 8-1 (CLK-1), 9.1 (PLL-1); project design choice ([`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM", scope of the first version: 60 Hz or more, never interlaced) | must | emu t_errors; S3COMPAT 'VBE VESA nnnn' (WARN 10 interlace, WARN 02 DCLK above the maximum) |
+| MODE-102 | Not offered: 106h (1280x1024 in 16 planar colours needs 108 MHz in a 4-bit VGA-style mode, which has no clock doubling; colour mode 0 allows 80 MHz, CLK-1) and 10Dh-10Fh (320x200 at 70 Hz needs a 12.59 MHz pixel clock; the PLL cannot make it - the lowest output is 135 MHz / 8 = 16.9 MHz, PLL-1 with R at most 3 - but a 25.175 MHz DCLK halved by SR15 bit 4 gives it: MQ-9, answered 11 November 2026; the modes stay out of the first version by scope). No mode is offered interlaced, and no mode whose timing exceeds the colour mode's clock limit (MODE-120): 1024x768 in 16M colours (65 MHz > 50 MHz in mode 13) and 1280x1024 in 32K/64K colours (108 MHz > 80 MHz in modes 9/10) do not exist on the Trio64 at 60 Hz | T32/64 table 8-1 (CLK-1), 9.1 (PLL-1); project design choice ([`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM", scope of the first version: 60 Hz or more, never interlaced) | must | emu t_errors; S3COMPAT 'VBE VESA nnnn' (WARN 10 interlace, WARN 02 DCLK above the maximum) |
 | MODE-103 | The installed memory decides; the board's memory type (fast page or EDO, CR36 bits 3-2) changes no value of this part except through the MCLK, which lowers M in MODE-136 when the FIFO wait no longer fits | T64-MEM-3, T64-MEM-5 | note | not checked |
 
 ## Timing
@@ -274,7 +276,7 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
    0Dh-12h, or 0 there?
 9. **[Answered 11 November 2026; offering the modes stays a scope decision]** **MQ-9** Answered for the modes: part C ([`spec-c-vbe.md`](spec-c-vbe.md) VBE-10) offers the planar 102h and 104h
    through the VGA 16-colour path and no VBE text modes 108h-10Ch. The halving question is answered by the data book: SR01 bit 3 cannot halve the dot clock in an enhanced mode - it
-   halves only the internal character clock (SR1 bit 3, CLK-5), not VCLK. The bit that reaches VCLK is SR15 bit 4, "Divide DCLK by 2" (SR15 register description, T32/64 14-15),
+   halves only the internal character clock (SR1 bit 3, CLK-5), not VCLK. The bit that reaches VCLK is SR15 bit 4, "Divide DCLK by 2" (SR15 register description, T32/64 14-15 - the register divides DCLK itself, so the CRTC's character clock, which is DCLK, follows as well),
    which 9.3 documents for colour mode 0001 (clock doubling, bit 4 or bit 6) and the 4-bit modes (AR10 bit 6 / CR3A bit 4 with CR33 bit 3 = 0); on a V+ card the pixel path also
    follows SR15 bit 4 in the high-colour modes (black-box observation, #247). So 10Dh-10Fh (320x200 direct colour, VESA modes, 70 Hz timing) are possible with a 25.175 MHz DCLK
    halved by SR15 bit 4; whether the first version offers them stays with MODE-102's scope.

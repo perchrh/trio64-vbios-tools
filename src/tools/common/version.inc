@@ -12,13 +12,13 @@
 ; VER765  the same for our Trio64V+ ROM: src/roms/vplus/s3vpatch.py, S3TEST on a Trio64V+ (make VER765=...)
 ; VER764  the same for our Trio64 ROM: src/roms/trio64/s3tpatch.py, S3TEST on a Trio64 (make VER764=...)
 %ifndef VERSION
-%define VERSION '1.0.1'
+%define VERSION '1.0.3'
 %endif
 %ifndef VER775
 %define VER775 '2.04.07-p27'
 %endif
 %ifndef VER765
-%define VER765 '1.03-08N-p10'
+%define VER765 '1.03-08N-p11'
 %endif
 %ifndef VER764
 %define VER764 '1.5-07-p6'

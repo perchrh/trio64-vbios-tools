@@ -42,10 +42,13 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
          and 1280x1024 are cut off their lists, so refresh index 0 gives the lowest non-interlaced rate;
          10Dh-10Fh keep 25.06 MHz (VCO 200.5 MHz) in place of 12.62 MHz (VCO 101 MHz, below the 135 MHz
          minimum), halved by SR15 bit 4 after the mode set.
-  tables (p8, #247) the CRTC tables of 10Dh-10Fh (02B8h, 0693h): the vertical total 449 -> 525 lines
-         (the 640x480 at 60 Hz frame), so with the halved DCLK the modes run at 31.3 kHz, 59.7 Hz
-         instead of 31.5 kHz, 69.8 Hz - 60 Hz, a rate LCDs commonly take, instead of the ~70 Hz of the
-         VESA 320x200 timing (owner's decision, #247)
+  tables (p11, #238/#247) 10Dh-10Fh keep their CRTC tables (02B8h, 0693h) as in 1.03-08: the 449-line
+         frame of the VESA 320x200 70 Hz timing. p8 had given them a 525-line frame (the 640x480 at 60
+         Hz vertical) for 59.7 Hz at the halved DCLK; on a card at p10 that frame showed the 400-line
+         picture in the top 400 of 525 lines (squished), and 10Fh no picture at all, so p11 reverts it:
+         with the halved DCLK the modes run at 31.3 kHz, 69.8 Hz - the 70 Hz the project rules keep for
+         320x200, and exactly the timing registers the stock Phoenix BIOS of the STB card programs
+         (SR12/SR13 61h 28h, SR15 13h, CR06/CR07 BFh 1Fh), which displays all three modes correctly
          shared with the other builds (src/roms/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
@@ -57,8 +60,8 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
 
 Not applied, and why (docs/765-rom.md): the VCO fix of the Trio64V2 (R with 3 bits, divide by 16, so
 12.6 MHz from a VCO in range; the Trio64V+ post divider R has 2 bits, at most divide by 8, so 12.6 MHz
-for 10Dh-10Fh cannot come from a VCO of 135 MHz or more - p2 gives them 25.06 MHz halved by SR15 bit 4,
-p8 their CRTC tables a 525-line frame for 60 Hz), the FIFO fix,
+for 10Dh-10Fh cannot come from a VCO of 135 MHz or more - p2 gives them 25.06 MHz halved by SR15 bit 4
+at the 449-line frame, the stock BIOS's own configuration), the FIFO fix,
 CR23/CR26, the POST delay and the DDC fixes (Trio64V2 registers or code 1.03-08 does not have), the
 VBE 2.0 functions (out of scope) and the black level (a card decision).
 
@@ -84,7 +87,7 @@ REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   #
 # only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = 'd715365c584d4592277d65fd16dcf8a46b801d6b79c95d585bfd4d70e4652b40'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = '479b3192799e5c2606709e06c09095be7ef4c1052febff968da9c108da880c12'  # 1.03-08N-p10 (NASM 3.02), emulator tests passed
+RESULT_SHA = '791062e5d0301a4d33ac5469886d90f924d379b1337fbaf5b8c14ebe374d9ea9'  # 1.03-08N-p11 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -188,14 +191,14 @@ ILACE_ENT = (0x055A, 0x0587, 0x0605, 0x0656)
 # ignored (V+ 18.1, SR8), so at p8/p9 the write did not latch on the Hercules 86C765 card (SR15 read back
 # 03h, 62.6 kHz, 119.3 Hz, invalid signal on the Eizo; results/86C765-p9-hercules.ZIP).
 HALF_DCLK = {0x05A2: 'b8 02 80 7d 70', 0x05AB: '93 06 80 7d 70'}
-# p8 (#247, kept at p9/p10): the CRTC tables the two refresh entries above point at (02B8h for 65h/66h,
-# 0693h for 67h; nothing else references them): CR06/CR07, the vertical total 449 -> 525 lines
-# (CR06 = 0Bh, CR07 = 3Eh: VT bit 9 in, VT bit 8 out; the 640x480 at 60 Hz frame), so with the halved
-# DCLK the modes run at 31.3 kHz, 59.7 Hz instead of 31.5 kHz, 69.8 Hz - the 60 Hz class LCDs commonly
-# take, instead of the ~70 Hz of the VESA 320x200 timing (owner's decision, #247). The horizontal and
-# display registers stay: 320x200 at 80 % of the line, double scanned (CR09 = 41h), 400 of 525 lines
-# high, as 320x200 sits in a 640x480 frame. Nothing else in 1.03-08 uses these tables.
-CRTC_320X200 = {0x02B8: '5f 4f 51 82 52 9f bf 1f 00 41', 0x0693: '2d 27 28 00 29 10 bf 1f 00 41'}
+# p11 (#238/#247): the CRTC tables the two refresh entries above point at (02B8h for 65h/66h, 0693h for
+# 67h; nothing else references them) stay as in 1.03-08: CR06 = BFh, CR07 = 1Fh, the 449-line frame of the
+# VESA 320x200 70 Hz timing, 400 display lines double scanned (CR09 = 41h). p8 had patched them to a
+# 525-line frame (CR06 = 0Bh, CR07 = 3Eh, the 640x480 at 60 Hz vertical) for 59.7 Hz at the halved DCLK;
+# on a card at p10 that showed the picture squished into the top 400 of 525 lines, and 10Fh no picture
+# at all (docs/765-rom.md "10Dh-10Fh"), so p11 reverts the frame: with the halved DCLK the modes run at
+# 31.3 kHz, 69.8 Hz, exactly what the stock Phoenix BIOS of the STB card programs for them (SR12/SR13
+# 61h 28h, SR15 = 13h, CR06/CR07 BFh 1Fh) and displays correctly on the Eizo.
 
 
 def drop_interlaced(d, put):
@@ -309,11 +312,7 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     put(a, d[a:a + 5], call(a, lab['vbe32']) + b'\x90\x90', 'VBE dispatcher: keep the 32-bit registers (p2)')
     drop_interlaced(d, put)
     for off, b in HALF_DCLK.items():
-        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR15 bit 4 (p2, p8/p10 #247)')
-    for off, b in CRTC_320X200.items():
-        old = bytes.fromhex(b)
-        new = old[:6] + bytes.fromhex('0b 3e') + old[8:]
-        put(off, b, new.hex(' '), '320x200x15/16/32 CRTC table: vertical total 525 lines, 59.7 Hz at 31.3 kHz (p8 #247, kept p10)')
+        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR15 bit 4 (p2, p8/p10 #247); the CRTC tables stay at the 449-line frame (p11)')
     for off, old, new in DEFAULT_MCLK:
         if old == new:
             if bytes(d[off:off + 2]) != bytes.fromhex(old):

@@ -14,15 +14,17 @@
 ;   CHARACTER clock only (T32/64 SR1 bit 3): on a card the pixel path of 16 and 32 bpp did not follow
 ;   it (#247: 10Eh and 10Fh wrong, 10Dh fine). p8 uses SR15 bit 4, the DCLK / 2 that reaches VCLK
 ;   (T32/64 9.3, SR15 bit 4) - the stock Phoenix BIOS of the STB card halves these modes with it and
-;   displays them correctly - and their CRTC tables (02B8h, 0693h) give a 525-line frame, so the modes
-;   run at 31.3 kHz, 59.7 Hz instead of 31.5 kHz, 69.8 Hz (the 60 Hz class LCDs commonly take).
+;   displays them correctly - and their CRTC tables (02B8h, 0693h) keep the 449-line frame of the VESA
+;   320x200 70 Hz timing (p11 reverts p8's 525-line frame, which on a card at p10 showed the picture
+;   squished into the top 400 of 525 lines and no picture at all in 10Fh), so the modes run at
+;   31.3 kHz, 69.8 Hz - the 70 Hz class, exactly what the stock Phoenix BIOS of the STB card programs.
 ;   p9 wrote the bit with the synchronous reset released; p10 (#247) unlocks SR8 around the write: the
 ;   mode set relocks SR8 (00h, its lock routine at 0B51h) before it returns, and while SR8 does not hold
 ;   the unlock code xxxx0110b, writes to the extended sequencer registers SR9-SR6F are ignored (V+ 18.1,
 ;   SR8; T32/64 SR8: SR9-SR18) - so at p8/p9 the SR15 write never latched on a card: SR15 read back 03h,
-;   the modes ran at the undivided 25.06 MHz (62.6 kHz, 119.3 Hz at the 525-line frame, "Signal Error"
-;   on the Eizo; results/86C765-p8-hercules.ZIP, results/86C765-p9-hercules.ZIP). SR01 bit 3 latched at
-;   p2-p7 because SR01 is a standard sequencer register, below SR9, outside the lock.
+;   the modes ran at the undivided 25.06 MHz (62.6 kHz, 119.3 Hz at p8/p9's 525-line frame, "Signal
+;   Error" on the Eizo; results/86C765-p8-hercules.ZIP, results/86C765-p9-hercules.ZIP). SR01 bit 3
+;   latched at p2-p7 because SR01 is a standard sequencer register, below SR9, outside the lock.
 bits 16
 cpu 386
 %include "bios.inc"
