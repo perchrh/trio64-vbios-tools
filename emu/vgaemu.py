@@ -253,10 +253,10 @@ class Machine:
             clk = 14318180.0 * ((m & 0x7F) + 2) / (((n & 0x1F) + 2) * (1 << rr))
         else:
             return None, None, 19886, 525
-        if seq.get(1, 0) & 8:
+        if seq.get(1, 0) & 8:               # SR01 bit 3: the CRTC's character clock only (T32/64 14-6)
             clk /= 2
         if csel == 3 and seq.get(0x15, 0) & 0x10:
-            clk /= 2
+            clk /= 2                         # SR15 bit 4: "Divide DCLK by 2" - of DCLK itself (T32/64 14-15), so the CRTC and VCLK both follow (card #247/#238)
         cw = 8 if seq.get(1, 0) & 1 else 9
         htot = cr.get(0, 0) + (256 if cr.get(0x5D, 0) & 1 else 0) + 5
         hdisp = cr.get(1, 0) + (256 if cr.get(0x5D, 0) & 2 else 0) + 1

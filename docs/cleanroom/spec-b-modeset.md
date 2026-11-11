@@ -45,15 +45,17 @@ rules describe behaviour and hold unchanged for the ROM written from scratch.
   in SR12 (N bits 4-0, R bits 6-5) and SR13 (M bits 6-0) (PLL-1, PLL-2). In every mode of this part
   DCLK is programmed to the pixel clock.
 - **VCLK**: the signal that clocks pixel data into the internal RAMDAC (T32/64 9.3). For most modes VCLK
-  is generated directly from DCLK, same frequency and phase. SR15 bit 4 (DCLK/2, register description:
-  "Divide DCLK by 2", T32/64 14-15) divides DCLK by 2 into VCLK; T32/64 9.3 names its uses: clock-doubled
-  RAMDAC operation in colour mode 0001 (SR15 bit 4 or bit 6) and the DCLK halving of the modes with
-  AR10 bit 6 (256 CLR) = 1 / CR3A bit 4 = 0, enabled with CR33 bit 3 = 0 (T32/64 CR33 bit 3: 0 = VCLK is
-  the external pass-through clock, or DCLK/2 in those modes; 1 = VCLK is the internal DCLK). SR01 bit 3
-  (DCK 1/2, T32/64 SR1 bit 3: "internal character clock = 1/2 DCLK") is a different bit: it halves the
-  CRTC's character clock only, not VCLK - a mode whose pixels must run at DCLK / 2 needs SR15 bit 4
-  (CLK-5 in [`docs/chip-rules.md`](../chip-rules.md); SR15 is an extended sequencer register, so the
-  write takes effect only while SR8 = 06h, REG-4).
+  is generated directly from DCLK, same frequency and phase. SR15 bit 4 (DCLK/2, register description
+  "Divide DCLK by 2", T32/64 14-15) divides DCLK itself by 2, so VCLK and the CRTC's character clock
+  (which is DCLK unless SR01 bit 3 is set) both follow; T32/64 9.3 names the VCLK-side uses:
+  clock-doubled RAMDAC operation in colour mode 0001 (SR15 bit 4 or bit 6) and the DCLK halving of the
+  modes with AR10 bit 6 (256 CLR) = 1 / CR3A bit 4 = 0, enabled with CR33 bit 3 = 0 (T32/64 CR33 bit 3:
+  0 = VCLK is the external pass-through clock, or DCLK/2 in those modes; 1 = VCLK is the internal
+  DCLK). SR01 bit 3 (DCK 1/2, T32/64 SR1 bit 3: "internal character clock = 1/2 DCLK") is a different
+  bit: it halves the CRTC's character clock only, not VCLK - a mode whose pixels must run at DCLK / 2
+  needs SR15 bit 4 (CLK-5 in [`docs/chip-rules.md`](../chip-rules.md); SR15 is an extended sequencer
+  register, so the write takes effect only while SR8 = 06h, REG-4). On a V+ card the character clock
+  followed SR15 bit 4 as well (black-box: with the bit set the line rate halved with valid sync, #247/#238).
 - **Colour mode**: CR67 bits 7-4 (T32/64 table 8-1): mode 0 (0000b, 8 bpp, one pixel per VCLK),
   mode 8 (0001b, 8 bpp clock-doubled, two pixels per VCLK), mode 9 (0011b, 15 bpp), mode 10 (0101b,
   16 bpp), mode 13 (1101b, 24-bit colour in 4 bytes, the upper byte unused; CR50 bits 5-4 = 11b).
@@ -274,7 +276,7 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
    0Dh-12h, or 0 there?
 9. **[Answered 11 November 2026; offering the modes stays a scope decision]** **MQ-9** Answered for the modes: part C ([`spec-c-vbe.md`](spec-c-vbe.md) VBE-10) offers the planar 102h and 104h
    through the VGA 16-colour path and no VBE text modes 108h-10Ch. The halving question is answered by the data book: SR01 bit 3 cannot halve the dot clock in an enhanced mode - it
-   halves only the internal character clock (SR1 bit 3, CLK-5), not VCLK. The bit that reaches VCLK is SR15 bit 4, "Divide DCLK by 2" (SR15 register description, T32/64 14-15),
+   halves only the internal character clock (SR1 bit 3, CLK-5), not VCLK. The bit that reaches VCLK is SR15 bit 4, "Divide DCLK by 2" (SR15 register description, T32/64 14-15 - the register divides DCLK itself, so the CRTC's character clock, which is DCLK, follows as well),
    which 9.3 documents for colour mode 0001 (clock doubling, bit 4 or bit 6) and the 4-bit modes (AR10 bit 6 / CR3A bit 4 with CR33 bit 3 = 0); on a V+ card the pixel path also
    follows SR15 bit 4 in the high-colour modes (black-box observation, #247). So 10Dh-10Fh (320x200 direct colour, VESA modes, 70 Hz timing) are possible with a 25.175 MHz DCLK
    halved by SR15 bit 4; whether the first version offers them stays with MODE-102's scope.
