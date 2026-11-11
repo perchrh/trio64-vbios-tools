@@ -45,7 +45,9 @@ rules describe behaviour and hold unchanged for the ROM written from scratch.
   in SR12 (N bits 4-0, R bits 6-5) and SR13 (M bits 6-0) (PLL-1, PLL-2). In every mode of this part
   DCLK is programmed to the pixel clock.
 - **VCLK**: the clock that latches pixels into the RAMDAC: DCLK, or DCLK / 2 with SR15 bit 4 = 1
-  (T32/64 9.3).
+  (T32/64 9.3). SR01 bit 3 (DCK 1/2) is a different bit: it halves the internal character clock of the
+  CRTC only, not VCLK (T32/64 SR1 bit 3); a mode whose pixels must run at DCLK / 2 needs SR15 bit 4
+  (CLK-5 in [`docs/chip-rules.md`](../chip-rules.md)).
 - **Colour mode**: CR67 bits 7-4 (T32/64 table 8-1): mode 0 (0000b, 8 bpp, one pixel per VCLK),
   mode 8 (0001b, 8 bpp clock-doubled, two pixels per VCLK), mode 9 (0011b, 15 bpp), mode 10 (0101b,
   16 bpp), mode 13 (1101b, 24-bit colour in 4 bytes, the upper byte unused; CR50 bits 5-4 = 11b).

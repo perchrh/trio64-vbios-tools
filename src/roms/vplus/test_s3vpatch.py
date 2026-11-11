@@ -14,10 +14,9 @@ Tests
   checksums      the 32 KB sum to 00 (byte 7FFFh makes it so) and have the 55AAh header with 32 KB size
   free_space     the bytes of the free block 7AE0-7FEF that no code uses are still 00, and 'Cardex1'
                  at 7FF0h is kept
-  unchanged      outside the patch sites, the code blocks, the table edits of p2 (the interlaced modes and
-                 refresh entries), the MCLK entries (p6: A6h 50.11 MHz), the sign-on and the checksum
-                 every byte is as in 1.03-08 (the DCLK
-                 values among them: no VCO fix on the Trio64V+)
+  unchanged      outside the patch sites, the code blocks, the table edits of p2 (the interlaced modes)
+                 and p8 (the 10Dh-10Fh refresh entries and CRTC tables), the MCLK entries (p6: A6h
+                 50.11 MHz), the sign-on and the checksum every byte is as in 1.03-08
   input_64k      a 64 KB image with 1.03-08 in the lower half gives the same result, whatever its upper
                  half holds
   size64         the default output is the same 32 KB twice, 64 KB (#78); --size 32 the 32 KB alone
@@ -150,6 +149,7 @@ def main():
         sites.update(range(off, off + len(b.split())))
     sites.update(off + 2 for off in s3vpatch.ILACE_END)
     sites.update(i for off in s3vpatch.HALF_DCLK for i in (off + 3, off + 4))
+    sites.update(i for off in s3vpatch.CRTC_320X200 for i in (off + 6, off + 7))
     sites.update(i for off, _, _ in s3vpatch.DEFAULT_MCLK for i in (off, off + 1))   # the MCLK entries (p6)
     signon = set(range(0x3F, 0x8F))
     diff = [i for i in range(0x8000) if img[i] != ref[i] and i not in used | sites | signon | {0x7FFF}]

@@ -18,7 +18,7 @@
 %define VER775 '2.04.07-p27'
 %endif
 %ifndef VER765
-%define VER765 '1.03-08N-p7'
+%define VER765 '1.03-08N-p8'
 %endif
 %ifndef VER764
 %define VER764 '1.5-07-p6'
