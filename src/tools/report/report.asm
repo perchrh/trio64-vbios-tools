@@ -25,7 +25,7 @@
 ;   REPORT           pack the run's files and print the archive name on stdout
 ;   REPORT /H, /?    this help
 ;   Files, in order: *.log, *.dbg, s3regs.txt, vgalog*.bin (VGALOG.BIN, the per-tool VGALOG0.BIN...
-;   dumps of runall.bat, VGALOGR.BIN), s3regs3.txt.
+;   dumps of runall.bat), s3regs3.txt.
 ;   A missing file is a line "missing <name>" on stderr and is left out. Stdout is the version
 ;   line and the archive name. Exit 0 when the archive was written, 1 when it was not.
 ;
