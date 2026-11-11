@@ -292,6 +292,7 @@ start:  cld
         PS 'Values in detail lines: REG=actual(expected), masked to the bits under test.',13,10
         PS 'VGA fail bits: 1 regs vs IBM  2 BIOS data/AH=0F/AH=1B  4 S3 ext left on',13,10
         PS '  8 refresh  10 memory  20 default DAC (256/EGA/CGA)  40 refresh vs CRTC/PLL math',13,10
+        PS '  80 4F05 in a mono mode did not reach the CRTC at 3B4h (#193)',13,10
         PS 'VGA warn bits: 1 mode 10h/0Fh without 8x14 font  2 DAC entry wrong once, right on a 2nd read',13,10
         PS '  4 DAC entry right after the mode set again (also AX=101B: warn 2/4, fail 1 = wrong 3 times)',13,10
         PS 'Mode xxh 350 = the mode at 350 scan lines (AH=12 BL=30 first).',13,10
