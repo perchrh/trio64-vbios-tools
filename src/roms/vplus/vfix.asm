@@ -16,12 +16,13 @@
 ;   (T32/64 9.3, SR15 bit 4) - the stock Phoenix BIOS of the STB card halves these modes with it and
 ;   displays them correctly - and their CRTC tables (02B8h, 0693h) give a 525-line frame, so the modes
 ;   run at 31.3 kHz, 59.7 Hz instead of 31.5 kHz, 69.8 Hz (the 60 Hz class LCDs commonly take).
-;   p9: the SR15 write is done with the synchronous reset RELEASED. p8 wrote it under the reset
-;   (SR00 = 01h) and on the Hercules 86C765 card the write did not latch: SR15 read back 03h, the modes
-;   ran at 62.6 kHz, 119.2 Hz and the Eizo showed "Signal Error" (results/86C765-p8-hercules.ZIP,
-;   results/pictures/invalid_signal.jpg). The stock Phoenix BIOS writes SR15 = 13h in its own mode set
-;   and it latches there (results/86C765-stock-stb.ZIP), so p9 writes the bit as a normal mode set
-;   does, reset off.
+;   p9 wrote the bit with the synchronous reset released; p10 (#247) unlocks SR8 around the write: the
+;   mode set relocks SR8 (00h, its lock routine at 0B51h) before it returns, and while SR8 does not hold
+;   the unlock code xxxx0110b, writes to the extended sequencer registers SR9-SR6F are ignored (V+ 18.1,
+;   SR8; T32/64 SR8: SR9-SR18) - so at p8/p9 the SR15 write never latched on a card: SR15 read back 03h,
+;   the modes ran at the undivided 25.06 MHz (62.6 kHz, 119.3 Hz at the 525-line frame, "Signal Error"
+;   on the Eizo; results/86C765-p8-hercules.ZIP, results/86C765-p9-hercules.ZIP). SR01 bit 3 latched at
+;   p2-p7 because SR01 is a standard sequencer register, below SR9, outside the lock.
 bits 16
 cpu 386
 %include "bios.inc"
@@ -32,8 +33,10 @@ org 0x7D2E
 ; from reading the sequencer index to putting it back (p3, #116): an interrupt that writes the
 ; sequencer index without putting it back would send the SR15 write elsewhere. The popf at the end
 ; restores IF.
-; p9 (#247): no synchronous reset around the SR15 write - on the Hercules 86C765 card the write under
-; the reset did not latch (p8), with the reset released it does (as in the stock BIOS's mode set).
+; p9 (#247): no synchronous reset around the SR15 write. p10 (#247): the write goes through only with
+; SR8 unlocked - the mode set relocks it before returning, so msx writes SR8 = 06h (xxxx0110b) first and
+; puts 00h back after (what the mode set's own lock at 0B51h writes); while locked, SR9-SR6F ignore
+; writes (V+ 18.1, SR8), and SR15 is one of them.
 msx:    call    MODESET
         pushf
         push    ax
@@ -50,13 +53,17 @@ msx:    call    MODESET
         cli                             ; p3: no interrupt between the index read and its restore
         in      al,dx
         push    ax                      ; the sequencer index, put back below
+        mov     ax,0x0608               ; p10: SR8 = 06h, unlock the extended sequencer registers (SR9-SR6F)
+        out     dx,ax
         mov     al,0x15
         out     dx,al
         inc     dx
         in      al,dx
-        or      al,0x10                 ; SR15 bit 4 (p8/p9, #247): VCLK = DCLK / 2 (SR01 bit 3, the character
+        or      al,0x10                 ; SR15 bit 4 (p8, #247): VCLK = DCLK / 2 (SR01 bit 3, the character
         out     dx,al                  ; clock only, left the 16/32 bpp pixel path undivided on a card)
         dec     dx
+        mov     ax,0x0008               ; SR8 = 00h: relock, as the mode set's own lock does
+        out     dx,ax
         pop     ax
         out     dx,al
 .r:     pop     ds                      ; (the flags, IF among them, come back with the popf below)

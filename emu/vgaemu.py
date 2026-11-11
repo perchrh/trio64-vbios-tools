@@ -414,10 +414,16 @@ class Machine:
                                   r['crtc'].get(0x39, 0)))
             if p == 0x3C4: r['si'] = v
             elif p == 0x3C5:
-                r['seq'][r['si']] = v
-                self._wcfg_cache = None
-                if r['si'] == 4:
-                    self._remap()
+                if r['si'] >= 0x09 and Machine.chip != 'v2' and (r['seq'].get(0x08, 0) & 0x0F) != 0x06:
+                    pass        # the SR8 lock: while SR8 does not hold the unlock code xxxx0110b, writes
+                                # to the extended sequencer registers are ignored (V+ 18.1 SR8: SR9-SR6F;
+                                # T32/64 SR8: SR9-SR18). p8/p9 of the Trio64V+ ROM wrote SR15 with SR8
+                                # locked and the write did not latch on a card (#247)
+                else:
+                    r['seq'][r['si']] = v
+                    self._wcfg_cache = None
+                    if r['si'] == 4:
+                        self._remap()
             elif p in (0x3D4, 0x3B4): r['ci'] = v
             elif p in (0x3D5, 0x3B5):
                 r['crtc'][self._ci()] = v
