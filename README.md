@@ -1095,3 +1095,17 @@ this for our ROMs).
     limit), see [`spec-a-post.md`](docs/cleanroom/spec-a-post.md) POST-22/POST-23; no BIOS provenance needed.
   - Trio64V2 errata noted only there: CR8504 does not read back on the Trio64V2, and planar mode has a CPU
     read problem.
+
+### DirectX 8 SDK (owner's copy, dirty side only)
+
+- [`dx8sdk/`](dx8sdk/) (untracked, in `.gitignore`) is the Microsoft DirectX 8.0 SDK: headers, libraries,
+  vendor-neutral samples and the EULAs in `dx8sdk/doc/DirectXEULAs/`. Same posture as the DDKs: the SDK
+  EULA licenses, not sells, the product, so the folder is never committed and nothing from it is copied or
+  cited as provenance. Its only S3 content is the DXT1/DXT3/DXT5 texture formats, commented "S3 texture
+  compression technique" (`d3dxcore.h`, `d3d8types.h`, `ddraw.h`): S3TC, a ViRGE-era feature the Trio64V2
+  (86C775) does not have - the V2 book's feature list is 2D acceleration and video only and mentions no
+  texture compression at all, and the V+ book's "compressed" refers to Scenic/MX2 video over the LPB.
+  No Trio, ViRGE or PCI 5333:8901 reference exists anywhere in the SDK's text; its
+  samples are Microsoft's own vendor-neutral code. Noted on 11 November 2026, dirty side only: the SDK has
+  no information relevant to the VBIOS work; the S3 driver source for this chip family stays the 98 DDK
+  samples recorded above.
