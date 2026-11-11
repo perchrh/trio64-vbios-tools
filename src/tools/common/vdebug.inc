@@ -21,6 +21,9 @@
 ;   D:I10< AX= BX= CX= DX= SI= DI= BP= DS= ES= FL= T= after; T = duration in PIT counts (decimal,
 ;                                     1 count = 0.838 us)
 ;   D:REG MISC= FEAT=, SR00:, GR00:, CRxx:, AR00:, DAC:, BDA49:, BDA84:   register dump
+;   D:4F05 SR08= xx idx= xx sr08= xx sr08u= xx   S3TEST's 4F05 line: SR08 before the bank switch, the
+;                                     3C4h index and SR08 read back after it (raw), SR08 read again
+;                                     after unlocking (#237)
 ;   D:FRM n=  c c c ...               PIT counts per frame of a refresh measurement (decimal)
 ;   D:MEM a= exp= got=                a memory mismatch (address, expected, read)
 ;   D:DAC try=n ok | i= got= exp=     S3COMPAT DAC check, read n (1, 2, or 3 after the BIOS call

@@ -130,7 +130,10 @@ is for the Windows 9x desktop.
 
 Each source file starts with a header that says what is tested and which outcome is expected, and
 each test routine has a comment block with its fail and warn bits. S3TEST and S3COMPAT end their log
-with `Time spent: x.y s`, the run time measured with the BIOS tick.
+with `Time spent: x.y s`, the run time measured with the BIOS tick. S3TEST's VBE 4F05 line checks the
+3C4h sequencer index (fail bit 2) and the SR08 readback after the bank switch (fail bit 20h) separately
+([#237](https://github.com/perchrh/trio64-vbios-tools/issues/237)), and with `/V` logs the raw values
+around the call as a `D:4F05` record, so a card run names the register that moved.
 
 Monitor: VBESHOW and S3TEST set modes up to a 75 kHz line frequency (1600x1200 at 60 Hz), S3COMPAT up
 to 91 kHz (1280x1024 at 85 Hz in its 4F14 refresh test). An LCD refuses a signal it cannot show (out
@@ -1043,8 +1046,9 @@ this for our ROMs).
   Trio3D-specific, among it a POST memory test that fills video memory with the Trio3D 2D engine).
 - VBE 2.0 specification section 4.13: the registers the 4F0A protected-mode functions may destroy.
 - Reviewed on 28 October 2026, nothing new for the 86C775: riplin's annotated disassembly of the
-  Phoenix S3 Trio64 BIOS 1.5-07 EDO for the Trio32/Trio64 (86C764x, PCI 5333:8811),
-  [hag `research/s3/bios/86c764x.asm`](https://github.com/riplin/hag/blob/main/research/s3/bios/86c764x.asm),
+  Phoenix S3 Trio64 BIOS 1.5-07 EDO for the Trio32/Trio64 (86C764x, PCI 5333:8811) in
+  [hag `research/s3`](https://github.com/riplin/hag/tree/main/research/s3), its
+  [`bios/86c764x.asm`](https://github.com/riplin/hag/blob/main/research/s3/bios/86c764x.asm),
   and the VOGONS thread
   [I disassembled an S3 Trio64 BIOS and am annotating it](https://www.vogons.org/viewtopic.php?t=96638).
   It is another code base than the S3 reference 2.04.07, so no addresses or tables carry over, and it
