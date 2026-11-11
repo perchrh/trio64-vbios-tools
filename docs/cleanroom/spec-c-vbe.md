@@ -307,9 +307,10 @@ Trio64 BIOSes examined there offers 4F14h.
    the number 0449h holds in them).
 2. **[Deferred by scope - later milestones]** 320x200 direct colour 10Dh-10Fh: VBE 1.2 modes that need a double-scanned 70 Hz timing with a
    12.59 MHz pixel clock, below the lowest PLL output (135 MHz / 8 = 16.9 MHz, PLL-1, PLL-2), so only
-   with the dot clock halved from 25.175 MHz (SR01 bit 3) in an enhanced mode, which the data book does
-   not describe ([`spec-b-modeset.md`](spec-b-modeset.md) MODE-102 and MQ-9 leave them out). Wanted, if the card shows the
-   halved clock works?
+   with the dot clock halved from 25.175 MHz in an enhanced mode. SR01 bit 3 cannot do that (character
+   clock only, CLK-5); SR15 bit 4 can (VCLK = DCLK/2, the register description, T32/64 14-15), and on a
+   V+ card the pixel path follows it in the high-colour modes too (black-box observation, #247) - so the
+   mechanism exists, MQ-9 answered. MODE-102 still leaves the modes out of the first version. Wanted?
 3. **[Open observation - survey of drivers/programs]** OEM string wording (VBE-23): the project's own text. Does any driver or program match the OEM string
    (for example on "S3" or "Trio64") to pick its Trio64 code path? If one does, the string must contain
    that word; the README's Windows 9x driver findings say nothing about it.

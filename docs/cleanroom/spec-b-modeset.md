@@ -271,9 +271,12 @@ From the DMT 800x600 timing (40 MHz; 800, 40, 128, 88; 600, 1, 4, 23; positive s
 8. **[Open observation - card/bench]** **MQ-8** CR31 bit 2 (16-bit VGA memory bus) in the planar and CGA graphics modes: the data book calls
    it useful in text modes "when VGA graphics controller functions are typically not used". Safe in
    0Dh-12h, or 0 there?
-9. **[Answered for the listed modes; 10Dh-10Fh deferred by scope to later milestones]** **MQ-9** Answered for the modes: part C ([`spec-c-vbe.md`](spec-c-vbe.md) VBE-10) offers the planar 102h and 104h
-   through the VGA 16-colour path and no VBE text modes 108h-10Ch. Still open: 10Dh-10Fh (320x200 at 70 Hz in high colour) be possible with SR01 bit 3 halving a 25.175 MHz
-   DCLK in an enhanced mode?
+9. **[Answered 11 November 2026; offering the modes stays a scope decision]** **MQ-9** Answered for the modes: part C ([`spec-c-vbe.md`](spec-c-vbe.md) VBE-10) offers the planar 102h and 104h
+   through the VGA 16-colour path and no VBE text modes 108h-10Ch. The halving question is answered by the data book: SR01 bit 3 cannot halve the dot clock in an enhanced mode - it
+   halves only the internal character clock (SR1 bit 3, CLK-5), not VCLK. The bit that reaches VCLK is SR15 bit 4, "Divide DCLK by 2" (SR15 register description, T32/64 14-15),
+   which 9.3 documents for colour mode 0001 (clock doubling, bit 4 or bit 6) and the 4-bit modes (AR10 bit 6 / CR3A bit 4 with CR33 bit 3 = 0); on a V+ card the pixel path also
+   follows SR15 bit 4 in the high-colour modes (black-box observation, #247). So 10Dh-10Fh (320x200 direct colour, VESA modes, 70 Hz timing) are possible with a 25.175 MHz DCLK
+   halved by SR15 bit 4; whether the first version offers them stays with MODE-102's scope.
 10. **[Open observation - card/bench]** **MQ-10** Display start units for 4F07 (VBE part): does CR0C/CR0D/CR69 count 4-byte or 8-byte units in
     the enhanced modes with 2 MB (64-bit bus) and with 1 MB?
 11. **[Answered for 101h by data-book arithmetic; the fit on a 1 MB card is an open acceptance observation]** **MQ-11** Answered for mode 101h by MODE-136. The 1 MB FIFO is 64 bytes, and M = 31 drains about
