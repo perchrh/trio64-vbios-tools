@@ -30,7 +30,10 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
                      VBE dispatcher keeps the upper halves of the 32-bit registers (4F06 changed them);
                      msx: after the mode set, 320x200 at 15/16/32 bpp (10Dh-10Fh) gets SR15 bit 4 (DCLK
                      / 2 into VCLK, the RAMDAC clock; p8, #247 - p2-p7 used SR01 bit 3, the character
-                     clock only, which the 16/32 bpp pixel path does not follow on a card)
+                     clock only, which the 16/32 bpp pixel path does not follow on a card). p9: the
+                     write is done with the synchronous reset released - under the reset it did not
+                     latch on the Hercules 86C765 card (p8 ran the modes at 62.6 kHz, 119.2 Hz there;
+                     results/86C765-p8-hercules.ZIP)
   tables (p2) no interlaced timing: the modes that exist only interlaced on the Trio64V+ (118h
          1024x768x16M, 119h/11Ah 1280x1024x32K/64K, 120h 1600x1200; S3 modes 78h, 79h, 7Ah, 7Ch) are
          removed from the mode table and the VESA list, and the interlaced refresh entries of 1024x768
@@ -79,7 +82,7 @@ REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   #
 # only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = 'd715365c584d4592277d65fd16dcf8a46b801d6b79c95d585bfd4d70e4652b40'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = '25b84b4f8a333377b22d7168758c54882f6d25a57b08f82975d3007da796945e'  # 1.03-08N-p8 (NASM 3.02), emulator tests passed
+RESULT_SHA = '86f2ef77de7cd09420eab73fa59d34f39276f54ff9a7e737e67d11cf276e8ef6'  # 1.03-08N-p9 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -88,7 +91,7 @@ BLOCK_SHA = {
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
-    'vfix.asm': 'efd691d7efe6c38c',
+    'vfix.asm': 'a8c88ddbe6601411',
 }
 # Font tables, from src/roms/fonts (p5, #141): (name, table of fonts.py, address). The 9x14 table's
 # closing 00h is the first byte of the 8x16 font (glyph 00h, row 0), as in 1.03-08N.
@@ -178,13 +181,15 @@ ILACE_ENT = (0x055A, 0x0587, 0x0605, 0x0656)
 # the internal CHARACTER clock only (T32/64 SR1 bit 3): the pixel path did not follow in 16/32 bpp
 # on a card, #247. p8 halves with SR15 bit 4, DCLK / 2 into VCLK, the RAMDAC clock (T32/64 9.3, SR15
 # bit 4; the stock Phoenix BIOS of the STB card does the same and displays these modes correctly):
-# vfix.asm's msx sets SR15 bit 4, not SR01 bit 3.
+# vfix.asm's msx sets SR15 bit 4, not SR01 bit 3. p9: msx writes it with the reset released; under the
+# synchronous reset the write did not latch on the Hercules 86C765 card (p8: SR15 read back 03h,
+# 62.6 kHz, 119.2 Hz, invalid signal on the Eizo).
 HALF_DCLK = {0x05A2: 'b8 02 80 7d 70', 0x05AB: '93 06 80 7d 70'}
-# p8 (#247): the CRTC tables the two refresh entries above point at (02B8h for 65h/66h, 0693h for 67h;
-# nothing else references them): CR06/CR07, the vertical total 449 -> 525 lines (CR06 = 0Bh,
-# CR07 = 3Eh: VT bit 9 in, VT bit 8 out; the 640x480 at 60 Hz frame), so with the halved DCLK the
-# modes run at 31.3 kHz, 59.7 Hz instead of 31.5 kHz, 69.8 Hz - the 60 Hz class LCDs commonly take,
-# instead of the ~70 Hz of the VESA 320x200 timing (owner's decision, #247). The horizontal and
+# p8 (#247, kept at p9): the CRTC tables the two refresh entries above point at (02B8h for 65h/66h,
+# 0693h for 67h; nothing else references them): CR06/CR07, the vertical total 449 -> 525 lines
+# (CR06 = 0Bh, CR07 = 3Eh: VT bit 9 in, VT bit 8 out; the 640x480 at 60 Hz frame), so with the halved
+# DCLK the modes run at 31.3 kHz, 59.7 Hz instead of 31.5 kHz, 69.8 Hz - the 60 Hz class LCDs commonly
+# take, instead of the ~70 Hz of the VESA 320x200 timing (owner's decision, #247). The horizontal and
 # display registers stay: 320x200 at 80 % of the line, double scanned (CR09 = 41h), 400 of 525 lines
 # high, as 320x200 sits in a 640x480 frame. Nothing else in 1.03-08 uses these tables.
 CRTC_320X200 = {0x02B8: '5f 4f 51 82 52 9f bf 1f 00 41', 0x0693: '2d 27 28 00 29 10 bf 1f 00 41'}
@@ -301,11 +306,11 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     put(a, d[a:a + 5], call(a, lab['vbe32']) + b'\x90\x90', 'VBE dispatcher: keep the 32-bit registers (p2)')
     drop_interlaced(d, put)
     for off, b in HALF_DCLK.items():
-        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR15 bit 4 (p2, p8 #247)')
+        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR15 bit 4 (p2, p8/p9 #247)')
     for off, b in CRTC_320X200.items():
         old = bytes.fromhex(b)
         new = old[:6] + bytes.fromhex('0b 3e') + old[8:]
-        put(off, b, new.hex(' '), '320x200x15/16/32 CRTC table: vertical total 525 lines, 59.7 Hz at 31.3 kHz (p8, #247)')
+        put(off, b, new.hex(' '), '320x200x15/16/32 CRTC table: vertical total 525 lines, 59.7 Hz at 31.3 kHz (p8 #247, kept p9)')
     for off, old, new in DEFAULT_MCLK:
         if old == new:
             if bytes(d[off:off + 2]) != bytes.fromhex(old):
