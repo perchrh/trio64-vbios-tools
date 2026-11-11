@@ -33,7 +33,6 @@ s3regs after tests
 vgalog /D
 
 if exist s3regs.txt copy s3regs.txt s3regs3.txt
-if exist vgalog.bin copy vgalog.bin vgalogr.bin
 report
 
 echo 
