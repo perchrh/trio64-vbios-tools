@@ -106,7 +106,9 @@ to implement from:
 The reference ROMs ([`reference/`](../../reference/)), the patched ROMs and their code ([`src/roms/`](../../src/roms/)), the oracle files,
 riplin's disassembly, [`docs/764-rom.md`](../764-rom.md), the README sections on byte-level changes, the
 emulator tests that compare with a reference ROM (`make 775-ref-compare`, `764-ref-compare`, the `T64_BASE`
-notes), and anything from another vendor's BIOS source.
+notes), and anything from another vendor's BIOS source. The Windows DDKs in [`ddk/`](../../ddk/) (untracked
+owner's copies; the 98 DDK carries S3's own driver sources): anything from another vendor's driver source is
+the same.
 
 ## Checking the clean ROM (on the dirty side)
 

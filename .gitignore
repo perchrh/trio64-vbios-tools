@@ -23,3 +23,5 @@ emu/all/
 *.untested
 nasm/
 poetry.lock
+ddk/
+dx8sdk/

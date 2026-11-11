@@ -21,7 +21,9 @@ must do, written from the datasheets alone.
   taken from BIOS images, says so, and its entries are not chip rules.
 - **Inheritance.** The Trio64V2/DX & GX and the Trio64UV+ books describe only what differs from the
   Trio64V+. A V+ rule that those books do not change applies to them too. Such rules carry no chip
-  prefix and say which chips they cover.
+  prefix and say which chips they cover. For example the V2 book does not redefine CR59/CR5A
+  (T64-REG-2), CR54 bits other than bit 2 (VP-MEM-5), SR15 bit 7 and SRA bit 7 (VP-MEM-2, T64-MEM-4),
+  or CR36 bits 7-5 (T64-MEM-5, from the T32/64 book); those keep their earlier descriptions.
 - **IDs.** `PLL-`, `CLK-`, `MEM-`, `REG-`, `ENG-`: rules of more than one chip. Rules of one book:
   `T64-` Trio32/Trio64, `VP-` Trio64V+, `UV-` Trio64UV+, `V2-` Trio64V2/DX/GX, `AV-` Aurora64V+ (no
   data book at hand, so *derived* only). An ID is never reused
@@ -119,6 +121,9 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 
 ## Registers
 
+CR41 and CR52 are documented as flag registers "used by the video BIOS" (T32/64 CR41, V+ CR52): their
+content is the BIOS's own, so a from-scratch BIOS may use them as scratch.
+
 | ID | Chips | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- | --- |
 | REG-1 | all | SR15 bit 5 (immediate MCLK/DCLK load) is written 1 then 0: "This register must never be left set to 1" | T32/64 and V+ SR15 | must | VESA lines fail 1000 |
@@ -129,6 +134,9 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 | T64-REG-3 | T32, T64 | Hardware cursor: the image starts on a 1024-byte boundary; its position should be reprogrammed at most once per vertical sync; CR45 bit 4 (cursor storage at the right of each line) needs CR4D bits 1-0 = 11b. Added 28 October 2026 | T32/64 13.4, CR45 | must | not checked |
 | T64-ENG-1 | T32, T64 | Drawing command 9AE8h bit 0 "must always be programmed to 1". Added 28 October 2026 | T32/64 9AE8h | must | not checked |
 | ENG-1 | V+, UV+, V2 | BEE8h index D and E have undefined power-on values: software writes both before the graphics engine is used (the write takes effect with the next engine command) | UV+ ER010-B item 4 (about the V+ data book); V2 4.1 | must | emulator `engine_init` |
+| ENG-2 | T32, T64, V+, UV+, V2 | The display bitmap is updated in one of two ways: the CPU writes to display memory directly (linear addressing in enhanced modes, paging in VGA modes), or the CPU issues commands to the Graphics Engine, which then writes the pixels. A rectangle fill (drawing command 9AE8h bits 15-13 = 0010b) fills a defined rectangle with a solid colour; on the V+ and its descendants all CPU data for the engine moves through the Pixel Data Transfer registers E2E8h/E2EAh, so a fill costs the CPU the command and one colour value, not one PCI write per pixel. Added 11 November 2026 | T32/64 13 (introduction), 13.1, 13.3.3 9AE8h CMD-TYPE 0010 = Rectangle Fill; V+ 15.2; extract [`primary-extracts/trio32-64-enhanced-mode-graphics-engine.md`](cleanroom/primary-extracts/trio32-64-enhanced-mode-graphics-engine.md), [`primary-extracts/trio64vplus-15.2-engine-access.md`](cleanroom/primary-extracts/trio64vplus-15.2-engine-access.md) | information | not checked |
+| ENG-3 | T32, T64, V+, UV+, V2 | The Graphics Engine busy flag, 9AE8h bit 9, "should be verified to be 0 (not busy)" before the engine is used and before linear addressing is enabled. Added 11 November 2026 | T32/64 13.1, 11.2.2 | should | not checked |
+| ENG-4 | T32, T64, V+, UV+, V2 | Engine writes to display memory do not cross the PCI bus: the engine is inside the chip and shares the display FIFO with CPU accesses ("CPU accesses" and "Graphics Engine accesses" are the two sources into the same FIFO towards memory); only CPU writes are PCI memory cycles, one per store over the bus (Fig 1-1, section 6.1). "In general, large image transfers to display memory can be performed faster using the Graphics Engine and memory-mapped I/O transfers": the book's expectation for an engine fill, not a promised time. Added 11 November 2026 | T32/64 Fig 1-1, 6.1, 7.4, 13, 13.1; V+ 15.2; the extracts above | information (the path), should (the faster expectation) | not checked |
 | V2-REG-1 | V2 | SR1A bit 4 (FCTD) "must be set to 1 by the BIOS upon reset" | V2 4.2 | must | S3COMPAT POST "SR1A bit 4" fail 1; S3TEST (pedestal line) |
 | V2-REG-2 | V2 | CR32 bit 3: "Reserved = 0. This bit should never be set to 1" | V2 4.1 | must | VESA lines fail 1000 |
 | V2-REG-3 | V2 | With DAC power saving on (CR86 bit 7 = 0), CR86 bits 6-0 "must be at least 1 less than the End Horizontal Blank value programmed in CR5D_3, CR5_7 and CR3_4-0" | V2 4.2 (CR86) | must | VESA lines WARN 80 (not yet confirmed on a card; the ROM's violations in 012Eh, 010Fh, 0131h and 0134h show a clean picture on the card, 30 October 2026) |
@@ -139,12 +147,16 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 
 ## Monitor communication (DDC)
 
-The two books reach the monitor's DDC lines differently, so a DDC routine is chip-specific.
+Each chip generation reaches the monitor's DDC lines differently (a generation difference, not a
+conflict): the T32/64 has no DDC pins and a board wires them through CR5C/3C8h (T64-DDC-1); the V+ and
+the V2 have serial-port pins driven via MMFF20 (VP-DDC-1, V2-DDC-1). A DDC routine is therefore
+chip-specific.
 
 | ID | Chips | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- | --- |
 | T64-DDC-1 | T32, T64 | The chip "supports the VESA Display Data Channel (DDC) standard" but has no DDC pins: the board reaches the lines through the General Output Port and the General Input Port. A CPU write of CR5C (GOP) strobes STWR and latches the value into an external 8-bit latch (GD7-0 on PCI, SD15-8 on the VL-Bus); with CR55 bit 2 = 1, an I/O read of 3C8h (otherwise the DAC write index) strobes STRD and reads an external 8-bit buffer. Which GOP and GIP bits carry the DDC clock and data, and whether the board has the latch and the buffer at all, is the board's design: the book does not assign them. A BIOS for any Trio64 board therefore needs the board's wiring, and a board without them has no DDC2. Added 6 November 2026 | T32/64 section 1, 10.3, 10.4, pins STWR and STRD, CR55, CR5C | must (register use) | not checked |
 | VP-DDC-1 | V+ | The DDC and I2C lines are pins 205 (clock) and 206 (data), driven through the Serial Port register MMFF20 (also at I/O E8h or E2h by CR6F bits 2-1): bit 4 enables bits 1-0; bit 0 = 0 drives the clock low, 1 tri-states it; bit 1 likewise for the data; bits 2 and 3 read the clock and data pins. LPB mode only (VP-SYS-1); a Trio32/Trio64 has no such register, so a V+ DDC routine finds nothing on a Trio64 board, and a Trio64 one (T64-DDC-1) finds nothing on a V+ board. Added 6 November 2026 | V+ section 1, MMFF20, CR6F | must | not checked |
+| V2-DDC-1 | V2 | The DDC2 and I2C lines are the chip's own SPCLK and SPD pins, driven and read through the Serial Port register MMFF20: bit 4 enables the port; bit 0 drives the clock output (0 = low, 1 = tri-stated), bit 1 the data output; bits 2 and 3 read the clock and data pins. Unlike the Trio32/Trio64 (T64-DDC-1) there is no board latch or buffer; the lines are the pins. Added 11 November 2026 | V2 section 2, pin descriptions SPCLK and SPD, MMFF20 | must | not checked |
 
 ## Trio64UV+ unified memory
 
@@ -288,3 +300,6 @@ books stay the closer relatives (README "Missing documents"). What V968 says tha
   bits 7-4 = 0000b, while the CR67 descriptions list 0111b as mode 12. The tools accept both (CLK-2).
 - UV+ errata ER010-B items 1 and 4 correct the Trio64V+ data book; they are taken as Trio64V+ rules
   and so for the chips that inherit from it (REG-2, ENG-1).
+- V2 3.5's sentence on CR87_1 is confusing next to the CR87 register description in the same book; the
+  register description is the rule: bit 1 = 1LA, 1 enables 1-cycle linear addressing write operation
+  and requires 1-cycle-capable memory (V2-MEM-4). The tools read the register description.
