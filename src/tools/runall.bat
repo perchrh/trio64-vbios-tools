@@ -27,8 +27,8 @@ vgalog /M /XL
 s3regs after tests
 vgalog /D
 
-if exist c:\s3regs.txt copy c:\s3regs.txt s3regsr.txt
-if exist c:\vgalog.bin copy c:\vgalog.bin vgalogr.bin
+if exist s3regs.txt copy s3regs.txt s3regs3.txt
+if exist vgalog.bin copy vgalog.bin vgalogr.bin
 report
 
 echo 
