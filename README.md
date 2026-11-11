@@ -482,9 +482,13 @@ of p2; Windows, video playback and the fonts look right ([docs/765-rom.md](docs/
 Hercules card: 1.03-08N-p5"). 1.03-08N-p8 on the Hercules card (11 November 2026): the SR15 bit 4 write
 under the synchronous reset did not latch there, so 10Dh-10Fh ran at 62.6 kHz, 119.2 Hz (S3TEST 4 FAIL,
 S3COMPAT 3 FAIL, "Signal Error" on the Eizo in VBESHOW; results/86C765-p8-hercules.ZIP and
-results/pictures/invalid_signal.jpg, kept local). 1.03-08N-p9 writes SR15 bit 4 with the reset released
-and keeps the 525-line frame: 59.7 Hz at 31.3 kHz expected on a card; the picture of 10Dh-10Fh in VBESHOW
-is still for a card to show ([`docs/765-rom.md`](docs/765-rom.md), "10Dh-10Fh").
+results/pictures/invalid_signal.jpg, kept local). 1.03-08N-p9 (same card, same run day,
+results/86C765-p9-hercules.ZIP, kept local) changed nothing: the SR15 write is dropped because the mode
+set has relocked SR8, and while SR8 is locked the extended sequencer registers SR9-SR6F ignore writes
+(V+ 18.1, SR8), so 10Dh-10Fh still ran at 62.6 kHz, 119.3 Hz, "invalid signal". 1.03-08N-p10 writes SR15
+bit 4 with SR8 = 06h around the write and relocks after, and the emulator now models that lock: 31.3 kHz,
+59.7 Hz, 525 lines, SR15 = 13h expected on a card; the picture of 10Dh-10Fh in VBESHOW is still for a card
+to show ([`docs/765-rom.md`](docs/765-rom.md), "10Dh-10Fh").
 
 ## Trio64 ROM
 
@@ -547,7 +551,7 @@ Every chip's ROM at its memory clocks in one go, into `build/roms/<chip>-<level>
 | Chip | Folder and files | Clocks | ROM |
 | --- | --- | --- | --- |
 | 775 (Trio64V2/DX) | `775-P26/775M50.BIN` ... | 50, 55, 60 MHz | 2.04.07-p26, 64 KB (`SIZE775=32` for 32 KB), the clock in the edo1 entry |
-| 765 (Trio64V+) | `765-P9/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p9, 64 KB (`SIZE765=32` for 32 KB), the clock in the edo1 entry |
+| 765 (Trio64V+) | `765-P10/765M50.BIN` ... | 50, 55, 60 MHz | 1.03-08N-p10, 64 KB (`SIZE765=32` for 32 KB), the clock in the edo1 entry |
 | 764X (Trio64 PnP) | `764X-P6/764XM55.BIN` ... | 55, 60, 70 MHz | 1.5-07-p6, 64 KB (`SIZE764=32` for 32 KB) |
 | 764P (86C764-P) | `764P-P6/764PM50.BIN` ... | 50, 55, 60 MHz | 1.5-07-p6, 64 KB |
 

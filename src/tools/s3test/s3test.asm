@@ -2731,9 +2731,10 @@ modelist:
 ; Trio64V+, our ROM 1.03-08N-pN: the booster in the banked modes, the base back in the VGA modes. The rates
 ; and line totals are 1.03-08's (VESA DMT 60 Hz; it has no 320x240, 400x300 or 512x384 modes); its
 ; 1280x1024 uses a 1696-pixel line, not DMT's 1688, which the ROM leaves as it is (not checked).
-; 10Dh-10Fh are p8/p9's (#247): 59.7 Hz at a 525-line frame, 31.3 kHz (DCLK 25.06 MHz halved by SR15 bit 4,
-; not SR01 bit 3; p9 writes the bit with the reset released - under the reset it did not latch on the
-; Hercules card, which then ran 119.2 Hz, invalid signal) - not the VESA 70 Hz, which the Trio64V+
+; 10Dh-10Fh are p8's (#247): 59.7 Hz at a 525-line frame, 31.3 kHz (DCLK 25.06 MHz halved by SR15 bit 4,
+; not SR01 bit 3; p10 writes the bit with SR8 unlocked - the mode set relocks SR8 and while locked the
+; extended sequencer registers ignore writes, so at p8/p9 the write did not latch on the Hercules card,
+; which then ran 119.3 Hz, invalid signal) - not the VESA 70 Hz, which the Trio64V+
 ; cannot clock within the VCO range; 60 Hz is what LCDs commonly take (owner's decision, #247).
 vmodelist:
         dw 0x0003,700,F_VGA,720,900
@@ -2741,9 +2742,9 @@ vmodelist:
         dw 0x0012,597,F_VGA,640,800
         dw 0x0101,597,F_BOOST,640,800     ; 640x480x8
         dw 0x0111,597,F_BOOST,640,800     ; 640x480x16
-        dw 0x010D,597,F_BOOST,320,400     ; 320x200x15 (p8/p9, #247)
-        dw 0x010E,597,F_BOOST,320,400     ; 320x200x16 (p8/p9, #247)
-        dw 0x010F,597,F_BOOST,320,400     ; 320x200x32 (p8/p9, #247)
+        dw 0x010D,597,F_BOOST,320,400     ; 320x200x15 (p8/p10, #247)
+        dw 0x010E,597,F_BOOST,320,400     ; 320x200x16 (p8/p10, #247)
+        dw 0x010F,597,F_BOOST,320,400     ; 320x200x32 (p8/p10, #247)
         dw 0x0103,603,F_BOOST,800,1056    ; 800x600x8
         dw 0x0105,601,F_BOOST,1024,1344   ; 1024x768x8
         dw 0x0107,602,F_BOOST|F_2MB,1280,0   ; 1280x1024x8
