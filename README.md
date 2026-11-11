@@ -179,10 +179,10 @@ calls). RUNALL.BAT deletes S3REGS.TXT at its start and each VGALOGN.BIN before t
 only its own files even when CLEAN.BAT was not run first (#240). At the end a second snapshot ("after tests") and
 `VGALOG /D` write VGALOG.BIN, and it beeps (`echo` of Ctrl-G) when done. It leaves the .LOG and .DBG files,
 S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies the run's own
-S3REGS.TXT and VGALOG.BIN (not the ones AUTOEXEC.BAT and Windows runs leave in the root) as S3REGS3.TXT and
-VGALOGR.BIN, and runs REPORT. REPORT writes one stored ZIP (method 0, no
-compression; Info-ZIP's unzip reads it) of the logs, the .DBG files, S3REGS.TXT, S3REGS3.TXT and every VGALOG*.BIN (VGALOG.BIN, the per-tool
-VGALOG0.BIN... dumps, VGALOGR.BIN). A file that
+S3REGS.TXT (not the one AUTOEXEC.BAT and Windows runs leave in the root) as S3REGS3.TXT, and runs REPORT.
+REPORT writes one stored ZIP (method 0, no
+compression; Info-ZIP's unzip reads it) of the logs, the .DBG files, S3REGS.TXT, S3REGS3.TXT and every VGALOG*.BIN (VGALOG.BIN and the per-tool
+VGALOG0.BIN... dumps). A file that
 is missing is a warning on stderr and is left out. The archive is created under the part name, not
 renamed into it: Windows 98 DOS can create a long name and cannot rename an existing file to one, which
 is why `CHIPID /Z` leaves `runall.zip` in place. The name is `runall-<part>.zip` (for example
@@ -191,9 +191,14 @@ the 8.3 name is `<part>.ZIP` (for example `86C775.ZIP`). With no part, the name 
 After the new archive is written, REPORT deletes a leftover `runall.zip` and the other form of this
 part's name. VGALOG stays resident afterwards (`VGALOG /U`
 unloads it); while it is loaded, every INT 10h call takes a little longer, which shows only in the timing
-lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
-.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, VGASHOW.LOG, S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps, S3REGS3.TXT and VGALOGR.BIN
-in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only
+lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one, in the
+current folder: the .DBG files, the four .LOG files, S3REGS.TXT, S3REGS3.TXT, CHIPID.OUT, every VGALOG*.BIN
+(VGALOG.BIN and the VGALOG0.BIN... dumps) and the ZIP archive the run leaves (`<part>.ZIP` such as
+`86C765.ZIP`, `runall-<part>.zip` when the DOS takes the long name, `RUNALL.ZIP` with no part, and any copy
+renamed by hand, such as `86c765-hercules.zip`). Run each card's RUNALL in its own folder: on the shared
+disk, two runalls writing the same names at once cross the FAT chains, and the files then start mid-line
+with another run's content (the 11 November 2026 `86c765-hercules.zip` bundle). `/S` skips the monitor
+warnings, so only
 start it with a monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V
 debug log code the test tools share.
 
