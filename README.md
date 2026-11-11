@@ -486,9 +486,14 @@ results/pictures/invalid_signal.jpg, kept local). 1.03-08N-p9 (same card, same r
 results/86C765-p9-hercules.ZIP, kept local) changed nothing: the SR15 write is dropped because the mode
 set has relocked SR8, and while SR8 is locked the extended sequencer registers SR9-SR6F ignore writes
 (V+ 18.1, SR8), so 10Dh-10Fh still ran at 62.6 kHz, 119.3 Hz, "invalid signal". 1.03-08N-p10 writes SR15
-bit 4 with SR8 = 06h around the write and relocks after, and the emulator now models that lock: 31.3 kHz,
-59.7 Hz, 525 lines, SR15 = 13h expected on a card; the picture of 10Dh-10Fh in VBESHOW is still for a card
-to show ([`docs/765-rom.md`](docs/765-rom.md), "10Dh-10Fh").
+bit 4 with SR8 = 06h around the write and relocks after, and the emulator now models that lock; on the
+Hercules card (11 November 2026, results/86C765-p10-hercules.ZIP, kept local) the write latched (SR15 =
+13h) and all three modes measured 59.6 Hz, 31.2 kHz, 525 lines, but the picture at p8-p10's 525-line frame
+was wrong: 10Dh/10Eh squished into the top 400 of 525 lines, 10Fh blank. 1.03-08N-p11 reverts the frame to
+1.03-08's 449 lines: with the halved DCLK the modes run at 31.3 kHz, 69.8 Hz, the VESA 70 Hz and exactly
+the timing registers the stock Phoenix BIOS of the STB card programs and displays correctly; the picture
+of 10Dh-10Fh in VBESHOW with p11 is still for a card to show
+([`docs/765-rom.md`](docs/765-rom.md), "10Dh-10Fh").
 
 ## Trio64 ROM
 

@@ -43,9 +43,10 @@ Tests
                    mode kept) exactly the listed modes 4F01 marks unsupported, no interlaced timing
                    (118h-11Ah and 120h removed, also as S3 modes 78h-7Ch; 1024x768 and 1280x1024
                    non-interlaced at every CR41 index), 10Dh-10Fh with the DCLK VCO in 135-270 MHz
-                   and SR15 bit 4 set, SR01 bit 3 clear (p8/p10, #247: 25.06 MHz halved into VCLK, 525-line
-                   frame, 59.7 Hz at 31.3 kHz; p10 writes the bit with SR8 unlocked - the mode set relocks
-                   SR8 and a locked SR8 drops the write on a card, as at p8/p9); all failures listed. On this
+                   and SR15 bit 4 set, SR01 bit 3 clear (p10/p11, #247: 25.06 MHz halved into VCLK, the
+                   449-line VESA frame, 69.8 Hz at 31.3 kHz; p10 writes the bit with SR8 unlocked - the
+                   mode set relocks SR8 and a locked SR8 drops the write on a card, as at p8/p9; p11
+                   reverts p8's 525-line frame); all failures listed. On this
                    ROM the tests tagged patch run
                    only when tagged 765 too (version, stores, 765_patches), and the failures 1.03-08
                    itself has (VPLUS_BASE, empty since p2) pass with a note
@@ -84,9 +85,9 @@ Tests
                    before the VBESHOW /I list, and S3TEST, S3COMPAT and VBESHOW (a mode, /A) print it on
                    stderr with a key prompt, where Esc cancels (/S prints nothing); /R /S runs through
                    every listed mode, and every measured line (Hz, kHz, lines total) must match the
-                   model's frame() for that mode; on our Trio64V+ ROM 10Dh-10Fh measure about 59.7 Hz
-                   (p8/p10, #247: DCLK 25.06 MHz halved by SR15 bit 4, 525 lines, 31.3 kHz; 69.8 Hz at p2-p7
-                   with it halved by SR01 bit 3, #238)
+                   model's frame() for that mode; on our Trio64V+ ROM 10Dh-10Fh measure about 69.8 Hz
+                   (p10/p11, #247: DCLK 25.06 MHz halved by SR15 bit 4, 449 lines, 31.3 kHz; 59.7 Hz at
+                   525 lines at p8-p10; 69.8 Hz at 449 lines at p2-p7 with it halved by SR01 bit 3, #238)
   vgashow           VGASHOW lists the standard modes 00h-13h and runs them (/A, /R) with measured
                    refresh and line frequency; "VGASHOW 13" prints the result line (mode, resolution,
                    Hz, kHz, lines); /V log VGASHOW.DBG with D:TEST mode, D:REG and D:FRM records; all
@@ -865,11 +866,11 @@ def t_vplus_patches(c):
             m.int10(0x4F02, bx=v | 0x8000)
             chk(not m.r['crtc'].get(0x42, 0) & 0x20, '4F02 %03X with CR41 = %02X: interlaced (CR42 %02X)'
                 % (v, c41, m.r['crtc'].get(0x42, 0)))
-    # p8/p10 (#247): 320x200 at 15/16/32 bpp with the DCLK VCO in 135-270 MHz (PLL-1), SR15 bit 4 set
+    # p10/p11 (#247): 320x200 at 15/16/32 bpp with the DCLK VCO in 135-270 MHz (PLL-1), SR15 bit 4 set
     # (DCLK / 2 into VCLK, the RAMDAC clock; p2-p7 used SR01 bit 3, the character clock only, which the
     # 16/32 bpp pixel path did not follow on a card; p10 writes the bit with SR8 = 06h around it, relocked
     # after - the mode set leaves SR8 locked and a locked SR8 drops the write on a card, as at p8/p9)
-    # and a 525-line frame: 59.7 Hz at 31.3 kHz.
+    # and the 449-line VESA frame of 1.03-08 (p11 reverts p8's 525-line frame): 69.8 Hz at 31.3 kHz.
     for v in (0x10D, 0x10E, 0x10F):
         m.int10(0x4F02, bx=v)
         sq = m.r['seq']
@@ -877,14 +878,14 @@ def t_vplus_patches(c):
         mm, nn, rr = (sq.get(0x13, 0) & 0x7F) + 2, (sq.get(0x12, 0) & 0x1F) + 2, (sq.get(0x12, 0) >> 5) & 3
         vco = 14.31818 * mm / nn
         hz, pix, period, lines = m.frame()
-        chk(135 <= vco <= 270 and sq.get(0x15, 0) & 0x10 and not sq.get(1, 0) & 8 and lines == 525
-            and abs(hz - 59.7) < 1 and abs(hz * lines / 1000 - 31.3) < 0.5,
+        chk(135 <= vco <= 270 and sq.get(0x15, 0) & 0x10 and not sq.get(1, 0) & 8 and lines == 449
+            and abs(hz - 69.8) < 1 and abs(hz * lines / 1000 - 31.3) < 0.5,
             '4F02 %03X: VCO %.1f MHz, SR15 %02X, SR01 %02X, CR06 %02X CR07 %02X, %.1f Hz %.1f kHz %d lines'
             % (v, vco, sq.get(0x15, 0), sq.get(1, 0), cr.get(6, 0), cr.get(7, 0), hz, hz * lines / 1000, lines))
     m.int10(0x03)
     check(not fails, '%d of the checks failed:\n    ' % len(fails) + '\n    '.join(fails))
     return ('booster, Windows check, fast 4F05, ATC flip-flop, 32-bit registers, %d of %d modes refused by 4F02, '
-            'no interlace, 10Dh-10Fh VCO in range, SR15 bit 4, 59.7 Hz at 525 lines' % (refused, len(modes))
+            'no interlace, 10Dh-10Fh VCO in range, SR15 bit 4, 69.8 Hz at 449 lines' % (refused, len(modes))
             + ''.join('; refused: %s' % w[2] for w in why))
 
 
@@ -1226,12 +1227,12 @@ def t_vbeshow(c):
             bad.append('%03X: %r vs the model %.2f Hz, %.1f kHz, %d lines'
                        % (v, l, f[0], f[0] * f[3] / 1000, f[3]))
     check(not bad, 'VBESHOW /R lines that do not match the model: %s' % bad[:6])
-    if c.vours:                    # 10Dh-10Fh: p8/p10 (#247), DCLK 25.06 MHz halved by SR15 bit 4 with a
-        for v in (0x10D, 0x10E, 0x10F):   # 525-line frame: 59.7 Hz at 31.3 kHz (69.8 Hz at p2-p7, #238)
+    if c.vours:                    # 10Dh-10Fh: p10/p11 (#247), DCLK 25.06 MHz halved by SR15 bit 4 with the
+        for v in (0x10D, 0x10E, 0x10F):   # 449-line VESA frame: 69.8 Hz at 31.3 kHz (p8-p10: 525 lines, 59.7 Hz)
             line = next((l for l in out.split('\r\n') if l.startswith('Mode %04X' % v)), '')
             hz = re.search(r'([\d.]+) Hz', line)
-            check(hz is not None and abs(float(hz.group(1)) - 59.7) < 1,
-                  'VBESHOW /R: Mode %03X line %r, expected about 59.7 Hz (10Dh-10Fh, p8/p10 #247)' % (v, line))
+            check(hz is not None and abs(float(hz.group(1)) - 69.8) < 1,
+                  'VBESHOW /R: Mode %03X line %r, expected about 69.8 Hz (10Dh-10Fh, p10/p11 #247)' % (v, line))
     ri = c.machine(keys=[0x011B]).run_com(com, '/I')
     check(ri.exit == ('exit', 0) and b'75 kHz' in ri.stdout and b'Esc to cancel' in ri.stdout,
           'VBESHOW /I: no monitor note before the list (Esc there quits)')
@@ -3207,7 +3208,7 @@ DURATION = {'s3compat_full': 170, 's3compat_bench': 30, 's3compat_vbe': 70, 'vbe
 VPLUS_BASE = {
     # none left since p2: it fixed 4F02 (modes beyond the memory) and 4F06 (32-bit registers), removed the
     # interlaced modes, and moved the DCLK VCO of 10Dh-10Fh into range (25.06 MHz; halved by SR15 bit 4
-    # since p8, #247, by SR01 bit 3 at p2-p7, with a 525-line frame at p8 for 59.7 Hz)
+    # since p8, #247, by SR01 bit 3 at p2-p7, at the 449-line VESA frame since p11)
 }
 
 
