@@ -174,10 +174,10 @@ dump renamed to VGALOG0.BIN, VGALOG1.BIN, ... (one per tool run; `VGALOG /U` and
 start a fresh session, so each file's call counter covers only that tool and holds its last 4096 INT 10h
 calls). At the end a second snapshot ("after tests") and
 `VGALOG /D` write VGALOG.BIN, and it beeps (`echo` of Ctrl-G) when done. It leaves the .LOG and .DBG files,
-S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies
-C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root, when they
-exist) as S3REGSR.TXT and VGALOGR.BIN, and runs REPORT. REPORT writes one stored ZIP (method 0, no
-compression; Info-ZIP's unzip reads it) of the logs, the .DBG files, S3REGS.TXT, S3REGSR.TXT and every VGALOG*.BIN (VGALOG.BIN, the per-tool
+S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies the run's own
+S3REGS.TXT and VGALOG.BIN (not the ones AUTOEXEC.BAT and Windows runs leave in the root) as S3REGS3.TXT and
+VGALOGR.BIN, and runs REPORT. REPORT writes one stored ZIP (method 0, no
+compression; Info-ZIP's unzip reads it) of the logs, the .DBG files, S3REGS.TXT, S3REGS3.TXT and every VGALOG*.BIN (VGALOG.BIN, the per-tool
 VGALOG0.BIN... dumps, VGALOGR.BIN). A file that
 is missing is a warning on stderr and is left out. The archive is created under the part name, not
 renamed into it: Windows 98 DOS can create a long name and cannot rename an existing file to one, which
@@ -188,7 +188,7 @@ After the new archive is written, REPORT deletes a leftover `runall.zip` and the
 part's name. VGALOG stays resident afterwards (`VGALOG /U`
 unloads it); while it is loaded, every INT 10h call takes a little longer, which shows only in the timing
 lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
-.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, VGASHOW.LOG, S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps, S3REGSR.TXT and VGALOGR.BIN
+.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, VGASHOW.LOG, S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps, S3REGS3.TXT and VGALOGR.BIN
 in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only
 start it with a monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V
 debug log code the test tools share.
