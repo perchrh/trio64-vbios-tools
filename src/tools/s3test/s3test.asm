@@ -120,7 +120,7 @@
 ;                    AL=0, every byte of the four planes checked (fail bits 1-80h); the S3 mode 6Ah
 ;                    (800x600x4) on its own line (fail bits 1 AH=06h full, 2 AH=07h window, 4 AL=0)
 ;   4F05 (p12 fast path): registers and the 3C4h index kept, CR6A set, planar 102h bank x 4 in CR6A and
-;                    0040:00FE, refused in linear 4101h (fail bits 1, 2, 4, 8, 10h)
+;                    0040:00FE, refused in linear 4101h (fail bits 1, 2 index, 4, 8, 10h, 20h SR08; #237)
 ;   Timings, INFO lines not counted: mode set 03h, 4F02 101h with the clear, one 4F05, one mode 13h
 ;                    scroll, a text clear and a mode 12h clear with AH=06h AL=0 (shortest of 3 runs)
 ;
@@ -1909,11 +1909,13 @@ plst6a: dw 0x0601, 0x0E00, 0x0000, 0x2463, 0,  99, 0,  36, 1
 
 ; ---------------- VBE 4F05 (p12: fast path from the INT 10h entry) ----------------
 ; In 101h: 4F05 BH=0 DX=5 returns 004Fh with BX, CX, DX, SI, DI unchanged (fail 1), keeps the 3C4h index
-; and SR08 (fail 2) and sets CR6A = 05h (fail 4). In planar 102h DX=2 gives CR6A = 08h and 0040:00FE =
-; 0008h (fail 8). In linear 4101h it is refused with 034Fh and CR6A stays (fail 10h). CR6A is compared
-; in its bank field, bits 4-0 (Trio64V2 datasheet: bit 5 reserved with 2 MB); the reserved bits 7-6 read
-; back as 1 on the card (p12 hardware log: C3h after bank 3), which the first version of this test
-; counted as fail 4 and 8.
+; (fail 2) and SR08 (fail 20h, read back without unlocking; #237 split this from fail 2 so a card run
+; names the register that moved) and sets CR6A = 05h (fail 4). In planar 102h DX=2 gives CR6A = 08h and
+; 0040:00FE = 0008h (fail 8). In linear 4101h it is refused with 034Fh and CR6A stays (fail 10h). CR6A
+; is compared in its bank field, bits 4-0 (Trio64V2 datasheet: bit 5 reserved with 2 MB); the reserved
+; bits 7-6 read back as 1 on the card (p12 hardware log: C3h after bank 3), which the first version of
+; this test counted as fail 4 and 8. The register reads around the call are logged as a D:4F05 record:
+; SR08 before the call, the 3C4h index and SR08 after it (raw), and SR08 after unlocking again.
 t_bank: VS 'D:TEST 4F05'
         call vnl
         call vflush
@@ -1950,14 +1952,34 @@ t_bank: VS 'D:TEST 4F05'
 .f1:    or byte [tmp],1
 .r1:    mov dx,0x3C4
         in al,dx
+        mov [tmp3],al                   ; the 3C4h index after the call
         cmp al,0x02
-        jne .f2
-        mov al,0x08
+        je .i2
+        or byte [tmp],2                 ; fail 2: the 3C4h index not kept
+.i2:    mov al,0x08
         call rdsr
+        mov [tmp4],ah                   ; SR08 read back without unlocking
         cmp ah,[tmp2]
         je .r2
-.f2:    or byte [tmp],2
-.r2:    mov al,0x6A
+        or byte [tmp],0x20              ; fail 20h: SR08 not as found
+.r2:    VS 'D:4F05 SR08='
+        mov al,[tmp2]
+        call vhex2
+        VS ' idx='
+        mov al,[tmp3]
+        call vhex2
+        VS ' sr08='
+        mov al,[tmp4]
+        call vhex2
+        call unlock
+        mov al,0x08
+        call rdsr
+        mov al,ah
+        VS ' sr08u='
+        call vhex2
+        call vnl
+        call vflush
+        mov al,0x6A
         call rdcr
         and ah,0x1F                     ; bank field CR6A bits 4-0 (2 MB); bits 7-6 read 1 on the card
         cmp ah,0x05
@@ -2876,6 +2898,8 @@ m_st    dw 0
 m_meas  dw 0
 tmp     dw 0
 tmp2    dw 0
+tmp3    dw 0                            ; t_bank: the 3C4h index after the 4F05 call
+tmp4    dw 0                            ; t_bank: SR08 read back after the 4F05 call
 tmin    dd 0
 runt0   dd 0                            ; BIOS tick at the start
 plbpl   dw 0                            ; planar scroll test: bytes per line, character height, lines

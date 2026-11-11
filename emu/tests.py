@@ -118,6 +118,9 @@ Tests
   vgalog_xl        VGALOG /M /XL installs with a 128 KB ring (4096 slots): the message says 4096 and
                    128 KB, /D then writes more than 1024 records (the default ring caps at 1024);
                    /XL without a memory mode is refused
+  vgalog_keep      VGALOG /M /XL resident: a 4F05 set-window call leaves the 3C4h sequencer index and
+                   SR08 as the caller set them, with VGALOG's register reads around the logged call in
+                   between (#237); only on our ROMs (the stock 1.5-07 leaves the index at 04h, #67)
   vgalog_trace     VGALOG /T: every OUT the BIOS makes in the mode sets AX=0003h and 4F02h 101h is in the
                    trace in order with its value, behind the marker of its call; other calls not traced,
                    INT 1 put back after each mode set, the trap flag clear on return
@@ -1792,6 +1795,41 @@ def t_vgalog_xl(c):
     return '/XL kept %d of %d calls, /M caps at %d' % (n, total, n2)
 
 
+def t_vgalog_keep(c):
+    """VGALOG /M /XL resident: a 4F05 set-window call leaves the 3C4h sequencer index and SR08 as the
+    caller found them, with VGALOG's own register reads around the logged call in between (#237): a stub
+    sets SR08 = 06h (unlocked) and the sequencer index 02h, calls 4F05 BH=0 DX=5 through the resident
+    VGALOG, and reads the index and SR08 back; both must be as set. Only on our ROMs: the stock Phoenix
+    1.5-07 leaves the index at 04h (#67)."""
+    if not (c.ours or c.vours or c.tours):
+        raise Skip('not one of our ROMs (the stock BIOSes leave the 3C4h index at 04h, #67)')
+    com = c.tool('VGALOG.COM')
+    m = c.machine()
+    r = m.run_com(com, '/M /XL', seg=0x2000)
+    check(r.exit and r.exit[0] == 'tsr', 'VGALOG /M /XL did not stay resident: %s' % (r.exit,))
+    stub = bytes.fromhex(
+        'b8024f' 'bb0101' 'cd10'                     # 4F02 101h
+        'bac403' 'b80806' 'ef'                       # SR08 = 06h (unlock)
+        'bad403' 'b83848' 'ef' 'b839a5' 'ef'         # CR38 = 48h, CR39 = A5h
+        'bac403' 'b008' 'ee' '42' 'ec' 'a29000'      # read SR08 -> [0x90]
+        '4a' 'b002' 'ee'                             # sequencer index = 02h
+        'b8054f' '31db' 'ba0500' 'cd10' 'a39400'     # 4F05 BH=0 DX=5, AX -> [0x94]
+        'bac403' 'ec' 'a29100'                       # the index after the call -> [0x91]
+        'b008' 'ee' '42' 'ec' 'a29200'               # SR08 after the call -> [0x92]
+        'cd20')                                      # exit
+    rp = m.run_com(stub, seg=0x4000, name='BANK.COM')
+    check(rp.exit == ('exit', 0), 'BANK.COM ended with %s' % (rp.exit,))
+    res = m.mem(0x4000 * 16 + 0x90, 6)
+    check(res[0] == 0x06, 'SR08 before the 4F05 call: %02X, expected 06h' % res[0])
+    ax = struct.unpack('<H', res[4:6])[0]
+    check(ax == 0x004F, '4F05 BH=0 DX=5 through VGALOG: AX=%04X, expected 004Fh' % ax)
+    check(res[1] == 0x02, 'the 3C4h index after the 4F05 call through VGALOG: %02X, expected 02h (#237)' % res[1])
+    check(res[2] == 0x06, 'SR08 after the 4F05 call through VGALOG: %02X, expected 06h (#237)' % res[2])
+    ru = m.run_com(com, '/U', seg=0x4000)
+    check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
+    return 'index %02X, SR08 %02X after 4F05 through VGALOG /M /XL' % (res[1], res[2])
+
+
 def t_vgalog_trace(c):
     """VGALOG /T traces the port accesses of the mode sets: every OUT the BIOS makes during AX=0003h and
     4F02h 101h is in the trace, in order and with its value (the model's own record of the OUTs as the
@@ -3080,7 +3118,7 @@ def t_mclk(c):
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vbeshow', t_vbeshow), ('vgashow', t_vgashow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
-         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_xl', t_vgalog_xl), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_xl', t_vgalog_xl), ('vgalog_keep', t_vgalog_keep), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
@@ -3112,7 +3150,7 @@ TAGS = {
     's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vbeshow': 'vbe tools card vram cleanroom', 'vgashow': 'mda cga ega vga tools card cleanroom',
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_xl': 'tools card cleanroom', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
+    'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_xl': 'tools card cleanroom', 'vgalog_keep': 'tools patch 765 764 card emu', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
     'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch 765', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu cleanroom', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
