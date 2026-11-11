@@ -456,7 +456,7 @@ the patcher tests in its section "The build".
 ## Trio64V+ ROM
 
 `src/roms/vplus/` builds 1.03-08N-pN from the S3 Trio64V+ BIOS 1.03-08N (86C765, VBE 1.2) in
-`reference/64vplus/1_03_08n.bin`: backports of the Trio64V2 ROM's speed patches and fixes, and fixes of
+`reference/64vplus/1-03-08n-09-03-96.bin`: backports of the Trio64V2 ROM's speed patches and fixes, and fixes of
 1.03-08's own faults, each with its issue in [docs/765-changes.md](docs/765-changes.md). The build, what
 does not apply to the Trio64V+ and the per-call costs: [docs/765-rom.md](docs/765-rom.md).
 

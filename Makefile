@@ -206,24 +206,24 @@ MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 	python3 $(ROMS_SRC)/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF775)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 # The Trio64V+ ROM (src/roms/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
-# reference/64vplus/1_03_08n.bin (REF765), docs/765-rom.md
+# reference/64vplus/1-03-08n-09-03-96.bin (REF765), docs/765-rom.md
 #   make 765-rom OUT=S3VPP1.BIN [REF765=...] [SIZE765=32] [MCLK=55 [MEMTYPE=edo1]]   (64 KB, the 32 KB twice; SIZE765=32: 32 KB)
 #   make 765-rom-test [REF765=...] [ROM=S3VPP1.BIN]
 #   make 765-ref-compare ROM=S3VPP1.BIN [REF765=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=765 [LOGS=emu/vlogs]
-REF765 ?= reference/64vplus/1_03_08n.bin
+REF765 ?= reference/64vplus/1-03-08n-09-03-96.bin
 SIZE775 ?= 64
 SIZE765 ?= 64
 SIZE764 ?= 64
 765-rom:
-	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (REF765 defaults to reference/64vplus/1_03_08n.bin)"; exit 2; }
+	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (REF765 defaults to reference/64vplus/1-03-08n-09-03-96.bin)"; exit 2; }
 	python3 $(ROMS_SRC)/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(SIZE765) "$(REF765)" -o "$(OUT)" $(MCLKOPT)
 
 765-rom-test:
 	python3 $(ROMS_SRC)/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(REF765)" --ref775 "$(REF775)" $(if $(ROM),--rom "$(ROM)")
 
 765-ref-compare:
-	@test -n "$(ROM)" || { echo "765-ref-compare: set ROM (our Trio64V+ ROM; REF765 defaults to reference/64vplus/1_03_08n.bin)"; exit 2; }
+	@test -n "$(ROM)" || { echo "765-ref-compare: set ROM (our Trio64V+ ROM; REF765 defaults to reference/64vplus/1-03-08n-09-03-96.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --chip 765 --ref "$(REF765)" --rom "$(ROM)"
 
 # The Trio64 ROM (src/roms/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
