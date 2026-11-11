@@ -139,12 +139,13 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 
 ## Monitor communication (DDC)
 
-The two books reach the monitor's DDC lines differently, so a DDC routine is chip-specific.
+Each book reaches the monitor's DDC lines differently, so a DDC routine is chip-specific.
 
 | ID | Chips | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- | --- |
 | T64-DDC-1 | T32, T64 | The chip "supports the VESA Display Data Channel (DDC) standard" but has no DDC pins: the board reaches the lines through the General Output Port and the General Input Port. A CPU write of CR5C (GOP) strobes STWR and latches the value into an external 8-bit latch (GD7-0 on PCI, SD15-8 on the VL-Bus); with CR55 bit 2 = 1, an I/O read of 3C8h (otherwise the DAC write index) strobes STRD and reads an external 8-bit buffer. Which GOP and GIP bits carry the DDC clock and data, and whether the board has the latch and the buffer at all, is the board's design: the book does not assign them. A BIOS for any Trio64 board therefore needs the board's wiring, and a board without them has no DDC2. Added 6 November 2026 | T32/64 section 1, 10.3, 10.4, pins STWR and STRD, CR55, CR5C | must (register use) | not checked |
 | VP-DDC-1 | V+ | The DDC and I2C lines are pins 205 (clock) and 206 (data), driven through the Serial Port register MMFF20 (also at I/O E8h or E2h by CR6F bits 2-1): bit 4 enables bits 1-0; bit 0 = 0 drives the clock low, 1 tri-states it; bit 1 likewise for the data; bits 2 and 3 read the clock and data pins. LPB mode only (VP-SYS-1); a Trio32/Trio64 has no such register, so a V+ DDC routine finds nothing on a Trio64 board, and a Trio64 one (T64-DDC-1) finds nothing on a V+ board. Added 6 November 2026 | V+ section 1, MMFF20, CR6F | must | not checked |
+| V2-DDC-1 | V2 | The DDC2 and I2C lines are the chip's own SPCLK and SPD pins, driven and read through the Serial Port register MMFF20: bit 4 enables the port; bit 0 drives the clock output (0 = low, 1 = tri-stated), bit 1 the data output; bits 2 and 3 read the clock and data pins. Unlike the Trio32/Trio64 (T64-DDC-1) there is no board latch or buffer; the lines are the pins. Added 11 November 2026 | V2 section 2, pin descriptions SPCLK and SPD, MMFF20 | must | not checked |
 
 ## Trio64UV+ unified memory
 
