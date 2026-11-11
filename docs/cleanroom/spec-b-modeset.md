@@ -52,7 +52,8 @@ rules describe behaviour and hold unchanged for the ROM written from scratch.
   the external pass-through clock, or DCLK/2 in those modes; 1 = VCLK is the internal DCLK). SR01 bit 3
   (DCK 1/2, T32/64 SR1 bit 3: "internal character clock = 1/2 DCLK") is a different bit: it halves the
   CRTC's character clock only, not VCLK - a mode whose pixels must run at DCLK / 2 needs SR15 bit 4
-  (CLK-5 in [`docs/chip-rules.md`](../chip-rules.md)).
+  (CLK-5 in [`docs/chip-rules.md`](../chip-rules.md); SR15 is an extended sequencer register, so the
+  write takes effect only while SR8 = 06h, REG-4).
 - **Colour mode**: CR67 bits 7-4 (T32/64 table 8-1): mode 0 (0000b, 8 bpp, one pixel per VCLK),
   mode 8 (0001b, 8 bpp clock-doubled, two pixels per VCLK), mode 9 (0011b, 15 bpp), mode 10 (0101b,
   16 bpp), mode 13 (1101b, 24-bit colour in 4 bytes, the upper byte unused; CR50 bits 5-4 = 11b).
@@ -189,7 +190,7 @@ by the data book procedure and the rates it gives.
 
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
-| MODE-139 | Before the first S3 register: SR08 = 06h (extended sequencer registers), CR38 = 48h (CR30-CR3F), CR39 = A5h (CR40-CRFF). At the end the three lock registers hold what they held before the call. CR35 bits 5-4 (horizontal and vertical timing locks) = 0 while the timing registers are written; CR11 bit 7 = 0 while CR00-CR07 are written and 1 at the end | T32/64 11.2 (T64-REG-1), CR35, CR11; project design choice ([`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM", item 1: the lock left as found) | must | emu t_t64_patches (lock state after the calls); S3COMPAT 'VBE VESA nnnn' |
+| MODE-139 | Before the first S3 register: SR08 = 06h (extended sequencer registers), CR38 = 48h (CR30-CR3F), CR39 = A5h (CR40-CRFF). At the end the three lock registers hold what they held before the call. CR35 bits 5-4 (horizontal and vertical timing locks) = 0 while the timing registers are written; CR11 bit 7 = 0 while CR00-CR07 are written and 1 at the end. A write to an extended sequencer register (SR09+) made outside the unlocked window - after the relock at the end, still inside the call - is silently dropped (REG-4): re-unlock SR8 = 06h around such a late write and restore the lock value after it | T32/64 11.2 (T64-REG-1), CR35, CR11, REG-4; project design choice ([`docs/clean-room.md`](../clean-room.md) "The parts of the clean ROM", item 1: the lock left as found) | must | emu t_t64_patches (lock state after the calls); S3COMPAT 'VBE VESA nnnn' |
 | MODE-140 | The screen is off (SR01 bit 5 = 1) from before the first timing, clock or FIFO register write until the last one; it is turned on (bit 5 = 0) at the end, after the clock is loaded | T32/64 7.4 (M and N with the screen off), SR1 bit 5 | should (must for CR54/CR60, MODE-138) | not checked |
 | MODE-141 | A sequencer reset (SR00 = 01h, then 03h) around the MISC and SR01 writes, as VGA programs do, is allowed; on the Trio64 SR00 bits 1-0 have "no function", so the clock change does not depend on it. SR00 = 03h when the call returns | T32/64 SR0; IBM (SR00 = 03h, [`docs/bios-rules.md`](../bios-rules.md) B00-8) | note (reset), must (03h at the end) | S3COMPAT 'Mode nnh' fail 1 (SR00) |
 | MODE-142 | Load the selected DCLK using a documented T32/64 9.2 path, with the screen/FIFO conditions required by MODE-138 and MODE-140. Derive CR54 from the DCLK that is finally programmed. No further order among independent mode-state writes is prescribed | T32/64 9.2; MODE-138, MODE-140 | should | not checked |

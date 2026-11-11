@@ -185,6 +185,8 @@ of the review of 2 November and are in its record.
   and the "May read" list names it, so the RBIL citations of the rules can be checked in-repo;
   the Ferraro book is linked for reading at its Internet Archive copy.
 
+- **11 November 2026** (branch `vibe/247-765-p10-sr8-unlock`). [`docs/chip-rules.md`](../chip-rules.md) REG-4: while SR8 does not hold xxxx0110b, writes to the extended sequencer registers (SR9 and above; SR9-SR18 T32/64, SR9-SR1C V+, SR9-SR6F UV+) are ignored - data book text only (V+ DB018-A 16.2 SR8, T32/64 14.2 SR8 and 11.2.1), with the two new extracts under [`primary-extracts/`](primary-extracts/), named in "May read" above; CLK-3 and CLK-5 cross-reference it. spec-a POST-3 and CONV-8 and spec-b MODE-139 and the VCLK term now state the consequence and the fix: an extended-register write outside an unlocked window must be wrapped in SR8 = 06h with the relock after. No ROM offset, routine name, table layout or BIOS-internal behaviour was added; REG-4's Checked by names only externally visible facts (an SR15 readback value and the measured frame rate, card #247). The pre-check counts above stand at `e224454`; the added lines are rule text and public-source quotes. A fresh second-reader pass on the changed files is needed before any of these IDs cross.
+
 ### The searches, run by the author as a pre-check (counts of lines, not findings)
 
 Run on 7 November 2026 at `e224454`.
@@ -228,6 +230,7 @@ say so in the record, and the review is done again by another session.
 | [`standards/pci/pci23.pdf`](../../standards/pci/pci23.pdf) and [`primary-extracts/pci-2.3-section-6.3.md`](primary-extracts/pci-2.3-section-6.3.md) | part A ROM header / PCI data structure / INIT (ROM-1..6, POST-1) |
 | [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt) and [`primary-extracts/vbe-1.2-status-and-ah0f.md`](primary-extracts/vbe-1.2-status-and-ah0f.md) | part C status / failure, AH=0Fh reinit advice, ModeAttributes D0 |
 | [`primary-extracts/trio32-64-enhanced-mode-graphics-engine.md`](primary-extracts/trio32-64-enhanced-mode-graphics-engine.md) and [`primary-extracts/trio64vplus-15.2-engine-access.md`](primary-extracts/trio64vplus-15.2-engine-access.md), with their full documents in [`datasheets/s3/pdf/`](../../datasheets/s3/pdf/) | chip-rules ENG-2..ENG-4 and spec-b MODE-151: the graphics engine's access path and rectangle fill (engine clear of video memory, no PCI bus traffic, expected faster than CPU writes) |
+| [`primary-extracts/trio64vplus-16.2-sr8-lock.md`](primary-extracts/trio64vplus-16.2-sr8-lock.md) and [`primary-extracts/trio32-64-14.2-sr8-lock.md`](primary-extracts/trio32-64-14.2-sr8-lock.md), with their full documents in [`datasheets/s3/pdf/`](../../datasheets/s3/pdf/) | chip-rules REG-4 and the lock rows of spec-a (POST-3, CONV-8) and spec-b (MODE-139, the VCLK term): the SR8 lock on the extended sequencer registers SR9 and above |
 | [`decisions-milestones-1-4.md`](decisions-milestones-1-4.md) | owner decisions that close Q100, Q0F, MCLK, FIFO, POST-41, ROM-8/9 |
 | [`primary-extracts/README.md`](primary-extracts/README.md) | index of extracts |
 | [`review-2026-11-02.md`](review-2026-11-02.md) | which places changed after the outside review |
