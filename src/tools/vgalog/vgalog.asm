@@ -148,10 +148,13 @@ mmode   db 0                    ; 1 = memory mode (/M)
 depth   db 0                    ; INT 10h nesting in memory mode
 rtotal  dd 0                    ; calls logged in memory mode
 rnext   dw 0                    ; next ring slot (0..rbn-1)
-RBN     equ 1024                ; default ring slots of 32 bytes, at ring (after the resident code)
+RBN     equ 1024                ; default ring slots of 32 bytes
 RBNXL   equ 4096                ; /XL: a 128 KB ring instead
+RSEGP   equ (ring-$$+0x100+15)>>4 ; paragraphs from the PSP to the ring's own segment: the ring starts
+                                ; at rseg:0000 (16-aligned), so 2048 slots fit per 64 KB segment
 rbn     dw RBN                  ; active ring slots (RBNXL with /XL); /D reads it as [es:rbn]
 rmask   dw RBN-1                ; rnext mask (rbn-1; rbn is a power of two)
+rseg    dw 0                    ; the ring's segment (CS + RSEGP), set at install
 xlflag  db 0                    ; 1 = /XL was given on the command line
 tflag   db 0                    ; 1 = port trace (/T)
 tron    db 0                    ; 1 while a traced mode set runs
@@ -273,7 +276,8 @@ misr:   cmp ah,0x02
         push si
         push cs
         pop ds
-        call slot                       ; SI = the next slot, its call number set
+        call slot                       ; SI = the slot in the ring, DS = its segment, call number set
+        push ds                         ; the ring segment of the slot
         mov [si+2],ax
         mov [si+4],bx
         mov [si+6],cx
@@ -281,16 +285,16 @@ misr:   cmp ah,0x02
         mov [si+10],es
         mov [si+12],di
         push ax
-        mov al,[depth]
+        mov al,[cs:depth]
         mov [si+23],al
         call tick
         pop ax
         call tstart                     ; /T: a mode set, or a call inside one: trace it
-        inc byte [depth]
-        mov bp,sp                       ; [bp] caller SI, [bp+2] caller DS, [bp+4] caller BP
-        xchg si,[bp]                    ; keep the slot there, SI = caller's SI
-        mov ds,[bp+2]
-        mov bp,[bp+4]
+        inc byte [cs:depth]
+        mov bp,sp                       ; [bp] ring seg, [bp+2] caller SI, [bp+4] caller DS, [bp+6] caller BP
+        xchg si,[bp+2]                  ; keep the slot there, SI = caller's SI
+        mov ds,[bp+4]
+        mov bp,[bp+6]
         pushf                           ; the BIOS's IRET frame: no trap flag, so the trace ends there
         cmp byte [cs:tron],0
         je .call
@@ -301,15 +305,14 @@ misr:   cmp ah,0x02
         popf
         pop bp
 .call:  call far [cs:old10]
-        ; stack: slot, DS, BP (caller's), IP, CS, caller flags
+        ; stack: ring seg, slot, DS, BP (caller's), IP, CS, caller flags
         pushf                           ; result flags
         push bp
-        mov bp,sp                       ; [bp] BIOS BP, +2 result flags, +4 slot, +6 DS, +8 BP, +10 IP,
-        push ds                         ; +12 CS, +14 caller flags
+        mov bp,sp                       ; [bp] BIOS BP, +2 result flags, +4 ring seg, +6 slot, +8 DS,
+        push ds                         ; +10 BP, +12 IP, +14 CS, +16 caller flags
         push si
-        push cs
-        pop ds
-        mov si,[bp+4]
+        mov ds,[bp+4]                   ; the ring segment of the slot
+        mov si,[bp+6]
         mov [si+14],ax
         mov [si+16],bx
         mov [si+18],cx
@@ -320,53 +323,67 @@ misr:   cmp ah,0x02
         call s3regs                     ; SR10 SR11 CR58 CR59 CR5A CR6D -> [si+26..31]
         call wfhook                     ; /W: a 4F01h's window function to ours
         call tstop                      ; the traced mode set ended: INT 1 back
-        dec byte [depth]
+        dec byte [cs:depth]
         mov ax,[bp+2]                   ; the BIOS result flags with the caller's interrupt and trap
         and ax,0xFCFF                   ; flags (a call from inside a traced one goes on being traced)
         push bx
-        mov bx,[bp+14]
+        mov bx,[bp+16]
         and bx,0x0300
         or ax,bx
         pop bx
-        mov [bp+14],ax
-        cmp byte [tclr],0               ; /P: the trace ended during this call: the caller goes on
+        mov [bp+16],ax
+        cmp byte [cs:tclr],0            ; /P: the trace ended during this call: the caller goes on
         je .tp                          ; untraced
-        and byte [bp+15],0xFE
-        cmp byte [depth],0
+        and byte [bp+17],0xFE
+        cmp byte [cs:depth],0
         jne .tp
-        mov byte [tclr],0
-.tp:    cmp byte [tpnew],0              ; /P: this 4F02h starts the program's trace
+        mov byte [cs:tclr],0
+.tp:    cmp byte [cs:tpnew],0           ; /P: this 4F02h starts the program's trace
         je .tq
-        cmp byte [depth],0
+        cmp byte [cs:depth],0
         jne .tq
-        mov byte [tpnew],0
-        or byte [bp+15],1
+        mov byte [cs:tpnew],0
+        or byte [bp+17],1
 .tq:    pop ax
         pop si
         pop ds
         pop bp                          ; BP as the BIOS returned it (AX=1130h returns ES:BP)
-        add sp,8                        ; result flags, slot, DS, BP
+        add sp,10                       ; result flags, ring seg, slot, DS, BP
         iret
 
-; The next ring slot (DS = CS): SI = its offset, +0 its call number (the low word of rtotal), rtotal
-; counted. Keeps the other registers.
-slot:   mov si,[rnext]
+; The next ring slot: SI = its number, rnext and rtotal counted, then DS:SI = its address in the ring
+; and +0 its call number (the low word of rtotal). Keeps AX and the other registers; DS on return is
+; the ring segment of the slot. The ring is addressed per slot (rds), never as one 16-bit
+; ring+slot*32 offset: past 64 KB that wraps and overwrites this code (the /XL lockup on the card).
+slot:   mov si,[rnext]                  ; DS = CS
         inc word [rnext]
         push ax
         mov ax,[rmask]
         and [rnext],ax
-        pop ax
-        shl si,5
-        add si,ring
-        push ax
         mov ax,[rtotal]
-        mov [si],ax
         add word [rtotal],1
         adc word [rtotal+2],0
+        push ax                         ; the call number
+        call rds                        ; DS:SI = the slot's address in the ring (keeps AX)
+        pop ax
+        mov [si],ax                     ; +0 the call number
         pop ax
         ret
 
-; The BIOS tick (0040:006C low word) into [SI+24] (DS = CS). Keeps all registers.
+; DS:SI = the ring slot whose number is in SI: the ring starts at [rseg]:0000, 32 bytes per slot,
+; rbn slots (with /XL the slots from 2048 on are at rseg+1000h, the next 64 KB). Keeps AX.
+rds:    push eax
+        movzx eax,si
+        shl eax,5                       ; EAX = slot*32 (17 bits with /XL)
+        mov si,ax                       ; SI = the offset within the 64 KB segment
+        shr eax,16
+        shl eax,12                      ; paragraphs of the 64 KB segment(s)
+        add ax,[rseg]                   ; DS = CS here
+        mov ds,ax
+        pop eax
+        ret
+
+; The BIOS tick (0040:006C low word) into [SI+24] (DS = the ring segment of the slot). Keeps all registers.
 tick:   push es
         push ax
         xor ax,ax
@@ -377,11 +394,11 @@ tick:   push es
         pop es
         ret
 
-; /W, after a call (DS = CS, SI = its slot, the registers in [SI+2..12] and out [SI+14..20]): when it
-; was 4F01h and returned 004Fh, the WinFuncPtr in the caller's buffer (ES:DI + 0Ch) is replaced by
-; wfn, and the BIOS's routine kept in wfold. Not when it is 0 (no window function), already ours, or
-; another routine than the one hooked first. Keeps all registers.
-wfhook: cmp byte [wflag],0
+; /W, after a call (DS = the ring segment of the slot, SI = the slot, the registers in [SI+2..12] and
+; out [SI+14..20]): when it was 4F01h and returned 004Fh, the WinFuncPtr in the caller's buffer
+; (ES:DI + 0Ch) is replaced by wfn, and the BIOS's routine kept in wfold. Not when it is 0 (no window
+; function), already ours, or another routine than the one hooked first. Keeps all registers.
+wfhook: cmp byte [cs:wflag],0
         je .r
         cmp word [si+2],0x4F01
         jne .r
@@ -403,15 +420,15 @@ wfhook: cmp byte [wflag],0
         mov di,cs
         cmp dx,di
         je .x                           ; ours already
-.n:     mov di,[wfold]
-        or di,[wfold+2]
+.n:     mov di,[cs:wfold]
+        or di,[cs:wfold+2]
         jz .k                           ; the first: keep it
-        cmp ax,[wfold]
+        cmp ax,[cs:wfold]
         jne .x                          ; another routine: left as it is
-        cmp dx,[wfold+2]
+        cmp dx,[cs:wfold+2]
         jne .x
-.k:     mov [wfold],ax
-        mov [wfold+2],dx
+.k:     mov [cs:wfold],ax
+        mov [cs:wfold+2],dx
         mov di,[si+12]
         mov word [es:di+0x0C],wfn
         mov [es:di+0x0E],cs
@@ -457,7 +474,7 @@ wfn:    pushf
         mov [si+26],ax
         mov [si+28],ax
         mov [si+30],ax
-        mov al,[depth]
+        mov al,[cs:depth]
         or al,0x80
         mov [si+22],ah
         mov [si+23],al
@@ -541,24 +558,24 @@ s3regs: push ax
         pop ax
         ret
 
-; /T, before the BIOS call (DS = CS, SI = the call's slot, AX = the caller's AX, [depth] = its depth).
-; A mode set at depth 0 (AH=00h, AX=4F02h) starts the trace: INT 1 hooked, tron = 1. Every call while
-; tron is 1 gets a marker event. Keeps all registers.
-tstart: cmp byte [tflag],0
+; /T, before the BIOS call (DS = the ring segment of the slot, SI = the slot, AX = the caller's AX,
+; [cs:depth] = its depth). A mode set at depth 0 (AH=00h, AX=4F02h) starts the trace: INT 1 hooked,
+; tron = 1. Every call while tron is 1 gets a marker event. Keeps all registers.
+tstart: cmp byte [cs:tflag],0
         je .r
-        cmp byte [tron],0
+        cmp byte [cs:tron],0
         je .new
-        cmp byte [tpost],0              ; /P: the program is traced; its next mode set is traced as one
+        cmp byte [cs:tpost],0           ; /P: the program is traced; its next mode set is traced as one
         je .mark                        ; (a call from inside the traced one)
-        cmp byte [depth],0
+        cmp byte [cs:depth],0
         jne .mark
         test ah,ah
         jz .ps
         cmp ax,0x4F02
         jne .mark
-.ps:    mov byte [tpost],0
+.ps:    mov byte [cs:tpost],0
         jmp .mark
-.new:   cmp byte [depth],0
+.new:   cmp byte [cs:depth],0
         jne .r
         test ah,ah
         jz .on
@@ -570,46 +587,46 @@ tstart: cmp byte [tflag],0
         mov es,ax
         cli
         mov ax,[es:4]
-        mov [oldi1],ax
+        mov [cs:oldi1],ax
         mov ax,[es:6]
-        mov [oldi1+2],ax
+        mov [cs:oldi1+2],ax
         mov word [es:4],i1
         mov [es:6],cs
         sti
         pop ax
         pop es
-        mov byte [tron],1
-        mov byte [tpend],0
+        mov byte [cs:tron],1
+        mov byte [cs:tpend],0
 .mark:  push ax
         push bx
         mov bx,[si]                     ; the call number
-        mov al,[depth]
+        mov al,[cs:depth]
         mov ah,3
         call tput
-        mov byte [tlv],0                ; nothing merges into a marker
+        mov byte [cs:tlv],0             ; nothing merges into a marker
         pop bx
         pop ax
 .r:     ret
 
-; /T, after the BIOS call (DS = CS, SI = its slot): at depth 1 (the traced mode set itself) INT 1 is
-; put back and tron cleared. With /P, after a 4F02h (or while the program is traced) the trace goes on
-; into the program instead: tpost = 1 with TPMAX events to go (misr sets the caller's trap flag).
-; Keeps all registers.
-tstop:  cmp byte [tron],0
+; /T, after the BIOS call (DS = the ring segment of the slot, SI = the slot): at depth 1 (the traced
+; mode set itself) INT 1 is put back and tron cleared. With /P, after a 4F02h (or while the program is
+; traced) the trace goes on into the program instead: tpost = 1 with TPMAX events to go (misr sets the
+; caller's trap flag). Keeps all registers.
+tstop:  cmp byte [cs:tron],0
         je .r
-        cmp byte [depth],1
+        cmp byte [cs:depth],1
         jne .r
-        cmp byte [tpost],0
+        cmp byte [cs:tpost],0
         jne .r                          ; the program is traced: it goes on
-        cmp byte [tpflag],0
+        cmp byte [cs:tpflag],0
         je tpoff
         cmp word [si+2],0x4F02
         je .on
-        mov byte [tclr],1               ; /P: a mode set ends the program's trace: no trap flag back
+        mov byte [cs:tclr],1            ; /P: a mode set ends the program's trace: no trap flag back
         jmp tpoff
-.on:    mov byte [tpost],1
-        mov byte [tpnew],1
-        mov word [tpleft],TPMAX
+.on:    mov byte [cs:tpost],1
+        mov byte [cs:tpnew],1
+        mov word [cs:tpleft],TPMAX
 .r:     ret
 
 ; The trace ends: INT 1 put back, tron, tpost and tpend cleared. Any DS. Keeps all registers and the
@@ -950,7 +967,10 @@ flush:  ; write rec (16 bytes) and commit, only if DOS is not busy. DS=CS
         pop ax
 .skip:  ret
 resend:                                 ; everything from here is freed after installation (file mode)
-ring:                                   ; memory mode: rbn x 32 bytes of ring buffer from here (RBN, or RBNXL with /XL)
+ring:                                   ; not the ring itself: it starts at rseg:0000 (RSEGP paragraphs
+                                        ; after the PSP), 32 bytes per slot, rbn slots - a 128 KB /XL ring
+                                        ; spans rseg and rseg+1000h and would wrap into this code if it
+                                        ; were addressed from here with a 16-bit offset (the /XL lockup)
 
 ; ---------------- command line ----------------
 init:   mov si,0x81
@@ -1147,11 +1167,13 @@ install:
         mov ax,0x4C01
         int 0x21
 
-; DX = paragraphs for the PSP + the resident code + the call ring (rbn x 32 bytes). Clobbers EAX.
+; DX = paragraphs for the PSP + the resident code + the call ring (rbn x 32 bytes at rseg:0000,
+; RSEGP paragraphs of code in front of it). Clobbers EAX.
 rbnpara: movzx eax,word [rbn]
         shl eax,5
-        add eax,ring-$$+0x100+15
-        shr eax,4
+        add eax,15
+        shr eax,4                       ; the ring's paragraphs
+        add eax,RSEGP                   ; + the PSP and the code up to the ring's segment
         mov dx,ax
         ret
 
@@ -1189,6 +1211,9 @@ minst:  call findmem
         int 0x21
 .go:    mov byte [mmode],1
         mov [mypsp],cs
+        mov ax,cs
+        add ax,RSEGP
+        mov [rseg],ax                   ; the call ring starts at rseg:0000
         call getinfo
         mov ax,0x3510
         int 0x21
@@ -1280,36 +1305,31 @@ dump:   call findmem
         int 0x21
         pop ds
         jc .err
-        ; part 1: dfirst .. end (or count), part 2: 0 ..
-        mov ax,[es:rbn]
-        sub ax,[dfirst]
-        cmp ax,[dcnt]
-        jbe .p1
-        mov ax,[dcnt]
-.p1:    mov cx,ax
-        sub [dcnt],ax
-        shl cx,5
-        mov dx,[dfirst]
-        shl dx,5
-        add dx,ring
-        push ds
-        push es
-        pop ds
-        mov ah,0x40
-        int 0x21
-        pop ds
-        jc .err
+        ; the records, oldest first, each through its own segment: the ring starts at [es:rseg]:0000
+        ; and with /XL spans two 64 KB segments, so one DS:DX pair cannot cover a run across slot 2048
         mov cx,[dcnt]
         jcxz .cl
-        shl cx,5
-        mov dx,ring
+        mov ax,[dfirst]
+.w:     push ax
+        push cx
         push ds
-        push es
-        pop ds
+        movzx eax,ax
+        shl eax,5
+        mov dx,ax                       ; DX = the slot's offset in its 64 KB segment
+        shr eax,16
+        shl eax,12
+        add ax,[es:rseg]
+        mov ds,ax
         mov ah,0x40
+        mov cx,32
         int 0x21
         pop ds
+        pop cx
+        pop ax
         jc .err
+        inc ax
+        and ax,[es:rmask]
+        loop .w
 .cl:    cmp byte [es:tflag],0
         je .cf
         call tdump
