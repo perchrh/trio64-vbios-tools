@@ -288,3 +288,19 @@ books stay the closer relatives (README "Missing documents"). What V968 says tha
   bits 7-4 = 0000b, while the CR67 descriptions list 0111b as mode 12. The tools accept both (CLK-2).
 - UV+ errata ER010-B items 1 and 4 correct the Trio64V+ data book; they are taken as Trio64V+ rules
   and so for the chips that inherit from it (REG-2, ENG-1).
+- The V2 book's omissions are gaps, not ambiguities. Its section 4 lists only what changed from the
+  Trio64V+, so a register it does not redefine keeps its V+ or T32/64 description (Inheritance above):
+  CR59/CR5A (linear addressing window base, T64-REG-2), CR54 bits other than bit 2 (the V+ meaning of
+  the M parameter in MCLKs, VP-MEM-5), SR15 bit 7 and SRA bit 7 (VP-MEM-2, T64-MEM-4). CR36 bits 7-5
+  (memory size) are encoded in the T32/64 book (T64-MEM-5); the V2 book documents only bits 3-2
+  (V2-MEM-2). Added 11 November 2026.
+- V2 3.5's sentence on CR87_1 ("the default (CR87_1 = 0) is 2-cycle operation if SRA_7 and SR15_7 are
+  set to 1") is confusing prose, not an ambiguity: the CR87 register description in the same book is
+  the rule - bit 1 = 1LA, 1 enables 1-cycle linear addressing write operation and requires memory that
+  supports 1-cycle operation (V2-MEM-4). The tools read the register description. Added 11 November 2026.
+- CR41 and CR52 are documented in both books as flag registers "used by the video BIOS" (T32/64 CR41,
+  V+ CR52), so their content is the BIOS's own choice; nothing about them is ambiguous (CONV-10).
+  Added 11 November 2026.
+- DDC is chip-generation-specific, not ambiguous: the T32/64 has no DDC pins and a board wires them
+  through CR5C/3C8h (T64-DDC-1); the V+ has LPB-mode pins via MMFF20 (VP-DDC-1); the V2 has its own
+  SPCLK/SPD pins via MMFF20 (V2-DDC-1). Added 11 November 2026.
