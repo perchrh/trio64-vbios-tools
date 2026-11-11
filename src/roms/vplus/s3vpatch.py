@@ -28,14 +28,19 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
          vext.asm    fast 4F05 BH=0 at the INT 10h entry, the window set booster entry
          vfix.asm    (p2) 4F02 refuses a mode that does not fit the video memory (4F01's rule), and the
                      VBE dispatcher keeps the upper halves of the 32-bit registers (4F06 changed them);
-                     msx: after the mode set, 320x200 at 15/16/32 bpp (10Dh-10Fh) gets SR01 bit 3 (dot
-                     clock / 2) for its new 25.06 MHz DCLK (the refresh entries below)
+                     msx: after the mode set, 320x200 at 15/16/32 bpp (10Dh-10Fh) gets SR15 bit 4 (DCLK
+                     / 2 into VCLK, the RAMDAC clock; p8, #247 - p2-p7 used SR01 bit 3, the character
+                     clock only, which the 16/32 bpp pixel path does not follow on a card)
   tables (p2) no interlaced timing: the modes that exist only interlaced on the Trio64V+ (118h
          1024x768x16M, 119h/11Ah 1280x1024x32K/64K, 120h 1600x1200; S3 modes 78h, 79h, 7Ah, 7Ch) are
          removed from the mode table and the VESA list, and the interlaced refresh entries of 1024x768
          and 1280x1024 are cut off their lists, so refresh index 0 gives the lowest non-interlaced rate;
-         10Dh-10Fh get 25.06 MHz (VCO 200.5 MHz) in place of 12.62 MHz (VCO 101 MHz, below the 135 MHz
-         minimum), halved by SR01 bit 3 for the same timing
+         10Dh-10Fh keep 25.06 MHz (VCO 200.5 MHz) in place of 12.62 MHz (VCO 101 MHz, below the 135 MHz
+         minimum), halved by SR15 bit 4 after the mode set.
+  tables (p8, #247) the CRTC tables of 10Dh-10Fh (02B8h, 0693h): the vertical total 449 -> 525 lines
+         (the 640x480 at 60 Hz frame), so with the halved DCLK the modes run at 31.3 kHz, 59.7 Hz
+         instead of 31.5 kHz, 69.8 Hz - 60 Hz, a rate LCDs commonly take, instead of the ~70 Hz of the
+         VESA 320x200 timing (owner's decision, #247)
          shared with the other builds (src/roms/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,
          VGA mode set clear), font32.asm and scr13.asm (32-bit font load, mode 13h scroll; also the
@@ -45,8 +50,10 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
          --memtype gets that clock instead, at most 60 MHz
   sign-on "1.03-08N-p4", checksum byte 7FFF
 
-Not applied, and why (docs/765-rom.md): the VCO fix (the Trio64V+ post divider R has 2 bits, at
-most divide by 8, so 12.6 MHz for 10Dh-10Fh cannot come from a VCO of 135 MHz or more), the FIFO fix,
+Not applied, and why (docs/765-rom.md): the VCO fix of the Trio64V2 (R with 3 bits, divide by 16, so
+12.6 MHz from a VCO in range; the Trio64V+ post divider R has 2 bits, at most divide by 8, so 12.6 MHz
+for 10Dh-10Fh cannot come from a VCO of 135 MHz or more - p2 gives them 25.06 MHz halved by SR15 bit 4,
+p8 their CRTC tables a 525-line frame for 60 Hz), the FIFO fix,
 CR23/CR26, the POST delay and the DDC fixes (Trio64V2 registers or code 1.03-08 does not have), the
 VBE 2.0 functions (out of scope) and the black level (a card decision).
 
@@ -72,7 +79,7 @@ REF_SHA = '9f297e58078d950fedf4a446d204cbb385c806adef1f73bf408b80fc7cae4cbe'   #
 # only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = 'd715365c584d4592277d65fd16dcf8a46b801d6b79c95d585bfd4d70e4652b40'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = '22dbd84501f22502dc7188c390d01ad6a32825426ddb57ec2a9cb57c1349ddf7'  # 1.03-08N-p7 (NASM 3.02), emulator tests passed
+RESULT_SHA = '25b84b4f8a333377b22d7168758c54882f6d25a57b08f82975d3007da796945e'  # 1.03-08N-p8 (NASM 3.02), emulator tests passed
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02 (see
 # s3patch.BLOCK_SHA)
 BLOCK_SHA = {
@@ -81,7 +88,7 @@ BLOCK_SHA = {
     'p13fill.asm': 'bebe3a6e43ddd275', 'p13df.asm': '7e785b4ba99b8749',
     'p13move.asm': '5f4a4e020f008747', 'p13bfill.asm': '882888314f88b876',
     'p13bfa.asm': 'bfff24ae94b812aa', 'clear32.asm': '329ca478763cce08',
-    'vfix.asm': 'a2fe5962c89579d5',
+    'vfix.asm': 'efd691d7efe6c38c',
 }
 # Font tables, from src/roms/fonts (p5, #141): (name, table of fonts.py, address). The 9x14 table's
 # closing 00h is the first byte of the 8x16 font (glyph 00h, row 0), as in 1.03-08N.
@@ -163,10 +170,24 @@ VENT = (0x4C90, '78 ae 4d 79 ba 4d 7a c6 4d 7c d2 4d 80 00 00 4e de 4d 4f ea 4d 
 # non-interlaced rate
 ILACE_END = {0x0563: '5b 07 02', 0x0590: 'bf 07 04', 0x060E: 'eb 08 02', 0x065F: 'bf 07 04'}
 ILACE_ENT = (0x055A, 0x0587, 0x0605, 0x0656)
-# p2: the refresh entries of 320x200 at 15/16 bpp (S3 modes 65h, 66h) and 32 bpp (67h): SR13 = M, SR12 = N/R
-# 12.62 MHz (VCO 101 MHz, below the 135 MHz minimum) becomes 25.06 MHz (VCO 200.5 MHz), which vfix.asm's
-# msx halves with SR01 bit 3
+# p2, halved since p8 by SR15 bit 4 instead of SR01 bit 3 (#247): the refresh entries of 320x200 at
+# 15/16 bpp (S3 modes 65h, 66h, entry 05A2h) and 32 bpp (67h, entry 05ABh): SR13 = M, SR12 = N/R.
+# 1.03-08's 12.62 MHz (SR13 = 7Dh, SR12 = 70h, VCO 101 MHz, below the 135 MHz minimum, PLL-1) cannot
+# come from a VCO in range on the Trio64V+ (R stops at 8), so the entries give 25.06 MHz (28h 61h,
+# VCO 200.5 MHz, the pair of 640x480), halved after the mode set. p2-p7 halved it with SR01 bit 3,
+# the internal CHARACTER clock only (T32/64 SR1 bit 3): the pixel path did not follow in 16/32 bpp
+# on a card, #247. p8 halves with SR15 bit 4, DCLK / 2 into VCLK, the RAMDAC clock (T32/64 9.3, SR15
+# bit 4; the stock Phoenix BIOS of the STB card does the same and displays these modes correctly):
+# vfix.asm's msx sets SR15 bit 4, not SR01 bit 3.
 HALF_DCLK = {0x05A2: 'b8 02 80 7d 70', 0x05AB: '93 06 80 7d 70'}
+# p8 (#247): the CRTC tables the two refresh entries above point at (02B8h for 65h/66h, 0693h for 67h;
+# nothing else references them): CR06/CR07, the vertical total 449 -> 525 lines (CR06 = 0Bh,
+# CR07 = 3Eh: VT bit 9 in, VT bit 8 out; the 640x480 at 60 Hz frame), so with the halved DCLK the
+# modes run at 31.3 kHz, 59.7 Hz instead of 31.5 kHz, 69.8 Hz - the 60 Hz class LCDs commonly take,
+# instead of the ~70 Hz of the VESA 320x200 timing (owner's decision, #247). The horizontal and
+# display registers stay: 320x200 at 80 % of the line, double scanned (CR09 = 41h), 400 of 525 lines
+# high, as 320x200 sits in a 640x480 frame. Nothing else in 1.03-08 uses these tables.
+CRTC_320X200 = {0x02B8: '5f 4f 51 82 52 9f bf 1f 00 41', 0x0693: '2d 27 28 00 29 10 bf 1f 00 41'}
 
 
 def drop_interlaced(d, put):
@@ -280,7 +301,11 @@ def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     put(a, d[a:a + 5], call(a, lab['vbe32']) + b'\x90\x90', 'VBE dispatcher: keep the 32-bit registers (p2)')
     drop_interlaced(d, put)
     for off, b in HALF_DCLK.items():
-        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR01 bit 3 (p2)')
+        put(off, b, b[:-5] + '28 61', '320x200x15/16/32: DCLK 25.06 MHz (VCO 200.5 MHz), halved by SR15 bit 4 (p2, p8 #247)')
+    for off, b in CRTC_320X200.items():
+        old = bytes.fromhex(b)
+        new = old[:6] + bytes.fromhex('0b 3e') + old[8:]
+        put(off, b, new.hex(' '), '320x200x15/16/32 CRTC table: vertical total 525 lines, 59.7 Hz at 31.3 kHz (p8, #247)')
     for off, old, new in DEFAULT_MCLK:
         if old == new:
             if bytes(d[off:off + 2]) != bytes.fromhex(old):

@@ -6,13 +6,16 @@
 ;   the 16-bit registers only, and 4F06 (among others) computes in EAX, ECX and EDX, so the caller got
 ;   them back changed; the 2.04.07 dispatcher keeps them. The handlers return their results in the
 ;   INT 10h stack frame (BP), so restoring all eight 32-bit registers changes no result.
-; - msx: the mode set, then in 320x200 at 15, 16 and 32 bpp (S3 modes 65h-67h, VESA 10Dh-10Fh) the dot
-;   clock halved (SR01 bit 3). 1.03-08 ran these modes at a 12.6 MHz DCLK with the PLL VCO at 101 MHz,
-;   below the 135 MHz minimum (PLL-1); the Trio64V+ post divider stops at 8, so 12.6 MHz cannot come
-;   from a VCO in range. Their refresh entries now give 25.06 MHz (VCO 200.5 MHz, the PLL pair of
-;   640x480), and SR01 bit 3 divides it by 2 for the CRTC, so the timing stays as it was (31.3 kHz,
-;   69.8 Hz instead of 70.3 Hz). Whether the RAMDAC path of these modes follows SR01 bit 3 is to be
-;   seen on a card; the emulator and S3COMPAT model the CRTC side only.
+; - msx: the mode set, then in 320x200 at 15, 16 and 32 bpp (S3 modes 65h-67h, VESA 10Dh-10Fh) SR15
+;   bit 4 set, DCLK / 2 into VCLK (the RAMDAC clock). 1.03-08 ran these modes at a 12.6 MHz DCLK with
+;   the PLL VCO at 101 MHz, below the 135 MHz minimum (PLL-1); the Trio64V+ post divider stops at 8,
+;   so 12.6 MHz cannot come from a VCO in range. Their refresh entries give 25.06 MHz (VCO 200.5 MHz,
+;   the PLL pair of 640x480), halved after the mode set. p2-p7 halved with SR01 bit 3, the internal
+;   CHARACTER clock only (T32/64 SR1 bit 3): on a card the pixel path of 16 and 32 bpp did not follow
+;   it (#247: 10Eh and 10Fh wrong, 10Dh fine). p8 uses SR15 bit 4, the DCLK / 2 that reaches VCLK
+;   (T32/64 9.3, SR15 bit 4) - the stock Phoenix BIOS of the STB card halves these modes with it and
+;   displays them correctly - and their CRTC tables (02B8h, 0693h) give a 525-line frame, so the modes
+;   run at 31.3 kHz, 59.7 Hz instead of 31.5 kHz, 69.8 Hz (the 60 Hz class LCDs commonly take).
 bits 16
 cpu 386
 %include "bios.inc"
@@ -22,7 +25,7 @@ org 0x7D2E
 ; In and out: as MODESET. Keeps every register, the flags and the sequencer index. Interrupts are off
 ; from reading the sequencer index to putting it back (p3, #116): an interrupt there would stretch the
 ; synchronous reset to the length of its handler, and one that writes the sequencer index without
-; putting it back would send the SR01 write elsewhere. The popf at the end restores IF.
+; putting it back would send the SR15 write elsewhere. The popf at the end restores IF.
 msx:    call    MODESET
         pushf
         push    ax
@@ -41,12 +44,12 @@ msx:    call    MODESET
         push    ax                      ; the sequencer index, put back below
         mov     ax,0x0100               ; synchronous reset while the dot clock changes
         out     dx,ax
-        mov     al,0x01
+        mov     al,0x15
         out     dx,al
         inc     dx
         in      al,dx
-        or      al,0x08                 ; SR01 bit 3: dot clock = DCLK / 2
-        out     dx,al
+        or      al,0x10                 ; SR15 bit 4 (p8, #247): VCLK = DCLK / 2 (SR01 bit 3, the character
+        out     dx,al                  ; clock only, left the 16/32 bpp pixel path undivided on a card)
         dec     dx
         mov     ax,0x0300               ; reset off
         out     dx,ax
