@@ -491,8 +491,8 @@ Hercules card (11 November 2026, results/86C765-p10-hercules.ZIP, kept local) th
 13h) and all three modes measured 59.6 Hz, 31.2 kHz, 525 lines, but the picture at p8-p10's 525-line frame
 was wrong: 10Dh/10Eh squished into the top 400 of 525 lines, 10Fh blank. 1.03-08N-p11 reverts the frame to
 1.03-08's 449 lines: with the halved DCLK the modes run at 31.3 kHz, 69.8 Hz, the VESA 70 Hz and exactly
-the timing registers the stock Phoenix BIOS of the STB card programs and displays correctly; the device
-tests with p11 were OK (11 November 2026): 10Dh-10Fh display correctly at 449 lines, 69.8 Hz
+the timing registers the stock Phoenix BIOS of the STB card programs and displays correctly; the picture
+of 10Dh-10Fh in VBESHOW with p11 is still for a card to show
 ([`docs/765-rom.md`](docs/765-rom.md), "10Dh-10Fh").
 
 ## Trio64 ROM
