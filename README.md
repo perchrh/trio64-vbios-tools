@@ -175,12 +175,13 @@ tests"), then runs each test tool (S3TEST, S3COMPAT, `VBESHOW /R`) with `/V /S`:
 first ("before S3TEST" and so on; S3REGS appends to S3REGS.TXT), then the tool, then `VGALOG /D` with the
 dump renamed to VGALOG0.BIN, VGALOG1.BIN, ... (one per tool run; `VGALOG /U` and `/M /XL` between the tools
 start a fresh session, so each file's call counter covers only that tool and holds its last 4096 INT 10h
-calls). At the end a second snapshot ("after tests") and
+calls). RUNALL.BAT deletes S3REGS.TXT at its start and each VGALOGN.BIN before the rename, so a run packs
+only its own files even when CLEAN.BAT was not run first (#240). At the end a second snapshot ("after tests") and
 `VGALOG /D` write VGALOG.BIN, and it beeps (`echo` of Ctrl-G) when done. It leaves the .LOG and .DBG files,
-S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies
-C:\S3REGS.TXT and C:\VGALOG.BIN (the files AUTOEXEC.BAT and Windows runs leave in the root, when they
-exist) as S3REGSR.TXT and VGALOGR.BIN, and runs REPORT. REPORT writes one stored ZIP (method 0, no
-compression; Info-ZIP's unzip reads it) of the logs, the .DBG files, S3REGS.TXT, S3REGSR.TXT and every VGALOG*.BIN (VGALOG.BIN, the per-tool
+S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies the run's own
+S3REGS.TXT and VGALOG.BIN (not the ones AUTOEXEC.BAT and Windows runs leave in the root) as S3REGS3.TXT and
+VGALOGR.BIN, and runs REPORT. REPORT writes one stored ZIP (method 0, no
+compression; Info-ZIP's unzip reads it) of the logs, the .DBG files, S3REGS.TXT, S3REGS3.TXT and every VGALOG*.BIN (VGALOG.BIN, the per-tool
 VGALOG0.BIN... dumps, VGALOGR.BIN). A file that
 is missing is a warning on stderr and is left out. The archive is created under the part name, not
 renamed into it: Windows 98 DOS can create a long name and cannot rename an existing file to one, which
@@ -191,7 +192,7 @@ After the new archive is written, REPORT deletes a leftover `runall.zip` and the
 part's name. VGALOG stays resident afterwards (`VGALOG /U`
 unloads it); while it is loaded, every INT 10h call takes a little longer, which shows only in the timing
 lines (INFO). `CLEAN.BAT` (from `clean.bat`) deletes what a run leaves behind before the next one: the
-.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, VGASHOW.LOG, S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps, S3REGSR.TXT and VGALOGR.BIN
+.DBG files, S3TEST.LOG, S3COMPAT.LOG, VBESHOW.LOG, VGASHOW.LOG, S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps, S3REGS3.TXT and VGALOGR.BIN
 in the current folder, and S3REGS.TXT and VGALOG.BIN in C:\. `/S` skips the monitor warnings, so only
 start it with a monitor that takes 91 kHz or refuses it (an LCD). `src/tools/common/` holds the /V
 debug log code the test tools share.
@@ -1062,3 +1063,54 @@ this for our ROMs).
   ROM, whose base is that BIOS: it confirms the patcher's assumptions (window set and get, the CR41/CR52
   refresh fields, CR6B/CR6C as the PCI base, the memory sizing) and showed the sequencer index that 4F05
   left at 04h; docs/764-rom.md, "Cross-check with riplin's annotated disassembly".
+
+### Windows DDKs (owner's copies, dirty side only)
+
+- [`ddk/`](ddk/) (untracked, in `.gitignore`) holds the installed Windows 95, 98, Me and XP DDKs. The 98 DDK
+  ships S3's own Windows 98 driver sources as samples: `ddk/98DDK/src/display/vdd/s3` and `vdd/s3v` (sample
+  mini-VDDs, S3.VXD and S3VSMP, for the 911/928/864/964/732/764 and the 765/775/ViRGE/M-series) and
+  `ddk/98DDK/src/display/mini/s3v` (a full mini display driver: `S3VSMP.drv`, `s3vsmp.dll`, `s3vsmp.vxd`, with
+  the 2D engine, DirectDraw, Direct3D and the LPB video port); its INFs and code name the Trio64V2,
+  PCI 5333:8901. The Me and XP DDKs carry no S3 samples (3Dlabs Permedia only; the Me DDK's Direct3D
+  reference rasterizer has the S3TC texture-compression file, a ViRGE feature). Licence: the DDK EULA
+  licenses, not sells, the product; its copyright clause grants no rights at all in third-party content,
+  which is what the files marked "Copyright (c) 1996 S3 Inc." are; even Microsoft's own sample code may be
+  distributed only as part of an application, with royalties for other uses, and is "AS IS". So the DDKs are
+  copyrighted owner's copies: never committed, never quoted in a committed file, no code, table or register
+  sequence copied from them into anything of ours, and never cited as provenance. Dirty-side use only, as a
+  map and an oracle; anything that must cross is re-sourced to the data books, PCI-IDS, the standards, or
+  observed black-box behaviour on our cards. Read on 11 November 2026. The cross-checks it confirmed, each
+  *derived* from S3's driver code and dirty-side only (none of them is needed as provenance):
+  - CR59/CR5A are the linear-addressing-window base on the Trio64V2 as well: the Trio32/64 book documents
+    them (also settable via PCI BAR0) and the V2 book's "Register Changes" table does not list them; MMIO
+    mirrors the VGA registers at base+8000h+port (83C4h/83D4h).
+  - The driver writes refresh indexes into CR52 bits 7-4 and CR41 bits 1-0 after a mode set; the books
+    define CR41/CR52 as BIOS flag (scratch) registers, so the clean ROM may leave them 0, and driver
+    compatibility stays an open black-box question (the planned VGALOG card logs).
+  - On the Trio64V2, DDC2/I2C goes through the serial port at MM FF20h (the V2 book's SPCLK/SPD pins,
+    programmed via MMFF20), not the CR5C/3C8h wiring the older Trio64 book documents.
+  - The driver never touches CR87 bit 1 or SR15 bit 7; the V2 book's 1-cycle linear addressing text and our
+    card's rejection of those bits (`docs/775-rom.md`, "Omitted") stand.
+  - The driver does not compute the display FIFO M from bandwidth for the Trio64V2; it pins fixed CR54/CR60
+    values (INI-overridable), so the 764 book's 9+2*M text (T64-MEM-8) needs no driver-derived constant.
+  - Memory size reads CR36 bits 7-5 (000b = 4 MB and down), as the 764 book documents; CR36 bits 3-2 are the
+    EDO/SGRAM strapping, as both books document.
+  - MCLK is only read back from the PLL registers SR10/SR11 that the BIOS loaded; the default 50.11 MHz is
+    public arithmetic (14.31818 MHz x 42 / (3 x 4) = 50.11 MHz, VCO 200.5 MHz, under the 60 MHz 1-cycle EDO
+    limit), see [`spec-a-post.md`](docs/cleanroom/spec-a-post.md) POST-22/POST-23; no BIOS provenance needed.
+  - Trio64V2 errata noted only there: CR8504 does not read back on the Trio64V2, and planar mode has a CPU
+    read problem.
+
+### DirectX 8 SDK (owner's copy, dirty side only)
+
+- [`dx8sdk/`](dx8sdk/) (untracked, in `.gitignore`) is the Microsoft DirectX 8.0 SDK: headers, libraries,
+  vendor-neutral samples and the EULAs in `dx8sdk/doc/DirectXEULAs/`. Same posture as the DDKs: the SDK
+  EULA licenses, not sells, the product, so the folder is never committed and nothing from it is copied or
+  cited as provenance. Its only S3 content is the DXT1/DXT3/DXT5 texture formats, commented "S3 texture
+  compression technique" (`d3dxcore.h`, `d3d8types.h`, `ddraw.h`): S3TC, a ViRGE-era feature the Trio64V2
+  (86C775) does not have - the V2 book's feature list is 2D acceleration and video only and mentions no
+  texture compression at all, and the V+ book's "compressed" refers to Scenic/MX2 video over the LPB.
+  No Trio, ViRGE or PCI 5333:8901 reference exists anywhere in the SDK's text; its
+  samples are Microsoft's own vendor-neutral code. Noted on 11 November 2026, dirty side only: the SDK has
+  no information relevant to the VBIOS work; the S3 driver source for this chip family stays the 98 DDK
+  samples recorded above.

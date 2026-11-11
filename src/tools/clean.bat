@@ -9,6 +9,6 @@ del c:\vgalog.bin
 del vgalog?.bin
 del vgalog.bin
 del vgalogr.bin
-del s3regsr.txt
+del s3regs3.txt
 del chipid.out
 
