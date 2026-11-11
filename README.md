@@ -172,7 +172,8 @@ tests"), then runs each test tool (S3TEST, S3COMPAT, `VBESHOW /R`) with `/V /S`:
 first ("before S3TEST" and so on; S3REGS appends to S3REGS.TXT), then the tool, then `VGALOG /D` with the
 dump renamed to VGALOG0.BIN, VGALOG1.BIN, ... (one per tool run; `VGALOG /U` and `/M /XL` between the tools
 start a fresh session, so each file's call counter covers only that tool and holds its last 4096 INT 10h
-calls). At the end a second snapshot ("after tests") and
+calls). RUNALL.BAT deletes S3REGS.TXT at its start and each VGALOGN.BIN before the rename, so a run packs
+only its own files even when CLEAN.BAT was not run first (#240). At the end a second snapshot ("after tests") and
 `VGALOG /D` write VGALOG.BIN, and it beeps (`echo` of Ctrl-G) when done. It leaves the .LOG and .DBG files,
 S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies the run's own
 S3REGS.TXT and VGALOG.BIN (not the ones AUTOEXEC.BAT and Windows runs leave in the root) as S3REGS3.TXT and
