@@ -24,3 +24,4 @@ emu/all/
 nasm/
 poetry.lock
 ddk/
+dx8sdk/
