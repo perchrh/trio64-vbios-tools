@@ -156,8 +156,10 @@ hardware with a DDC monitor this test completes (the card's Dell 2021FP answers 
   (recipe step 6).
 - Model artifacts that show up as FAIL/WARN in every run, on our ROMs and the stock ones alike: no
   real bus speed (throughput test), the ATC flip-flop, AH=1C state size, the video save pointer table,
-  and VBE refresh measurements doubled or off by 0.1 Hz by the virtual clock. None of these are BIOS
-  bugs; judge them against the hardware logs, not the 86Box ones. Two entries from an earlier draft of
+  and VBE refresh measurements doubled or off by 0.1 Hz by the virtual clock (the `vberef` reproducer
+  also has a units bug of its own, so on the card it printed HZ10=0 as well; `vbe2` is the corrected
+  probe - see [docs/775-rom.md](775-rom.md) "In 86Box"). None of these are BIOS bugs; judge them
+  against the hardware logs, not the 86Box ones. Two entries from an earlier draft of
   this list turned out not to be 86Box artifacts: the PCI subsystem ID (config 2Ch-2Fh read 00000000 in
   the 7.0 build we ran; with the CR81-CR84 shadow mapping it reads 89015333, the same as the card -
   CR81-84 hold the ROM bytes C000:0040-0043, see chip-rules V2-PCI-1) and the SR04/DAC readback in
