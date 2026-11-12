@@ -58,6 +58,7 @@ Usage (see tests.py for complete examples)
   print(r.stdout.decode('latin1'), r.files.get('S3TEST.DBG'))
 """
 import copy
+import fnmatch
 import struct
 import sys
 try:
@@ -211,7 +212,10 @@ class Machine:
         self.dac_fault = None
         self.keys = list(keys or [])
         self.com = None                                 # ComResult while a .COM runs
-        self.handles = {}
+        self.handles = {}                              # handle -> file name
+        self.hpos = {}                                 # handle -> file pointer
+        self.dta = (0x0050, 0x0080)                    # the current DTA (AH=1Ah sets it)
+        self.find = None                               # AH=4Eh/4F state: (pattern, names, next)
         mu.hook_add(UC_HOOK_INTR, self._intr)
         mu.hook_add(UC_HOOK_INSN, self._in, None, 1, 0, UC_X86_INS_IN)
         mu.hook_add(UC_HOOK_INSN, self._out, None, 1, 0, UC_X86_INS_OUT)
@@ -846,6 +850,22 @@ class Machine:
         if ax is not None:
             uc.reg_write(UC_X86_REG_AX, ax)
 
+    @staticmethod
+    def _dosname(uc, ds, dx):
+        """The ASCIZ file name at DS:DX, uppercased (DOS names are case-insensitive)."""
+        return bytes(uc.mem_read(ds * 16 + dx, 128)).split(b'\0')[0].decode('latin1').upper()
+
+    def _dtafill(self, uc, name, size):
+        """One find result into the current DTA (attribute at +15h, size at +1Ah, name at +1Eh)."""
+        dta = bytearray(43)
+        dta[0x15] = 0x20                                # attribute: archive
+        struct.pack_into('<H', dta, 0x16, 0)            # time 00:00:00
+        struct.pack_into('<H', dta, 0x18, 0x21)         # date 1980-01-01
+        struct.pack_into('<I', dta, 0x1A, size)
+        dta[0x1E:0x1E + len(name) + 1] = name.encode('latin1') + b'\0'
+        seg, off = self.dta
+        uc.mem_write(seg * 16 + off, bytes(dta))
+
     def _dos(self, uc, ah):
         c = self.com
         c.dos_calls.add(ah)
@@ -856,6 +876,7 @@ class Machine:
         ds = self._reg(UC_X86_REG_DS)
         cf = 0
         es = self._reg(UC_X86_REG_ES)
+        si = self._reg(UC_X86_REG_SI)
         if ah == 0x02:
             c.stdout.append(dx & 0xFF)
         elif ah == 0x09:
@@ -876,22 +897,134 @@ class Machine:
             uc.reg_write(UC_X86_REG_ES, seg)
         elif ah == 0x25:
             uc.mem_write((ax & 0xFF) * 4, struct.pack('<HH', dx, ds))
-        elif ah == 0x3C:
-            name = bytes(uc.mem_read(ds * 16 + dx, 64)).split(b'\0')[0].decode('latin1').upper()
+        elif ah == 0x1A:                                # set DTA
+            self.dta = (ds, dx)
+        elif ah == 0x3C:                                # create/truncate
+            name = self._dosname(uc, ds, dx)
             h = 5 + len(self.handles)
             self.handles[h] = name
+            self.hpos[h] = 0
             c.files[name] = bytearray()
             uc.reg_write(UC_X86_REG_AX, h)
-        elif ah == 0x3E:
+        elif ah == 0x3D:                                # open
+            name = self._dosname(uc, ds, dx)
+            if name in c.files and (ax & 7) == 0:
+                h = 5 + len(self.handles)
+                self.handles[h] = name
+                self.hpos[h] = 0
+                uc.reg_write(UC_X86_REG_AX, h)
+            else:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 2)
+        elif ah == 0x3E:                                # close
             self.handles.pop(bx, None)
-        elif ah == 0x40:
+            self.hpos.pop(bx, None)
+        elif ah == 0x3F:                                # read
+            name = self.handles.get(bx)
+            if name is None or name not in c.files:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 6)
+            else:
+                pos = self.hpos.get(bx, 0)
+                data = bytes(c.files[name][pos:pos + cx])
+                uc.mem_write(ds * 16 + dx, data)
+                self.hpos[bx] = pos + len(data)
+                uc.reg_write(UC_X86_REG_AX, len(data))
+        elif ah == 0x40:                                # write
             data = bytes(uc.mem_read(ds * 16 + dx, cx))
             if bx == 1: c.stdout.extend(data)
             elif bx == 2: c.stderr.extend(data)
             elif bx in self.handles:
-                c.files[self.handles[bx]].extend(data)
-                c.synced.discard(self.handles[bx])
-            uc.reg_write(UC_X86_REG_AX, cx)
+                name = self.handles[bx]
+                f = c.files[name]
+                pos = self.hpos.get(bx, 0)
+                if cx == 0:
+                    del f[pos:]                         # a zero-length write truncates at the pointer
+                else:
+                    if pos > len(f): pos = len(f)
+                    if pos + cx > len(f): f.extend(bytes(pos + cx - len(f)))
+                    f[pos:pos + cx] = data
+                    self.hpos[bx] = pos + cx
+                c.synced.discard(name)
+            else:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 6)
+            if not cf:
+                uc.reg_write(UC_X86_REG_AX, cx)
+        elif ah == 0x41:                                # delete
+            name = self._dosname(uc, ds, dx)
+            if name in c.files:
+                del c.files[name]
+                for hh in [k for k, v in self.handles.items() if v == name]:
+                    self.handles.pop(hh, None)
+                    self.hpos.pop(hh, None)
+            else:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 5)
+        elif ah == 0x42:                                # seek: AL=0 from start, 1 from here, 2 from end
+            name = self.handles.get(bx)
+            if name is None or name not in c.files or (ax & 0xFF) > 2:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 1)
+            else:
+                off = dx | (cx << 16)                  # CX:DX is the 32-bit offset
+                if (ax & 0xFF) == 2 and off >= 0x8000: off -= 0x10000
+                pos = (off, self.hpos.get(bx, 0) + off, len(c.files[name]) + off)[ax & 0xFF]
+                self.hpos[bx] = pos
+                uc.reg_write(UC_X86_REG_AX, pos & 0xFFFF)
+                uc.reg_write(UC_X86_REG_DX, (pos >> 16) & 0xFFFF)
+        elif ah == 0x43:                                # get/set attributes
+            if (ax & 0xFF) == 0:
+                uc.reg_write(UC_X86_REG_CX, 0x20)      # archive
+            else:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 5)
+        elif ah == 0x57:                                # get/set file time
+            if (ax & 0xFF) == 0:
+                uc.reg_write(UC_X86_REG_CX, 0x0000)    # 00:00:00
+                uc.reg_write(UC_X86_REG_DX, 0x0021)    # 1980-01-01
+            else:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 1)
+        elif ah in (0x4E, 0x4F):                       # find first/next (4F keeps the search, DS:DX is ignored)
+            if ah == 0x4E:
+                pat = self._dosname(uc, ds, dx)
+                self.find = (pat, sorted(n for n in c.files if fnmatch.fnmatchcase(n, pat)), 0)
+            if self.find is None:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 0x12)
+                self._ret_cf(uc, cf)
+                return
+            names, i = self.find[1], self.find[2]
+            if i >= len(names):
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 0x12)      # no more files
+            else:
+                self.find = (self.find[0], names, i + 1)
+                self._dtafill(uc, names[i], len(c.files[names[i]]))
+        elif ah == 0x71:                                # long-name functions
+            sub = ax & 0xFF
+            if sub == 0x41:                             # delete (SI=0: the name is at DS:DX)
+                name = self._dosname(uc, ds, dx)
+                if name in c.files:
+                    del c.files[name]
+                else:
+                    cf = 1
+                    uc.reg_write(UC_X86_REG_AX, 5)
+            elif sub == 0x6C:                           # create/truncate (the name is at DS:SI)
+                name = self._dosname(uc, ds, si)
+                if (dx & 0x12) or name in c.files:
+                    h = 5 + len(self.handles)
+                    self.handles[h] = name
+                    self.hpos[h] = 0
+                    c.files[name] = bytearray()
+                    uc.reg_write(UC_X86_REG_AX, h)
+                else:
+                    cf = 1
+                    uc.reg_write(UC_X86_REG_AX, 2)
+            else:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 0x7100)
         elif ah == 0x44:
             uc.reg_write(UC_X86_REG_DX, 0x0000 if self.stdout_is_file else 0x0080)
         elif ah == 0x4A:                                # resize: only the program's own block matters
@@ -1150,6 +1283,7 @@ class Machine:
         psp[0x81:0x81 + len(t) + 1] = t + b'\r'
         mu.mem_write(seg * 16, bytes(psp))
         mu.mem_write((seg - 0x10) * 16, b'\0\0\x01\0C:\\' + name.encode() + b'\0')
+        self.dta = (seg, 0x80)
         self._mcb(seg - 0x11, b'M', seg, 0x0F)
         self._mcb(seg - 1, b'Z', seg, MEM_TOP - seg, name.split('.')[0].encode())
 
@@ -1165,11 +1299,16 @@ class Machine:
         self.com = None
         return c
 
-    def run_com(self, com, tail='', seg=0x2000, stdout_is_file=True, max_insn=600_000_000, name='PROG.COM'):
+    def run_com(self, com, tail='', seg=0x2000, stdout_is_file=True, max_insn=600_000_000, name='PROG.COM',
+                files=None):
         """Run a .COM program at seg:0100 with the command tail; returns a ComResult. The program's
-        resident part stays in memory when it ends with INT 21h AH=31h."""
+        resident part stays in memory when it ends with INT 21h AH=31h. files: {name: bytes} already on
+        the disk before the program starts."""
         mu = self.mu
         self.com = ComResult()
+        if files:
+            for k, v in files.items():
+                self.com.files[k.upper()] = bytearray(v)
         self.stdout_is_file = stdout_is_file
         self._psp(seg, tail, name)
         base = seg * 16

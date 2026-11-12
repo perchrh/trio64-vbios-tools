@@ -3154,10 +3154,63 @@ def t_mclk(c):
     return 'recommended %s' % rec.split(b' SR10')[0].decode('latin1')
 
 
+def t_report(c):
+    """REPORT packs the run's files into one ZIP that Info-ZIP's unzip reads: method 8 (deflate,
+    RFC 1951) with version-needed 20 when the DOS has memory for the compressor's window, a stored
+    ZIP (method 0, version 1.0) when it has not. The container is PKWARE's APPNOTE and the stream
+    RFC 1951, both public; the ratio bounds below are sanity bounds on our own compressor, not
+    expectations from any ROM."""
+    import io
+    import random
+    import zipfile
+    if not os.path.exists(os.path.join(TOOLS, 'report', 'report.asm')):
+        raise Skip('no src/tools/report/ in this tree')
+    com = c.tool('REPORT.COM')
+    rng = random.Random(775)
+    line = b'S3TEST 1.0.3 - Trio64V2/DX VGA BIOS test, mode 101h 640x480x8 PASS, nothing to report\r\n'
+    text = line * 500                                   # 41500 bytes of repetitive text
+    rnd = bytes(rng.randrange(256) for _ in range(9000))  # incompressible
+    files = {'S3TEST.LOG': text, 'VGALOG0.BIN': rnd, 'EMPTY.LOG': b''}
+    m = c.machine()
+    r = m.run_com(com, '', files=files, name='REPORT.COM')
+    check(r.exit == ('exit', 0), 'REPORT exit %s stdout %r stderr %r' % (r.exit, bytes(r.stdout), bytes(r.stderr)))
+    c.save('REPORT', r)
+    zips = [n for n in r.files if n.upper().endswith('.ZIP')]
+    check(len(zips) == 1, 'REPORT left %r, expected one archive' % zips)
+    z = zipfile.ZipFile(io.BytesIO(bytes(r.files[zips[0]])))
+    check(z.testzip() is None, 'archive fails its CRCs: %s' % z.testzip())
+    names = sorted(i.filename.upper() for i in z.infolist())
+    check(names == ['EMPTY.LOG', 'S3TEST.LOG', 'VGALOG0.BIN'], 'entries %r' % names)
+    for i in z.infolist():
+        orig = files[i.filename.upper()]
+        check(i.compress_type == zipfile.ZIP_DEFLATED, '%s method %d, expected 8 (deflate)' % (i.filename, i.compress_type))
+        check(i.extract_version == 20, '%s version-needed %d, expected 20' % (i.filename, i.extract_version))
+        check(z.read(i.filename) == orig, '%s does not inflate back to the original' % i.filename)
+        ratio = i.compress_size / max(1, i.file_size)
+        if i.filename == 'S3TEST.LOG':
+            check(ratio < 0.1, 'text entry ratio %.3f, expected under 0.1' % ratio)
+        if i.filename == 'VGALOG0.BIN':
+            check(ratio <= 1.01, 'random entry ratio %.3f, expected a stored block (<= 1.01)' % ratio)
+    # no memory for the window and hash tables: the archive goes in stored (method 0, version 1.0)
+    m2 = c.machine()
+    r2 = m2.run_com(com, '', seg=0x8F00, files=files, name='REPORT.COM')
+    check(r2.exit == ('exit', 0), 'stored REPORT exit %s' % (r2.exit,))
+    zips2 = [n for n in r2.files if n.upper().endswith('.ZIP')]
+    check(len(zips2) == 1, 'stored REPORT left %r' % zips2)
+    z2 = zipfile.ZipFile(io.BytesIO(bytes(r2.files[zips2[0]])))
+    check(z2.testzip() is None, 'stored archive fails its CRCs')
+    for i in z2.infolist():
+        check(i.compress_type == 0, '%s method %d in the no-memory run, expected 0 (stored)' % (i.filename, i.compress_type))
+        check(i.extract_version == 10, '%s version-needed %d, expected 10' % (i.filename, i.extract_version))
+        check(z2.read(i.filename) == files[i.filename.upper()], '%s does not read back in the no-memory run' % i.filename)
+    return 'deflate ZIP %s (%d bytes for %d), stored ZIP without memory' % (
+        zips[0], sum(i.compress_size for i in z.infolist()), sum(len(v) for v in files.values()))
+
+
 TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches), ('765_patches', t_vplus_patches), ('764_patches', t_t64_patches), ('vga_registers', t_vga_registers),
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vbeshow', t_vbeshow), ('vgashow', t_vgashow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
-         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_xl', t_vgalog_xl), ('vgalog_keep', t_vgalog_keep), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias),
+         ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_xl', t_vgalog_xl), ('vgalog_keep', t_vgalog_keep), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias), ('report', t_report),
          ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
@@ -3189,7 +3242,7 @@ TAGS = {
     's3test': 'rom cga ega vga vbe s3 patch 765 764 card vram', 's3test_any': 'rom cga ega vga vbe s3 card vram cleanroom', 'romver': 'rom tools card', 'mclk': 'tools s3 card vram cleanroom', 'vbeshow': 'vbe tools card vram cleanroom', 'vgashow': 'mda cga ega vga tools card cleanroom',
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
-    'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_xl': 'tools card cleanroom', 'vgalog_keep': 'tools patch 765 764 card emu', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom',
+    'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_xl': 'tools card cleanroom', 'vgalog_keep': 'tools patch 765 764 card emu', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom', 'report': 'tools card emu cleanroom',
     'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch 765', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu cleanroom', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',

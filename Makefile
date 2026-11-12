@@ -48,7 +48,7 @@ tools: $(TOOLS)
 
 # runall.bat: VGALOG /M /XL (128 KB ring), S3REGS, then per test tool (S3TEST, S3COMPAT, VBESHOW /R
 # with /V /S): S3REGS, VGALOG /D renamed to vgalogN.bin, VGALOG /U + /M /XL; finally S3REGS, VGALOG /D,
-# then REPORT.COM (stored ZIP of the logs, .DBG files and vgalog*.bin; created under the part name).
+# then REPORT.COM (deflate ZIP of the logs, .DBG files and vgalog*.bin; created under the part name).
 # clean.bat deletes what a run leaves behind, including its ZIP archive
 build/RUNALL.BAT: $(TOOLS_SRC)/runall.bat | build
 	cp $< $@
