@@ -76,10 +76,10 @@ configuration and, on the Trio64UV+, the shared memory (see "Trio64UV+ unified m
 
 | ID | Chips | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- | --- |
-| PLL-1 | all | f = fREF x (M+2) / ((N+2) x 2^R), fREF = 14.31818 MHz. The VCO, fREF x (M+2) / (N+2), must lie in 135-270 MHz (DCLK maximum raised on the V2, see V2-PLL-1) | V+ 9.1 constraint 1; T32/64 9.1 | must | S3COMPAT POST (MCLK, fail 1), VESA lines (DCLK, fail 200), `tvco` (fail 1) |
+| PLL-1 | all | f = fREF x (M+2) / ((N+2) x 2^R), fREF = 14.31818 MHz. The books use the wording "should": "Programmed PLL M and PLL N values should be consistent with the following constraints: 1. 135 MHz < (M+2) fREF / (N+2) < 270 MHz; 2. min N >= 1". So the VCO, fREF x (M+2) / (N+2), should lie in 135-270 MHz - minimum 135 MHz, maximum 270 MHz, for the DCLK and the MCLK PLL alike (the design steps repeat it as 135 MHz < 2^R x fOUT < 270 MHz); the DCLK maximum is raised on the V2, see V2-PLL-1. The tools judge a VCO outside the range as fail | V+ 9.1 constraint 1 and design steps; T32/64 9.1 (same wording) | must | S3COMPAT POST (MCLK, fail 1), VESA lines (DCLK, fail 200), `tvco` (fail 1) |
 | PLL-2 | all | M 1-127 (SR11 / SR13 bits 6-0), N 1-31 (SR10 / SR12 bits 4-0), R 0-3 (bits 6-5): "min N >= 1" | V+ 9.1 | must | N: S3COMPAT POST fail 1, VESA lines fail 200 ('PLL N=0'); `test_s3patch.py` pllcodes (M, N, R of every refresh entry) |
-| V2-PLL-1 | V2 | DCLK PLL VCO maximum 340 MHz. Only the maximum is raised: the minimum stays 135 MHz, and the MCLK PLL keeps 135-270 MHz | V2 3.6 | must | VESA lines fail 200, `tvco` fail 1, POST fail 1 (MCLK) |
-| V2-PLL-2 | V2 | V2 3.6 raises the DCLK PLL maximum to 340 MHz and states no minimum, so the tools judge the V2 VCO by the 135-340 MHz of PLL-1/V2-PLL-1 (since 1 November 2026). An earlier 170 MHz floor taken from XFree86's s3 driver is not a data book fact: it is not cited and no longer used (owner decision, 10 November 2026) | V2 3.6; PLL-1 | note | not checked; `s3patch.py` still moves the 22 reference entries below 170 MHz into 170-340 MHz (the tested ROM), and its result check uses 135-340 MHz |
+| V2-PLL-1 | V2 | V2 3.6: "The maximum DCLK PLL frequency has been increased to 340 MHz" - only the maximum is raised and the book states no minimum, so the DCLK PLL VCO minimum stays the 135 MHz of PLL-1, the maximum is 340 MHz, and the MCLK PLL keeps 135-270 MHz | V2 3.6 | must | VESA lines fail 200, `tvco` fail 1, POST fail 1 (MCLK) |
+| V2-PLL-2 | V2 | V2 3.6 raises the DCLK PLL maximum to 340 MHz and states no minimum, so the tools judge the V2 DCLK VCO by 135-340 MHz (PLL-1/V2-PLL-1). The V2 book's only 170 MHz figures are the RAMDAC output rating and the clock-doubled DCLK maximum (table 5-7 note 2, V2-CLK-1), not a VCO floor | V2 3.6, table 5-7 note 2; PLL-1 | note | not checked; `s3patch.py` sets no target: its result check only keeps every refresh entry in the book's 135-340 MHz (p28) |
 | V2-PLL-3 | V2 | SR12 bit 7 is the third bit of the DCLK R divider; SR12 bits 7-5 = 100b divides by 16. No other code with bit 7 set is defined. SR10 (MCLK) has no third R bit: bit 7 stays reserved | V2 3.6, 4.1 (SR12); V+ 16 (SR10 bit 7 reserved) | must | VESA lines fail 200 ('PLL R code'), `tvco` fail 4, POST WARN 1 (SR10 bit 7); `test_s3patch.py` pllcodes |
 | V2-CLK-1 | V2 | DCLK maximum 95 MHz single-clocked with the Streams Processor off; 170 MHz with clock doubling (two 8-bit pixels per 85 MHz clock) | V2 table 5-7 note 2 | limit | VESA lines WARN 02 |
 | V2-CLK-2 | V2 | DCLK maximum 80 MHz single-clocked with the Streams Processor on (CR67 bits 3-2 = 11b) | V2 table 5-7 note 2 | limit | VESA lines WARN 02 |
@@ -298,6 +298,11 @@ books stay the closer relatives (README "Missing documents"). What V968 says tha
   same table allows 95 MHz single-clocked with the Streams Processor off. The tools use the note.
 - V2 3.6 raises the DCLK PLL maximum to 340 MHz and says nothing about the minimum, so the tools keep
   the 135 MHz of PLL-1 for the V2 too (V2-PLL-2).
+- The T32/64 and V+ books (9.1) word the VCO range as a "should" constraint, not an absolute limit, and
+  stock BIOSes ran VCOs below 135 MHz anyway (the Trio64V+ 1.03-08 at 101 MHz, Phoenix Trio32 builds at
+  120.3 MHz) with working hardware. The tools still judge the specified 135-270 MHz (135-340 MHz DCLK on
+  the V2) as the range - outside it is fail - because the books give no other specified range (PLL-1,
+  V2-PLL-1/2).
 - Packed 24 bpp: sections 8.1.4 (T32/64) and 8.2.4 (V+) select it with SRB bits 7-4 = 0111b and CR67
   bits 7-4 = 0000b, while the CR67 descriptions list 0111b as mode 12. The tools accept both (CLK-2).
 - UV+ errata ER010-B items 1 and 4 correct the Trio64V+ data book; they are taken as Trio64V+ rules

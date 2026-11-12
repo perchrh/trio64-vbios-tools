@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
 """test_s3patch.py - checksum tests for the ROM patcher s3patch.py (needs python3 and nasm).
 
-    python3 src/roms/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P16.BIN] [--nasm nasm]
-    make 775-rom-test REF775=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P16.BIN]
+    python3 src/roms/test_s3patch.py --ref REF2047.BIN [--stock STOCK.BIN] [--rom S3V2P28.BIN] [--nasm nasm]
+    make 775-rom-test REF775=REF2047.BIN [STOCK=STOCK.BIN] [ROM=S3V2P28.BIN]
 
 REF2047.BIN is the 32 KB S3 reference BIOS 2.04.07, STOCK.BIN (optional) the 64 KB dump of the card
-(its 2.04.11 must be refused), S3V2P16.BIN a build to compare with byte by byte. No ROM image is in the
+(its 2.04.11 must be refused), S3V2P28.BIN a build to compare with byte by byte. No ROM image is in the
 repository.
 
 Tests
-  build          the reference gives the tested build: SHA-256 of the lower 32 KB 59a38032... (NASM 3.02),
-                 sign-on 2.04.07-p22, byte-identical to --rom when given (a 64 KB --rom with zeros above,
+  build          the reference gives the tested build: SHA-256 of the lower 32 KB (NASM 3.02),
+                 sign-on 2.04.07-p28, byte-identical to --rom when given (a 64 KB --rom with zeros above,
                  as p15-p21 were built, compares by its lower 32 KB)
   checksums      the lower 32 KB sums to 00 (byte 7FFFh makes it so) and has the 55AAh header with
                  32 KB size, the upper 32 KB is a copy of the lower (#78)
   size32         --size 32 gives the lower 32 KB alone
-  vco            every DCLK refresh entry runs its VCO in 135-340 MHz (the data book's range, V2-PLL-1)
+  vco            every DCLK refresh entry runs its VCO in 135-340 MHz, the data book's range (PLL-1,
+                 V2-PLL-1/2: the books word 135-270 MHz as "should", the V2 book states only the 340 MHz
+                 maximum and no minimum)
   pllcodes       every DCLK refresh entry has M 1-127, N 1-31 and an R code the datasheet defines (SR12
                  bits 7-5: with bit 7 set only 100b), docs/chip-rules.md PLL-2 and V2-PLL-3
   free_space     the bytes of the free blocks 7C8B-7FEF that no code uses are still 00, so a later level
                  can use them
   input_64k      a 64 KB image with the reference in the lower half gives the same result, whatever
                  its upper half holds
-  novco          --no-vco-fix keeps the 22 refresh entries below 170 MHz and still checksums
   mclk           --mclk 50, 55 and 60 (1-cycle EDO) and 66 (fast page) give a valid MCLK PLL pair within
                  0.5 MHz in that memory type's entry and change nothing else but the checksum; 61 MHz for
                  1-cycle EDO, 67 MHz for fast page and 39 MHz are refused (V2-MEM-1)
@@ -166,10 +167,6 @@ def main():
            if free else '%d bytes 00 in 7C8B-7FEF' % len(unused))
     rc, img64, err = run(tmp, ref + bytes([0x5A]) * 0x8000)
     result('input_64k', rc == 0 and img64 == img, err or 'same result')
-    rc, nimg, err = run(tmp, ref, ['--no-vco-fix'])
-    low = len(vco_out(nimg, 170)) if nimg else -1
-    result('novco', rc == 0 and low == 22 and not image_checks(nimg), err or '%d entries below 170 MHz kept' % low)
-
     bad = mclk_cases(tmp, ref, img, s3patch.MCLK_ENTRY, run)
     result('mclk', not bad, '; '.join(bad) or '50, 55, 60 MHz edo1 and the fpm maximum valid, out-of-range values refused')
     s = s3patch.SITES

@@ -315,8 +315,9 @@ an error), an interlaced mode is judged by its frame (twice the lines of a field
 
 Chip rules: S3COMPAT judges the registers the BIOS programs by the datasheet rules of the chip it
 found; `docs/chip-rules.md` lists every rule with its ID, chips, source and the result bit that checks
-it. On the Trio64V2 a DCLK VCO outside 135-340 MHz (the datasheet range) is FAIL 200 (XFree86's 170 MHz
-minimum, V2-PLL-2, is not a data book limit and gives no WARN since 1 November 2026). The Trio64V2 POST part also
+it. On the Trio64V2 a DCLK VCO outside 135-340 MHz (the datasheet range; the books word 135-270 MHz as
+"should", and the V2 book raises only the DCLK PLL maximum to 340 MHz and states no minimum, V2-PLL-1/2)
+is FAIL 200. The Trio64V2 POST part also
 checks SR1A bit 4 and the PCI subsystem ID handover (ROM C000:0040-0043 to CR81-CR84, CR37 bit 2
 cleared), and its VESA lines CR32 bit 3 (FAIL 1000) and the CR86 and CR90/CR91 rules (WARN 80; on this
 ROM 012Eh, 010Fh, 0131h, 0134h and 012Ah, see docs/775-rom.md, "Known remaining items"). The emulator test `775_writes`
@@ -1044,8 +1045,6 @@ this for our ROMs).
   DCLK VCO maximum of 340 MHz, the 3-bit DCLK R divider (SR12 bit 7), CR36 memory types, CR87 1-cycle
   linear addressing, CR90/CR91 FIFO, the PCI subsystem ID (section 3.8), SR1A, CR23/CR26, CR32, CR40,
   CR66 and CR86 rules.
-- XFree86 / X.Org xf86-video-s3, `s3_Trio64DAC.c`: the DCLK PLL range 170-340 MHz for the
-  Trio64V2/DX/GX, which S3COMPAT uses as its WARN limit and the ROM patcher for every refresh entry
 - S3 Trio64V+ (86C765) datasheet, from the S3VBEFIX repository: PLL formula and VCO range, CR67 colour
   modes, SR15/SR18 clock doubling, CR31/CR58/CR59-5A linear addressing, CR50, CR51, CR43, CR5D/CR5E.
 - [S3VBEFIX](https://github.com/wbcbz7/S3VBEFIX) source and README, plus SVGATRIX.TXT and vbe20.txt.
