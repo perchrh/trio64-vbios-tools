@@ -139,6 +139,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
 
 - NASM 3.02 (the project's assembler; the pinned ROM SHA-256 is of a 3.02 build), `-f bin`, 16-bit .COM files (`bits 16`, `org 0x100`), `cpu 386` where 32-bit registers are
   used. No other build dependencies: tables are `db` data in the source or in an `.inc` file.
+- Only 386 instructions in the `src/tools` code (and anywhere else that runs on the test machine's CPUs): no 486-and-later instructions (BSWAP, CMPXCHG, XADD, CMPXCHG8B, CPUID,
+  RDTSC, ...), no MMX, no SSE, no Pentium-Pro instructions (CMOVcc, FCMOV, ...). The tools run on 386/Pentium-class machines, and a later instruction there is a real #UD that
+  freezes the machine (seen with REPORT.COM, 2026-11-12). Keep `cpu 386` and check a new binary with `ndisasm -b 16` for `0F`-prefixed opcodes beyond jcc/setcc/movzx/movsx/
+  imul/bt/bsf/bsr/shld/shrd/lar/lsl when in doubt.
 - On an Ubuntu 26.04 x86-64 sandbox (the CI runners' image) do not build NASM: fetch the prebuilt
   3.02 of the `ci-deps` release instead (`gh release download ci-deps -p 'nasm-3.02-linux-x86_64.tgz'
   -p 'nasm-3.02-linux-x86_64_SHA256.txt'`, then `sha256sum -c nasm-3.02-linux-x86_64_SHA256.txt &&

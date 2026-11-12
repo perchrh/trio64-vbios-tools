@@ -3155,11 +3155,11 @@ def t_mclk(c):
 
 
 def t_report(c):
-    """REPORT packs the run's files into one ZIP that Info-ZIP's unzip reads: method 8 (deflate,
-    RFC 1951) with version-needed 20 when the DOS has memory for the compressor's window, a stored
-    ZIP (method 0, version 1.0) when it has not. The container is PKWARE's APPNOTE and the stream
-    RFC 1951, both public; the ratio bounds below are sanity bounds on our own compressor, not
-    expectations from any ROM."""
+    """REPORT enumerates the run's files and calls ZIP.EXE (INT 21h AH=4Bh/4Dh) to make one deflate
+    ZIP (method 8, RFC 1951, version-needed 20) of them; the emulator's DOS runs the ZIP.EXE call
+    itself (emu/vgaemu.py AH=4Bh packs the named files with deflate). The container is PKWARE's
+    APPNOTE and the stream RFC 1951, both public; the ratio bounds below are sanity bounds on the
+    compression, not expectations from any ROM."""
     import io
     import random
     import zipfile
@@ -3175,6 +3175,8 @@ def t_report(c):
     r = m.run_com(com, '', files=files, name='REPORT.COM')
     check(r.exit == ('exit', 0), 'REPORT exit %s stdout %r stderr %r' % (r.exit, bytes(r.stdout), bytes(r.stderr)))
     c.save('REPORT', r)
+    check(b'missing *.dbg' in bytes(r.stderr) and b'missing s3regs.txt' in bytes(r.stderr),
+          'the missing files are not warned about on stderr: %r' % bytes(r.stderr))
     zips = [n for n in r.files if n.upper().endswith('.ZIP')]
     check(len(zips) == 1, 'REPORT left %r, expected one archive' % zips)
     z = zipfile.ZipFile(io.BytesIO(bytes(r.files[zips[0]])))
@@ -3190,20 +3192,14 @@ def t_report(c):
         if i.filename == 'S3TEST.LOG':
             check(ratio < 0.1, 'text entry ratio %.3f, expected under 0.1' % ratio)
         if i.filename == 'VGALOG0.BIN':
-            check(ratio <= 1.01, 'random entry ratio %.3f, expected a stored block (<= 1.01)' % ratio)
-    # no memory for the window and hash tables: the archive goes in stored (method 0, version 1.0)
+            check(ratio <= 1.01, 'random entry ratio %.3f, expected about 1 (incompressible)' % ratio)
+    # no files at all: a message on stderr, no archive, exit 1
     m2 = c.machine()
-    r2 = m2.run_com(com, '', seg=0x8F00, files=files, name='REPORT.COM')
-    check(r2.exit == ('exit', 0), 'stored REPORT exit %s' % (r2.exit,))
-    zips2 = [n for n in r2.files if n.upper().endswith('.ZIP')]
-    check(len(zips2) == 1, 'stored REPORT left %r' % zips2)
-    z2 = zipfile.ZipFile(io.BytesIO(bytes(r2.files[zips2[0]])))
-    check(z2.testzip() is None, 'stored archive fails its CRCs')
-    for i in z2.infolist():
-        check(i.compress_type == 0, '%s method %d in the no-memory run, expected 0 (stored)' % (i.filename, i.compress_type))
-        check(i.extract_version == 10, '%s version-needed %d, expected 10' % (i.filename, i.extract_version))
-        check(z2.read(i.filename) == files[i.filename.upper()], '%s does not read back in the no-memory run' % i.filename)
-    return 'deflate ZIP %s (%d bytes for %d), stored ZIP without memory' % (
+    r2 = m2.run_com(com, '', files={}, name='REPORT.COM')
+    check(r2.exit == ('exit', 1), 'REPORT with no files exit %s' % (r2.exit,))
+    check(b'no files to pack' in bytes(r2.stderr), 'REPORT with no files stderr %r' % bytes(r2.stderr))
+    check(not [n for n in r2.files if n.upper().endswith('.ZIP')], 'REPORT with no files left %r' % r2.files)
+    return 'ZIP.EXE deflate ZIP %s (%d bytes for %d)' % (
         zips[0], sum(i.compress_size for i in z.infolist()), sum(len(v) for v in files.values()))
 
 

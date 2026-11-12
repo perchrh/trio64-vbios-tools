@@ -31,6 +31,8 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 "%NASM%" -f bin -isrc\tools\common\ -o build\REPORT.COM src\tools\report\report.asm
 if errorlevel 1 goto fail
+copy /y src\tools\report\ZIP.EXE build\ZIP.EXE >nul
+if errorlevel 1 goto fail
 copy /y src\tools\runall.bat build\RUNALL.BAT >nul
 if errorlevel 1 goto fail
 copy /y src\tools\clean.bat build\CLEAN.BAT >nul

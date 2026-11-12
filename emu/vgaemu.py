@@ -216,6 +216,7 @@ class Machine:
         self.hpos = {}                                 # handle -> file pointer
         self.dta = (0x0050, 0x0080)                    # the current DTA (AH=1Ah sets it)
         self.find = None                               # AH=4Eh/4F state: (pattern, names, next)
+        self.child_rc = 0                              # exit code of the last AH=4Bh child (AH=4Dh reads it)
         mu.hook_add(UC_HOOK_INTR, self._intr)
         mu.hook_add(UC_HOOK_INSN, self._in, None, 1, 0, UC_X86_INS_IN)
         mu.hook_add(UC_HOOK_INSN, self._out, None, 1, 0, UC_X86_INS_OUT)
@@ -850,6 +851,37 @@ class Machine:
         if ax is not None:
             uc.reg_write(UC_X86_REG_AX, ax)
 
+    def _zip_exe(self, tail):
+        """The ZIP.EXE call REPORT.COM makes: pack the named files into the archive in the
+        machine's file store, deflate (method 8), updating an archive that is already there.
+        Returns ZIP.EXE's exit code: 0 ok, 1 a name was not matched, 11 none was."""
+        import io, zipfile
+        c = self.com
+        toks = [t for t in tail.replace('\r', ' ').split(' ') if t]
+        args = [t for t in toks if not t.startswith('-')]
+        if not args:
+            return 12
+        archive, names = args[0].upper(), [t.upper() for t in args[1:]]
+        entries = {}
+        if archive in c.files:
+            try:
+                z = zipfile.ZipFile(io.BytesIO(bytes(c.files[archive])))
+                for i in z.infolist():
+                    entries[i.filename] = z.read(i.filename)
+            except Exception:
+                entries = {}                           # not an archive: start over
+        hit = 0
+        for n in names:
+            if n in c.files:
+                entries[n] = bytes(c.files[n])
+                hit += 1
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            for n, data in entries.items():
+                z.writestr(n, data)
+        c.files[archive] = bytearray(buf.getvalue())
+        return 0 if hit == len(names) else (11 if hit == 0 else 1)
+
     @staticmethod
     def _dosname(uc, ds, dx):
         """The ASCIZ file name at DS:DX, uppercased (DOS names are case-insensitive)."""
@@ -1077,6 +1109,22 @@ class Machine:
         elif ah in (0x2A, 0x2C):
             uc.reg_write(UC_X86_REG_CX, 0)
             uc.reg_write(UC_X86_REG_DX, 0)
+        elif ah == 0x4B:                                # exec: only ZIP.EXE is really run (packed here)
+            if (ax & 0xFF) == 0:
+                prog = self._dosname(uc, ds, dx)
+                if prog.replace('\\', '/').split('/')[-1] == 'ZIP.EXE':
+                    toff, tseg = struct.unpack('<HH', uc.mem_read(es * 16 + bx + 2, 4))
+                    n = uc.mem_read(tseg * 16 + toff, 1)[0]
+                    tail = bytes(uc.mem_read(tseg * 16 + toff + 1, n)).decode('latin1')
+                    self.child_rc = self._zip_exe(tail)
+                else:
+                    cf = 1
+                    uc.reg_write(UC_X86_REG_AX, 2)     # file not found
+            else:
+                cf = 1
+                uc.reg_write(UC_X86_REG_AX, 1)         # invalid function
+        elif ah == 0x4D:                                # wait for child: AL = its exit code
+            uc.reg_write(UC_X86_REG_AX, self.child_rc & 0xFF)
         elif ah == 0x4C:                                # the program's blocks are free again
             c.exit = ('exit', ax & 0xFF)
             for s in (self.psp - 0x11, self.psp - 1):

@@ -121,7 +121,7 @@ is for the Windows 9x desktop.
 | CHIPID.COM | Prints the chip identification alone (CR2D-CR30, CR6F, PCI device/rev, market name, S3 part), using the same `src/tools/common/chip.inc` routines as S3TEST; also names Trio3D (8904h, 86C365) and Trio3D/2X (8A13h, 86C362/86C368); `/Q` (`-q`) prints only the S3 part (86C775, ...); `/Z` (`-z`) renames `runall.zip` to `runall-<part>.zip` from `chipid.out` when the DOS can rename to a long name. Windows 98 DOS can create a long name and cannot rename an existing file to one, so `/Z` changes nothing there; RUNALL uses REPORT | `CHIPID`, `CHIPID /Q` |
 | ROMVER.COM | Prints the video ROM version S3TEST's signature line reads, using the same scan (`src/tools/common/romver.inc`): "Version " in C000:0000-00FF, then at most 12 characters. `/Q` (`-q`) prints only that version | `ROMVER`, `ROMVER /Q` |
 | MCLK.COM | Shows, sets or tests the memory clock. Without a switch it only reports, and changes nothing: the chip, the amount and type of video memory, the memory clock the BIOS programmed, and the range the datasheet gives for the chip, from the lowest PLL pair at or above 50 MHz (SR10=41h SR11=28h, 50.114 MHz; 50 MHz is the EDO clock of the Trio64V+ feature list, the data books give no minimum) to the datasheet maximum (MEM-1, V2-MEM-1; 60 MHz for the Trio64, not the 70 MHz board policy). `/S 57.5` sets the PLL pair at or below the request and leaves it, without a memory test, until the BIOS sets its own clock at the next boot; it refuses a request below the lowest pair or above the cap (the datasheet maximum plus 25 percent), and above the datasheet maximum it asks for Y first. It reads SR10/SR11 back and ends with one result line: "Memory clock set to 57.272 MHz (requested 57.500 MHz, SR10=41 SR11=2E read back): OK" (exit 0), or a line starting "ERROR:" that says why the clock was not changed (exit 1; after a wrong read-back the clock found at the start is put back). `/T` tests steps of 0.5 MHz from the lowest pair up to the cap, `/T /P` finer steps (the next PLL pair at least 0.1 MHz higher), `/T /I 52.5` starts higher; it always asks for Y once before the first clock change (on stderr, with the range it will program), and any other key ends the run without touching the PLL (exit 1). The "Recommended max" line names a clock the run tested and passed, at least 1 percent below the highest that passed (the highest such step), followed by the `/S` command that sets it, or "none" when no tested step is that low (run again with a lower `/I`). After `/T` the clock found at the start is restored. `/Y` answers yes to the question of `/S` and `/T` without reading a key, for a batch file (the log says "Confirmed: /Y given"; `/Y` alone is a bad argument). Not part of RUNALL. `/A 0|1` (with /S or /T) also sets or clears SRA bit 7, the 2-MCLK write cycles (spec-a Q5 of [#200](https://github.com/perchrh/trio64-vbios-tools/issues/200)): with /S the bit is left set for what follows (the S3COMPAT VRAM test at that clock), with /T finish puts it back as found. `/D ms` (with /S or /T) replaces the default two-tick wait after each PLL load with a PIT-channel-2 wait of the given milliseconds (0 = none, at most 3000), so a sweep per delay answers how long the memory takes to become reliable after an MCLK load (spec-a Q6) | `MCLK`, `MCLK /S 57.5`, `MCLK /S 70 /Y`, `MCLK /T`, `MCLK /T /Y`, `MCLK /T /P`, `MCLK /T /I 52.5`, `MCLK /S 59.96 /A 1`, `MCLK /T /D 5` |
-| REPORT.COM | Packs the RUNALL logs into one deflate ZIP (method 8, RFC 1951; Info-ZIP's unzip reads it; a chunk that does not shrink goes in as a stored block, and without memory for the compressor the whole archive is stored, method 0) and creates it as `runall-<part>.zip` (a slash in the part becomes a hyphen). If that create is refused, the name is `<part>.ZIP` (86C775.ZIP; 86C764-P gives 86C764.ZIP). No part: `RUNALL.ZIP` | `REPORT` |
+| REPORT.COM | Packs the RUNALL logs into one ZIP by calling ZIP.EXE (Info-ZIP zip 2.32, 16-bit, shipped as `src/tools/report/ZIP.EXE`, license `ZIP-LICENSE.txt`; deflate, method 8, which Info-ZIP's unzip reads; ZIP.EXE needs about 455 KB free DOS memory, so REPORT shrinks its own block to its 64 KB first) and creates it as `runall-<part>.zip` (a slash in the part becomes a hyphen). If that create is refused, the name is `<part>.ZIP` (86C775.ZIP; 86C764-P gives 86C764.ZIP). No part: `RUNALL.ZIP` | `REPORT` |
 | S3ALIAS.COM | TSR for Pinball Illusions' S3 driver: INT 10h AH=00 mode 49h becomes 59h (640x480x8), 4Bh becomes 5Ah (800x600x8) | `S3ALIAS` before starting the game, `S3ALIAS /U` to unload, `/H` for help; not with S3TEST or S3COMPAT |
 | VGALOG.COM | TSR that logs every INT 10h AH=00 mode set and VBE 4F01/4F02/4F06 call of any program to VGALOG.BIN, committed before and after each call, so it survives a freeze. `/M` keeps the last 1024 INT 10h calls of any kind (not text output) in memory instead, for Windows 9x (`/XL` with it: a 128 KB ring, the last 4096 calls, about 130 KB of memory); `/D` writes them (with none yet it writes no file and says "No events registered, not writing output file"); it commits the file and flushes the DOS buffers and a SMARTDRV write-behind cache (AH=68h, AH=0Dh) before it says the file is written, so the machine may be reset right after it ([#158](https://github.com/perchrh/trio64-vbios-tools/issues/158)). `/T` is `/M` with a port trace: during each mode set (AH=00h, 4F02h) it single-steps the BIOS and keeps every VGA, PCI configuration and S3 engine port access with its value, in program order, the last 16384 in a second 64 KB ring (about 100 KB resident; a traced mode set runs slower), so a card run shows what the ROM programs and in which order. `/P` is `/T` that also traces the program itself after each of its 4F02h calls (its port accesses, with those of the BIOS calls it makes), until 12288 new events, its next mode set or an instruction that would switch to protected mode; it shows how a program changes the bank or programs the DAC and CRTC through the ports, and the program runs much slower until the trace ends by itself. `/W` is `/M` with a window function hook: the WinFuncPtr a 4F01h call returns points to VGALOG, which logs the program's far calls through it (the first 64 as records, all counted) and jumps on to the BIOS's routine, so a log shows whether a program changes the bank with the window function, with INT 10h 4F05h or with its own port writes. Every VGALOG.BIN starts with the chip (CR2D-CR30), CR36, the MCLK the POST set and the ROM's version word, read at install, so logs of different cards and ROMs can be told apart | `VGALOG` (or `VGALOG /M`, `VGALOG /T`, `VGALOG /P`, `VGALOG /W`), then start the program; `VGALOG /D` to write the memory log, `VGALOG /U` to unload, `/H` for help; record formats in `src/tools/vgalog/vgalog.asm` |
 | S3REGS.COM | Register snapshot (SR, CR, GR, PCI, BIOS and VBE mode) appended to S3REGS.TXT, with a label; changes nothing | `S3REGS label` |
@@ -150,7 +150,7 @@ example `make clean && make VERSION=0.9 VER775=2.04.07-p18`.
 NASM 3.02 (the ROM build needs exactly 3.02, see docs/775-rom.md, "The build"):
 
     make            # tools and every chip's ROM (make tools && make roms)
-    make tools      # the DOS tools into build/ (including CHIPID.COM, ROMVER.COM, REPORT.COM and MCLK.COM)
+    make tools      # the DOS tools into build/ (including CHIPID.COM, ROMVER.COM, REPORT.COM, MCLK.COM and ZIP.EXE)
     make roms       # every chip's ROM at its memory clocks into build/roms/
     make clean      # removes build/ (tools and ROM images)
     build.bat       # DOS or Windows with nasm.exe on the PATH (tools only)
@@ -180,11 +180,15 @@ only its own files even when CLEAN.BAT was not run first (#240). At the end a se
 `VGALOG /D` write VGALOG.BIN, and it beeps (`echo` of Ctrl-G) when done. It leaves the .LOG and .DBG files,
 S3REGS.TXT, VGALOG.BIN and the VGALOG0.BIN... dumps next to them. It then copies the run's own
 S3REGS.TXT (not the one AUTOEXEC.BAT and Windows runs leave in the root) as S3REGS3.TXT, and runs REPORT.
-REPORT writes one deflate ZIP (method 8, RFC 1951; Info-ZIP's unzip
-reads it; each 4 KB chunk goes in as a dynamic-Huffman block when that is smallest, else fixed,
-else stored, so a near-random VGALOG dump does not grow; without memory for the compressor the
-whole archive is stored, method 0) of the logs, the .DBG files, S3REGS.TXT, S3REGS3.TXT and every VGALOG*.BIN (VGALOG.BIN and the per-tool
-VGALOG0.BIN... dumps). A file that
+REPORT writes one deflate ZIP (method 8, RFC 1951; Info-ZIP's unzip reads
+it) of the logs, the .DBG files, S3REGS.TXT, S3REGS3.TXT and every VGALOG*.BIN (VGALOG.BIN and the per-tool
+VGALOG0.BIN... dumps), but not itself: it enumerates the files and calls ZIP.EXE
+(`ZIP.EXE -q <archive> <names...>`, in as many execs as the 126-byte command tail holds, since
+ZIP.EXE updates the archive it finds), waiting for each with INT 21h AH=4Dh. ZIP.EXE is Info-ZIP's
+16-bit zip 2.32 (`src/tools/report/ZIP.EXE`), which runs on any 8086+ but wants about 455 KB of
+contiguous free DOS memory, so REPORT first shrinks its own block (AH=4Ah) to its 64 KB - the
+stack at PSP:FFFEh must stay inside the block, because DOS saves the return from the exec on the
+caller's stack, where the child's memory block must not reach. A file that
 is missing is a warning on stderr and is left out. The archive is created under the part name, not
 renamed into it: Windows 98 DOS can create a long name and cannot rename an existing file to one, which
 is why `CHIPID /Z` leaves `runall.zip` in place. The name is `runall-<part>.zip` (for example
@@ -664,7 +668,7 @@ image; the binary needs glibc 2.38 or newer) does the same instead of building:
 
 Tool and ROM sources live under `src/tools/` and `src/roms/`. `make` builds both; `make tools` and
 `make roms` build one or the other; `make clean` removes `build/` (tools and ROM images). CHIPID.COM,
-ROMVER.COM, REPORT.COM and MCLK.COM are part of the tools list and of the release zip.
+ROMVER.COM, REPORT.COM, MCLK.COM and ZIP.EXE are part of the tools list and of the release zip.
 
 The job "All ROMs (make roms) and the release zip" builds every chip's ROM at its memory clocks, to show
 that they all build, and the release zip (`make dist`). When `src/roms/**` changed, the tests also run
@@ -705,7 +709,7 @@ tests run by hand.
 
 builds the tools and packs them into `build/trio64-tools-<VERSION>.zip` (VERSION from
 `src/tools/common/version.inc`, now 1.0.1): `trio64/tools/` with VBESHOW, S3TEST, S3COMPAT, S3ALIAS, VGALOG, S3REGS,
-CHIPID, ROMVER, REPORT, S3REGS32.EXE, RUNALL.BAT and CLEAN.BAT. CI builds it on
+CHIPID, ROMVER, REPORT, ZIP.EXE, S3REGS32.EXE, RUNALL.BAT and CLEAN.BAT. CI builds it on
 every run and keeps it as the artifact `trio64-tools-<VERSION>` for 90 days; the download is that zip.
 `ROMS=1` adds `trio64/roms/` with every chip's ROM at its memory clocks (`make roms`); the default leaves
 the ROMs out: the patched images carry S3's and Phoenix's code, so they are built from the reference

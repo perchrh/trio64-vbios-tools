@@ -36,19 +36,20 @@ ifdef VER764
 DEFS += -DVER764="'$(VER764)'"
 endif
 
-# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM, REPORT.COM, MCLK.COM and the batch files into build/
+# make tools: the DOS tools, S3REGS32.EXE, CHIPID.COM, ROMVER.COM, REPORT.COM, MCLK.COM, ZIP.EXE and the batch files into build/
 # make all: tools and every chip's ROM at its memory clocks (make roms)
 # make clean: removes build/ (tools and ROM images)
 TOOLS = build/VBESHOW.COM build/VGASHOW.COM build/S3TEST.COM build/S3COMPAT.COM build/S3ALIAS.COM build/VGALOG.COM \
         build/S3REGS.COM build/S3REGS32.EXE build/CHIPID.COM build/ROMVER.COM build/REPORT.COM \
-        build/MCLK.COM \
+        build/MCLK.COM build/ZIP.EXE \
         build/RUNALL.BAT build/CLEAN.BAT
 all: tools roms
 tools: $(TOOLS)
 
 # runall.bat: VGALOG /M /XL (128 KB ring), S3REGS, then per test tool (S3TEST, S3COMPAT, VBESHOW /R
 # with /V /S): S3REGS, VGALOG /D renamed to vgalogN.bin, VGALOG /U + /M /XL; finally S3REGS, VGALOG /D,
-# then REPORT.COM (deflate ZIP of the logs, .DBG files and vgalog*.bin; created under the part name).
+# then REPORT.COM, which packs the logs, .DBG files and vgalog*.bin into one ZIP by calling
+# ZIP.EXE (Info-ZIP zip 2.32, 16-bit, from src/tools/report/ZIP.EXE) under the part name.
 # clean.bat deletes what a run leaves behind, including its ZIP archive
 build/RUNALL.BAT: $(TOOLS_SRC)/runall.bat | build
 	cp $< $@
@@ -93,6 +94,12 @@ build/CHIPID.COM: $(TOOLS_SRC)/chipid/chipid.asm $(COMMON)/version.inc $(COMMON)
 
 build/REPORT.COM: $(TOOLS_SRC)/report/report.asm $(COMMON)/version.inc $(COMMON)/chip.inc | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ $(DEFS) -o $@ $<
+
+# ZIP.EXE: Info-ZIP's 16-bit zip 2.32 (license in ZIP-LICENSE.txt), which REPORT.COM calls to
+# make the run's archive; runs on any 8086+ and needs about 455 KB free DOS memory
+build/ZIP.EXE: $(TOOLS_SRC)/report/ZIP.EXE | build
+	cp $< $@
+
 
 build/MCLK.COM: $(TOOLS_SRC)/mclk/mclk.asm $(TOOLS_SRC)/mclk/pll.inc $(COMMON)/version.inc $(COMMON)/chip.inc $(COMMON)/romver.inc | build
 	"$(NASMBIN)" -f bin -i$(COMMON)/ -i$(TOOLS_SRC)/mclk/ $(DEFS) -o $@ $<
