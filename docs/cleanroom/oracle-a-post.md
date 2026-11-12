@@ -7,7 +7,7 @@ clean ROM; none of its values may be copied into the specification. Observed 1 N
 
 ## How it was observed
 
-- Reference: `reference/trio64/1_5_07.bin` (Phoenix S3 Trio64 1.5-07, CP764 build, 32 KB; doubled to
+- Reference: `reference/764/1_5_07.bin` (Phoenix S3 Trio64 1.5-07, CP764 build, 32 KB; doubled to
   64 KB for the emulator). Patched: 1.5-07-p3 built with `s3tpatch.py --size 64 --mclk 69.8` (NASM
   2.16 here; that build reports itself as the tested code with only the MCLK changed).
 - Emulator: [`emu/vgaemu.py`](../../emu/vgaemu.py), `Machine.chip = 'trio64'`, `Machine.vram` 1, 2 and 4; `m.wlog` for the
@@ -138,7 +138,7 @@ call (open question 12 of the spec).
 
 ## The option ROM of the reference
 
-`reference/trio64/1_5_07.bin`: 32768 bytes; 55h AAh 40h; PCI data structure at 0208h: "PCIR", 5333h,
+`reference/764/1_5_07.bin`: 32768 bytes; 55h AAh 40h; PCI data structure at 0208h: "PCIR", 5333h,
 8811h, VPD 0000h, length 0018h, revision 00h, class 00 00 03, image length 0040h, code revision 0000h,
 code type 00h, indicator 80h. Byte sum over 32 KB = 00h. At 001Eh the text "IBM VGA Compatible BIOS."
 (so "IBM" at 1Eh). Sign-on "Phoenix S3 TRIO64 Enhanced VGA BIOS. Version 1.5-07" within the first

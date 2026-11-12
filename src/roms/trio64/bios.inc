@@ -1,4 +1,4 @@
-; bios.inc - addresses in the Phoenix S3 Trio64 BIOS 1.5-07 (reference/trio64/1_5_07.bin, the CP764 build;
+; bios.inc - addresses in the Phoenix S3 Trio64 BIOS 1.5-07 (reference/764/1_5_07.bin, the CP764 build;
 ;            the code 1000h-7EFFh is the same in every 1.5-07 build) that the Trio64 patch code uses
 ;            (C000:offset)
 ;

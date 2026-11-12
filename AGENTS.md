@@ -21,10 +21,10 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   block of that same NASM 3.02 build (all files in `BLOCKS`, also new ones); s3patch uses them to name
   the blocks another assembler encoded differently, so a stale entry points at the wrong block. The
   repository also holds the Trio64V+ backport (`src/roms/vplus/`: `s3vpatch.py` builds 1.03-08N-pN
-  from the S3 Trio64V+ BIOS 1.03-08N in `reference/64vplus/`, with the same rules: byte assertions, a
+  from the S3 Trio64V+ BIOS 1.03-08N in `reference/765/`, with the same rules: byte assertions, a
   pinned `RESULT_SHA` and `BLOCK_SHA`, the level from `VER765`; docs/765-rom.md) and the Trio64 ROM
   (`src/roms/trio64/`: `s3tpatch.py` builds 1.5-07-pN from the Phoenix S3 Trio64 BIOS 1.5-07 in
-  `reference/trio64/`, the same rules, `VER764`; docs/764-rom.md), and the documentation for the tools.
+  `reference/764/`, the same rules, `VER764`; docs/764-rom.md), and the documentation for the tools.
 - Test machine: plain DOS on a 386 or later. Monitors: an Eizo LCD (native 1600x1200) and a Dell
   2021FP (EDID over DDC2: Windows 98 identifies it with p21). The multiQ LCD (MQ215 B-1, native
   800x600, no 1280x1024 at all) shows no picture on any card or machine since 31 October 2026: a

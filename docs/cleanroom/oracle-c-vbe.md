@@ -1,6 +1,6 @@
 # Oracle for part C (VBE 1.2, S3 mode numbers, 4F14h): the reference ROM in the emulator
 
-DIRTY SIDE ONLY. This file records what the reference ROM `reference/trio64/1_5_07.bin` (Phoenix S3
+DIRTY SIDE ONLY. This file records what the reference ROM `reference/764/1_5_07.bin` (Phoenix S3
 Trio64 BIOS 1.5-07, VBE 1.2) returns in the emulator, and compares it with the rules of
 [`docs/cleanroom/spec-c-vbe.md`](spec-c-vbe.md). It is used to check the clean ROM and to answer questions through the
 wall; its values do not go into the specification unless a rule there derives them from a public
