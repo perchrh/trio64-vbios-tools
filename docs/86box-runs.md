@@ -35,13 +35,12 @@ full test run; `REPORT.COM` packs the logs into `runall-<chip>.zip` in `C:\trio6
 
 ## Choosing the video BIOS in 86Box
 
-86Box resolves a relative ROM name (`roms/video/s3/...`) against a list of ROM paths. The VM-local
-directory `test/roms/` is the first entry, but only when the VM is started the way the VM manager
-starts a named machine, with `--vmpath <vm dir> --vmname <name>`: then the startup log shows
-`# ROM path: .../Virtual Machines/test/roms/` first. Starting with `-C <vm>/86box.cfg` alone does not
-add it (the log lists only the executable's and the system paths), so the override would be silently
-ignored. The executable-local copy is `build/src/roms` (a symlink to the roms set), so replacing the
-file there works for every launch style; we did both.
+86Box resolves a relative ROM name (`roms/video/s3/...`) against a list of ROM paths. Start the VM
+the way the VM manager starts a named machine, with `--vmpath <vm dir> --vmname <name>`: then the
+startup log shows `# ROM path: .../Virtual Machines/test/roms/` first and the VM-local directory is
+searched (there is no `-C` switch; a bare config path as the last argument is just the config). The
+executable-local copy is `build/src/roms` (a symlink to the roms set), so replacing the file there
+works for every launch style; we did both.
 
 For these S3 PCI cards 86Box loads the first 32 KB of the ROM file (`rom_init(..., 0xc0000, 0x8000,
 ...)`), which for our 64 KB images is exactly the patched lower half. So the active override for our
@@ -155,10 +154,13 @@ hardware with a DDC monitor this test completes (the card's Dell 2021FP answers 
 - Floppy copy-out: the result zip is ~1.1-2.1 MB, larger than a 1.44 MB floppy's 1,457,664 bytes, and
   the guest did not pick up a floppy media swap while inserted; read the VHD on the host instead
   (recipe step 6).
-- `-C <vm>/86box.cfg` launches do not search the VM-local `test/roms/` (only `--vmpath` does), so a
-  ROM override there is silently ignored; watch the `# ROM path:` lines in the startup log.
 - Model artifacts that show up as FAIL/WARN in every run, on our ROMs and the stock ones alike: no
-  real bus speed (throughput test), the ATC flip-flop, SR04/DAC readback in CGA/MDA text modes, PCI
-  subsystem ID 00000000 from config space, AH=1C state size, the video save pointer table, and VBE
-  refresh measurements doubled or off by 0.1 Hz by the virtual clock. None of these are BIOS bugs;
-  judge them against the hardware logs, not the 86Box ones.
+  real bus speed (throughput test), the ATC flip-flop, AH=1C state size, the video save pointer table,
+  and VBE refresh measurements doubled or off by 0.1 Hz by the virtual clock. None of these are BIOS
+  bugs; judge them against the hardware logs, not the 86Box ones. Two entries from an earlier draft of
+  this list turned out not to be 86Box artifacts: the PCI subsystem ID (config 2Ch-2Fh read 00000000 in
+  the 7.0 build we ran; with the CR81-CR84 shadow mapping it reads 89015333, the same as the card -
+  CR81-84 hold the ROM bytes C000:0040-0043, see chip-rules V2-PCI-1) and the SR04/DAC readback in
+  CGA/MDA text modes (86Box reads SR04=09h and DAC entry 01 = 090909, the same as the card; the
+  FAIL/WARN came from comparing against the IBM VGA reference values, not against the card). See
+  [docs/775-rom.md](775-rom.md) "In 86Box".
