@@ -46,8 +46,8 @@ What is applied (the backport of 2.04.07-p1 to p21, docs/765-rom.md)
          frame of the VESA 320x200 70 Hz timing. p8 had given them a 525-line frame (the 640x480 at 60
          Hz vertical) for 59.7 Hz at the halved DCLK; on a card at p10 that frame showed the 400-line
          picture in the top 400 of 525 lines (squished), and 10Fh no picture at all, so p11 reverts it:
-         with the halved DCLK the modes run at 31.3 kHz, 69.8 Hz - the 70 Hz the project rules keep for
-         320x200, and exactly the timing registers the stock Phoenix BIOS of the STB card programs
+         with the halved DCLK the modes run at 31.3 kHz, 69.8 Hz - the VESA 320x200 70 Hz timing,
+         and exactly the timing registers the stock Phoenix BIOS of the STB card programs
          (SR12/SR13 61h 28h, SR15 13h, CR06/CR07 BFh 1Fh), which displays all three modes correctly
          shared with the other builds (src/roms/): clear32.asm (S3/VESA mode set clear), p13fill.asm,
          p13move.asm, p13bfill.asm, p13bfa.asm, p13df.asm (text and planar scrolls, AH=09h text,

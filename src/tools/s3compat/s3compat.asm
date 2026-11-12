@@ -4883,8 +4883,8 @@ pos24   db 8,16,8,8,8,0
 ; CR67 = 0111b or by SRB bits 7-4 = 0111b with SRB bit 3 = 1 and CR67 = 0000b, and not on a Trio64
 ; (the Trio32/Trio64 book: Trio32 only) and, on the Trio64V2, no reserved R code
 ; in SR12 bits 7-5 (V2-PLL-3, printed as 'PLL R code'). A VCO inside the datasheet range but below
-; [vcomin] is WARN 08; [vcomin] is the datasheet's 135 MHz on every chip since 1 November 2026 (the
-; Trio64V2 had XFree86's 170 MHz, V2-PLL-2), so it does not occur. The MCLK check
+; [vcomin] is WARN 08; [vcomin] is the datasheet's 135 MHz on every chip (section 9.1 words the range as
+; 'should'; the Trio64V2 book raises only the maximum, V2-PLL-2), so it does not occur. The MCLK check
 ; in post_tests uses 135 MHz to [mvcomax].
 
 ; DCLK above the chip's maximum is WARN 02 (CLK-1; packed 24 by either encoding counts as packed;
@@ -6152,7 +6152,7 @@ vesa_more:
 ;     Trio64V2 a reserved R code in SR12 bits 7-5 (only 100b of the codes with bit 7 set is defined,
 ;     V2-PLL-3)
 ; warn bits: 8 VCO inside the datasheet range but below [vcomin] ([vcomin] = [vcodsmin] = 135 MHz on
-;   every chip, so never; the Trio64V2 had XFree86's 170 MHz until 1 November 2026, V2-PLL-2)
+;   every chip, so never; the books word the range as 'should', PLL-1/V2-PLL-2)
 ; The first bad or warned rates are listed as mode@Hz.
 ;   INFO when the BIOS has no 4F14h (BL=00h returns AL other than 4Fh)
 ; The monitor sees every rate of every mode (up to 85 Hz at 1280x1024); an LCD may show out of range.

@@ -1,6 +1,6 @@
 # Trio64V2/DX ROM (775): fixes and improvements
 
-What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p27) changes against the S3 reference BIOS
+What 2.04.07-pN (the level in [`src/tools/common/version.inc`](../src/tools/common/version.inc), now p28) changes against the S3 reference BIOS
 2.04.07, each with the issue that has the details: what was wrong or missing, the cause, the effect
 and how it is tested. The build, the byte-level changes, what was borrowed, not taken or omitted, and
 what is left are in [`docs/775-rom.md`](775-rom.md); the speed measured on the card is in README "Speed". The Trio64V+
@@ -13,7 +13,7 @@ and Trio64 ROMs carry backports of many of these ([`docs/765-changes.md`](765-ch
 | 640x480 class at 800 pixels per line | picture | p6 | [#65](https://github.com/perchrh/trio64-vbios-tools/issues/65) |
 | 320x240 at 60 Hz (131h-133h) | picture | before p9 | [#66](https://github.com/perchrh/trio64-vbios-tools/issues/66) |
 | 1600x1200: 1200 displayed lines | fix | p14 | [#56](https://github.com/perchrh/trio64-vbios-tools/issues/56) |
-| DCLK VCO in 170-340 MHz (XFree86 range) | fix | p14 | [#57](https://github.com/perchrh/trio64-vbios-tools/issues/57) |
+| DCLK VCO target of 170-340 MHz removed; the 22 refresh entries back at the reference values (VCO 145-162 MHz, inside the book's 135-340 MHz) | fix | p28 (moved at p14) | [#57](https://github.com/perchrh/trio64-vbios-tools/issues/57) |
 | Memory clock 59.96 MHz (p9-p25) | speed | before p9 | [#58](https://github.com/perchrh/trio64-vbios-tools/issues/58) |
 | Memory clock 50.11 MHz in every entry by default (owner's decision; 59.96 MHz with `MCLK=60`) | default | p26 | none (not a fault) |
 | Fast 4F05 set window picks the CRTC port with GETCRTC (MISC bit 0) instead of a hardcoded 3D4h, so it also works in the mono modes (3B4h), where 3D4h writes are not decoded | fix | p27 | none |
@@ -62,11 +62,13 @@ Picture and monitor
   clocks per pixel.
 - **1600x1200 (120h)** ([#56](https://github.com/perchrh/trio64-vbios-tools/issues/56)): vertical display end 1200 lines (CR12 AFh), as 4F01 reports; the reference
   shows 1201.
-- **DCLK PLL in the XFree86 range** ([#57](https://github.com/perchrh/trio64-vbios-tools/issues/57)): 22 refresh entries of the reference ran the VCO at 145-162 MHz,
-  inside the datasheet range (135-340 MHz) but below the 170 MHz minimum XFree86 uses; new M/N/R give
-  exactly the same pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N). The data book
-  itself allows 135-340 MHz, which the tools and the patcher's result check use; the moved entries
-  stay because the ROM was built and tested with them (`--no-vco-fix` leaves them as in 2.04.07).
+- **DCLK PLL at 170 MHz or more** ([#57](https://github.com/perchrh/trio64-vbios-tools/issues/57)), removed at p28: at p14, 22 refresh entries of the reference ran the VCO at
+  145-162 MHz, inside the datasheet range (135-340 MHz on the V2), and got new M/N/R for exactly the same
+  pixel clock with the VCO in 170-340 MHz (smallest R, then smallest N). That target was never a data book
+  limit: the V2 book states only the 340 MHz DCLK PLL maximum and no minimum (V2 3.6, V2-PLL-2), and the
+  T32/64 and V+ books word the 135-270 MHz VCO range as "should" (PLL-1). p28 removes the target: the
+  entries are as in 2.04.07 again, and the patcher sets no target of its own - its result check only keeps
+  every VCO in the book's 135-340 MHz.
   Each mode's refresh list starts at the entry its mode table pointer gives and runs downwards to the
   entry with bit 7 of byte 2 set.
 - 1280x1024x16 colours (106h) keeps the VESA DMT timing (108 MHz, 64 kHz, 60 Hz): 14% above the 95 MHz

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """s3patch.py - build the current ROM (the level of VER775 in src/tools/common/version.inc) from the S3 Trio64V2/DX reference BIOS 2.04.07.
 
-    python3 src/roms/s3patch.py REF2047.BIN -o S3V2P27.BIN [--size 64|32] [--no-vco-fix]
+    python3 src/roms/s3patch.py REF2047.BIN -o S3V2P28.BIN [--size 64|32]
                                 [--mclk MHZ [--memtype edo1|fpm|sgram]] [--nasm nasm] [-q]
-    make 775-rom IN=REF2047.BIN OUT=S3V2P27.BIN [MCLK=55 [MEMTYPE=edo1]]
+    make 775-rom IN=REF2047.BIN OUT=S3V2P28.BIN [MCLK=55 [MEMTYPE=edo1]]
 
 Needs python3 (no packages) and NASM 3.02 (another version may encode some instructions differently).
 
@@ -32,10 +32,10 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
          booster, on at the end of a banked 4F02 (p18) and at the first bank switch (p16); LFB base and linear test fixes), vbe4f06.asm (4F06 BL=3), clear32.asm (32-bit S3/VESA
          mode set clear), p13*.asm (32-bit text and planar scroll fills, text window moves, AH=09h);
          p14: the VGA mode set clear in place as a jump to wfill
-  VCO    (unless --no-vco-fix) the 22 refresh entries whose DCLK PLL runs its VCO below 170 MHz get a
-         larger post divider R and new M/N for exactly the same pixel clock, VCO in 170-340 MHz. The data
-         book allows 135-340 MHz (the result check uses that); 170 MHz is XFree86's minimum, kept here
-         because the ROM was built and tested with it
+  VCO    no target is set: the refresh entries stay as in the reference, and the result check keeps every
+         DCLK VCO in the data book's range, 135-340 MHz on the Trio64V2 (PLL-1/V2-PLL-1: the books word
+         135-270 MHz as "should", and the V2 book raises only the DCLK PLL maximum to 340 MHz and states
+         no minimum, V2-PLL-2)
   p16    the booster no longer at the end of VBE 4F02 (the reference instruction stays at 56F7h): the
          window set at 584Bh (4F05 BH=0 slow path and the window function) and the fast 4F05 path call
          it, so a banked 4F02 leaves CR58-CR5A as the reference does (S3 Windows 9x driver)
@@ -64,7 +64,7 @@ What is applied (trio64-vbios-tools docs/775-changes.md, each change with its is
 
 Every byte that is replaced is compared with the expected original first; on any mismatch nothing is
 written and the exit code is 1. The result is checked before it is written: the lower 32 KB sums to 00
-and declares 32 KB, the upper 32 KB is a copy of it, every DCLK VCO in the data book's 135-340 MHz (unless --no-vco-fix),
+and declares 32 KB, the upper 32 KB is a copy of it, every DCLK VCO in the data book's 135-340 MHz,
 and with the known reference image the SHA-256 (of the lower 32 KB) of the build that passed the
 emulator tests.
 """
@@ -93,7 +93,7 @@ REF_SHA = '25d64cd7cbefdf756e2bdce53de2c308c553fc69fb203fdae72f1fa4e6805337'    
 # check the patch sites only; this refuses an image with a changed byte anywhere else (#143)
 CODE_SHA = '64f716e96fb3e8dd0fbdcf5de41df732b95852d373b0ade541d522026a5442a2'
 CODE_RANGE = (0x0100, 0x7FFE)
-RESULT_SHA = 'e11d0f95692a6acdba2123f430300ead86c3dd9f7261fe69c38395040009ed68'  # 2.04.07-p27 (NASM 3.02), emulator tests passed;
+RESULT_SHA = '0fa6ab979f43acae65c10f3a012f1d95a662c842b72767cf216d98965f5d971c'  # 2.04.07-p28 (NASM 3.02), emulator tests passed;
 # the SHA-256 of the lower 32 KB, as in s3tpatch.py and s3vpatch.py (p21, until the upper half became a copy,
 # #78, it was taken over the 64 KB with zeros above: 515bf9fe..., the same lower 32 KB)
 # SHA-256 (first 16 hex digits) of each assembled block in the tested build, made with NASM 3.02: when
@@ -340,35 +340,6 @@ def refresh_entries(img):
     return sorted(seen)
 
 
-def vco_fix(d, log, lo=170.0):
-    n = 0
-    for e in refresh_entries(d):
-        m, nr = d[e + 4], d[e + 5]
-        vco, f = pll(m, nr)
-        if vco >= lo:
-            continue
-        r, nn = rcode(nr), nr & 0x1F         # r = 4 (bit 7): no larger R left, refused below
-        best = None                         # same pixel clock: (M'+2)/(N'+2)/2^R' = (M+2)/(N+2)/2^R
-        for r2 in range(r + 1, 4):
-            for n2 in range(1, 32):
-                num = (m + 2) * (n2 + 2) * (1 << (r2 - r))
-                if num % (nn + 2) == 0 and 1 <= num // (nn + 2) - 2 <= 0x7F:
-                    m2 = num // (nn + 2) - 2
-                    if lo <= pll(m2, n2 | (r2 << 5))[0] <= 340:
-                        best = best or (m2, n2, r2)   # smallest R', then smallest N'
-        if not best:
-            raise PatchError('refresh entry %04X: no M/N/R with the same clock %.3f MHz and the VCO in range' % (e, f))
-        m2, n2, r2 = best
-        nr2 = (r2 << 5) | n2                 # r2 <= 3: bit 7 stays clear
-        d[e + 4], d[e + 5] = m2, nr2
-        v2, f2 = pll(m2, nr2)
-        assert abs(f2 - f) < 1e-9
-        log.append('%04X  %02X %02X -> %02X %02X  DCLK %.2f MHz %3d Hz: VCO %.1f -> %.1f MHz'
-                   % (e + 4, m, nr, m2, nr2, f, d[e + 3], vco, v2))
-        n += 1
-    return n
-
-
 # ------------------------------------------------------------------ MCLK (build option)
 # POST picks the MCLK PLL pair (SR11 = M, then SR10 = N/R) by the memory type the card is strapped for
 # (CR36 bits 3-2, code at 14A5h): 1-cycle EDO C7h, 2-cycle EDO and fast page C9h (bit 3 set), SGRAM
@@ -558,7 +529,7 @@ def speed_sites(d, put, site, sym, lab, tags=True, skip=()):
         t('VGA mode set clear: in place, rep stosw replaced by a jump to wfill', 'p14'))
 
 
-def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
+def patch(lo, nasm='nasm', mclk=None, memtype='edo1'):
     """lo: the lower 32 KB (2.04.07); mclk: MHz for the MCLK entry of memtype (None: the default build).
     Returns (new lower 32 KB, log lines)."""
     d = bytearray(lo)
@@ -662,15 +633,7 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     put(a, 'bb 0a 00', 'b8 0a 00', 'POST delay before the engine reset: count 0Ah in AX, not BX (p20)')
     speed_sites(d, put, site, sym, lab)
 
-    # 4. DCLK VCO
-    if vcofix:
-        vlog = []
-        n = vco_fix(d, vlog)
-        log += vlog
-        if n:
-            log.append('      %d refresh entries: VCO moved into 170-340 MHz, same pixel clock' % n)
-
-    # 5. sign-on and checksum
+    # 4. sign-on and checksum
     s = m.start(1)
     end = d.index(b'\x00', s)
     txt = bytes(d[s:end]).replace(VERSION.encode(), (VERSION + '-' + LEVEL).encode(), 1)
@@ -687,7 +650,7 @@ def patch(lo, nasm='nasm', vcofix=True, mclk=None, memtype='edo1'):
     return bytes(d), log
 
 
-def verify(img, vcofix, size=64):
+def verify(img, size=64):
     errs = []
     if len(img) != size * 1024:
         errs.append('image is %d bytes, not %d' % (len(img), size * 1024))
@@ -697,11 +660,10 @@ def verify(img, vcofix, size=64):
         errs.append('upper 32 KB is not a copy of the lower 32 KB')
     if img[0:2] != b'\x55\xAA' or img[2] != 0x40:
         errs.append('ROM header 55AAh with 32 KB size missing')
-    if vcofix:
-        for e in refresh_entries(img):
-            vco, f = pll(img[e + 4], img[e + 5])
-            if not 135 <= vco <= 340:
-                errs.append('refresh entry %04X: VCO %.1f MHz' % (e, vco))
+    for e in refresh_entries(img):           # the data book's VCO range (PLL-1, V2-PLL-1/2)
+        vco, f = pll(img[e + 4], img[e + 5])
+        if not 135 <= vco <= 340:
+            errs.append('refresh entry %04X: VCO %.1f MHz' % (e, vco))
     return errs
 
 
@@ -745,7 +707,6 @@ def main():
     ap.add_argument('-o', '--output', required=True, help='64 KB result')
     ap.add_argument('--size', type=int, choices=(32, 64), default=64,
                     help='output size in KB (default 64: the 32 KB twice; 32 for a 32 KB EEPROM)')
-    ap.add_argument('--no-vco-fix', action='store_true', help='leave refresh entries with a VCO below 170 MHz')
     ap.add_argument('--mclk', type=float, help='MCLK in MHz for the memory type of --memtype (default: 50.11 '
                     'for every memory type, as the default build)')
     ap.add_argument('--memtype', choices=sorted(MCLK_ENTRY), default='edo1',
@@ -759,10 +720,10 @@ def main():
         if len(src) not in (0x8000, 0x10000):
             raise PatchError('input is %d bytes; expected 32768 or 65536' % len(src))
         lo = src[:0x8000]                       # a 64 KB input: only its lower half is used
-        new_lo, log = patch(lo, a.nasm, not a.no_vco_fix, a.mclk, a.memtype)
+        new_lo, log = patch(lo, a.nasm, a.mclk, a.memtype)
         img = new_lo * (2 if a.size == 64 else 1)   # 64 KB: the 32 KB twice (#78)
-        errs = verify(img, not a.no_vco_fix, a.size)
-        base = hashlib.sha256(lo).hexdigest() == REF_SHA and not a.no_vco_fix and RESULT_SHA
+        errs = verify(img, a.size)
+        base = hashlib.sha256(lo).hexdigest() == REF_SHA and RESULT_SHA
         known = base and a.mclk is None
         out_sha = hashlib.sha256(new_lo).hexdigest()
         if known and out_sha != RESULT_SHA:
@@ -771,7 +732,7 @@ def main():
         mclk_ok = False
         if base and a.mclk is not None:     # compare with the default build of the same input (#143)
             e = MCLK_ENTRY[a.memtype]
-            default_lo, _ = patch(lo, a.nasm, True, None, a.memtype)
+            default_lo, _ = patch(lo, a.nasm, None, a.memtype)
             mclk_errs = mclk_build_errors(default_lo, new_lo, {e, e + 1, 0x7FFF}, RESULT_SHA)
             errs += mclk_errs + (diagnose(a.nasm, a.output, img) if mclk_errs else [])
             mclk_ok = not mclk_errs

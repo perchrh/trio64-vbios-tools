@@ -35,8 +35,10 @@
 ;
 ; Limits per chip (kHz), rule IDs from docs/chip-rules.md:
 ;   [vcomin]   DCLK PLL VCO minimum below which a VCO in the datasheet range is a WARN: 135 MHz on every
-;              chip (datasheet section 9.1, PLL-1). The Trio64V2 used 170 MHz, XFree86's minimum
-;              (s3_Trio64DAC.c, V2-PLL-2), until 1 November 2026; its datasheet gives no other minimum
+;              chip (datasheet section 9.1, PLL-1, worded "should": "Programmed PLL M and PLL N values
+;              should be consistent with the following constraints: 1. 135 MHz < (M+2)fREF/(N+2) < 270 MHz").
+;              The Trio64V2 datasheet raises only the DCLK PLL maximum, 340 MHz (section 3.6), and states no
+;              minimum (V2-PLL-2), so its minimum is the same 135 MHz
 ;   [vcodsmin] DCLK PLL VCO minimum the datasheet gives: 135 MHz on every chip (the Trio64V2 datasheet
 ;              changes only the maximum, section 3.6). A VCO from [vcodsmin] up to [vcomin] is a WARN
 ;   [vcomax]   DCLK PLL VCO maximum: 270 MHz, 340 MHz on the Trio64V2 (section 3.6, V2-PLL-1)
