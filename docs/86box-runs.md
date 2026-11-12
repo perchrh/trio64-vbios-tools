@@ -158,7 +158,9 @@ hardware with a DDC monitor this test completes (the card's Dell 2021FP answers 
   real bus speed (throughput test), the ATC flip-flop, AH=1C state size, the video save pointer table,
   and VBE refresh measurements doubled or off by 0.1 Hz by the virtual clock (the `vberef` reproducer
   also has a units bug of its own, so on the card it printed HZ10=0 as well; `vbe2` is the corrected
-  probe - see [docs/775-rom.md](775-rom.md) "In 86Box"). None of these are BIOS bugs; judge them
+  probe, and the PIT-latch probe `vbe4` gives the same vsync edge counts on the card and in 86Box
+  (68/59 vs 69/59 for modes 03h/101h), so the remaining refresh offset is the probe's sampling, not
+  the emulator - see [docs/775-rom.md](775-rom.md) "In 86Box"). None of these are BIOS bugs; judge them
   against the hardware logs, not the 86Box ones. Two entries from an earlier draft of
   this list turned out not to be 86Box artifacts: the PCI subsystem ID (config 2Ch-2Fh read 00000000 in
   the 7.0 build we ran; with the CR81-CR84 shadow mapping it reads 89015333, the same as the card -
