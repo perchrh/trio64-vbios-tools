@@ -37,8 +37,7 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   system BIOS maps, copies, calls and keeps), nothing more. Screen output is allowed (INT 10h
   teletype), and so are the PC speaker and the PIT.
 - Stay compatible with the standard VGA modes (00h-13h) and the VESA modes. Never change what a
-  standard mode returns to a program; use standard VESA/VGA timings; keep 70 Hz for 320x200 and
-  640x400 text/graphics.
+  standard mode returns to a program; use standard VESA/VGA timings.
 - The RAM must stay treated as 1-cycle EDO (CR36 bits 3-2 = 00): the ROM never writes those bits, the
   card's strapping decides. The default build's MCLK is 50.11 MHz in every MCLK entry of all three ROMs
   (the clock S3's own Trio64V2 and Trio64V+ BIOSes use for 1-cycle EDO; owner's decision, 7 November
