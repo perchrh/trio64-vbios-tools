@@ -143,6 +143,11 @@ the tools, the VBIOS changes they verify and where the reference data comes from
   RDTSC, ...), no MMX, no SSE, no Pentium-Pro instructions (CMOVcc, FCMOV, ...). The tools run on 386/Pentium-class machines, and a later instruction there is a real #UD that
   freezes the machine (seen with REPORT.COM, 2026-11-12). Keep `cpu 386` and check a new binary with `ndisasm -b 16` for `0F`-prefixed opcodes beyond jcc/setcc/movzx/movsx/
   imul/bt/bsf/bsr/shld/shrd/lar/lsl when in doubt.
+- A reproducer .COM with an EXPECT line that goes into an upstream bug report must be run on the real card first, and must print STATUS=OK there (or the documented
+  hardware value), before it is shared: our first round of reproducers had reference values taken from the wrong source (the option ROM's PCIR instead of what the card
+  reports in config space, IBM VGA/VGATEST values instead of what the S3 BIOS programs, and a units bug in a refresh counter - all seen 2026-11-12), which sent the
+  upstream maintainer chasing zeroes that were never there. Also wrap every INT 21h output call in PUSHAD when the program keeps live values in registers: AH=09h
+  clobbers registers on some DOSes (it turned a measured value into garbage on real hardware).
 - On an Ubuntu 26.04 x86-64 sandbox (the CI runners' image) do not build NASM: fetch the prebuilt
   3.02 of the `ci-deps` release instead (`gh release download ci-deps -p 'nasm-3.02-linux-x86_64.tgz'
   -p 'nasm-3.02-linux-x86_64_SHA256.txt'`, then `sha256sum -c nasm-3.02-linux-x86_64_SHA256.txt &&
