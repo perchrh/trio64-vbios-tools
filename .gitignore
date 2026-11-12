@@ -25,3 +25,4 @@ nasm/
 poetry.lock
 ddk/
 dx8sdk/
+results/
