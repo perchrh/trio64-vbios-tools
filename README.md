@@ -441,7 +441,7 @@ candidate (`docs/clean-room.md`).
 ## Trio64V2/DX ROM
 
 `src/roms/` holds the code the ROM carries and `s3patch.py`, which applies the current change set
-(level p24) to the S3 reference BIOS 2.04.07 in `reference/v2/2_04_07.bin`, with byte assertions at
+(level p24) to the S3 reference BIOS 2.04.07 in `reference/775/2_04_07.bin`, with byte assertions at
 every patch site, the SHA-256 of the input's code outside the OEM area (CODE_SHA, 0100h-7FFDh) and the
 SHA-256 of the build that passed the emulator tests. The result is 64 KB, the
 patched 32 KB twice (`SIZE775=32`: the 32 KB alone, for a 32 KB EEPROM). All three ROM targets default
@@ -459,7 +459,7 @@ the patcher tests in its section "The build".
 ## Trio64V+ ROM
 
 `src/roms/vplus/` builds 1.03-08N-pN from the S3 Trio64V+ BIOS 1.03-08N (86C765, VBE 1.2) in
-`reference/64vplus/1_03_08n.bin`: backports of the Trio64V2 ROM's speed patches and fixes, and fixes of
+`reference/765/1_03_08n.bin`: backports of the Trio64V2 ROM's speed patches and fixes, and fixes of
 1.03-08's own faults, each with its issue in [docs/765-changes.md](docs/765-changes.md). The build, what
 does not apply to the Trio64V+ and the per-call costs: [docs/765-rom.md](docs/765-rom.md).
 
@@ -501,7 +501,7 @@ of 10Dh-10Fh in VBESHOW with p11 is still for a card to show
 ## Trio64 ROM
 
 `src/roms/trio64/` builds 1.5-07-pN for the Trio64 (86C764) from the Phoenix S3 Trio64 BIOS 1.5-07 in
-`reference/trio64/1_5_07.bin` (the CP764 build), the reference BIOS S3 gave the card makers for the
+`reference/764/1_5_07.bin` (the CP764 build), the reference BIOS S3 gave the card makers for the
 Trio64, as far as the 14 Trio64 images at hand show (no S3-built one among them). Its changes, each with
 its issue: [docs/764-changes.md](docs/764-changes.md) (backports of the Trio64V2 ROM's speed patches and
 fixes, no interlaced timings, S3's font layout from public domain sources (`src/roms/fonts`), the display FIFO M from the memory bandwidth). The build, the

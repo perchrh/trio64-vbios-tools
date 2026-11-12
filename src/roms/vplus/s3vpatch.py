@@ -10,7 +10,7 @@ assembler driver and the shared patch code of s3patch.py next to it.
 
 Input
   1_03_08N.BIN the S3 Trio64V+ BIOS 1.03-08N ("S3 86C765 Video BIOS. Version 1.03-08N", 09/03/96),
-               32 KB, as in reference/64vplus/1_03_08n.bin (theretroweb, S3 86C765 page), or a 64 KB
+               32 KB, as in reference/765/1_03_08n.bin (theretroweb, S3 86C765 page), or a 64 KB
                image with it in the lower half (the upper half of the input is not used). S3's 1.03-08
                (the upper half of the Gainward GW503A stock dump) has the same code but is refused: its
                configuration bytes differ (#129, docs/765-rom.md)

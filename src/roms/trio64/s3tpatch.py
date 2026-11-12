@@ -9,7 +9,7 @@ assembler driver and the shared patch code of s3patch.py.
 
 Input
   1_5_07.BIN   a Phoenix S3 Trio64 BIOS 1.5-07 ("Phoenix S3 TRIO64 Enhanced VGA BIOS. Version 1.5-07"),
-               32 KB, or a 64 KB image with it in the lower half. reference/trio64/1_5_07.bin is the CP764
+               32 KB, or a 64 KB image with it in the lower half. reference/764/1_5_07.bin is the CP764
                build (08/19/96); every 1.5-07 build at hand has the same code from 1000h to 7EFFh and
                differs only in the first 4 KB (sign-on, memory clock, per-mode memory timing bytes), so
                another card's own 1.5-07 dump is accepted when its code is that code and its tables have

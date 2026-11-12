@@ -162,13 +162,13 @@ stock-test: tools
 
 # The S3 reference BIOS 2.04.07 (32 KB) in the repository: the default REF775 of 775-ref-compare and 775-rom-test
 # and the default IN of 775-rom; give REF775=... or IN=... for another copy
-REF775 ?= reference/v2/2_04_07.bin
+REF775 ?= reference/775/2_04_07.bin
 IN ?= $(REF775)
 
 # EGA/CGA behaviour against the unpatched reference BIOS (AGENTS.md goal)
 #   make 775-ref-compare ROM=S3V2P15.BIN [REF775=REF2047.BIN]
 775-ref-compare:
-	@test -n "$(REF775)" -a -n "$(ROM)" || { echo "775-ref-compare: set ROM (and REF775, default reference/v2/2_04_07.bin)"; exit 2; }
+	@test -n "$(REF775)" -a -n "$(ROM)" || { echo "775-ref-compare: set ROM (and REF775, default reference/775/2_04_07.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --ref "$(REF775)" --rom "$(ROM)"
 
 # PoC PCI option ROM (src/poc-pci-rom, docs/poc-rom.md): a generic card ROM that beeps high-low
@@ -198,35 +198,35 @@ MCLKOPT = $(if $(MCLK),--mclk $(MCLK) $(if $(MEMTYPE),--memtype $(MEMTYPE)))
 #   make 775-rom OUT=S3V2P22.BIN [IN=REF2047.BIN] [SIZE775=32] [MCLK=55 [MEMTYPE=edo1]]   (64 KB, the 32 KB twice; SIZE775=32: 32 KB)
 #   make 775-rom-test [REF775=REF2047.BIN] [STOCK=STOCK.BIN] [ROM=S3V2P15.BIN]
 775-rom:
-	@test -n "$(IN)" -a -n "$(OUT)" || { echo "775-rom: set OUT, e.g. make 775-rom OUT=S3V2P15.BIN (IN defaults to reference/v2/2_04_07.bin)"; exit 2; }
+	@test -n "$(IN)" -a -n "$(OUT)" || { echo "775-rom: set OUT, e.g. make 775-rom OUT=S3V2P15.BIN (IN defaults to reference/775/2_04_07.bin)"; exit 2; }
 	python3 $(ROMS_SRC)/s3patch.py --nasm "$(NASMBIN)" --size $(SIZE775) "$(IN)" -o "$(OUT)" $(MCLKOPT)
 
 775-rom-test:
-	@test -n "$(REF775)" || { echo "775-rom-test: set REF775 (2.04.07, 32 KB, default reference/v2/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
+	@test -n "$(REF775)" || { echo "775-rom-test: set REF775 (2.04.07, 32 KB, default reference/775/2_04_07.bin); STOCK (the stock 64 KB dump) and ROM are optional"; exit 2; }
 	python3 $(ROMS_SRC)/test_s3patch.py --nasm "$(NASMBIN)" --ref "$(REF775)" $(if $(STOCK),--stock "$(STOCK)") $(if $(ROM),--rom "$(ROM)")
 
 # The Trio64V+ ROM (src/roms/vplus): the backport to the S3 Trio64V+ BIOS 1.03-08 in
-# reference/64vplus/1_03_08n.bin (REF765), docs/765-rom.md
+# reference/765/1_03_08n.bin (REF765), docs/765-rom.md
 #   make 765-rom OUT=S3VPP1.BIN [REF765=...] [SIZE765=32] [MCLK=55 [MEMTYPE=edo1]]   (64 KB, the 32 KB twice; SIZE765=32: 32 KB)
 #   make 765-rom-test [REF765=...] [ROM=S3VPP1.BIN]
 #   make 765-ref-compare ROM=S3VPP1.BIN [REF765=...]               (EGA/CGA behaviour against 1.03-08)
 #   make emu-test ROM=S3VPP1.BIN CHIP=765 [LOGS=emu/vlogs]
-REF765 ?= reference/64vplus/1_03_08n.bin
+REF765 ?= reference/765/1_03_08n.bin
 SIZE775 ?= 64
 SIZE765 ?= 64
 SIZE764 ?= 64
 765-rom:
-	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (REF765 defaults to reference/64vplus/1_03_08n.bin)"; exit 2; }
+	@test -n "$(OUT)" || { echo "765-rom: set OUT, e.g. make 765-rom OUT=S3VPP1.BIN (REF765 defaults to reference/765/1_03_08n.bin)"; exit 2; }
 	python3 $(ROMS_SRC)/vplus/s3vpatch.py --nasm "$(NASMBIN)" --size $(SIZE765) "$(REF765)" -o "$(OUT)" $(MCLKOPT)
 
 765-rom-test:
 	python3 $(ROMS_SRC)/vplus/test_s3vpatch.py --nasm "$(NASMBIN)" --ref "$(REF765)" --ref775 "$(REF775)" $(if $(ROM),--rom "$(ROM)")
 
 765-ref-compare:
-	@test -n "$(ROM)" || { echo "765-ref-compare: set ROM (our Trio64V+ ROM; REF765 defaults to reference/64vplus/1_03_08n.bin)"; exit 2; }
+	@test -n "$(ROM)" || { echo "765-ref-compare: set ROM (our Trio64V+ ROM; REF765 defaults to reference/765/1_03_08n.bin)"; exit 2; }
 	$(PYTHON) emu/refcompare.py --chip 765 --ref "$(REF765)" --rom "$(ROM)"
 
-# The Trio64 ROM (src/roms/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/trio64/1_5_07.bin
+# The Trio64 ROM (src/roms/trio64): built on the Phoenix S3 Trio64 BIOS 1.5-07 in reference/764/1_5_07.bin
 # (REF764; another card's 1.5-07 build is accepted too), docs/764-rom.md
 #   make 764x-rom OUT=S3T64P3.BIN [REF764=...] [SIZE764=32] [MCLK=55]   (64 KB, the 32 KB twice; SIZE764=32: 32 KB)
 #   make 764x-rom OUT=S3T64P3.BIN MCLK=69.8   (up to 70 MHz, the Trio64 limit of our tools; the data book gives 60)
@@ -234,18 +234,18 @@ SIZE764 ?= 64
 #   make 764-rom-test [REF764=...] [ROM=S3T64P3.BIN]
 #   make 764-ref-compare ROM=S3T64P3.BIN [REF764=...]              (EGA/CGA behaviour against 1.5-07)
 #   make emu-test ROM=S3T64P3.BIN CHIP=764 [LOGS=emu/tlogs]
-REF764 ?= reference/trio64/1_5_07.bin
+REF764 ?= reference/764/1_5_07.bin
 # 764x-rom is for the 86C764X (Trio64 PnP, MCLK 50-70 MHz), 764p-rom for the 86C764-P (50-60 MHz): the same
 # ROM, only the MCLK range the build option accepts differs (T64-MEM-7); without MCLK the two are identical.
 764x-rom 764p-rom:
-	@test -n "$(OUT)" || { echo "$@: set OUT, e.g. make $@ OUT=S3T64P3.BIN (REF764 defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+	@test -n "$(OUT)" || { echo "$@: set OUT, e.g. make $@ OUT=S3T64P3.BIN (REF764 defaults to reference/764/1_5_07.bin)"; exit 2; }
 	python3 $(ROMS_SRC)/trio64/s3tpatch.py --nasm "$(NASMBIN)" --size $(SIZE764) --model $(subst -rom,,$@) "$(REF764)" -o "$(OUT)" $(if $(MCLK),--mclk $(MCLK) $(if $(OVERCLOCK),--overclock))
 
 764-rom-test:
 	python3 $(ROMS_SRC)/trio64/test_s3tpatch.py --nasm "$(NASMBIN)" --ref "$(REF764)" --ref765 "$(REF765)" $(if $(ROM),--rom "$(ROM)")
 
 764-ref-compare: | build
-	@test -n "$(ROM)" || { echo "764-ref-compare: set ROM (our Trio64 ROM; REF764 defaults to reference/trio64/1_5_07.bin)"; exit 2; }
+	@test -n "$(ROM)" || { echo "764-ref-compare: set ROM (our Trio64 ROM; REF764 defaults to reference/764/1_5_07.bin)"; exit 2; }
 	python3 $(ROMS_SRC)/trio64/s3tpatch.py --fonts-only "$(REF764)" -o build/T64FONTS.BIN
 	$(PYTHON) emu/refcompare.py --chip 764 --ref build/T64FONTS.BIN --rom "$(ROM)"
 

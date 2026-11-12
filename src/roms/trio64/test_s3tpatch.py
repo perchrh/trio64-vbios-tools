@@ -4,7 +4,7 @@
     python3 src/roms/trio64/test_s3tpatch.py [--ref 1_5_07.BIN] [--rom S3T64P3.BIN] [--nasm nasm]
     make 764-rom-test [REF764=...] [ROM=S3T64P3.BIN]
 
---ref is the 32 KB Phoenix S3 Trio64 BIOS 1.5-07 (default reference/trio64/1_5_07.bin), --rom a build to
+--ref is the 32 KB Phoenix S3 Trio64 BIOS 1.5-07 (default reference/764/1_5_07.bin), --rom a build to
 compare with byte by byte.
 
 Tests
@@ -113,8 +113,8 @@ def table_check(ref, img):
 def main():
     global NASM
     ap = argparse.ArgumentParser(description='checksum and table tests for s3tpatch.py')
-    ap.add_argument('--ref', default=os.path.join(REPO, 'reference', 'trio64', '1_5_07.bin'), help='32 KB Phoenix Trio64 BIOS 1.5-07')
-    ap.add_argument('--ref765', default=os.path.join(REPO, 'reference', '64vplus', '1_03_08n.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
+    ap.add_argument('--ref', default=os.path.join(REPO, 'reference', '764', '1_5_07.bin'), help='32 KB Phoenix Trio64 BIOS 1.5-07')
+    ap.add_argument('--ref765', default=os.path.join(REPO, 'reference', '765', '1_03_08n.bin'), help='32 KB Trio64V+ 1.03-08 (must be refused)')
     ap.add_argument('--rom', help='a build to compare with')
     ap.add_argument('--nasm', default='nasm', help='nasm executable passed to s3tpatch.py')
     a = ap.parse_args()

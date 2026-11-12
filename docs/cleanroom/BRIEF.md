@@ -18,7 +18,7 @@ book rules with IDs), [docs/bios-rules.md](../bios-rules.md) (standard function 
   with section/table, or the rule ID of [docs/chip-rules.md](../chip-rules.md)), VESA (VBE 1.2/2.0 in standards/vesa and
   README "VESA standards"; DMT timings as published industry figures), IBM/VGA references
   ([docs/bios-rules.md](../bios-rules.md) sources), VGADOC (standards/thoegersen). Cite it in a Source column.
-- Black-box observation is allowed for checking: run the reference ROM (reference/trio64/1_5_07.bin,
+- Black-box observation is allowed for checking: run the reference ROM (reference/764/1_5_07.bin,
   Phoenix, and our patched build) in the emulator (emu/vgaemu.py, Machine.chip = 'trio64', python at
   /home/user/trio64-vbios-tools/.venv/bin/python3; m = Machine(rom64k); m.post(); m.int10(ax, bx=..);
   registers in m.r['crtc'], m.r['seq'], m.r['gc'], m.r['atc'], m.r['misc'], memory m.mem(addr, n)),
