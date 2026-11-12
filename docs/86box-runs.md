@@ -131,6 +131,32 @@ The 86Box model reads the Phoenix-variant chip as 86C764-P; our ROM targets the 
 as above (the 765 run adds the doubled/rounded VBE refresh measurements). After these runs the VM
 config was restored to the Trio64V2/DX card with our 2.04.07-p27 override.
 
+## Learnings from the runs
+
+Comparing the eight logs (`S3TEST.LOG`, `S3COMPAT.LOG`, `VBESHOW.LOG`, `VGASHOW.LOG` in each zip):
+
+- Lowest VCO seen: 101.02 MHz. The Cardex `S3T64VP.VBI` programs VCO 101.02 MHz (DCLK 12.62 MHz)
+  for VESA modes 010D/010E/010F (320x200x15/16/32), and miroMEDIA TV 128.86 MHz for the 1024x768
+  modes and 133.63 MHz for 0120 (1600x1200x8 at 95 Hz). Both are below the data book's 135 MHz soft
+  minimum; our ROMs stay at 200.45 MHz (MCLK) and above 170 MHz for the refresh entries, so we have
+  never seen a sub-135 MHz VCO on our builds. The stock V+ BIOSes do go below it.
+- MCLK above the data book maximum: yes, two stock Trio64V+ BIOSes exceed the 60 MHz data book limit
+  for the 86C765: Hercules Terminator 64 sets 63.91 MHz at POST (SR10=45 SR11=7B) and miroMEDIA TV
+  sets 73.97 MHz (SR10=21 SR11=1D), both FAIL in S3TEST. Cardex runs 59.96 MHz, just under the limit;
+  Diamond 54.88, Phoenix 57.27; our ROMs 50.11 on all three chips.
+- IBM CGA+EGA+VGA modes: every ROM in all eight runs implements all 15 standard modes 00h-07h and
+  0Dh-13h (VGASHOW lists all of them everywhere); none skips one. The only mode-related SKIP anywhere
+  is a Trio64V2-only CR90 sub-test of mode 13h. The CGA 00h-03h FAILs are the SR04 readback artifact.
+- Modes not seen in our ROMs: the Diamond Stealth64 Video 2001 offers VBE mode 0211 (640x400x32,
+  69.7 Hz), which no other ROM here has. The stock V+ ROMs (Cardex, Hercules, miroMEDIA TV, Phoenix)
+  offer 010D-010F (320x200 high/true colour) and 0118-011A/0120; our 765 ROM skips 0118-011A and 0120
+  on a 2 MB card (memory limit) and the Diamond lacks 010D-010F. Our 775 2.04.07-p27 offers by far
+  the most VBE modes (46, including the whole linear-frame-buffer range 011C-0164); the V+ and 764
+  ROMs have no LFB at all ("no linear frame buffer in 101h", SKIP in S3COMPAT). The 764 Phoenix
+  1.5-07 list is the shortest (17 modes: no 0106, no 010D-010F, no 0118-011A/0120).
+- VBE version: our 775 ROM reports VESA signature 02.00 (VBE 2.0); all 765 V+ ROMs and the 764
+  Phoenix report 01.02 (VBE 1.2) at 4F00 while still answering the VBE 2.0 512-byte block query.
+
 ## Limitations of 86Box for these tests
 
 What did not work, and what to expect when it shows up in a log:
