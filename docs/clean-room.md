@@ -211,8 +211,8 @@ where the two differ; that section is kept as the record of how the decision was
   integration"). The reference ROMs stay in [`reference/`](../reference/) for now; they are to be removed later and
   fetched from theretroweb.com by URL and SHA-256 instead (README "To do"). The Trio64V2 2.04.07 and
   1.01.04 are not on theretroweb yet.
-- **Scope: four milestones, then the monitor sense, a tentative FreeDOS milestone, and a DDC idea** (the
-  first four decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), answering the review's F5; the monitor sense inserted as milestone 5 on 8 November 2026; the DDC milestone 7 added 8 November 2026, [#117](https://github.com/perchrh/trio64-vbios-tools/issues/117)). All are judged on the DSP-3364P,
+- **Scope: six milestones, then a DDC idea** (the
+  first four decided 2 November 2026, [#145](https://github.com/perchrh/trio64-vbios-tools/issues/145), answering the review's F5; the monitor sense inserted as milestone 5 on 8 November 2026; the DDC milestone 7 added 8 November 2026, [#117](https://github.com/perchrh/trio64-vbios-tools/issues/117); milestones 1-6 opened 13 November 2026). All are judged on the DSP-3364P,
   in a host from an Intel Pentium 75 to an AMD K6-400 (the project's target machines, recorded
   8 November 2026; performance reasoning for the ROMs assumes that range, not the 80486 of the
   README's VIDSPEED run), in order:
@@ -237,9 +237,20 @@ where the two differ; that section is kept as the record of how the decision was
      [`docs/cleanroom/primary-extracts/vision964-sense-input-utilization.md`](cleanroom/primary-extracts/vision964-sense-input-utilization.md),
      the IBM power-on and monochrome-state contract at
      [`docs/cleanroom/primary-extracts/ibm-bios-power-on-mode-and-mono-state.md`](cleanroom/primary-extracts/ibm-bios-power-on-mode-and-mono-state.md);
-     still open for it: the DAC drive values and the behaviour with no display attached.
-  6. **Milestone 6 (tentative): FreeDOS.** FreeDOS boots on the card
-     ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS).
+     the DAC drive values and the no-display behaviour are decided (M5-DAC, M5-NODISP, 8 November 2026)
+     and specified for this milestone in
+     [`docs/cleanroom/spec-d-sense.md`](cleanroom/spec-d-sense.md) (part D, drafted 13 November 2026, not
+     yet reviewed; chip rule T64-SENSE-1). The emulator checks the SENSE rows through its monitor model
+     (`emu/monitor.py`, `Machine.monitor`, test `t_sense`; PR #276).
+  6. **Milestone 6: FreeDOS** (opened 13 November 2026). FreeDOS 1.4 boots on the card;
+     acceptance (decided 13 November 2026, M6-BOOT): legible text during boot, a legible command
+     prompt, legible text from both TYPE and EDIT, and in EDIT text can be modified without
+     corruption of the displayed text.
+     ([`docs/cleanroom/freedos-1.4.md`](cleanroom/freedos-1.4.md) lists what FreeDOS 1.4 asks of the video BIOS.)
+     The VESA text modes 108h/10Bh/10Ch, which the stock ROMs do not list in 4F00h, are not required
+     for this milestone. The defects found in the FreeDOS programs (the issues tagged FreeDOS) are
+     known errors in FreeDOS itself, unrelated to the video BIOS; the clean ROM does not work around
+     them (M6-NOTOURS).
   7. **Milestone 7 (idea): DDC (VBE 4F15h) with interrupts on.** The clean ROM's 4F15h (VBE/DDC 1.0)
      keeps interrupts enabled for the whole call, so the BIOS tick stays correct and a UART without a
      FIFO loses no bytes while Windows 9x or a monitor tool reads the EDID. This is wanted on every
@@ -280,8 +291,8 @@ where the two differ; that section is kept as the record of how the decision was
   [`docs/cleanroom/decisions-milestones-1-4.md`](cleanroom/decisions-milestones-1-4.md)), so CLS / DOSKEY
   surround is out of the contract. Text-output functions VGALOG omits still come from the standard or a
   fuller trace where EDIT needs them.
-- **Scope of the leak review:** a clean-room implementation of milestones 1-4. Only what the clean side
-  needs for them crosses now and is reviewed; milestone 5 and later get their own review when they are
+- **Scope of the leak review:** a clean-room implementation of milestones 1-6. Only what the clean side
+  needs for them crosses now and is reviewed; milestone 7 and later get their own review when they are
   set ([`docs/cleanroom/LEAK-REVIEW.md`](cleanroom/LEAK-REVIEW.md) "Scope of this review").
 
 ## The parts of the clean ROM
