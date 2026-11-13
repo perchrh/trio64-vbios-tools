@@ -69,7 +69,71 @@ CTMOUSE, NANSI, HTMLHELP and V8Power take only modes 00h-03h and 07h in 0449h as
 CTMOUSE draws no mouse cursor, NANSI falls back to slow BIOS output, and HTMLHELP resets the screen to mode
 03h. VBE 1.2 asks that AH=0Fh return a number with which AH=00h sets the mode again, which a 132-column mode
 cannot share with 03h. Open question for the specification (part C): which number 0449h holds in 108h-10Ch,
-and whether FreeDOS's behaviour there is accepted.
+and whether FreeDOS's behaviour there is accepted. Answered below and in issue #103: the OEM or VBE
+number is allowed (VBE 1.2 chapter 3 leaves it to the OEM), and FreeDOS's behaviour is accepted as far
+as the IBM PS/2 book goes; what is missing on the FreeDOS side is a VBE-based text test for those
+numbers.
+
+## The 0449h number in the VBE text modes (issue #103), 13 November 2026
+
+Findings for the later FreeDOS experiment (milestone 6), recorded in full in issue #103. Sources: the
+standards in [../../standards/](../../standards/) and the FreeDOS sources at https://gitlab.com/FreeDOS
+(master, re-read 2026-11-13).
+
+### What the standards say
+
+- IBM PS/2 and PC BIOS Interface Technical Reference (Apr 87,
+  [`standards/PS2_and_PC_BIOS_Interface_Technical_Reference_Apr87.epub`](../../standards/PS2_and_PC_BIOS_Interface_Technical_Reference_Apr87.epub)):
+  Fig. 2-3 defines modes 00h-13h
+  with the text (A/N) modes 00h-03h and 07h, and nothing above 13h. INT 10h AH=0Fh returns "mode
+  currently set" per the AH=00h table; the BIOS data area lists 40:49 as "Display Mode set" with no
+  range restriction. The book is silent on OEM modes, so neither our ROMs nor the FreeDOS programs
+  violate a written IBM rule there. For IBM modes the FreeDOS test "text iff 0449h in 00h-03h/07h" is
+  exactly right (43/50-line text still reports 03h: font loads change the rows, not the number).
+- VBE 1.2 (VS911022, [`standards/vesa/vbe12.txt`](../../standards/vesa/vbe12.txt)): chapter 3 -
+  VESA-unaware TSRs call VGA 0Fh and later
+  00h, and VESA recommends that whatever 0Fh returns ("it is up to the OEM to define this number") be
+  usable with AH=00h to set the mode again; our ROMs satisfy this by storing the S3 number that AH=00h
+  re-sets (storing 03h would break the recommendation). Function 03h returns the current VESA mode in
+  BX; 6.3 ModeAttributes D4 = 0 text / 1 graphics, D2 = BIOS output functions supported. In Super VGA
+  modes the authoritative text test is therefore 4F03h + 4F01h D4, not 0449h.
+
+Verdict: the ROM side is conformant; the FreeDOS programs are incomplete against VBE 1.2, not wrong
+against the IBM book. This answers the open question in [spec-c-vbe.md](spec-c-vbe.md) part C item 1:
+0449h may hold the OEM/VBE number in 108h-10Ch.
+
+### Why FreeDOS does not auto-detect today
+
+NANSI has had the `/Tnn` switch since 1991 (revision 1.8, "tell nansi about new text modes") precisely
+for non-IBM text modes; its documentation says the default table marks only 00h-03h and 07h as text,
+"Worse yet, BIOS can't tell you what kind of mode it's in", and ships per-card examples (`/t54`-/`t57`
+Paradise, `/t4F`-/`t51` OTI-067, `/t50`-/`t5A` Trident TVGA8900 - OEM text numbers of the 54h/55h class
+our ROMs store). Its source notes that without `/T` it "may think VESA text is gfx". CTMOUSE's
+`@setvideo` has the same static table (modes 0-3/7 text, other graphics) and hooks 4F02h but still
+classifies by the 0449h number. The reasons are still valid: the table is consulted per character in a
+resident hot loop, and real VBE 1.2 VBIOSes are unreliable (our record: #73, #108, #267, and a VBE 1.2
+card that hangs in 4F02h, [../764-rom.md](../764-rom.md)). MODE is the one place that safely uses 4F01h
+attributes, because it runs as a user command, not resident. The user-side workaround needs no code
+change: `NANSI.SYS /T54 /T55` for the S3 numbers, `/T109 /T10A` for VBE-compliant BIOSes.
+
+### Proposed FreeDOS-side fix (for the experiment; additive and fail-closed)
+
+In CTMOUSE, NANSI, HTMLHELP and V8Power, keep the existing legacy test first, unchanged; only when 0449h
+is not 00h-03h/07h, call 4F03h, and if BX (bit 14 masked off, the LFB bit) is >= 0100h, call 4F01h for
+it and take the mode as text iff ModeAttributes D4 = 0 (plus D2 where BIOS output matters). Check
+AL = 4Fh after both calls, give 4F01h an ES:DI 256-byte buffer, preserve all registers, run the probe
+once per mode change (CTMOUSE's existing 4F02h hook or `@setvideo`), never per character or per
+interrupt, and treat any failure as today's answer.
+
+Safety: on every BIOS that stores 00h-03h/07h the legacy test returns before any VBE call, so the code
+path, the INT 10h call count and the result are identical to the current binaries; on a VBE 1.x BIOS
+(AL != 4Fh) or in a standard VGA mode (BX < 0100h) the answer is the same as today; in a VBE graphics
+mode D4 is set, still not text. The only changed outcome is this issue's case: a non-legacy number in
+0449h while the current mode is a VBE text mode (our 54h/55h/19h/1Ah, or 108h-10Ch on VBE-compliant
+BIOSes).
+
+Cross-references: issue #103 (self-contained description), #266 and #267 (the MORE and MODE defects,
+filed from the removed freedos-reports.md by PR #268), #265 (the missing 108h/10Bh/10Ch modes).
 
 ## Our ROMs against these (emulator, 1 November 2026)
 
