@@ -240,7 +240,8 @@ where the two differ; that section is kept as the record of how the decision was
      the DAC drive values and the no-display behaviour are decided (M5-DAC, M5-NODISP, 8 November 2026)
      and specified for this milestone in
      [`docs/cleanroom/spec-d-sense.md`](cleanroom/spec-d-sense.md) (part D, drafted 13 November 2026, not
-     yet reviewed; chip rule T64-SENSE-1).
+     yet reviewed; chip rule T64-SENSE-1). The emulator checks the SENSE rows through its monitor model
+     (`emu/monitor.py`, `Machine.monitor`, test `t_sense`; PR #276).
   6. **Milestone 6: FreeDOS** (opened 13 November 2026). FreeDOS 1.4 boots on the card;
      acceptance (decided 13 November 2026, M6-BOOT): legible text during boot, a legible command
      prompt, legible text from both TYPE and EDIT, and in EDIT text can be modified without
