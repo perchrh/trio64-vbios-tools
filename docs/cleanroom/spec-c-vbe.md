@@ -306,8 +306,7 @@ Trio64 BIOSes examined there offers 4F14h.
    109h-10Ch and 108h ([`docs/cleanroom/freedos-1.4.md`](freedos-1.4.md) FD-14, FD-15, and the open question there on
    the number 0449h holds in them). That number is answered (13 November 2026, issue #103): the OEM or
    VBE number is allowed, because VBE 1.2 chapter 3 leaves the 0Fh value in a Super VGA mode to the OEM
-   and asks that AH=00h accept it again - see [freedos-1.4.md](freedos-1.4.md) "The 0449h number in the
-   VBE text modes".
+   and asks that AH=00h accept it again - see issue #103 and [freedos-1.4.md](freedos-1.4.md).
 2. **[Deferred by scope - later milestones]** 320x200 direct colour 10Dh-10Fh: VBE 1.2 modes that need a double-scanned 70 Hz timing with a
    12.59 MHz pixel clock, below the lowest PLL output (135 MHz / 8 = 16.9 MHz, PLL-1, PLL-2), so only
    with the dot clock halved from 25.175 MHz in an enhanced mode. SR01 bit 3 cannot do that (character
