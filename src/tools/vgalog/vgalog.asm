@@ -11,8 +11,9 @@
 ;   VGALOG           install, then start the program to watch; VGALOG.BIN grows in the current directory
 ;   VGALOG /M        install in memory mode: every INT 10h call except the text and pixel functions is
 ;                    kept in a 32 KB ring buffer in memory (the last 1024 calls), nothing is written to
-;                    disk. For Windows 9x: load it before Windows (AUTOEXEC.BAT), use Windows, then
-;                    VGALOG /D in a DOS box or after leaving Windows.
+;                    disk. The text and pixel functions are counted instead and /D appends the counts
+;                    (a VGALOGC1 part) at the end of VGALOG.BIN. For Windows 9x: load it before Windows
+;                    (AUTOEXEC.BAT), use Windows, then VGALOG /D in a DOS box or after leaving Windows.
 ;   VGALOG /M /XL    as /M, but the ring buffer is 128 KB (the last 4096 calls) instead of 32 KB
 ;                    (the last 1024); about 130 KB of conventional memory (about 194 KB with /T).
 ;                    /XL without a memory mode (/M, /T, /P, /W) is refused.
@@ -48,8 +49,9 @@
 ;                    +24). Only the routine of the first 4F01h that has one is hooked: a 4F01h that
 ;                    returns another address keeps it (the S3 BIOSes return one routine for all modes).
 ;                    Unload only after the program has ended (it keeps the hooked address).
-;   VGALOG /D        memory mode: write the ring buffer to VGALOG.BIN (oldest call first); the buffer
-;                    is kept, so /D can be repeated. With no call logged yet it writes no file and says
+;   VGALOG /D        memory mode: write the ring buffer to VGALOG.BIN (oldest call first), then the
+;                    trace part with /T, then the VGALOGC1 counter part; the buffer is kept, so /D can
+;                    be repeated. With no call logged yet it writes no file and says
 ;                    "No events registered, not writing output file" (exit code 0). The file is committed
 ;                    and DOS's buffers flushed (AH=68h, AH=0Dh, which also empties a SMARTDRV
 ;                    write-behind cache) before /D says it is written, so the machine may be reset
@@ -101,8 +103,10 @@
 ;   (VGALOG does not see the return), +23 80h + the nesting depth (bit 7 set: a far call, not INT 10h),
 ;   +24 the tick, +26 to +31 0.
 ;   Not logged in memory mode (they would fill the buffer): AH=02h, 03h, 08h, 09h, 0Ah, 0Ch, 0Dh, 0Eh,
-;   13h. Under Windows the calls of DOS boxes may see virtual register values (the display driver
-;   traps their VGA ports); the calls the driver makes itself run with the real ones.
+;   13h. They are counted (cntr, nine dd) and /D appends them after everything else as a part:
+;   header 'VGALOGC1', then 9 dd, the calls per function in the order 02h, 03h, 08h, 09h, 0Ah, 0Ch,
+;   0Dh, 0Eh, 13h (44 bytes). Under Windows the calls of DOS boxes may see virtual register values
+;   (the display driver traps their VGA ports); the calls the driver makes itself run with the real ones.
 ;
 ; Port trace (/T): after the calls, a second part
 ;   header  'VGALOGT1', dd events in total, dd events in the file (at most 16384)
@@ -131,7 +135,8 @@
 ;   hook) and uses the copy's saved vector and file handle. /D and the install check also search the
 ;   DOS memory control block chain (findmem), with the upper memory blocks linked in for the walk: in
 ;   a Windows 9x DOS box Windows hooks INT 10h after a VGALOG loaded before it, which still logs.
-;   VGALOG.BIN size = 48 + 32 bytes per logged call (and with /T 16 + 4 per trace event).
+;   VGALOG.BIN size = 48 + 32 bytes per logged call (and with /T 16 + 4 per trace event) + 44 for the
+;   VGALOGC1 counter part at the end.
 bits 16
 org 0x100
 %include "version.inc"
@@ -181,6 +186,9 @@ wfold   dd 0                    ; the BIOS's window function (offset, segment) o
 wfcnt   dd 0                    ; far calls through the hook in total
 wflog   dw 0                    ; of them logged as records (at most WFMAX)
 WFMAX   equ 64
+cntrtab db 0,1,0xFF,0xFF,0xFF,0xFF,2,3,4,0xFF,5,6,7,0xFF,0xFF,0xFF,0xFF,8  ; AH 02h-13h -> index in cntr (0xFF = not counted)
+cntr    times 9 dd 0            ; text/pixel calls passed on unlogged in memory mode, per function:
+                                ; AH=02h, 03h, 08h, 09h, 0Ah, 0Ch, 0Dh, 0Eh, 13h (the VGALOGC1 part of /D)
 info    times 32 db 0           ; the chip and ROM block (see the header), filled at install
 
 ; resident INT 10h handler
@@ -270,7 +278,30 @@ misr:   cmp ah,0x02
         jbe .pass
         cmp ah,0x13
         jne .go
-.pass:  jmp far [cs:old10]
+.pass:  pushf                          ; count the text/pixel call, then pass it on unlogged
+        push ax
+        push bx
+        push si
+        push ds
+        push cs
+        pop ds
+        mov bl,ah
+        sub bl,2                        ; AH 02h-13h -> cntrtab index 0-17
+        mov bh,0
+        mov al,[cntrtab+bx]
+        cmp al,0xFF
+        je .skip
+        mov ah,0
+        shl ax,2
+        add ax,cntr
+        mov si,ax
+        inc dword [si]
+.skip:  pop ds
+        pop si
+        pop bx
+        pop ax
+        popf
+        jmp far [cs:old10]
 .go:    push bp                         ; caller's BP, DS, SI (BP and DS go to the BIOS unchanged)
         push ds
         push si
@@ -1331,8 +1362,22 @@ dump:   call findmem
         and ax,[es:rmask]
         loop .w
 .cl:    cmp byte [es:tflag],0
-        je .cf
+        je .cc
         call tdump
+        jc .err
+.cc:    mov ah,0x40                     ; the text-call counters, as the last part of the file
+        mov cx,8
+        mov dx,chdr
+        int 0x21
+        jc .err
+        push ds                         ; the resident copy's counters
+        push es
+        pop ds
+        mov ah,0x40
+        mov cx,9*4
+        mov dx,cntr
+        int 0x21
+        pop ds
         jc .err
 .cf:    mov ah,0x68                     ; commit: data and directory entry to disk (DOS 3.3 and later;
         int 0x21                        ; an older DOS sets CF, the close below writes them then)
@@ -1544,8 +1589,8 @@ unload: call findres
 fname   db 'VGALOG.BIN',0
 msg     db 'VGALOG ',VERSION,' installed, logging INT 10h AH=00 and 4F01/4F02/4F06 to VGALOG.BIN',13,10,'$'
 msge    db 'VGALOG ',VERSION,': cannot create VGALOG.BIN',13,10,'$'
-msgm    db 'VGALOG ',VERSION,' installed in memory mode: the last 1024 INT 10h calls (no text/pixel output), VGALOG /D writes them',13,10,'$'
-msgxl   db 'VGALOG ',VERSION,' installed in memory mode: the last 4096 INT 10h calls in a 128 KB ring (no text/pixel output), VGALOG /D writes them',13,10,'$'
+msgm    db 'VGALOG ',VERSION,' installed in memory mode: the last 1024 INT 10h calls (text/pixel calls counted, not kept), VGALOG /D writes them',13,10,'$'
+msgxl   db 'VGALOG ',VERSION,' installed in memory mode: the last 4096 INT 10h calls in a 128 KB ring (text/pixel calls counted, not kept), VGALOG /D writes them',13,10,'$'
 msgt    db 'VGALOG ',VERSION,' installed in memory mode with the port trace of the mode sets (AH=00h, 4F02h), VGALOG /D writes them',13,10,'$'
 msgw    db 'VGALOG ',VERSION,' installed in memory mode with the window function hook (4F01h WinFuncPtr), VGALOG /D writes them',13,10,'$'
 msgp    db 'VGALOG ',VERSION,' installed in memory mode with the port trace of the mode sets and of the program after 4F02h, VGALOG /D writes them',13,10,'$'
@@ -1555,6 +1600,7 @@ s_dump  db 'VGALOG ',VERSION,': ring buffer written to VGALOG.BIN',13,10,'$'
 s_none  db 'VGALOG ',VERSION,': No events registered, not writing output file',13,10,'$'
 s_notm  db 'VGALOG ',VERSION,': /D needs VGALOG resident in memory mode (VGALOG /M).',13,10,'$'
 dhdr    db 'VGALOGM2',0,0,0,0,0,0,0,0
+chdr    db 'VGALOGC1'
 fhdr    db 'VGALOGF1',0,0,0,0,0,0,0,0
 dcnt    dw 0
 dfirst  dw 0
@@ -1565,7 +1611,7 @@ s_use   db 'VGALOG ',VERSION,' - logs INT 10h AH=00 and VBE 4F01/4F02/4F06 calls
         db '  VGALOG /T           as /M, and every VGA/S3 port access of the mode sets (AH=00h, 4F02h)',13,10
         db '  VGALOG /P           as /T, and the program itself for a while after its 4F02h',13,10
         db '  VGALOG /W           as /M, and the far calls through the window function (4F01h WinFuncPtr)',13,10
-        db '  VGALOG /D           memory mode: write the calls (and the trace) to VGALOG.BIN',13,10
+        db '  VGALOG /D           memory mode: write the calls, the trace and the text-call counts to VGALOG.BIN',13,10
         db '  VGALOG /U           unload (INT 10h restored, VGALOG.BIN closed)',13,10
         db '  VGALOG /H, /?, /HELP  this help',13,10,'$'
 s_bad   db 'VGALOG ',VERSION,': bad argument.',13,10,13,10,'$'
