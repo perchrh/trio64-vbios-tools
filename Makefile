@@ -129,19 +129,22 @@ LOGS ?= emu/logs
 # extra tests.py arguments for every run of emu-test, e.g. EMUARGS="--skip s3compat_full" (CI uses it to
 # split the tests over parallel jobs)
 EMUARGS ?=
+# attach a display to the card in every emu-test run: MONITOR=colour, mono or none (tests.py --monitor,
+# emu/monitor.py: 3C2h bit 4 then follows DAC palette register 0 and the display's load)
+MONOPT = $(if $(MONITOR),--monitor $(MONITOR),)
 # Depends on tools only (not make all / roms): building every ROM image before each emu-test would be
 # slow and is not needed when ROM= points at an image already built.
 emu-test: tools
 	@test -n "$(ROM)" || { echo "emu-test: set ROM to the 64 KB VBIOS image, e.g. make emu-test ROM=S3V2P15.BIN"; exit 2; }
 ifdef VRAM
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM) $(EMUARGS)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) --vram $(VRAM) $(MONOPT) $(EMUARGS)
 else
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) $(EMUARGS)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS) -j $(JOBS) --chip $(CHIP) $(MONOPT) $(EMUARGS)
 ifeq ($(filter 732 764 764x 764p,$(CHIP)),)
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram $(EMUARGS)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)4 -j $(JOBS) --chip $(CHIP) --vram 4 -t vram $(MONOPT) $(EMUARGS)
 endif
 ifneq ($(filter 775 765 764 764x 764p 732,$(CHIP)),)
-	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)1 -j $(JOBS) --chip $(CHIP) --vram 1 -t vram $(EMUARGS)
+	$(PYTHON) emu/tests.py --nasm "$(NASMBIN)" --rom "$(ROM)" --build build --logs $(LOGS)1 -j $(JOBS) --chip $(CHIP) --vram 1 -t vram $(MONOPT) $(EMUARGS)
 endif
 endif
 

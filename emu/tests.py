@@ -200,6 +200,7 @@ import argparse, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vgaemu import Machine, REGNAMES, CHIPS, CHIP_CODES, CHIP_CR2F, chip_ids, budget_msg  # noqa: E402
+from monitor import KINDS  # noqa: E402
 from unicorn import UC_HOOK_INSN, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import (UC_X86_REG_EAX, UC_X86_REG_EBX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_ESI, UC_X86_REG_EDI,  # noqa: E402
                                UC_X86_REG_AX, UC_X86_REG_CX, UC_X86_REG_EBP, UC_X86_REG_IP, UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP,
@@ -317,7 +318,7 @@ class Ctx:
             m = Machine(self.rom, keys)
             m.post()
             return m
-        key = (Machine.chip, Machine.vram, self.rom)
+        key = (Machine.chip, Machine.vram, Machine.monitor, self.rom)
         snap = POST_CACHE.get(key)
         if snap is None:
             m = Machine(self.rom, keys)
@@ -2380,6 +2381,73 @@ def t_mono(c):
     return 'mode 07h/0Fh, equipment word, %d DCC pairs' % len(pairs)
 
 
+def t_sense(c):
+    """Milestone 5, the monitor sense at POST (docs/cleanroom/spec-d-sense.md). With each display kind
+    attached (Machine.monitor, emu/monitor.py) POST must run the sense procedure (SENSE-2: drive one
+    channel of DAC palette register 0 at a time to full scale, read 3C2h bit 4) and classify the
+    display (SENSE-3), leaving the result of SENSE-5/6/7 in the BIOS data area, with AH=12h BL=10h
+    and the AH=1Bh state block byte 2Dh agreeing (SENSE-8); after the sense the DAC, the attribute
+    controller and 3C2h bits 3-2 are as before it (SENSE-4). No ROM at the current level implements
+    this (EXPECTED_FAIL): ours and the stock ones run POST-42, always colour."""
+    old = Machine.monitor
+    fails = []
+    try:
+        def hygiene(m):
+            """The state SENSE-4 says the sense must restore: DAC entry 0, the attribute controller
+            (registers, index, flip-flop) and 3C2h bits 3-2, taken right after POST."""
+            return (list(m.dac[0]), dict(m.r['atc']), m.r['ai'], m.r['aff'], m.r['misc'] & 0x0C)
+
+        base = Machine(c.rom)                       # no monitor: the reference POST state (SENSE-4)
+        base.post()
+        base_h = hygiene(base)
+        summary = []
+        for kind in KINDS:
+            Machine.monitor = kind
+            m = Machine(c.rom)
+            sense_reads = []                        # DAC palette entry 0 at each 3C2h read during POST
+
+            def h_in(uc, port, size, ud, m=m, sense_reads=sense_reads):
+                if port == 0x3C2:
+                    sense_reads.append(tuple(m.dac[0]))
+
+            hi = m.mu.hook_add(UC_HOOK_INSN, h_in, None, 1, 0, UC_X86_INS_IN)
+            m.post()
+            m.mu.hook_del(hi)
+            h = hygiene(m)                          # before any INT 10h call of this test touches the ATC
+            mono = kind == 'mono'
+            exp_mode = 0x07 if mono else 0x03       # SENSE-5/6/7: 'none' behaves exactly as colour
+
+            def chk(cond, what):
+                if not cond:
+                    fails.append('%s: %s' % (kind, what))
+
+            chk(m.mem(0x449, 1)[0] == exp_mode,
+                'power-on mode %02Xh, expected %02Xh' % (m.mem(0x449, 1)[0], exp_mode))
+            chk(m.mem(0x489, 1)[0] & 0x04 == (0x04 if mono else 0),
+                '0040:0089h bit 2 (monochrome display) = %d' % ((m.mem(0x489, 1)[0] >> 2) & 1))
+            chk(m.mem(0x487, 1)[0] & 0x02 == (0x02 if mono else 0),
+                '0040:0087h bit 1 (mono monitor) = %d' % ((m.mem(0x487, 1)[0] >> 1) & 1))
+            chk(word(m, 0x410) & 0x30 == (0x30 if mono else 0x20),
+                'equipment word bits 5-4 = %02Xh' % (word(m, 0x410) & 0x30))
+            chk(word(m, 0x463) == (0x3B4 if mono else 0x3D4), 'CRTC port %04Xh' % word(m, 0x463))
+            r = m.int10(0x1210, bx=0x10)            # AH=12h BL=10h (SENSE-8)
+            chk(r['bx'] >> 8 == (1 if mono else 0), 'AH=12h BL=10h: BH=%02Xh' % (r['bx'] >> 8))
+            chk(m.state_block()[0x2D] & 0x04 == (0x04 if mono else 0),
+                'state block 2Dh bit 2 = %d' % ((m.state_block()[0x2D] >> 2) & 1))
+            # SENSE-4: the sense restored the DAC, the attribute controller and 3C2h bits 3-2
+            chk(h == base_h, 'after POST: DAC entry 0 / ATC / MISC bits 3-2 = %s, reference %s' % (h, base_h))
+            # SENSE-2/3: three reads of 3C2h, one per single-channel full-scale drive of entry 0
+            drives = {e for e in sense_reads if e in ((63, 0, 0), (0, 63, 0), (0, 0, 63))}
+            chk(len(sense_reads) >= 3 and len(drives) == 3,
+                '%d reads of 3C2h at POST, full-scale single-channel drives seen: %s'
+                % (len(sense_reads), sorted(drives)))
+            summary.append('%s->mode %02Xh, %d sense reads' % (kind, m.mem(0x449, 1)[0], len(sense_reads)))
+    finally:
+        Machine.monitor = old
+    check(not fails, '%d of the checks failed: ' + ' / '.join(fails))
+    return '; '.join(summary)
+
+
 def t_errors(c):
     """Invalid input: the BIOS must refuse it and change nothing."""
     m = c.machine()
@@ -3207,7 +3275,7 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
          ('vga_palettes', t_vga_palettes),
          ('s3test', t_s3test), ('s3test_any', t_s3test_any), ('romver', t_romver), ('mclk', t_mclk), ('vbeshow', t_vbeshow), ('vgashow', t_vgashow), ('s3compat_vga', t_s3compat_vga), ('s3compat_dac_retry', t_s3compat_dac_retry), ('s3compat_vbe', t_s3compat_vbe), ('s3compat_bench', t_s3compat_bench), ('s3compat_full', t_s3compat_full),
          ('vgalog', t_vgalog), ('vgalog_mem', t_vgalog_mem), ('vgalog_xl', t_vgalog_xl), ('vgalog_keep', t_vgalog_keep), ('vgalog_trace', t_vgalog_trace), ('vgalog_win', t_vgalog_win), ('vgalog_post', t_vgalog_post), ('s3alias', t_s3alias), ('report', t_report),
-         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
+         ('s3regs', t_s3regs), ('dos_exe', t_dos_exe), ('mono', t_mono), ('mono_4f05', t_mono_4f05), ('sense', t_sense), ('errors', t_errors), ('windows', t_windows), ('display_switch', t_display_switch), ('stores', t_stores),
          ('775_writes', t_v2_writes), ('post_delay', t_post_delay), ('ddc', t_ddc), ('engine_init', t_engine_init)]
 
 # Categories of each test (tests.py -t, --list): the standard the expected values come from (mda, cga,
@@ -3218,7 +3286,8 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # on the card, whose hardware log decides; emu = only in the emulator. vram: the result depends on
 # the video memory size (the VESA mode list, 4F06 maximum, the mode set clear of the whole memory, the
 # LFB window size in CR58); make emu-test runs these again with --vram 4. The others (VGA modes and
-# functions, the tools) give the same output with 2 and 4 MB. cleanroom: every expected value comes
+# functions, the tools) give the same output with 2 and 4 MB. sense: the monitor-sense test of
+# milestone 5 (docs/cleanroom/spec-d-sense.md, t_sense with each display kind). cleanroom: every expected value comes
 # from a public source (IBM, VESA, the data book, the PCI ID database, Microsoft's documented
 # interfaces, the PCI 2.3 extract) or is pure observation; no expectation or tolerated line derives
 # from a reference or patched ROM, so the test may cross to the clean side (#201). The tests without
@@ -3230,7 +3299,10 @@ TESTS = [('version', t_version), ('post', t_post), ('rom_patches', t_rom_patches
 # Tests that are expected to fail on the current ROM level, with the reason: they expose a known
 # issue (the result is XFAIL, not FAIL, so CI stays green; XPASS when fixed). #193: the fast 4F05
 # must pick the CRTC port from MISC bit 0; a hardcoded 3D4h is not decoded in the mono modes.
-EXPECTED_FAIL = {'mono_4f05': '#193: 4F05 in a mono mode must use the CRTC port 3B4h'}
+# sense: no ROM at the current level implements the milestone-5 monitor sense at POST
+# (docs/cleanroom/spec-d-sense.md); remove when the clean ROM lands.
+EXPECTED_FAIL = {'mono_4f05': '#193: 4F05 in a mono mode must use the CRTC port 3B4h',
+                 'sense': 'milestone 5 (spec-d SENSE-1..8): no current ROM senses the monitor at POST'}
 
 TAGS = {
     'version': 'rom patch 765 764 emu', 'post': 'rom emu cleanroom', 'rom_patches': 'rom patch emu vram',
@@ -3239,7 +3311,8 @@ TAGS = {
     's3compat_vga': 'cga ega vga card cleanroom', 's3compat_dac_retry': 'vga card cleanroom', 's3compat_vbe': 'vbe s3 card vram cleanroom',
     's3compat_bench': 'vbe s3 tools card vram cleanroom', 's3compat_full': 'cga ega vga vbe s3 card vram',
     'vgalog': 'tools card cleanroom', 'vgalog_mem': 'tools card cleanroom', 'vgalog_xl': 'tools card cleanroom', 'vgalog_keep': 'tools patch 765 764 card emu', 'vgalog_trace': 'tools card cleanroom', 'vgalog_win': 'tools card cleanroom', 'vgalog_post': 'tools card cleanroom', 's3alias': 'tools patch card', 's3regs': 'tools s3 card cleanroom', 'report': 'tools card emu cleanroom',
-    'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch 765', 'errors': 'call cga ega vga vbe emu vram',
+    'dos_exe': 'tools emu cleanroom', 'mono': 'mda emu cleanroom', 'mono_4f05': 'mda emu cleanroom patch 765',
+    'sense': 'vga emu cleanroom sense', 'errors': 'call cga ega vga vbe emu vram',
     'windows': 'call vga vbe emu vram', 'display_switch': 'vga emu cleanroom', 'stores': 'cga ega vga patch 765 764 emu',
     '765_patches': 'rom vbe patch 765 emu vram', '764_patches': 'rom vbe patch 764 emu vram',
     '775_writes': 's3 emu vram cleanroom', 'post_delay': 'rom patch emu', 'ddc': 'vbe patch emu', 'engine_init': 's3 emu cleanroom',
@@ -3248,7 +3321,7 @@ TAGS = {
 
 # rough run times (s, 2 MB) to start the long tests first when they run in parallel
 DURATION = {'s3compat_full': 170, 's3compat_bench': 30, 's3compat_vbe': 70, 'vbeshow': 60, 'vgashow': 60, 's3test': 40, 's3compat_vga': 30, 'windows': 25,
-            's3test_any': 10, 'stores': 5}
+            's3test_any': 10, 'stores': 5, 'sense': 15}
 
 
 # Our Trio64V+ ROM keeps these failures of its base 1.03-08, outside the backport (docs/765-rom.md,
@@ -3391,6 +3464,9 @@ def main():
                     help='the chip the model is, by its S3 part number (vgaemu.CHIP_CODES): 775 = Trio64V2/DX (the card, '
                          'default), 765 = Trio64V+, 767 = Trio64UV+, 764 (764x, 764p) = Trio64, 732 = Trio32; ID registers, '
                          'PCI device and the PLL post divider follow it')
+    ap.add_argument('--monitor', choices=KINDS, default=None, help='attach a display of this kind to the card '
+                    '(Machine.monitor, emu/monitor.py): 3C2h bit 4 follows DAC palette register 0 and the '
+                    "display's load; default: no monitor, 3C2h reads the constant 0x10")
     ap.add_argument('--vram', type=int, choices=(1, 2, 4), default=2,
                     help='video memory size in MB (CR36 bits 7-5 after POST, and the size of Machine.vram): '
                          '2 (the card, default), 4 (the maximum of every Trio64-family chip but the Trio32; on '
@@ -3404,6 +3480,7 @@ def main():
     Machine.vram = a.vram
     Machine.chip = CHIP_CODES[a.chip]
     Machine.cr2f = CHIP_CR2F.get(a.chip)
+    Machine.monitor = a.monitor
     assert set(TAGS) == {n for n, _ in TESTS}, 'TAGS and TESTS differ'
     if a.list:
         for n, _ in TESTS:
