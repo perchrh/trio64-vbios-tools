@@ -51,7 +51,8 @@ For the clean ROM, and for our patched ROMs where the space allows:
 
 ## Defects found in FreeDOS (master of April 2026 unchanged since 1.4)
 
-The texts to file on FreeDOS's GitLab are in [freedos-reports.md](freedos-reports.md).
+The texts to file on FreeDOS's GitLab are issues #266 (MORE) and #267 (MODE) on this repository's GitHub
+(they were drafted in the since-removed freedos-reports.md, #125).
 
 - **MORE** (`base/more`, `MORE.C`, `GetScreenSize`): the line count is the page size at 0040:004Ch
   divided by 2 x columns. A BIOS that rounds the page size up (IBM's 4 KB pages, SeaVGABIOS's 2 KB

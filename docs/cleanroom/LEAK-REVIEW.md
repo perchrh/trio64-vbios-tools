@@ -122,7 +122,8 @@ VESA. What crosses now is what the clean side needs for these:
 Rules outside this scope (the other modes, 4F03h-4F08h beyond 4F05h if milestone 4 does not need
 them, 4F14h and the S3 mode numbers, the S3 OEM functions) are not reviewed now and are cut from the
 clean side's copy; the record names the rule IDs that crossed. [`freedos-1.4.md`](freedos-1.4.md) and
-[`freedos-reports.md`](freedos-reports.md) belong to milestone 6 (tentative) and are reviewed with it.
+the FreeDOS defect reports in issues #266 and #267 (were `freedos-reports.md`) belong to milestone 6
+(tentative) and are reviewed with it.
 
 ### Files to review
 
@@ -135,7 +136,7 @@ clean side's copy; the record names the rule IDs that crossed. [`freedos-1.4.md`
 | [`docs/bios-rules.md`](../bios-rules.md) | public-source rules | the returned rows B00-5, B09-11, B10-1, B11-1, B12-1, B1A-1, B1C-8, TAB-9 and question 17, rewritten on 5 November (#168) |
 | [`milestone-calls.md`](milestone-calls.md) | requirements | only its part "The contract" crosses; since the pin it holds EDIT's calls (milestone 2), the benchmark's bank switching through CR35 and the milestone 2 boot policy (#168), none of them reviewed yet; "The run" names our ROMs and what they answered |
 | [`freedos-1.4.md`](freedos-1.4.md) | requirements | not in this review (milestone 6). Its section "Our ROMs against these" measures our patched ROMs by level (1.5-07-p3, 1.03-08-p1, 2.04.07-p22): dirty-side material, to cut from the clean side's copy or keep with a reason (step 5) |
-| [`freedos-reports.md`](freedos-reports.md) | defect reports to FreeDOS | not in this review (milestone 6). About FreeDOS's MORE and MODE; it names S3 BIOSes as a class (4F01h for mode 03h) |
+| issues #266, #267 (were `freedos-reports.md`) | defect reports to FreeDOS | not in this review (milestone 6). About FreeDOS's MORE and MODE; they name S3 BIOSes as a class (4F01h for mode 03h) |
 
 ### What changed since the reviewed commit `cbbc2ce`
 
@@ -295,7 +296,7 @@ that one file, not the rest of `src/roms/`.
   it stays on the dirty side. What the contract takes from it (CR6A = 00h, CR51 bits 3-2 = 0, CR31 bits
   0 and 3 with 64 KB pages in CR35 after 4F02h 101h) is in the contract, which now cites spec C's rule
   IDs VBE-44 and VBE-53; its Source column is a return of the first pass.
-- [`freedos-1.4.md`](freedos-1.4.md) and [`freedos-reports.md`](freedos-reports.md): deferred with milestone 6.
+- [`freedos-1.4.md`](freedos-1.4.md) and the defect reports in issues #266/#267 (were `freedos-reports.md`): deferred with milestone 6.
 - Not to review now: the monitor sense decision of our ROMs (#134, #139) and the font change (#141)
   touched no file that crosses. The monitor sense at POST is decided for milestones 1-4: no sense,
   POST always behaves as on a colour monitor (POST-42, decisions M-SENSE, 8 November 2026). The sense
