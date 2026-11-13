@@ -131,9 +131,11 @@ is for the Windows 9x desktop.
 Each source file starts with a header that says what is tested and which outcome is expected, and
 each test routine has a comment block with its fail and warn bits. S3TEST and S3COMPAT end their log
 with `Time spent: x.y s`, the run time measured with the BIOS tick. S3TEST's VBE 4F05 line checks the
-3C4h sequencer index (fail bit 2) and the SR08 readback after the bank switch (fail bit 20h) separately
-([#237](https://github.com/perchrh/trio64-vbios-tools/issues/237)), and with `/V` logs the raw values
-around the call as a `D:4F05` record, so a card run names the register that moved.
+3C4h sequencer index (fail bit 2) and the SR08 lock key after the bank switch (fail bit 20h) separately
+([#237](https://github.com/perchrh/trio64-vbios-tools/issues/237); bit 20h compares bits 3-0 only, the
+lock key - SR8 bits 7-4 are reserved, "x = don't care", Trio32/Trio64 data book 14.2 SR8 page 14-9, and
+on the 86C764X card they do not read back as written: 06h written, 46h read), and with `/V` logs the
+raw values around the call as a `D:4F05` record, so a card run names the register that moved.
 
 Monitor: VBESHOW and S3TEST set modes up to a 75 kHz line frequency (1600x1200 at 60 Hz), S3COMPAT up
 to 91 kHz (1280x1024 at 85 Hz in its 4F14 refresh test). An LCD refuses a signal it cannot show (out
