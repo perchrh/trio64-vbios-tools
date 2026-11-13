@@ -1034,6 +1034,19 @@ Specification 2.3 is in the repository as [`standards/pci/pci23.pdf`](standards/
   reserved byte at ModeInfoBlock offset 1Eh as 0 in VBE 1.0-2.0 and 1 in 3.0, but VBE 1.2 says it is
   always 1, VBE 2.0 lists it with 1, and our three ROMs return 1 (emulator, 31 October 2026). Its
   links to further tutorials (DJGPP's VESA guide, monstersoft's introduction) add nothing for us.
+- Michael Abrash,
+  [Graphics Programming Black Book](https://web.archive.org/web/20250308094138/https://www.drdobbs.com/parallel/graphics-programming-black-book/184404919)
+  (1997; the author published it freely, Dr. Dobb's hosts the chapters as PDFs): how the VGA
+  hardware behaves for the programmer who bypasses the BIOS and programs it directly - latches,
+  write modes, chain-four and unchained memory, the CRTC behind Mode X and 360x480, the split
+  screen, the DAC. IBM's VGA only: it says nothing of the BIOS functions, SVGA, VESA or any S3
+  chip, so it is a hardware cross-check, not a BIOS source. The clean side may read it too
+  ([docs/clean-room.md](docs/clean-room.md), "More sources the clean side may read").
+- David Brackeen, [256-Color VGA Programming in C](https://web.archive.org/web/20251115151342/http://www.brackeen.com/vga/)
+  (1996, a five-part tutorial): how a program drives mode 13h and the unchained mode - pixels,
+  lines, bitmaps, the DAC palette. It is more about programming against the modes than about the
+  hardware, and its author disclaims its accuracy and its code. A check of what DOS games assume
+  of the VGA modes, nothing more.
 
 Looked at and not used: the list of chipsets with VBE 2.0/3.0 (xerxys.info), and vbespy and vbetool,
 Linux tools that run a card's video BIOS to log or replay its mode sets (the emulator in `emu/` does

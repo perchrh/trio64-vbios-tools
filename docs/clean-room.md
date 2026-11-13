@@ -344,8 +344,12 @@ maps the upper half, #78). Optional later: a 64 KB linear window for the banked 
     up); a waiver with a permissive fallback licence, such as CC0 1.0 or the Unlicense, gives the same
     result where public domain is not available. To settle with the lawyer of this document.
 - **More sources the clean side may read:**
-  - Michael Abrash's Graphics Programming Black Book (freely published by the author): the VGA
+  - Michael Abrash's Graphics Programming Black Book (freely published by the author, hosted by
+    Dr. Dobb's: [web.archive.org/web/20250308094138/https://www.drdobbs.com/parallel/graphics-programming-black-book/184404919](https://web.archive.org/web/20250308094138/https://www.drdobbs.com/parallel/graphics-programming-black-book/184404919)): the VGA
     hardware (latches, write modes, Mode X), not the BIOS functions.
+  - David Brackeen, "256-Color VGA Programming in C", 1996 ([web.archive.org/web/20251115151342/http://www.brackeen.com/vga/](https://web.archive.org/web/20251115151342/http://www.brackeen.com/vga/)):
+    a mode 13h and unchained-mode programming tutorial, mostly how a program drives the modes
+    rather than how the hardware works. A check of what programs assume of the VGA modes.
   - Francois Gervais, "Programmation des cartes graphiques CGA, EGA, VGA" (Sybex): the BIOS
     functions and registers.
   - DOSEMU 1.0.1 source: its VGA emulation and video BIOS tables and formulas, as facts.
