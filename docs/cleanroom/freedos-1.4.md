@@ -51,7 +51,8 @@ For the clean ROM, and for our patched ROMs where the space allows:
 
 ## Defects found in FreeDOS (master of April 2026 unchanged since 1.4)
 
-The texts to file on FreeDOS's GitLab are in [freedos-reports.md](freedos-reports.md).
+The texts to file on FreeDOS's GitLab are the issues tagged FreeDOS on this repository's GitHub
+(video modes); they were drafted in the since-removed freedos-reports.md (#125).
 
 - **MORE** (`base/more`, `MORE.C`, `GetScreenSize`): the line count is the page size at 0040:004Ch
   divided by 2 x columns. A BIOS that rounds the page size up (IBM's 4 KB pages, SeaVGABIOS's 2 KB
@@ -68,7 +69,15 @@ CTMOUSE, NANSI, HTMLHELP and V8Power take only modes 00h-03h and 07h in 0449h as
 CTMOUSE draws no mouse cursor, NANSI falls back to slow BIOS output, and HTMLHELP resets the screen to mode
 03h. VBE 1.2 asks that AH=0Fh return a number with which AH=00h sets the mode again, which a 132-column mode
 cannot share with 03h. Open question for the specification (part C): which number 0449h holds in 108h-10Ch,
-and whether FreeDOS's behaviour there is accepted.
+and whether FreeDOS's behaviour there is accepted. Answered in issue #103: the OEM or VBE number is
+allowed, and 0449h may hold it in 108h-10Ch.
+
+## The 0449h number in the VBE text modes, 13 November 2026
+
+The findings and the proposed FreeDOS-side fix for the later FreeDOS experiment (milestone 6) are in
+issue #103 (self-contained); they are not duplicated here. The FreeDOS defects found in this area are
+filed as issues tagged FreeDOS on this repository's GitHub; they relate to video modes. This answers
+the open question in [spec-c-vbe.md](spec-c-vbe.md) part C item 1.
 
 ## Our ROMs against these (emulator, 1 November 2026)
 
