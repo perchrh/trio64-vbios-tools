@@ -23,7 +23,9 @@ Cleared only after the exact CH-1..CH-8 edits and cuts are applied to the crossi
 `T64-REG-2`, `T64-ENG-1`.
 
 The other 56 chip-rule IDs and the whole OEM / Vision864 / Vision968 sections are cut
-(CH-8) and do not cross. The ID-INF owner decision (8 November 2026) additionally cuts
+(CH-8) and do not cross. T64-SENSE-1 (added 13 November 2026 for milestone 5,
+[`spec-d-sense.md`](spec-d-sense.md)) is not among the cleared 24; it crosses only when the
+milestone-5 review clears it. The ID-INF owner decision (8 November 2026) additionally cuts
 the driver-INF identification material (T64-ID-2, AV-ID-1, T3D-ID-1, T3D2X-ID-1 and the
 INF parts of VP-ID-1/V2-ID-1), agreeing with CH-2.
 
@@ -66,6 +68,7 @@ counts and cross as such; the dirty-side run material does not cross.
 - [spec-a-post.md](spec-a-post.md) — RETURNED (A-1, A-5b, and the A-12 dependency hold).
 - [spec-b-modeset.md](spec-b-modeset.md) — RETURNED (B-1, B-3, B-4).
 - [spec-c-vbe.md](spec-c-vbe.md) — RETURNED (C-10 dependency hold).
+- [spec-d-sense.md](spec-d-sense.md) — new 13 November 2026 (part D, milestone 5), not reviewed; milestone 5 opened 13 November 2026, and nothing here crosses until the milestone-5 review clears it.
 - [bios-rules.md](../bios-rules.md) — RETURNED; **no rule ID cleared** (R1, R2, R3).
 - [freedos-1.4.md](freedos-1.4.md), and the FreeDOS defect reports in the issues tagged FreeDOS
   (were `freedos-reports.md`) - milestone 6 opened 13 November 2026; still not reviewed, and nothing

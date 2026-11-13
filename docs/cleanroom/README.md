@@ -80,6 +80,7 @@ to implement from:
 | [`spec-a-post.md`](spec-a-post.md) | goes across after the leak review | POST start-up, the conventions drivers rely on, the PCI ROM header (plan items 1, 4, 6) |
 | [`spec-b-modeset.md`](spec-b-modeset.md) | goes across after the leak review | the S3 mode set: DMT timings, clocks, colour modes, display FIFO, return to VGA (item 2) |
 | [`spec-c-vbe.md`](spec-c-vbe.md) | goes across after the leak review | VBE 1.2 (4F00-4F08), the S3 mode numbers and 4F14h (items 3, 5) |
+| [`spec-d-sense.md`](spec-d-sense.md) | goes across with the milestone-5 review | the monitor sense at POST: procedure, classification, power-on mode and BIOS data area by display type (milestone 5) |
 | [`milestone-calls.md`](milestone-calls.md) | its contract part goes across after the leak review | the INT 10h calls of milestones 2 (EDIT), 3 and 4, recorded on a card |
 | [`freedos-1.4.md`](freedos-1.4.md) | goes across with milestone 6 | what FreeDOS 1.4 asks of the video BIOS (milestone 6, tentative), from its sources |
 | the FreeDOS-tagged issues (were `freedos-reports.md`) | goes across with milestone 6 | defect reports to FreeDOS; they relate to video modes |
