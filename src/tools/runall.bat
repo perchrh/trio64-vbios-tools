@@ -31,6 +31,7 @@ vgalog /U
 vgalog /M /XL
 s3regs after tests
 vgalog /D
+vgalog /U
 
 if exist s3regs.txt copy s3regs.txt s3regs3.txt
 report
