@@ -116,21 +116,34 @@ card that hangs in 4F02h, [../764-rom.md](../764-rom.md)). MODE is the one place
 attributes, because it runs as a user command, not resident. The user-side workaround needs no code
 change: `NANSI.SYS /T54 /T55` for the S3 numbers, `/T109 /T10A` for VBE-compliant BIOSes.
 
-### Proposed FreeDOS-side fix (for the experiment; additive and fail-closed)
+### What is actually a defect in FreeDOS, and what is not
 
-In CTMOUSE, NANSI, HTMLHELP and V8Power, keep the existing legacy test first, unchanged; only when 0449h
-is not 00h-03h/07h, call 4F03h, and if BX (bit 14 masked off, the LFB bit) is >= 0100h, call 4F01h for
-it and take the mode as text iff ModeAttributes D4 = 0 (plus D2 where BIOS output matters). Check
-AL = 4Fh after both calls, give 4F01h an ES:DI 256-byte buffer, preserve all registers, run the probe
-once per mode change (CTMOUSE's existing 4F02h hook or `@setvideo`), never per character or per
-interrupt, and treat any failure as today's answer.
+Two genuine defects, both bugs in FreeDOS's own logic whatever the BIOS does, both filed as issues:
+**#266** (MORE takes its line count from the rounded 0040:004Ch instead of 0040:0084h + 1) and **#267**
+(MODE leaves `xcols`/`xlines` uninitialised when 4F01h fails for the current mode; they should be
+initialised with the requested dimensions). The ROM does not work around either.
 
-Safety: on every BIOS that stores 00h-03h/07h the legacy test returns before any VBE call, so the code
-path, the INT 10h call count and the result are identical to the current binaries; on a VBE 1.x BIOS
-(AL != 4Fh) or in a standard VGA mode (BX < 0100h) the answer is the same as today; in a VBE graphics
-mode D4 is set, still not text. The only changed outcome is this issue's case: a non-legacy number in
-0449h while the current mode is a VBE text mode (our 54h/55h/19h/1Ah, or 108h-10Ch on VBE-compliant
-BIOSes).
+The 0449h handling itself is not a defect: the static {00h-03h/07h} table with `/Tnn` is a deliberate
+choice since 1991 (above), it violates no written rule (the IBM book is silent above 13h; VBE 1.2 leaves
+the 0449h value in Super VGA modes to the OEM), and for users today the workaround is
+`NANSI.SYS /T54 /T55` (S3 numbers) or `/T109 /T10A` (VBE-compliant BIOSes); CTMOUSE, HTMLHELP and
+V8Power have no such switch.
+
+The only thing one could still propose upstream is an optional, fail-closed enhancement, not a bug
+fix: in CTMOUSE, NANSI, HTMLHELP and V8Power, keep the existing legacy test first, unchanged; only
+when 0449h is not 00h-03h/07h, call 4F03h, and if BX (bit 14 masked off, the LFB bit) is >= 0100h,
+call 4F01h for it and take the mode as text iff ModeAttributes D4 = 0 (plus D2 where BIOS output
+matters). Check AL = 4Fh after both calls, give 4F01h an ES:DI 256-byte buffer, preserve all
+registers, run the probe once per mode change (CTMOUSE's existing 4F02h hook or `@setvideo`), never
+per character or per interrupt, and treat any failure as today's answer.
+
+Safety of that enhancement: on every BIOS that stores 00h-03h/07h the legacy test returns before any
+VBE call, so the code path, the INT 10h call count and the result are identical to the current
+binaries; on a VBE 1.x BIOS (AL != 4Fh) or in a standard VGA mode (BX < 0100h) the answer is the same
+as today; in a VBE graphics mode D4 is set, still not text. The only changed outcome is this issue's
+case: a non-legacy number in 0449h while the current mode is a VBE text mode (our 54h/55h/19h/1Ah, or
+108h-10Ch on VBE-compliant BIOSes). Whether upstream wants the probe at all is their 1991 decision to
+revisit; the ROM side needs nothing.
 
 Cross-references: issue #103 (self-contained description), #266 and #267 (the MORE and MODE defects,
 filed from the removed freedos-reports.md by PR #268), #265 (the missing 108h/10Bh/10Ch modes).
