@@ -10,6 +10,10 @@ What is emulated
     (3DAh), PIT channels 0 and 2, port 61h, PCI configuration mechanism 1 and the PCI BIOS
     (INT 1Ah B101h-B10Dh) with the card's configuration header (BAR0 = E0000000 as on the real card;
     the Trio64 keeps BAR0 in CR59/CR5A).
+  - The monitor's SENSE line when Machine.monitor is set ('colour', 'mono' or 'none', monitor.py):
+    a read of 3C2h returns bit 4 computed from DAC palette register 0 and the display's load
+    (docs/cleanroom/spec-d-sense.md SENSE-1..3) and bits 3-2 as the clock select of the written MISC;
+    with Machine.monitor = None (the default) 3C2h reads the constant 0x10.
   - One virtual clock in PIT counts (1.193182 MHz) for everything that measures time: it advances
     with every port access and every read of the BIOS tick. The PIT channels count from it, the tick
     at 0040:006C counts channel 0 periods, and the vertical retrace bit of 3DAh follows the frame period that
@@ -47,7 +51,10 @@ What is not emulated (results that depend on it are meaningless here)
     tests through the LFB fail. Video memory itself is modelled (below).
   - The graphics engine (ports 82E8h-BEE8h): commands written to 9AE8h are counted (ge_cmds), not
     executed. The Trio64 BIOS 1.4 clears video memory with it, so its mode sets clear nothing here.
-  - Real timing: CPU speed, bus waits and monitor behaviour. Durations come from the virtual clock.
+  - Real timing: CPU speed and bus waits. Durations come from the virtual clock. The monitor is
+    modelled only on its SENSE line (Machine.monitor, monitor.py: 3C2h bit 4 computed from DAC
+    palette register 0 and the display's load; None, the default, reads the constant 0x10 as before);
+    its DDC lines are not modelled.
   - Equipment-dependent BIOS state (AH=1Bh +26h alternate display, +2Dh flags).
 
 Usage (see tests.py for complete examples)
@@ -59,6 +66,7 @@ Usage (see tests.py for complete examples)
 """
 import copy
 import fnmatch
+import os
 import struct
 import sys
 try:
@@ -69,6 +77,8 @@ except ImportError:
 from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_16, UC_HOOK_INTR, UC_HOOK_INSN, UC_HOOK_MEM_READ, \
     UC_HOOK_MEM_WRITE, UC_HOOK_BLOCK, UC_HOOK_CODE
 from unicorn.x86_const import *
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # monitor.py when run standalone
+from monitor import Monitor  # noqa: E402
 
 REGNAMES = ['MISC', 'FEAT', 'SR0', 'SR1', 'SR2', 'SR3', 'SR4'] + ['CR%02X' % i for i in range(25)] + \
            ['AR%02X' % i for i in range(21)] + ['GR%02X' % i for i in range(9)]
@@ -205,6 +215,9 @@ class Machine:
         self.r['crtc'][0x59] = 0xE0
         self.r['crtc'][0x5A] = 0x00
         self.dac = [[0, 0, 0] for _ in range(256)]
+        # the display attached to the card: None (3C2h reads the constant 0x10) or a Monitor of
+        # Machine.monitor's kind (monitor.py); set Machine.monitor before creating the Machine
+        self.mon = Monitor(Machine.monitor) if Machine.monitor else None
         # Fault injection for the tests of S3COMPAT's DAC retry (t_s3compat_dac_retry): None, or a dict
         # op 'r' (a 3C9h read returns value ^ xor) or 'w' (a 3C9h write is dropped, the entry keeps its
         # old component), entry, comp (0-2), value (the value read or written that triggers it) and
@@ -346,7 +359,10 @@ class Machine:
         if port == 0x3C0: return r['ai']
         if port == 0x3CC: return r['misc']
         if port == 0x3CA: return r['feat']
-        if port == 0x3C2: return 0x10
+        if port == 0x3C2:
+            if self.mon is None:
+                return 0x10
+            return (r['misc'] & 0x0C) | (self.mon.sense_bit4(self.dac[0]) << 4)
         if port in (0x3DA, 0x3BA):
             self.t += 22                                # polling loops: keep the run time short
             r['aff'] = 0
@@ -1228,6 +1244,9 @@ class Machine:
     vram = 2                                            # MB the CR36 bits 7-5 report: 1, 2 (the card) or 4
     chip = 'v2'                                         # CHIPS key: v2 (the card), vplus, uvplus, trio64, trio32
     cr2f = None                                         # CR2F when it is not the PCI revision (CHIP_CR2F)
+    monitor = None                                      # None: 3C2h reads the constant 0x10; else a monitor kind
+                                                        # of monitor.KINDS ('colour', 'mono', 'none'): 3C2h bit 4
+                                                        # follows DAC palette register 0 (monitor.py)
 
     def _noop_hook(self, entry):
         def hit(uc, addr, size, ud):
