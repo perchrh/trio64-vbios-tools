@@ -177,7 +177,7 @@ From `clearance.json`, `owner-summary.md` and `full-review-record.md`:
   with CR6A/CR51/CR35/CR31 values and sources, cutting "details in The run"), **MC-4**
   (The run, the S3REGS 4F03h instrumentation and the richer-shell aside cut from the clean
   copy).
-- **freedos-1.4.md / the FreeDOS defect reports (issues #266, #267; were freedos-reports.md) - DEFERRED**
+- **freedos-1.4.md / the FreeDOS defect reports (FreeDOS-tagged issues; were freedos-reports.md) - DEFERRED**
   (package: "to milestone 5"; on `main`: milestone 6), not reviewed.
 - Fonts and legal/release clearance were **not granted** (counsel items); the similarity
   scans (14 candidates, 13 zero matches at the 16-byte threshold, the MODE-133 22-byte

@@ -67,7 +67,7 @@ counts and cross as such; the dirty-side run material does not cross.
 - [spec-b-modeset.md](spec-b-modeset.md) — RETURNED (B-1, B-3, B-4).
 - [spec-c-vbe.md](spec-c-vbe.md) — RETURNED (C-10 dependency hold).
 - [bios-rules.md](../bios-rules.md) — RETURNED; **no rule ID cleared** (R1, R2, R3).
-- [freedos-1.4.md](freedos-1.4.md), and the FreeDOS defect reports in issues #266 and #267
+- [freedos-1.4.md](freedos-1.4.md), and the FreeDOS defect reports in the issues tagged FreeDOS
   (were `freedos-reports.md`) - deferred to milestone 6, not reviewed.
 - Fonts and the asset manifest: no legal/release clearance granted.
 - **CHIPID** ([src/tools/chipid/](../src/tools/chipid/)) and **ROMVER** ([src/tools/romver/](../src/tools/romver/),

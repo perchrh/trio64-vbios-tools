@@ -51,8 +51,8 @@ For the clean ROM, and for our patched ROMs where the space allows:
 
 ## Defects found in FreeDOS (master of April 2026 unchanged since 1.4)
 
-The texts to file on FreeDOS's GitLab are issues #266 (MORE) and #267 (MODE) on this repository's GitHub
-(they were drafted in the since-removed freedos-reports.md, #125).
+The texts to file on FreeDOS's GitLab are the issues tagged FreeDOS on this repository's GitHub
+(video modes); they were drafted in the since-removed freedos-reports.md (#125).
 
 - **MORE** (`base/more`, `MORE.C`, `GetScreenSize`): the line count is the page size at 0040:004Ch
   divided by 2 x columns. A BIOS that rounds the page size up (IBM's 4 KB pages, SeaVGABIOS's 2 KB
@@ -74,15 +74,10 @@ allowed, and 0449h may hold it in 108h-10Ch.
 
 ## The 0449h number in the VBE text modes, 13 November 2026
 
-The full findings and the proposed FreeDOS-side fix for the later FreeDOS experiment (milestone 6) are
-in issue #103 (self-contained); they are not duplicated here. In short: VBE 1.2 chapter 3 leaves the
-number 0449h holds in a Super VGA mode to the OEM and asks that AH=00h accept it again, so our ROMs'
-54h/55h/19h/1Ah (or 108h-10Ch on a VBE-compliant BIOS) are conformant, and the text/graphics test for
-such modes is 4F03h + 4F01h ModeAttributes D4. The FreeDOS programs keep their deliberate 1991 static
-table with `/Tnn` (user workaround: `NANSI.SYS /T54 /T55` or `/T109 /T10A`). The two genuine FreeDOS
-defects in this area are filed as #266 (MORE) and #267 (MODE), moved out of this repository by
-PR #268; #265 tracks the missing 108h/10Bh/10Ch modes. This answers the open question in
-[spec-c-vbe.md](spec-c-vbe.md) part C item 1.
+The findings and the proposed FreeDOS-side fix for the later FreeDOS experiment (milestone 6) are in
+issue #103 (self-contained); they are not duplicated here. The FreeDOS defects found in this area are
+filed as issues tagged FreeDOS on this repository's GitHub; they relate to video modes. This answers
+the open question in [spec-c-vbe.md](spec-c-vbe.md) part C item 1.
 
 ## Our ROMs against these (emulator, 1 November 2026)
 
