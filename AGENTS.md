@@ -206,8 +206,9 @@ review and a clean implementer who must not see BIOS images or BIOS source.
 - **Open questions.** Observable black-box questions only; they are not requirements. Prefaces must say
   so. Strip internal packing / vector-swap / temporary-value guesses until a public source or a named
   necessary observation supports them.
-- **Parts A/B/C scope.** Crossing text must match the current milestone allowlist (milestones 1-4 today:
-  POST/VGA, EDIT bare boot, Superscape, Chris's 101h). Cut or defer out-of-scope modes, 4F14h, S3 mode
+- **Parts A/B/C scope.** Crossing text must match the current milestone allowlist (milestones 1-6 today:
+  POST/VGA, EDIT bare boot, Superscape, Chris's 101h, the monitor sense, FreeDOS). Cut or defer
+  out-of-scope modes, 4F14h, S3 mode
   numbers, and Windows acceptance unless a later milestone opens them. Prefer interface contracts
   (inputs/outputs) over implementation recipes; put primary pages the reviewer may read in
   `docs/cleanroom/primary-extracts/` and name them in LEAK-REVIEW "May read".

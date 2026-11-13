@@ -68,7 +68,8 @@ counts and cross as such; the dirty-side run material does not cross.
 - [spec-c-vbe.md](spec-c-vbe.md) — RETURNED (C-10 dependency hold).
 - [bios-rules.md](../bios-rules.md) — RETURNED; **no rule ID cleared** (R1, R2, R3).
 - [freedos-1.4.md](freedos-1.4.md), and the FreeDOS defect reports in the issues tagged FreeDOS
-  (were `freedos-reports.md`) - deferred to milestone 6, not reviewed.
+  (were `freedos-reports.md`) - milestone 6 opened 13 November 2026; still not reviewed, and nothing
+  here crosses until the milestone-6 review clears it.
 - Fonts and the asset manifest: no legal/release clearance granted.
 - **CHIPID** ([src/tools/chipid/](../src/tools/chipid/)) and **ROMVER** ([src/tools/romver/](../src/tools/romver/),
   with [src/tools/common/romver.inc](../src/tools/common/romver.inc), via vdebug.inc) — dirty as wholes
