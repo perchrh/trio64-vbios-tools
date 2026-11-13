@@ -127,8 +127,10 @@ Tests
                    128 KB, /D then writes more than 1024 records (the default ring caps at 1024);
                    /XL without a memory mode is refused
   vgalog_keep      VGALOG /M /XL resident: a 4F05 set-window call leaves the 3C4h sequencer index and
-                   SR08 as the caller set them, with VGALOG's register reads around the logged call in
-                   between (#237); only on our ROMs (the stock 1.5-07 leaves the index at 04h, #67)
+                   the SR08 lock key (bits 3-0) as the caller set them, with VGALOG's register reads
+                   around the logged call in between (#237; SR8 bits 7-4 are reserved, "x = don't
+                   care", T32/64 14-9, and do not read back as written on the 86C764X card); only on
+                   our ROMs (the stock 1.5-07 leaves the index at 04h, #67)
   vgalog_trace     VGALOG /T: every OUT the BIOS makes in the mode sets AX=0003h and 4F02h 101h is in the
                    trace in order with its value, behind the marker of its call; other calls not traced,
                    INT 1 put back after each mode set, the trap flag clear on return
@@ -1836,10 +1838,13 @@ def t_vgalog_xl(c):
 
 
 def t_vgalog_keep(c):
-    """VGALOG /M /XL resident: a 4F05 set-window call leaves the 3C4h sequencer index and SR08 as the
-    caller found them, with VGALOG's own register reads around the logged call in between (#237): a stub
-    sets SR08 = 06h (unlocked) and the sequencer index 02h, calls 4F05 BH=0 DX=5 through the resident
-    VGALOG, and reads the index and SR08 back; both must be as set. Only on our ROMs: the stock Phoenix
+    """VGALOG /M /XL resident: a 4F05 set-window call leaves the 3C4h sequencer index and the SR08 lock
+    key as the caller found them, with VGALOG's own register reads around the logged call in between
+    (#237): a stub sets SR08 = 06h (unlocked) and the sequencer index 02h, calls 4F05 BH=0 DX=5 through
+    the resident VGALOG, and reads the index and SR08 back; the index must be 02h and the SR08 key bits
+    3-0 06h. Only the key is compared: SR8 bits 7-4 are reserved ("x = don't care", Trio32/Trio64 data
+    book 14.2 SR8, page 14-9) and on the 86C764X card they do not read back as written (06h written,
+    46h read; #237), so the raw byte is not a stable contract. Only on our ROMs: the stock Phoenix
     1.5-07 leaves the index at 04h (#67)."""
     if not (c.ours or c.vours or c.tours):
         raise Skip('not one of our ROMs (the stock BIOSes leave the 3C4h index at 04h, #67)')
@@ -1864,7 +1869,7 @@ def t_vgalog_keep(c):
     ax = struct.unpack('<H', res[4:6])[0]
     check(ax == 0x004F, '4F05 BH=0 DX=5 through VGALOG: AX=%04X, expected 004Fh' % ax)
     check(res[1] == 0x02, 'the 3C4h index after the 4F05 call through VGALOG: %02X, expected 02h (#237)' % res[1])
-    check(res[2] == 0x06, 'SR08 after the 4F05 call through VGALOG: %02X, expected 06h (#237)' % res[2])
+    check(res[2] & 0x0F == 0x06, 'the SR08 lock key after the 4F05 call through VGALOG: %02X, expected 06h in bits 3-0 (#237; bits 7-4 reserved, T32/64 14-9, not stable on the card)' % res[2])
     ru = m.run_com(com, '/U', seg=0x4000)
     check(ru.exit == ('exit', 0), '/U ended with %s' % (ru.exit,))
     return 'index %02X, SR08 %02X after 4F05 through VGALOG /M /XL' % (res[1], res[2])

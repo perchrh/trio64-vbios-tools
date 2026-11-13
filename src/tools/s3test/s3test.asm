@@ -120,7 +120,8 @@
 ;                    AL=0, every byte of the four planes checked (fail bits 1-80h); the S3 mode 6Ah
 ;                    (800x600x4) on its own line (fail bits 1 AH=06h full, 2 AH=07h window, 4 AL=0)
 ;   4F05 (p12 fast path): registers and the 3C4h index kept, CR6A set, planar 102h bank x 4 in CR6A and
-;                    0040:00FE, refused in linear 4101h (fail bits 1, 2 index, 4, 8, 10h, 20h SR08; #237)
+;                    0040:00FE, refused in linear 4101h (fail bits 1, 2 index, 4, 8, 10h, 20h the SR08
+;                    lock key bits 3-0 - SR8 bits 7-4 are reserved, T32/64 14.2 SR8 p.14-9; #237)
 ;   Timings, INFO lines not counted: mode set 03h, 4F02 101h with the clear, one 4F05, one mode 13h
 ;                    scroll, a text clear and a mode 12h clear with AH=06h AL=0 (shortest of 3 runs)
 ;
@@ -1909,12 +1910,16 @@ plst6a: dw 0x0601, 0x0E00, 0x0000, 0x2463, 0,  99, 0,  36, 1
 
 ; ---------------- VBE 4F05 (p12: fast path from the INT 10h entry) ----------------
 ; In 101h: 4F05 BH=0 DX=5 returns 004Fh with BX, CX, DX, SI, DI unchanged (fail 1), keeps the 3C4h index
-; (fail 2) and SR08 (fail 20h, read back without unlocking; #237 split this from fail 2 so a card run
-; names the register that moved) and sets CR6A = 05h (fail 4). In planar 102h DX=2 gives CR6A = 08h and
-; 0040:00FE = 0008h (fail 8). In linear 4101h it is refused with 034Fh and CR6A stays (fail 10h). CR6A
-; is compared in its bank field, bits 4-0 (Trio64V2 datasheet: bit 5 reserved with 2 MB); the reserved
-; bits 7-6 read back as 1 on the card (p12 hardware log: C3h after bank 3), which the first version of
-; this test counted as fail 4 and 8. The register reads around the call are logged as a D:4F05 record:
+; (fail 2) and the SR08 lock key (fail 20h, read back without unlocking; #237 split this from fail 2 so
+; a card run names the register that moved) and sets CR6A = 05h (fail 4). In planar 102h DX=2 gives
+; CR6A = 08h and 0040:00FE = 0008h (fail 8). In linear 4101h it is refused with 034Fh and CR6A stays
+; (fail 10h). CR6A is compared in its bank field, bits 4-0 (Trio64V2 datasheet: bit 5 reserved with
+; 2 MB); the reserved bits 7-6 read back as 1 on the card (p12 hardware log: C3h after bank 3), which
+; the first version of this test counted as fail 4 and 8. Fail 20h compares SR08 masked to bits 3-0,
+; the lock key (xxxx0110b): SR8 bits 7-4 are reserved ("x = don't care", Trio32/Trio64 data book 14.2
+; SR8, page 14-9, and Table A-1) and do not read back as written on the 86C764X card (06h written,
+; 46h read; 13 Nov 2026 card run of 1.5-07-p6: D:4F05 SR08=46 idx=02 sr08=06, #237), so the raw byte
+; is not stable across a call. The register reads around the call are logged as a D:4F05 record:
 ; SR08 before the call, the 3C4h index and SR08 after it (raw), and SR08 after unlocking again.
 t_bank: VS 'D:TEST 4F05'
         call vnl
@@ -1958,10 +1963,13 @@ t_bank: VS 'D:TEST 4F05'
         or byte [tmp],2                 ; fail 2: the 3C4h index not kept
 .i2:    mov al,0x08
         call rdsr
-        mov [tmp4],ah                   ; SR08 read back without unlocking
-        cmp ah,[tmp2]
+        mov [tmp4],ah                   ; SR08 read back without unlocking (raw, logged below)
+        and ah,0x0F                     ; fail 20h compares the lock key only, SR8 bits 3-0
+        mov al,[tmp2]                   ; (xxxx0110b; bits 7-4 are reserved, "x = don't care",
+        and al,0x0F                     ; T32/64 14-9: on the 86C764X card they do not read back
+        cmp ah,al                       ; as written - 06h written, 46h read, #237)
         je .r2
-        or byte [tmp],0x20              ; fail 20h: SR08 not as found
+        or byte [tmp],0x20              ; fail 20h: the SR08 lock key not as found
 .r2:    VS 'D:4F05 SR08='
         mov al,[tmp2]
         call vhex2
