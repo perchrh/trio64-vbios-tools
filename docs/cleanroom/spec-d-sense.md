@@ -27,7 +27,7 @@ are separate; where a rule here depends on them it says so.
 | ID | Rule | Source | Strength | Checked by |
 | --- | --- | --- | --- | --- |
 | SENSE-1 | STATUS_0 (3C2h) bit 4 is the Monitor Sense Status: the internal RAMDAC analog comparators drive the internal SENSE signal active low when any AR, AG or AB output exceeds 330 mV +/- 20%; the data book says the information "can be used to detect the existence and type of monitor". 3C2h bits 3-2 select the VGA clock and are unrelated to bit 4; a sense read must restore them (T64-CLK-1) | T64-SENSE-1 (T32/64 8.4, section 14 STATUS_0) | must | not checked: the emulator returns a constant at 3C2h until a monitor model is added (open question 4) |
-| SENSE-2 | The sense procedure: POST drives the three analog outputs one at a time (red, green, blue) through the standard palette path - write the DAC colour register (PEL address write 3C8h, then the RGB triple at 3C9h) with 63 on the driven channel and 0 on the other two, select that colour through the attribute controller, read 3C2h bit 4 - and restores the palette and the attribute controller to their power-on state afterwards. The drive value 63 is a project choice (the data book gives only the threshold; full scale clears it with margin, an unloaded output rises to about 0.7 V against a 264-396 mV threshold, a monitor-terminated output stays below it) | Vision964 8.2.7 extract ([`primary-extracts/vision964-sense-input-utilization.md`](primary-extracts/vision964-sense-input-utilization.md)) for the procedure and classification; M5-DAC decision (full scale, project choice); T64-SENSE-1 for the polarity | must | not checked (same emulator gap); card: POST with each display type on the DSP-3364P |
+| SENSE-2 | The sense procedure: POST drives the three analog outputs one at a time (red, green, blue) through the standard palette path - write DAC palette register 0 (PEL address 0 at 3C8h, then the RGB triple at 3C9h) with 63 on the driven channel and 0 on the other two, select palette register 0 through the attribute controller, read 3C2h bit 4 - and restores the palette and the attribute controller to their power-on state afterwards. Palette register 0 is pinned so the driven entry is the same one emulators that model the sense from a single palette entry can see (86Box reads vgapal[0], see "Emulator coverage"). The drive value 63 is a project choice (the data book gives only the threshold; full scale clears it with margin, an unloaded output rises to about 0.7 V against a 264-396 mV threshold, a monitor-terminated output stays below it) | Vision964 8.2.7 extract ([`primary-extracts/vision964-sense-input-utilization.md`](primary-extracts/vision964-sense-input-utilization.md)) for the procedure and classification; M5-DAC decision (full scale, project choice); T64-SENSE-1 for the polarity | must | not checked (same emulator gap); card: POST with each display type on the DSP-3364P |
 | SENSE-3 | Classification truth table: no monitor - 3C2h bit 4 stays 1 for all three drives; monochrome monitor - bit 4 goes 0 only when the green output is driven; colour monitor - bit 4 goes 0 for each of the three. (An output terminated by a monitor's load stays below the threshold; an unloaded output rises above it.) | Vision964 8.2.7 extract; T64-SENSE-1 for the Trio64 polarity and threshold | must | not checked (same emulator gap) |
 | SENSE-4 | Order: the sense runs at POST before the first mode set (nothing is displayed yet); after it, the DAC palette, the attribute controller and 3C2h bits 3-2 are as before the sense | M5-DAC decision; T64-CLK-1 | must (project choice for the placement) | not checked |
 | SENSE-5 | Colour result: power-on mode 03h; 0040:0089h bit 2 (monochrome display) = 0 and bit 1 (grey summing) = 0; 0040:0087h bit 1 (mono monitor) = 0; equipment word 0040:0010h bits 5-4 = 10b (80x25 colour) | IBM extract ([`primary-extracts/ibm-bios-power-on-mode-and-mono-state.md`](primary-extracts/ibm-bios-power-on-mode-and-mono-state.md)), Figure 2-4 item 5c (power-on default mode with a colour display is 3); RBIL M0006/M0024/M0027 via bios-rules BDA-1, BDA-14, BDA-16; part A POST-34 | must | emu t_post with a colour monitor model; card: POST with a colour display |
@@ -54,6 +54,22 @@ are separate; where a rule here depends on them it says so.
    3C2h bit 4 from the DAC drive and a simulated monitor load must be added to the emulator before
    milestone 5 is implemented; the SENSE rows' "Checked by" then become an emu t_sense asserting
    the mode, the BDA bits and 0040:0063h for each of the three display types.
+
+## Emulator coverage
+
+- **Our emulator (`emu/vgaemu.py`)** is where the SENSE classification is tested: it needs a
+  monitor model (colour / monochrome / none) that computes 3C2h bit 4 from the DAC drive with the
+  Trio64 polarity (SENSE-1, active low on an over-threshold, i.e. unloaded, output). Until that
+  model lands, 3C2h reads a constant 0x10 there and no SENSE row is checkable (open question 4).
+- **86Box** can be a whole-system smoke test only. Its SVGA core (`vid_svga.c`, `svga_in` case
+  0x3c2) models 3C2h bit 4 from DAC palette entry 0: with a cable connected, bit 4 goes 0 when any
+  of entry 0's channels is >= 0x26 (38) or their sum >= 0x4e (78); with no cable the threshold is
+  10 (an IBM PS/55 quirk). That covers the drive-and-read loop and a full-scale drive (63 clears
+  both thresholds), and our ROM override in a VM is proven ([`../../86box-runs.md`](../../86box-runs.md)),
+  but 86Box has no monochrome-load model on the sense line and follows the IBM polarity (sense
+  asserts with a monitor attached), the opposite of the Trio64's - so it cannot be the oracle for
+  the colour/mono/none classification. The classification test belongs in our own emulator, and
+  the mono branch additionally on the card with a monochrome display.
 
 ## What this part does not cover
 
