@@ -118,8 +118,10 @@ Tests
                    ROM size, SR10/SR11, the ROM version) and logs 32 bytes per call, returns the BIOS
                    results with the caller's interrupt flag; second install refused, /H, /U closes the
                    file and unhooks; /M and /T files carry the same block
-  vgalog_mem       VGALOG /M keeps the calls in memory (AH=0Eh skipped, nested BIOS calls with their depth,
-                   registers in and out, SR10/SR11 and CR58-5A/6D after), /D writes them in call order,
+  vgalog_mem       VGALOG /M keeps the calls in memory (the text/pixel calls AH=02h,03h,08h,09h,0Ah,0Ch,
+                   0Dh,0Eh,13h skipped but counted, nested BIOS calls with their depth,
+                   registers in and out, SR10/SR11 and CR58-5A/6D after), /D writes them in call order
+                   plus a VGALOGC1 part with the nine counts at the end,
                    the S3 locks are put back, /U unhooks, /D afterwards is refused; /D commits the file
                    and resets the disk before it says it is written (#158); a program's mode 07h and 03h
                    (M7.COM) loaded where /D runs next are logged (#159)
@@ -1703,8 +1705,9 @@ def t_dos_exe(c):
 
 
 def t_vgalog_mem(c):
-    """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped, nested BIOS calls with their
-    depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call order, and with
+    """VGALOG /M keeps INT 10h calls in its ring buffer (text output skipped but counted, nested BIOS
+    calls with their depth, registers in and out, SR10/SR11 and CR58-5A/6D after); /D writes them in call
+    order plus the VGALOGC1 counter part at the end, and with
     no call yet it writes no file and says so. /D commits the file and resets the disk before it reports
     success (#158); a program's mode sets (M7.COM) at the segment /D runs at next are in it (#159).
     With another INT 10h hook after it (Windows in a DOS box)
@@ -1739,7 +1742,12 @@ def t_vgalog_mem(c):
     check(flags == 0, 'header flags %04X without /T' % flags)
     vgalog_info(c, m, bytes(b[16:48]), '/M')
     recs = [b[48 + 32 * i:80 + 32 * i] for i in range(n)]
-    check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    check(len(b) == 48 + 32 * n + 44, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    c1 = 48 + 32 * n
+    check(b[c1:c1 + 8] == b'VGALOGC1', 'no text-call counter part after the %d records' % n)
+    cntr = struct.unpack_from('<9I', b, c1 + 8)
+    check(cntr[7] == 1 and sum(cntr) == 1, 'counters %s: one AH=0Eh call expected, no other text/pixel call'
+          % (list(cntr),))
     top = [struct.unpack_from('<H', x, 2)[0] for x in recs if x[23] == 0]
     check(top == [0x0003, 0x4F02, 0x4F05, 0x1130, 0x0007, 0x0003], 'calls at depth 0: %s (AH=0Eh must be skipped)'
           % ['%04X' % a for a in top])
@@ -1813,7 +1821,7 @@ def t_vgalog_xl(c):
     check(b is not None and b[:8] == b'VGALOGM2', 'no memory-mode VGALOG.BIN after /M /XL')
     total, n, flags = struct.unpack_from('<IHH', b, 8)
     check(total == 2600 and n == 2600, '/XL ring did not keep all 2600 calls: total=%d n=%d' % (total, n))
-    check(len(b) == 48 + 32 * n, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
+    check(len(b) == 48 + 32 * n + 44, 'VGALOG.BIN is %d bytes for %d records' % (len(b), n))
     # record k = slot k (2600 < 4096, nothing wrapped yet): call number k, AX=0F00h; 2500 is in the
     # ring's second 64 KB segment
     bad = [k for k in (0, 1, 1000, 2047, 2048, 2500, 2599)
@@ -1929,8 +1937,9 @@ def t_vgalog_trace(c):
     t = 48 + 32 * n
     check(b[t:t + 8] == b'VGALOGT1', 'no trace part after the %d calls' % n)
     ttot, tn = struct.unpack_from('<II', b, t + 8)
-    check(len(b) == t + 16 + 4 * tn and tn == ttot, 'trace part: %d events in total, %d in the file, %d bytes'
+    check(len(b) == t + 16 + 4 * tn + 44 and tn == ttot, 'trace part: %d events in total, %d in the file, %d bytes'
           % (ttot, tn, len(b) - t - 16))
+    check(b[t + 16 + 4 * tn:t + 16 + 4 * tn + 8] == b'VGALOGC1', 'no counter part after the trace part')
     evs = [struct.unpack_from('<HBB', b, t + 16 + 4 * i) for i in range(tn)]
     # split at the markers: call number -> events (repeats expanded)
     bycall, num, reads, reps = {}, None, 0, 0
